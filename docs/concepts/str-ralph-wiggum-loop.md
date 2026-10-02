@@ -15,83 +15,121 @@ The orchestration strategy is replaceable. Every option MUST preserve fresh sess
 
 ### Simple Loop
 
-Use a small shell or Python loop that repeatedly invokes one fresh agent session with the same prompt. Each iteration reconstructs current state, performs one bounded unit of work, verifies it, persists the result, and exits. The outer loop starts the next fresh session.
-
-Use this as the default when work can be serialized and does not require planner/reviewer or parallel-agent coordination.
+Repeatedly invoke one coding agent with a stable prompt. Each iteration is fresh, rebuilds current external state, completes one issue, verifies it, commits the result, and closes the issue. No planner/reviewer orchestration.
 
 #### Rules
 
-- MUST use a simple iteration loop that repeatedly invokes the coding agent until completion or an explicit iteration/stop limit; it MUST NOT require planner/reviewer orchestration.
-- MUST start each iteration as a fresh agent invocation without conversational context from the previous iteration.
-- MUST use the same stable prompt or task contract for every iteration.
-- MUST refresh external state at the start of every iteration, including the actionable task list and relevant repository history/state.
-- MUST work on one bounded task per iteration.
-- MUST persist progress through durable external state such as issues, commits, source files, and test results so the next fresh iteration can reconstruct progress.
-- MUST run explicit binary verification, such as tests, type checks, or a build, before marking the selected task complete.
-- MUST persist the completed task and handoff state before the iteration exits, for example by committing changes and closing/updating the task.
-- MUST terminate only when refreshed external state shows no actionable work remains, all remaining work is explicitly blocked, or another explicit stop condition applies.
-- MUST NOT treat agent self-assessment alone as completion evidence.
+- MUST use a simple bounded loop, such as `max_iterations = 3`, to repeatedly invoke the coding agent.
+- MUST start a new agent invocation for every iteration; previous conversational context MUST NOT be resumed.
+- MUST load the same stable prompt file for every iteration.
+- MUST rebuild dynamic prompt state every iteration:
+  - current actionable issues from the task source;
+  - recent `RALPH:` commits from Git history.
+- MUST instruct the agent to work on exactly one issue per iteration.
+- MUST keep cross-iteration state in GitHub issues, Git commits, source files, and tests rather than previous chat context.
+- MUST run the configured verification commands before committing or closing the issue.
+- MUST commit completed work with the `RALPH:` prefix and close the completed issue so the next fresh iteration sees the updated task list and history.
+- MUST stop early when the agent emits `<promise>COMPLETE</promise>`, which means no actionable issues remain.
+- MUST stop when the iteration limit is reached even if completion was not signaled.
+
+#### Python example
 
 ```python
+from pathlib import Path
 import subprocess
 
-MAX_ITERATIONS = 10
-PROMPT = """
-Work on the next actionable issue.
-Read current task and repository state first.
-Complete one issue only.
-Run verification before committing.
-Persist progress before exiting.
-"""
+MAX_ITERATIONS = 3
+PROMPT_FILE = Path(".sandcastle/prompt.md")
+COMPLETION_SIGNAL = "<promise>COMPLETE</promise>"
 
-def run_agent() -> int:
+def sh(*args: str) -> str:
     return subprocess.run(
-        ["copilot", "-p", PROMPT],
-        check=False,
-    ).returncode
+        args,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
 
-def has_actionable_tasks() -> bool:
-    return subprocess.run(
-        ["python", "scripts/has_open_tasks.py"],
-        check=False,
-    ).returncode == 0
+def build_prompt() -> str:
+    template = PROMPT_FILE.read_text()
 
-def verification_passes() -> bool:
-    return subprocess.run(
-        ["python", "-m", "pytest"],
+    # Re-evaluated every iteration.
+    open_issues = sh("python", "scripts/list_tasks.py")
+    recent_ralph_commits = sh(
+        "git", "log", "--oneline", "--grep=RALPH", "-10"
+    )
+
+    return (
+        template
+        .replace("{{LIST_TASKS_COMMAND}}", open_issues)
+        .replace(
+            '{{GIT_HISTORY}}',
+            recent_ralph_commits,
+        )
+    )
+
+def run_agent(prompt: str) -> str:
+    # New process => fresh agent session.
+    result = subprocess.run(
+        ["copilot", "-p", prompt],
         check=False,
-    ).returncode == 0
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout
 
 for _ in range(MAX_ITERATIONS):
-    if not has_actionable_tasks():
+    prompt = build_prompt()
+    output = run_agent(prompt)
+
+    if COMPLETION_SIGNAL in output:
         break
-
-    run_agent()  # new process = fresh agent session
-
-    if not verification_passes():
-        continue
-
-if has_actionable_tasks():
-    raise SystemExit("Loop stopped before completion")
 ```
 
-Additional orchestration options may be added as sibling sections under **Options** when they preserve the core loop invariants but solve different coordination needs.
+The stable prompt carries the per-iteration workflow:
+
+```text
+# Context
+
+## Open issues
+{{LIST_TASKS_COMMAND}}
+
+## Recent RALPH commits
+{{GIT_HISTORY}}
+
+# Task
+
+Work on one issue only.
+
+Before commit:
+1. npm run typecheck
+2. npm run test
+
+When complete:
+1. git commit with a message starting with "RALPH:"
+2. close the issue
+
+If no actionable issues remain, output:
+<promise>COMPLETE</promise>
+```
+
+Additional orchestration options may be added as sibling sections under **Options**.
 
 ## Benefits and Trade-offs
 
 **Benefits**
 
 - Fresh context reduces context rot, drift, and accumulation of incorrect assumptions.
-- External state makes progress resumable and inspectable across independent runs.
-- Binary completion criteria make termination deterministic rather than subjective.
-- Multiple orchestration options can evolve without changing the core pattern.
+- GitHub issues and Git commits make progress resumable across independent runs.
+- Verification gates keep issue completion externally checkable.
+- The loop stays small and understandable.
 
 **Trade-offs**
 
 - Fresh sessions may spend tokens rediscovering repository and task context.
-- Poorly maintained external state can cause repeated or conflicting work.
-- Simple Loop serializes work; more complex coordination may require another option.
+- Simple Loop serializes work.
+- Correctness depends on the prompt and task-list command exposing enough durable state.
 
 ## Validation
 
-A conforming implementation demonstrates that every iteration starts a fresh agent session, reconstructs progress from shared external state, persists its progress, and checks explicit completion criteria independently of agent self-assessment.
+A conforming Simple Loop demonstrates that each iteration launches a new agent process, rebuilds current task and Git state, handles one issue, verifies before commit/close, persists progress through Git and the issue tracker, and terminates on `<promise>COMPLETE</promise>` or the iteration limit.
