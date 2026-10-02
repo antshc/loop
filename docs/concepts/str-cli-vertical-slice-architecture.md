@@ -1,5 +1,4 @@
 # CLI Vertical Slice Architecture
-**Type:** Architecture Pattern
 
 ## Purpose
 
