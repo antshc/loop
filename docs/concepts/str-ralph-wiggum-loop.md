@@ -77,15 +77,6 @@ if has_actionable_tasks():
 
 Additional orchestration options may be added as sibling sections under **Options** when they preserve the core loop invariants but solve different coordination needs.
 
-## Rules
-
-- MUST preserve fresh agent sessions between iterations.
-- MUST keep cross-iteration state outside agent conversational memory.
-- MUST make each iteration bounded and externally observable.
-- MUST use externally verifiable completion criteria.
-- SHOULD use the Simple Loop option unless the workflow requires additional coordination.
-- SHOULD add alternative orchestration strategies as explicit options instead of weakening the core invariants.
-
 ## Benefits and Trade-offs
 
 **Benefits**
