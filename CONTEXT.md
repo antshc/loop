@@ -9,4 +9,4 @@ An autonomous development loop that repeatedly invokes a coding agent in fresh s
 
 
 **Shipyard**  
-An orchestration framework for AI coding agents using Git worktrees. It handles running agents against a single repository or multiple repositories, Git branch/worktree lifecycle, and iterative agent execution.
+An orchestration framework for Headless AI Agents using Git worktrees. It handles running agents against a single repository or multiple repositories, Git branch/worktree lifecycle, and iterative agent execution.
