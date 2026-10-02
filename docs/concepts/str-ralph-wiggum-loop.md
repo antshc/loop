@@ -9,15 +9,28 @@ Provide a reusable autonomous development-loop pattern that can continue across 
 
 A Ralph Wiggum loop repeatedly starts fresh AI coding-agent sessions against durable external state. Each iteration reconstructs the current task state from artifacts such as issues, a task list, PRD, source tree, Git history, or test results, performs bounded work, then persists progress for the next iteration.
 
-The orchestration strategy is replaceable. Every option MUST preserve the same core properties: fresh sessions, stable task contract, external state, bounded progress, and externally verifiable completion.
+The orchestration strategy is replaceable. Every option MUST preserve fresh sessions, external state, bounded progress, durable handoff, and verifiable completion.
 
 ## Options
 
 ### Simple Loop
 
-Use a small shell or Python loop that repeatedly invokes one fresh agent session with the same prompt. Each iteration reads current repository/task state, performs one bounded unit of work, verifies it, persists the result, and exits. The outer loop starts the next fresh session until completion criteria pass.
+Use a small shell or Python loop that repeatedly invokes one fresh agent session with the same prompt. Each iteration reconstructs current state, performs one bounded unit of work, verifies it, persists the result, and exits. The outer loop starts the next fresh session.
 
 Use this as the default when work can be serialized and does not require planner/reviewer or parallel-agent coordination.
+
+#### Rules
+
+- MUST use a simple iteration loop that repeatedly invokes the coding agent until completion or an explicit iteration/stop limit; it MUST NOT require planner/reviewer orchestration.
+- MUST start each iteration as a fresh agent invocation without conversational context from the previous iteration.
+- MUST use the same stable prompt or task contract for every iteration.
+- MUST refresh external state at the start of every iteration, including the actionable task list and relevant repository history/state.
+- MUST work on one bounded task per iteration.
+- MUST persist progress through durable external state such as issues, commits, source files, and test results so the next fresh iteration can reconstruct progress.
+- MUST run explicit binary verification, such as tests, type checks, or a build, before marking the selected task complete.
+- MUST persist the completed task and handoff state before the iteration exits, for example by committing changes and closing/updating the task.
+- MUST terminate only when refreshed external state shows no actionable work remains, all remaining work is explicitly blocked, or another explicit stop condition applies.
+- MUST NOT treat agent self-assessment alone as completion evidence.
 
 ```python
 import subprocess
@@ -25,9 +38,10 @@ import subprocess
 MAX_ITERATIONS = 10
 PROMPT = """
 Work on the next actionable issue.
-Read repository state before choosing work.
+Read current task and repository state first.
 Complete one issue only.
-Run tests before committing.
+Run verification before committing.
+Persist progress before exiting.
 """
 
 def run_agent() -> int:
@@ -36,22 +50,28 @@ def run_agent() -> int:
         check=False,
     ).returncode
 
-def complete() -> bool:
+def has_actionable_tasks() -> bool:
+    return subprocess.run(
+        ["python", "scripts/has_open_tasks.py"],
+        check=False,
+    ).returncode == 0
+
+def verification_passes() -> bool:
     return subprocess.run(
         ["python", "-m", "pytest"],
         check=False,
-    ).returncode == 0 and subprocess.run(
-        ["python", "scripts/has_open_tasks.py"],
-        check=False,
-    ).returncode == 1
+    ).returncode == 0
 
 for _ in range(MAX_ITERATIONS):
-    if complete():
+    if not has_actionable_tasks():
         break
 
     run_agent()  # new process = fresh agent session
 
-if not complete():
+    if not verification_passes():
+        continue
+
+if has_actionable_tasks():
     raise SystemExit("Loop stopped before completion")
 ```
 
@@ -59,13 +79,10 @@ Additional orchestration options may be added as sibling sections under **Option
 
 ## Rules
 
-- MUST start every iteration in a fresh AI agent session without conversational context from previous iterations.
-- MUST provide a stable task prompt or task contract across iterations.
-- MUST persist cross-iteration progress in external repository or task-system state rather than agent memory.
-- MUST read current external state before selecting work for an iteration.
-- MUST keep each iteration bounded to a clearly defined unit of progress.
-- MUST define completion using explicit, externally verifiable pass/fail criteria.
-- MUST NOT treat an agent's statement that the task is complete as sufficient completion evidence.
+- MUST preserve fresh agent sessions between iterations.
+- MUST keep cross-iteration state outside agent conversational memory.
+- MUST make each iteration bounded and externally observable.
+- MUST use externally verifiable completion criteria.
 - SHOULD use the Simple Loop option unless the workflow requires additional coordination.
 - SHOULD add alternative orchestration strategies as explicit options instead of weakening the core invariants.
 
