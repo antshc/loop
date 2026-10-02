@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "brain-tools"
+version = "0.1.0"
+description = "AFK automated PR review service driven by Copilot"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "python-json-logger>=2.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+afk_fix_prs = "afk.features.fix_prs.cli:main"
+afk_address_prs = "afk.features.address_prs.cli:main"
+afk_dev = "afk.features.dev.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["tools/src"]
+include = ["afk*", "modules*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tools/tests"]

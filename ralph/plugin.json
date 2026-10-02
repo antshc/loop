@@ -1,0 +1,6 @@
+{
+  "name": "ralph",
+  "version": "1.0.0",
+  "description": "AFK autonomous development loop and PR review-comment automation.",
+  "skills": ["./skills"]
+}
