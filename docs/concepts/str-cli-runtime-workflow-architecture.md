@@ -15,6 +15,15 @@ The **runtime** is the shared kernel. It defines contracts (CLI command, agent c
 
 Built-in workflows ship inside the `shipyard` package and may use the shared `adapters/` package. Workflows loaded from user-supplied directories may import only `shipyard.runtime` and bring their own adapters ([ADR 0003](../adr/0003-expose-only-the-runtime-to-user-supplied-workflows.md)).
 
+| | Built-in workflow | User-supplied workflow |
+|---|---|---|
+| Location | `shipyard/workflows/<name>/` | `<user dir>/<name>/`, directory supplied by the user |
+| Imported as | `shipyard.workflows.<name>.command` | `<user dir name>.<name>.command`, with the directory's parent added to `sys.path` |
+| May import from `shipyard` | `runtime` and shared `adapters` | `runtime` only |
+| Adapters | shared `adapters/`, or its own folder | its own folder |
+| Architecture checks | import-linter | AST import check at load time or in the author's own tests |
+| Trust | ships with the package | executes arbitrary code; trusted by configuring the directory |
+
 ```text
 cli.py
   | discovers workflows/*/command.py (+ user-supplied workflow dirs)
@@ -34,7 +43,7 @@ Adapters used by more than one built-in workflow (for example GitHub, Copilot CL
 
 ## Rules
 
-- MUST organize workflows as one folder per workflow under `workflows/`; each workflow maps to exactly one `ship` subcommand.
+- MUST organize workflows as one folder per workflow, under the package's `workflows/` or under a user-supplied directory; each workflow maps to exactly one `ship` subcommand.
 - MUST define the CLI command contract, adapter contracts, and execution policy in `runtime`.
 - MUST define each platform-neutral model in the `runtime/contracts` module whose contract returns it; there is no separate domain layer.
 - MUST define each contract as an `abc.ABC` with `@abstractmethod` operations and make every implementation inherit it.
@@ -49,11 +58,14 @@ Adapters used by more than one built-in workflow (for example GitHub, Copilot CL
 - MUST place an adapter in the shared `adapters/` package when more than one built-in workflow uses it.
 - MUST keep process execution (`git`, `gh`, `copilot`) inside adapters; workflows see only contracts.
 - MUST limit user-supplied workflows to importing `shipyard.runtime`; they bring their own adapters.
+- MUST NOT name a user-supplied directory after an installed top-level module; its name becomes a top-level import name.
+- MUST give built-in and user-supplied workflows the same `command.py` contract and the same discovery.
 - MUST place only logic whose business meaning is identical across workflows (for example the attempt cap) in `runtime`.
 - MUST NOT treat discovered workflow code from untrusted locations as safe; loading a workflow executes its code.
 - SHOULD allow a workflow to own its control flow (runtime-provided loop or its own loop) rather than forcing one lifecycle.
 - SHOULD accept small duplication between workflows over extracting shared code that only looks similar.
 - SHOULD load additional workflow directories only from explicitly user-supplied, trusted directories.
+- SHOULD check user-supplied workflows' imports statically (AST scan) because import-linter cannot see code outside the package.
 
 ## Example
 
@@ -81,11 +93,23 @@ src/shipyard/
 └── cli.py
 ```
 
+A user-supplied directory holds workflows of the same shape. It may override a shared adapter inside a workflow's own folder:
+
+```text
+~/ship-workflows/                 # passed to the CLI; name must not collide with an installed module
+├── __init__.py
+└── review/
+    ├── command.py                # imports shipyard.runtime only
+    ├── workflow.py
+    ├── github_tracker.py         # own adapter implementing the runtime contract
+    └── prompt.md
+```
+
 CLI commands map one-to-one to workflow folders:
 
 ```text
-ship dev           → workflows/dev
-ship <name>        → <user-supplied dir>/<name>
+ship dev           → shipyard/workflows/dev
+ship review        → ~/ship-workflows/review
 ```
 
 The command contract:
@@ -123,21 +147,30 @@ class DevCommand(Command):
 command = DevCommand()
 ```
 
-Discovery reads each workflow's exported `command`:
+Discovery reads each workflow's exported `command`. A root is imported by package name when it is part of the package; otherwise its parent joins `sys.path` and the directory name is the package. Roots merge into one command table, so the duplicate check spans built-in and user-supplied workflows:
 
 ```python
-def discover_commands(root: Path) -> dict[str, Command]:
-    commands: dict[str, Command] = {}
+def discover_commands(
+    root: Path,
+    package: str | None = None,
+    into: dict[str, Command] | None = None,
+) -> dict[str, Command]:
+    root = root.resolve()
+    if package is None:
+        if str(root.parent) not in sys.path:
+            sys.path.insert(0, str(root.parent))
+        package = root.name
+    commands = {} if into is None else into
     for entry in sorted(root.iterdir()):
         if (entry / "command.py").is_file():
-            cmd = import_module(f"shipyard.workflows.{entry.name}.command").command
+            cmd = import_module(f"{package}.{entry.name}.command").command
             if cmd.name in commands:
                 raise ValueError(f"duplicate command: {cmd.name}")
             commands[cmd.name] = cmd
     return commands
 ```
 
-The CLI runs the same discovery over each user-supplied workflow directory, builds one subparser per discovered command, and returns `command.run(...)` as the process exit code.
+The CLI discovers the built-in root first, then each user-supplied directory, builds one subparser per discovered command, and returns `command.run(...)` as the process exit code.
 
 ## Options Considered
 
@@ -163,6 +196,8 @@ The CLI runs the same discovery over each user-supplied workflow directory, buil
 - Discovery hides imports from static analysis; architecture checks must read source files.
 - Each workflow's `command.py` is a composition root, so wiring is distributed rather than central.
 - Loading workflows from user-supplied directories executes arbitrary code.
+- A user-supplied directory name becomes a top-level module name, so a collision with an installed module shadows or breaks it.
+- A user-supplied workflow needing GitHub or Copilot access reimplements those adapters; the shared ones stay internal and free to change.
 
 ## Validation
 
@@ -173,7 +208,8 @@ Architecture review should verify that:
 - `workflow.py` imports no adapter; only `command.py` constructs adapters;
 - each workflow folder exposes one `command` with a unique name;
 - adding a workflow requires no edits outside its folder;
-- user-supplied workflows import nothing from `shipyard` except `shipyard.runtime`;
+- user-supplied workflows import nothing from `shipyard` except `shipyard.runtime`, checked by an AST import scan;
+- built-in and user-supplied workflows sharing a command name fail discovery;
 - code in `runtime` is shared because of business meaning, not code reuse alone.
 
 Enforce these with import-linter `forbidden` and `independence` contracts.
