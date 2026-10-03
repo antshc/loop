@@ -23,22 +23,42 @@ The runtime owns the Run boundary: it binds the prepared execution context, invo
 - MUST compose Workflows with ordinary Python control flow rather than a separate workflow DSL.
 - MUST NOT encode planner, implementer, reviewer, or other workflow-specific roles into the Run contract.
 
+### Variant: Shared Sandbox
+**Selected when:** multiple Runs operate on the same evolving workspace and later Runs depend on changes or results produced by earlier Runs.
+
+- MUST reuse one sandbox context across the dependent Runs.
+- MUST preserve each Run as a separate agent invocation with its own prompt and result.
+- SHOULD execute dependent Runs sequentially in workflow-defined order.
+
+### Variant: Isolated Sandboxes
+**Selected when:** Runs operate on independent units of work that do not require a shared mutable workspace.
+
+- MUST give each independent unit of work its own sandbox context.
+- MUST keep mutable workspace state isolated between those sandboxes.
+- MAY execute independent Runs concurrently when the Workflow allows it.
+
 ## Example
+
+Shared Sandbox:
+
+```text
+Sandbox
+  ├─ run(planner)
+  ├─ run(implementer)
+  ├─ run(reviewer)
+  └─ run(fixer)
+```
+
+Isolated Sandboxes:
 
 ```text
 Workflow
-  |
-  +-- Sandbox Run: planner prompt
-  |
-  +-- for each selected task
-  |     +-- Sandbox Run: implementer prompt
-  |     +-- if review is needed
-  |           +-- Sandbox Run: reviewer prompt
-  |
-  +-- workflow result
+  ├─ Sandbox A → run(issue 1)
+  ├─ Sandbox B → run(issue 2)
+  └─ Sandbox C → run(issue 3)
 ```
 
-The Workflow decides the sequence and conditions. Each Run remains the same execution primitive.
+The Workflow selects the variant, sequence, conditions, and concurrency. Each Run remains the same execution primitive.
 
 ## Benefits and Trade-offs
 
