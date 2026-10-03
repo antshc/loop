@@ -11,12 +11,12 @@ Platform-specific CLIs, field names, states, and response shapes are translated 
 
 A **Platform Adapter** exposes repository and work-management capabilities through a platform-neutral contract.
 
-Application code depends only on the contract and normalized models such as `WorkItem` and `PullRequest`. Each concrete adapter translates those operations to the native platform interface—for example, `gh` for GitHub or `az` for Azure DevOps—and maps native responses back to the normalized model.
+Application code depends only on the contract and normalized models such as `Ticket` and `PullRequest`. Each concrete adapter translates those operations to the native platform interface—for example, `gh` for GitHub or `az` for Azure DevOps—and maps native responses back to the normalized model.
 
 The concrete adapter is selected in the composition root, normally from explicit configuration or the repository remote. Platform detection and construction are outside application behavior.
 
 ```text
-Application / Slices
+Application / Workflows
         |
         v
   PlatformAdapter
@@ -34,7 +34,7 @@ The contract represents capabilities the application needs, not the command stru
 
 ## Rules
 
-- MUST make application and slice code depend on the platform-neutral adapter contract rather than a concrete platform implementation.
+- MUST make application and workflow code depend on the platform-neutral adapter contract rather than a concrete platform implementation.
 - MUST define the contract as an `abc.ABC` whose operations are `@abstractmethod`s, and MUST make each concrete adapter inherit it, so an adapter missing an operation fails at instantiation.
 - MUST keep the contract in the application/runtime layer; adapters import it, never the reverse.
 - MUST normalize platform-specific work-item and pull-request data before returning it through the contract.
@@ -43,7 +43,7 @@ The contract represents capabilities the application needs, not the command stru
 - MUST provide one concrete adapter per supported platform.
 - MUST select and construct the concrete adapter in the composition root or an equivalent infrastructure factory.
 - MUST NOT expose `gh`, `az`, or provider-specific response models through the application-facing contract.
-- MUST NOT branch on GitHub-versus-Azure-DevOps behavior inside application or slice code when the difference can be handled by the adapter.
+- MUST NOT branch on GitHub-versus-Azure-DevOps behavior inside application or workflow code when the difference can be handled by the adapter.
 - SHOULD keep the contract limited to capabilities actually required by the application.
 - SHOULD run a static type checker so overridden signatures are verified; `ABC` enforces only that the methods exist.
 - SHOULD run one shared contract test suite against every adapter.
@@ -59,7 +59,7 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class WorkItem:
+class Ticket:
     id: int
     title: str
     state: str
@@ -70,16 +70,16 @@ class WorkItem:
 
 class PlatformAdapter(ABC):
     @abstractmethod
-    def list_work_items(
+    def list_tickets(
         self,
         *,
         tags: tuple[str, ...] = (),
         state: str | None = None,
         limit: int | None = None,
-    ) -> list[WorkItem]: ...
+    ) -> list[Ticket]: ...
 
     @abstractmethod
-    def add_comment(self, work_item_id: int, comment: str) -> None: ...
+    def add_comment(self, ticket_id: int, comment: str) -> None: ...
 
     @abstractmethod
     def create_branch(self, name: str, from_branch: str = "main") -> None: ...
@@ -104,13 +104,13 @@ class GitHubAdapter(PlatformAdapter):
             text=True,
         ).stdout.strip()
 
-    def list_work_items(
+    def list_tickets(
         self,
         *,
         tags: tuple[str, ...] = (),
         state: str | None = None,
         limit: int | None = None,
-    ) -> list[WorkItem]:
+    ) -> list[Ticket]:
         args = [
             "issue", "list",
             "--repo", self._repo,
@@ -125,7 +125,7 @@ class GitHubAdapter(PlatformAdapter):
 
         issues = json.loads(self._gh(*args))
         return [
-            WorkItem(
+            Ticket(
                 id=issue["number"],
                 title=issue["title"],
                 state=issue["state"].lower(),
@@ -140,7 +140,7 @@ class GitHubAdapter(PlatformAdapter):
         ]
 ```
 
-Azure DevOps implements the same contract but translates it to `az boards` and maps fields such as `System.Id`, `System.Title`, `System.State`, and `System.Tags` into the same `WorkItem` model.
+Azure DevOps implements the same contract but translates it to `az boards` and maps fields such as `System.Id`, `System.Title`, `System.State`, and `System.Tags` into the same `Ticket` model.
 
 Selection stays outside the application:
 
@@ -157,7 +157,7 @@ def create_platform_adapter(remote_url: str) -> PlatformAdapter:
 The caller remains platform-agnostic:
 
 ```python
-items = platform.list_work_items(
+items = platform.list_tickets(
     tags=("ready",),
     state="open",
 )

@@ -26,3 +26,15 @@ _Avoid_: Monorepo, standalone harness
 **Multi Repo**:  
 A harness layout in which the harness is a separate parent repository wrapping one or more source repositories.  
 _Avoid_: Wrapping harness, parent harness
+
+**Ticket**:  
+A platform-neutral unit of tracked work, such as a GitHub issue or an Azure DevOps work item, that Shipyard reads and acts on.  
+_Avoid_: Issue, Work item
+
+**Spec**:  
+A Ticket that groups the Tickets one dev run delivers, carrying the target branch and initiative in its metadata.  
+_Avoid_: Epic, parent issue
+
+**Workflow**:  
+One autonomous procedure Shipyard runs as a `ship` subcommand, such as `dev`, discovered and loaded as a plugin.  
+_Avoid_: Slice, feature, template

@@ -11,3 +11,4 @@ Shipyard (`brain-tools`, exposing `afk_dev`, `afk_fix_prs`, `afk_address_prs`) m
 
 - Users need Python and `pip` and must update by pulling the repository and reinstalling.
 - No package index is involved; the repository is the only distribution channel.
+- Package and command names are set by [ADR 0002](0002-ship-shipyard-as-the-shipyard-package-with-a-ship-command.md).
