@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from afk_proto.runtime.contracts.execution_store import ExecutionStore
+from ship_proto.runtime.contracts.execution_store import ExecutionStore
 
 
 class FileExecutionStore(ExecutionStore):

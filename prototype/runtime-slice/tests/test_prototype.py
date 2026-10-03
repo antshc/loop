@@ -6,20 +6,20 @@ from pathlib import Path
 
 import pytest
 
-from afk_proto.adapters.azure_devops.adapter import AzureDevOpsAdapter
-from afk_proto.adapters.azure_devops.fake_az import FakeAz
-from afk_proto.adapters.copilot_cli import DummyCopilotCli
-from afk_proto.adapters.github.adapter import GitHubAdapter
-from afk_proto.adapters.github.fake_gh import FakeGh
-from afk_proto.adapters.platform_factory import create_platform_adapter
-from afk_proto.cli import main
-from afk_proto.runtime.attempts import MAX_FAILED_ATTEMPTS
-from afk_proto.runtime.context import RunContext
-from afk_proto.runtime.contracts.platform_adapter import PlatformAdapter, WorkItem
-from afk_proto.runtime.discovery import discover_commands
+from ship_proto.adapters.azure_devops.adapter import AzureDevOpsAdapter
+from ship_proto.adapters.azure_devops.fake_az import FakeAz
+from ship_proto.adapters.copilot_cli import DummyCopilotCli
+from ship_proto.adapters.github.adapter import GitHubAdapter
+from ship_proto.adapters.github.fake_gh import FakeGh
+from ship_proto.adapters.platform_factory import create_platform_adapter
+from ship_proto.cli import BUILTIN_WORKFLOWS_DIR, main
+from ship_proto.runtime.attempts import MAX_FAILED_ATTEMPTS
+from ship_proto.runtime.context import RunContext
+from ship_proto.runtime.contracts.platform_adapter import PlatformAdapter, WorkItem
+from ship_proto.runtime.discovery import discover_commands
 
-SRC = Path(__file__).parents[1] / "src" / "afk_proto"
-SLICES_DIR = Path(__file__).parents[2] / "slices"
+SRC = Path(__file__).parents[1] / "src" / "ship_proto"
+WORKFLOWS_DIR = Path(__file__).parents[2] / "workflows"
 GITHUB_REMOTE = "https://github.com/owner/repo.git"
 AZURE_REMOTE = "https://dev.azure.com/org/project/_git/repo"
 
@@ -34,12 +34,15 @@ def imports_of(path: Path) -> set[str]:
     return found
 
 
-def test_discovers_every_slice() -> None:
-    assert set(discover_commands(SLICES_DIR)) == {"dev", "fix-prs", "address-prs"}
+def test_discovers_builtin_and_user_supplied_workflows() -> None:
+    commands = discover_commands(BUILTIN_WORKFLOWS_DIR, "ship_proto.workflows")
+    discover_commands(WORKFLOWS_DIR, into=commands)
+
+    assert set(commands) == {"dev", "fix-prs", "address-prs"}
 
 
-def test_slices_dir_option_selects_the_discovery_root(tmp_path: Path) -> None:
-    root = tmp_path / "custom_slices"
+def test_workflows_dir_option_selects_the_discovery_root(tmp_path: Path) -> None:
+    root = tmp_path / "custom_workflows"
     (root / "hello").mkdir(parents=True)
     (root / "__init__.py").write_text("")
     (root / "hello" / "__init__.py").write_text("")
@@ -52,21 +55,21 @@ def test_slices_dir_option_selects_the_discovery_root(tmp_path: Path) -> None:
         "command = C()\n"
     )
 
-    assert main(["--slices-dir", str(root), "hello"]) == 7
+    assert main(["--workflows-dir", str(root), "hello"]) == 7
 
 
 def test_duplicate_command_names_are_rejected(tmp_path: Path) -> None:
-    for slice_name in ("one", "two"):
-        slice_dir = tmp_path / "dup_slices" / slice_name
-        slice_dir.mkdir(parents=True)
-        (slice_dir / "__init__.py").write_text("")
-        (slice_dir / "command.py").write_text(
+    for workflow_name in ("one", "two"):
+        workflow_dir = tmp_path / "dup_workflows" / workflow_name
+        workflow_dir.mkdir(parents=True)
+        (workflow_dir / "__init__.py").write_text("")
+        (workflow_dir / "command.py").write_text(
             "class C:\n    name = 'same'\n    help = ''\ncommand = C()\n"
         )
-    (tmp_path / "dup_slices" / "__init__.py").write_text("")
+    (tmp_path / "dup_workflows" / "__init__.py").write_text("")
 
     with pytest.raises(ValueError, match="duplicate command: same"):
-        discover_commands(tmp_path / "dup_slices")
+        discover_commands(tmp_path / "dup_workflows")
 
 
 @pytest.mark.parametrize("remote_url", [GITHUB_REMOTE, AZURE_REMOTE])
@@ -140,9 +143,8 @@ def test_dry_run_skips_reply() -> None:
 
 
 def test_attempt_cap_stops_retries(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.syspath_prepend(str(SLICES_DIR.parent))
     monkeypatch.setattr(
-        "slices.dev.command.DummyCopilotCli",
+        "ship_proto.workflows.dev.command.DummyCopilotCli",
         lambda ctx: DummyCopilotCli(ctx, fail_if_contains="login"),
     )
     codes = [main(["--log-dir", str(tmp_path), "dev"]) for _ in range(MAX_FAILED_ATTEMPTS + 1)]
@@ -151,19 +153,20 @@ def test_attempt_cap_stops_retries(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     assert codes[-1] == 0
 
 
-def test_runtime_imports_no_slice_adapter_or_cli() -> None:
+def test_runtime_imports_no_workflow_adapter_or_cli() -> None:
     for path in (SRC / "runtime").rglob("*.py"):
         for module in imports_of(path):
-            assert not module.startswith(("slices", "afk_proto.adapters", "afk_proto.cli")), path
+            assert not module.startswith(("workflows", "ship_proto.workflows", "ship_proto.adapters", "ship_proto.cli")), path
 
 
-def test_slice_flow_imports_no_adapter_or_other_slice() -> None:
-    for slice_dir in SLICES_DIR.iterdir():
-        if not slice_dir.is_dir() or slice_dir.name == "__pycache__":
-            continue
-        for module in imports_of(slice_dir / "slice.py"):
-            assert not module.startswith("afk_proto.adapters"), slice_dir
-        for path in slice_dir.glob("*.py"):
-            for module in imports_of(path):
-                other = module.startswith("slices.") and not module.startswith(f"slices.{slice_dir.name}")
-                assert not other, path
+def test_workflow_flow_imports_no_adapter_or_other_workflow() -> None:
+    for root, package in ((BUILTIN_WORKFLOWS_DIR, "ship_proto.workflows"), (WORKFLOWS_DIR, "workflows")):
+        for workflow_dir in root.iterdir():
+            if not workflow_dir.is_dir() or workflow_dir.name == "__pycache__":
+                continue
+            for module in imports_of(workflow_dir / "workflow.py"):
+                assert not module.startswith("ship_proto.adapters"), workflow_dir
+            for path in workflow_dir.glob("*.py"):
+                for module in imports_of(path):
+                    other = module.startswith(f"{package}.") and not module.startswith(f"{package}.{workflow_dir.name}")
+                    assert not other, path

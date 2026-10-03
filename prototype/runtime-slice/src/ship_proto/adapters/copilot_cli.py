@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from afk_proto.runtime.context import RunContext
-from afk_proto.runtime.contracts.agent_client import AgentClient, AgentRunResult
+from ship_proto.runtime.context import RunContext
+from ship_proto.runtime.contracts.agent_client import AgentClient, AgentRunResult
 
 
 class DummyCopilotCli(AgentClient):

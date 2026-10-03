@@ -4,7 +4,7 @@ import json
 from collections.abc import Callable
 from typing import Any
 
-from afk_proto.runtime.contracts.platform_adapter import PlatformAdapter, PullRequest, ReviewThread, WorkItem
+from ship_proto.runtime.contracts.platform_adapter import PlatformAdapter, PullRequest, ReviewThread, WorkItem
 
 GhRunner = Callable[[tuple[str, ...]], str]
 

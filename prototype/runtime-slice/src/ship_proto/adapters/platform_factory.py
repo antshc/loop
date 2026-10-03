@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import re
 
-from afk_proto.adapters.azure_devops.adapter import AzureDevOpsAdapter
-from afk_proto.adapters.azure_devops.fake_az import FakeAz
-from afk_proto.adapters.github.adapter import GitHubAdapter
-from afk_proto.adapters.github.fake_gh import FakeGh
-from afk_proto.runtime.context import RunContext
-from afk_proto.runtime.contracts.platform_adapter import PlatformAdapter
+from ship_proto.adapters.azure_devops.adapter import AzureDevOpsAdapter
+from ship_proto.adapters.azure_devops.fake_az import FakeAz
+from ship_proto.adapters.github.adapter import GitHubAdapter
+from ship_proto.adapters.github.fake_gh import FakeGh
+from ship_proto.runtime.context import RunContext
+from ship_proto.runtime.contracts.platform_adapter import PlatformAdapter
 
 _GITHUB_REMOTE = re.compile(r"^(?:git@github\.com:|https://github\.com/)(?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?$")
 _AZURE_REMOTE = re.compile(

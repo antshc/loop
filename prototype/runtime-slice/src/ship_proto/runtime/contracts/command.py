@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from abc import ABC, abstractmethod
 
-from afk_proto.runtime.context import RunContext
+from ship_proto.runtime.context import RunContext
 
 
 class Command(ABC):

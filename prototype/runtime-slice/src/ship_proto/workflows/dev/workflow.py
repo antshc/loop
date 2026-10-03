@@ -4,12 +4,12 @@ import argparse
 from dataclasses import dataclass
 from pathlib import Path
 
-from afk_proto.runtime.attempts import may_attempt
-from afk_proto.runtime.context import RunContext
-from afk_proto.runtime.contracts.agent_client import AgentClient
-from afk_proto.runtime.contracts.execution_store import ExecutionStore
-from afk_proto.runtime.contracts.platform_adapter import PlatformAdapter
-from afk_proto.runtime.errors import ExitCode
+from ship_proto.runtime.attempts import may_attempt
+from ship_proto.runtime.context import RunContext
+from ship_proto.runtime.contracts.agent_client import AgentClient
+from ship_proto.runtime.contracts.execution_store import ExecutionStore
+from ship_proto.runtime.contracts.platform_adapter import PlatformAdapter
+from ship_proto.runtime.errors import ExitCode
 
 PROMPT = (Path(__file__).parent / "prompt.md").read_text()
 

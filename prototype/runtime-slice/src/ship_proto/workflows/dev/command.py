@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import argparse
 
-from afk_proto.adapters.copilot_cli import DummyCopilotCli
-from afk_proto.adapters.file_execution_store import FileExecutionStore
-from afk_proto.adapters.platform_factory import create_platform_adapter
-from afk_proto.runtime.context import RunContext
-from afk_proto.runtime.contracts.command import Command
-from . import slice as flow
+from ship_proto.adapters.copilot_cli import DummyCopilotCli
+from ship_proto.adapters.file_execution_store import FileExecutionStore
+from ship_proto.adapters.platform_factory import create_platform_adapter
+from ship_proto.runtime.context import RunContext
+from ship_proto.runtime.contracts.command import Command
+from . import workflow as flow
 
 
 class DevCommand(Command):
