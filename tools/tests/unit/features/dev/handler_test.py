@@ -26,9 +26,9 @@ def _spec(number: int = 3, title: str = "PROJ-3: Delivery slice") -> Issue:
     return Issue(
         number=number,
         title=title,
-        body="```metadata\ninitiative_id: PROJ-3\ntarget_branch: main\n```",
+        body="",
         url=f"https://github.com/owner/repo/issues/{number}",
-        labels=["spec", "repo:owner/repo"],
+        labels=["spec", "repo:target:owner/repo", "repo:base:main"],
     )
 
 

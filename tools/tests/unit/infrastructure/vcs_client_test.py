@@ -159,9 +159,9 @@ class TestVCSClientSpecMapping:
                     {
                         "number": 1,
                         "title": "PROJ-1: First delivery slice",
-                        "body": "```metadata\ninitiative_id: PROJ-1\ntarget_branch: main\n```",
+                        "body": "Spec body",
                         "url": "https://github.com/owner/repo/issues/1",
-                        "labels": ["spec", "repo:owner/repo"],
+                        "labels": ["spec", "repo:target:owner/repo", "repo:base:main"],
                     }
                 ]
             )
@@ -172,8 +172,8 @@ class TestVCSClientSpecMapping:
         assert len(result) == 1
         assert result[0].number == 1
         assert result[0].title == "PROJ-1: First delivery slice"
-        assert result[0].body.startswith("```metadata")
-        assert result[0].labels == ["spec", "repo:owner/repo"]
+        assert result[0].body == "Spec body"
+        assert result[0].labels == ["spec", "repo:target:owner/repo", "repo:base:main"]
 
     def test_no_spec_nodes_map_to_empty_list(self):
         # Scenario: No spec nodes map to an empty list

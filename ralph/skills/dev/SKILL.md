@@ -48,13 +48,12 @@ gh issue view "$spec" --repo "$repo" --json number,title,body,labels,state
 
 If the issue is missing or lacks the `spec` label, **exit** and report "Spec not found: `$spec`".
 
-Parse the fenced ```` ```metadata ```` block from `spec.body` — the only source read; legacy bold header lines (`**Initiative ID:**`, `**Target Branch:**`, `**Feature ID:**`) are never parsed, even when a `metadata` block is absent:
-- `initiative_id`
-- `target_branch` — this branch lives in the **source repository** the worktree is created from, not necessarily the harness repo.
+Read spec metadata from the title and labels only; never parse `spec.body`:
+- `initiative_id` — `spec.title` prefix before the first `:`.
+- `target_branch` — the single `repo:base:<branch>` label. This branch lives in the **source repository** the worktree is created from, not necessarily the harness repo.
+- `repository` (`owner/name`) — the single `repo:target:<owner>/<name>` label.
 
-Read `repository` (`owner/name`) from the spec's single `repo:<owner>/<name>` label.
-
-Any field missing, or no/several `repo:` labels → **exit** before creating any worktree, leave ticket labels unchanged, and report "Spec is missing required metadata."
+Any field missing, or no/several `repo:base:` or `repo:target:` labels → **exit** before creating any worktree, leave ticket labels unchanged, and report "Spec is missing required metadata."
 
 Derive the checkout for `repository`: equals `$HARNESS_REPO_PATH`'s own `origin` remote (`git -C "$HARNESS_REPO_PATH" remote get-url origin`, normalized the same way as a `repos` entry) → `CODEBASE_REPO_PATH := $HARNESS_REPO_PATH`. Otherwise → `CODEBASE_REPO_PATH := $HARNESS_REPO_PATH/workspace/<name>` (`<name>` is `repository`'s part after the slash). Confirm the checkout exists and its own `origin` normalizes to `repository` — missing or a clone of another repository → **exit** before creating any worktree, leave ticket labels unchanged, and report why. Never read `repos` to make this decision.
 
