@@ -4,7 +4,7 @@
 
 Single repo: docs and codebase live together at the reporoot. There is no `workspace/` split and no `.harness.env`.
 
-- **Docs & decisions:** `CONTEXT.md` (domain glossary) and `ARCHITECTURE.md` (Concept index and Codebase Structure), with Crosscutting Concepts under `docs/concepts/`. Standalone ADRs may live under `docs/adr/`; `ARCHITECTURE.md` does not index them.
+- **Docs & decisions:** `CONTEXT.md` (domain glossary) and `ARCHITECTURE.md` (ADR index, Concept index, and Codebase Structure), with ADRs under `docs/adr/` and Crosscutting Concepts under `docs/concepts/`.
 - **Code:** `ralph/` (the `ralph` plugin and its skills) and `tools/` (Python package `brain-tools`: `tools/src/afk`, `tools/src/modules`, `tools/tests`). The source hierarchy is documented under **Codebase Structure** in `ARCHITECTURE.md`.
 
 Within this file, resolve conflicts in this order: **safety and repository targeting → authoritative sources → navigation → build and validation → documentation conventions.** This ordering scopes only the rules in this file; it does not override `AGENTS.md`, path-scoped instructions, or user instructions.
@@ -24,7 +24,7 @@ Confirm the repo root with `git rev-parse --show-toplevel`. Origin: `antshc/ralp
 Consult these before searching the code:
 
 - **Domain glossary:** [`CONTEXT.md`](../CONTEXT.md).
-- **Architecture:** [`ARCHITECTURE.md`](../ARCHITECTURE.md) — Concept index and Codebase Structure.
+- **Architecture:** [`ARCHITECTURE.md`](../ARCHITECTURE.md) — ADR index, Concept index, and Codebase Structure.
 - **Skills overview:** [`ralph/skills/README.md`](../ralph/skills/README.md).
 
 ## 4. Navigation policy
