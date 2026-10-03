@@ -35,6 +35,8 @@ The contract represents capabilities the application needs, not the command stru
 ## Rules
 
 - MUST make application and slice code depend on the platform-neutral adapter contract rather than a concrete platform implementation.
+- MUST define the contract as an `abc.ABC` whose operations are `@abstractmethod`s, and MUST make each concrete adapter inherit it, so an adapter missing an operation fails at instantiation.
+- MUST keep the contract in the application/runtime layer; adapters import it, never the reverse.
 - MUST normalize platform-specific work-item and pull-request data before returning it through the contract.
 - MUST translate platform-specific states, identifiers, labels or tags, assignees, and response shapes inside the concrete adapter.
 - MUST keep native CLI invocation and parsing inside the concrete adapter.
@@ -43,6 +45,8 @@ The contract represents capabilities the application needs, not the command stru
 - MUST NOT expose `gh`, `az`, or provider-specific response models through the application-facing contract.
 - MUST NOT branch on GitHub-versus-Azure-DevOps behavior inside application or slice code when the difference can be handled by the adapter.
 - SHOULD keep the contract limited to capabilities actually required by the application.
+- SHOULD run a static type checker so overridden signatures are verified; `ABC` enforces only that the methods exist.
+- SHOULD run one shared contract test suite against every adapter.
 - SHOULD detect the platform from durable repository configuration such as the Git remote when no explicit platform configuration is supplied.
 
 ## Example
@@ -50,8 +54,8 @@ The contract represents capabilities the application needs, not the command stru
 A normalized Python contract:
 
 ```python
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Protocol
 
 
 @dataclass(frozen=True)
@@ -64,7 +68,8 @@ class WorkItem:
     url: str
 
 
-class PlatformAdapter(Protocol):
+class PlatformAdapter(ABC):
+    @abstractmethod
     def list_work_items(
         self,
         *,
@@ -73,8 +78,10 @@ class PlatformAdapter(Protocol):
         limit: int | None = None,
     ) -> list[WorkItem]: ...
 
+    @abstractmethod
     def add_comment(self, work_item_id: int, comment: str) -> None: ...
 
+    @abstractmethod
     def create_branch(self, name: str, from_branch: str = "main") -> None: ...
 ```
 
@@ -85,7 +92,7 @@ import json
 import subprocess
 
 
-class GitHubAdapter:
+class GitHubAdapter(PlatformAdapter):
     def __init__(self, owner: str, repo: str) -> None:
         self._repo = f"{owner}/{repo}"
 
@@ -168,6 +175,7 @@ items = platform.list_work_items(
 **Trade-offs**
 
 - The normalized contract can expose only the common or intentionally supported capability set.
+- Adapters are coupled to the contract by inheritance; `ABC` checks that methods exist, not their signatures, so a type checker is still needed.
 - Provider-specific features may require an explicit contract extension instead of leaking through the abstraction.
 - State and field normalization adds mapping code that must be kept correct as provider behavior changes.
 

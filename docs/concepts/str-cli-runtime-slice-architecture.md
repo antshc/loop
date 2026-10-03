@@ -34,6 +34,7 @@ Adapters used by more than one slice (for example GitHub, Copilot CLI) live in a
 
 - MUST organize workflows as one folder per slice under `slices/`; each slice maps to exactly one CLI command.
 - MUST define the CLI command contract, adapter contracts, and execution policy in `runtime`.
+- MUST define each contract as an `abc.ABC` with `@abstractmethod` operations and make every implementation inherit it.
 - MUST make each slice register its own command name, arguments, and help in `command.py`.
 - MUST make the CLI discover commands from slice folders; a new slice MUST NOT require editing a central registry.
 - MUST reject duplicate command names at discovery.
@@ -55,7 +56,7 @@ Adapters used by more than one slice (for example GitHub, Copilot CLI) live in a
 src/afk/
 ├── runtime/
 │   ├── contracts/
-│   │   ├── command.py            # Command protocol
+│   │   ├── command.py            # Command ABC
 │   │   ├── agent_client.py       # AgentClient, AgentRunResult
 │   │   ├── work_tracker.py       # platform-neutral work items and threads
 │   │   └── execution_store.py    # attempt records
@@ -87,18 +88,21 @@ afk address-prs    → slices/address_prs
 The command contract:
 
 ```python
-class Command(Protocol):
+class Command(ABC):
     name: str
     help: str
 
+    @abstractmethod
     def configure(self, parser: argparse.ArgumentParser) -> None: ...
+
+    @abstractmethod
     def run(self, args: argparse.Namespace, ctx: RunContext) -> int: ...
 ```
 
 A slice registers its command and composes its adapters:
 
 ```python
-class DevCommand:
+class DevCommand(Command):
     name = "dev"
     help = "Run the autonomous dev loop on open specs."
 
