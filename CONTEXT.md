@@ -38,3 +38,11 @@ _Avoid_: Epic, parent issue
 **Workflow**:  
 One autonomous procedure Shipyard runs as a `ship` subcommand, such as `dev`, discovered and loaded as a plugin.  
 _Avoid_: Slice, feature, template
+
+**Hook**:  
+A user-declared shell command that Shipyard runs on the host at a Hook point, before the agent starts.  
+_Avoid_: Callback, script, setup step
+
+**Hook point**:  
+A named moment in a run's lifecycle at which Shipyard runs the Hooks declared for it, such as `worktree-ready`.  
+_Avoid_: Event, trigger, stage
