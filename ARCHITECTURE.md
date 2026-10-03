@@ -6,6 +6,14 @@ A Copilot plugin (`ralph`) of skills for an autonomous development loop and PR r
 
 Shared language is defined in [CONTEXT.md](CONTEXT.md).
 
+## Architecture Decision Records
+
+An ADR records a point-in-time, localized decision — hard to reverse, surprising without context, and the result of a real trade-off.
+
+| # | Decision | Trigger condition | Summary |
+|---|----------|-------------------|---------|
+| [0001](docs/adr/0001-install-shipyard-with-pip-from-the-repository.md) | Install Shipyard with pip from the repository | install Shipyard, pip install, brain-tools packaging, distribution channel, PyPI, pipx, zipapp, standalone binary, versioning, delivery to users, running scripts without install, afk_dev entry points | Install `brain-tools` with `pip` from this repository so the repository revision defines the delivered version; no package index, binary, `pipx`, or zipapp distribution. |
+
 ## Crosscutting Concepts
 
 This section describes crosscutting concepts (practices, patterns, regulations, recurring approaches). They preserve architectural consistency.
