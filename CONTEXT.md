@@ -14,3 +14,15 @@ An orchestration framework for Headless AI Agents using Git worktrees. It handle
 **Crew**:  
 An AI Agent Team: multiple specialized agents with distinct responsibilities coordinated toward a shared outcome. Coordination may occur through direct interaction, an orchestrator, or shared external state.  
 _Avoid_: AI Agent Team
+
+**Harness**:  
+The repository from which an agent is executed and where its docs, specs, instructions, and skills live. It either holds the source code itself or wraps the repositories that do.  
+_Avoid_: Control repo, wrapper repo
+
+**Single Repo**:  
+A harness layout in which the harness and the source code are one repository.  
+_Avoid_: Monorepo, standalone harness
+
+**Multi Repo**:  
+A harness layout in which the harness is a separate parent repository wrapping one or more source repositories.  
+_Avoid_: Wrapping harness, parent harness
