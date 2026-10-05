@@ -1,13 +1,18 @@
 from __future__ import annotations
 
-from orb.agents.base import AgentClientBase
-from orb.contracts.agent_client import AgentOptions, AgentResult, AgentSession, SessionStore
-from orb.contracts.capsule import AgentClientFactory, CommandExecutor
-from orb.process import checked_output
+from orb.contracts.agent_client import (
+    AgentClient,
+    AgentOptions,
+    AgentResult,
+    AgentSession,
+    SessionStore,
+)
+from orb.contracts.capsule import AgentClientFactory
+from orb.process import CommandExecutor, checked_output
 from orb.prompt import PromptPreprocessor
 
 
-class CopilotClient(AgentClientBase):
+class CopilotClient(AgentClient):
     """Runs one prompt through `copilot -p` using the capsule's executor."""
 
     def __init__(

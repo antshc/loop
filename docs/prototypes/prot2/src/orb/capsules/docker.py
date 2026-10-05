@@ -9,9 +9,9 @@ from pathlib import Path
 from uuid import uuid4
 
 from orb.contracts.agent_client import AgentOptions, AgentResult
-from orb.contracts.capsule import AgentClientFactory, Capsule, CommandExecutor
+from orb.contracts.capsule import AgentClientFactory, Capsule
 from orb.errors import OrbError
-from orb.process import CommandResult, checked_output, execute
+from orb.process import CommandExecutor, CommandResult, checked_output, execute
 
 CAPSULE_HOME = "/home/agent"
 CAPSULE_WORKSPACE = f"{CAPSULE_HOME}/workspace"

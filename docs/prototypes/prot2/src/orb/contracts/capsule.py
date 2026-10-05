@@ -1,21 +1,11 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Mapping
 from types import TracebackType
-from typing import Protocol
 
 from orb.contracts.agent_client import AgentClient, AgentOptions, AgentResult
-from orb.process import CommandResult
-
-
-class CommandExecutor(Protocol):
-    """Runs a command in the capsule's environment; a non-zero exit is returned, not raised."""
-
-    def __call__(
-        self, command: Sequence[str] | str, *, timeout_s: float | None = None
-    ) -> CommandResult: ...
-
+from orb.process import CommandExecutor
 
 AgentClientFactory = Callable[[CommandExecutor], AgentClient]
 

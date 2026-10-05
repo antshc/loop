@@ -23,14 +23,14 @@ CONTAINER_WORKSPACE = "/home/agent/workspace"
 
 
 def test_no_capsule_delegates_prompt_args_and_options_to_its_agent(tmp_path: Path) -> None:
-    agent = FakeAgentClient(lambda prompt, args, options: f"{prompt}:{args['A']}:{options.model}")
+    agent = FakeAgentClient(lambda prompt, options: f"{prompt}:{options.model}")
 
     with NoCapsule(tmp_path, lambda executor: agent) as capsule:
-        result = capsule.run("p", {"A": "1"}, AgentOptions(model="m"))
+        result = capsule.run("p=${{A}}", {"A": "1"}, AgentOptions(model="m"))
 
     assert isinstance(capsule, Capsule)
     assert capsule.workspace == str(tmp_path)
-    assert result.stdout == "p:1:m"
+    assert result.stdout == "p=1:m"
 
 
 def test_no_capsule_executes_commands_on_the_host_in_the_workspace(tmp_path: Path) -> None:

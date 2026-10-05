@@ -5,6 +5,7 @@ import subprocess
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 
 from orb.errors import CommandError
 
@@ -14,6 +15,14 @@ class CommandResult:
     returncode: int
     stdout: str
     stderr: str
+
+
+class CommandExecutor(Protocol):
+    """Runs a command in a capsule's environment; a non-zero exit is returned, not raised."""
+
+    def __call__(
+        self, command: Sequence[str] | str, *, timeout_s: float | None = None
+    ) -> CommandResult: ...
 
 
 def _label(args: Sequence[str] | str) -> str:

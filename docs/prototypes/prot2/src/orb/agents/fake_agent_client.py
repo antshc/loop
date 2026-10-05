@@ -1,27 +1,35 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 
-from orb.contracts.agent_client import AgentClient, AgentOptions, AgentResult
+from orb.contracts.agent_client import AgentClient, AgentOptions, AgentResult, AgentSession
+from orb.process import CommandResult
+from orb.prompt import PromptPreprocessor
+from orb.stores.memory import InMemorySessionStore
 
-Handler = Callable[[str, Mapping[str, str], AgentOptions], "str | AgentResult"]
+Handler = Callable[[str, AgentOptions], "str | AgentResult"]
 
 
 class FakeAgentClient(AgentClient):
-    """Skips rendering and the CLI: a handler stands in for the agent and every call is recorded."""
+    """Keeps rendering and session handling; a handler stands in for the provider CLI."""
 
     def __init__(self, handler: Handler | None = None) -> None:
-        self._handler = handler or (lambda prompt, prompt_args, options: "")
-        self.calls: list[tuple[str, Mapping[str, str], AgentOptions]] = []
+        super().__init__(
+            lambda command, *, timeout_s=None: CommandResult(0, "", ""),
+            PromptPreprocessor(lambda command: ""),
+            InMemorySessionStore(),
+        )
+        self._handler = handler or (lambda prompt, options: "")
+        self.calls: list[tuple[str, AgentOptions]] = []
 
-    def run(
+    def _invoke(
         self,
         prompt: str,
-        prompt_args: Mapping[str, str] | None = None,
-        options: AgentOptions | None = None,
+        options: AgentOptions,
+        session: AgentSession | None,
+        *,
+        resume: bool,
     ) -> AgentResult:
-        args = prompt_args or {}
-        options = options or AgentOptions()
-        self.calls.append((prompt, args, options))
-        outcome = self._handler(prompt, args, options)
+        self.calls.append((prompt, options))
+        outcome = self._handler(prompt, options)
         return outcome if isinstance(outcome, AgentResult) else AgentResult(outcome, "", 0)

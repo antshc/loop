@@ -3,13 +3,38 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from orb.contracts.source_control import PullRequest, ReviewThread, WorkItem
 from orb.process import cli_runner, run_command
 
 GhRunner = Callable[[tuple[str, ...]], str]
+
+
+@dataclass(frozen=True)
+class WorkItem:
+    id: str
+    title: str
+    state: str
+    tags: tuple[str, ...]
+    url: str
+
+
+@dataclass(frozen=True)
+class PullRequest:
+    id: str
+    title: str
+    url: str
+    branch: str
+
+
+@dataclass(frozen=True)
+class ReviewThread:
+    id: str
+    path: str
+    body: str
+    resolved: bool
 
 _ISSUES_QUERY = (
     "query($owner: String!, $repo: String!) {"

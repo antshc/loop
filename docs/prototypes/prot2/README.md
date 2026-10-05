@@ -24,10 +24,7 @@ classDiagram
         class NoCapsule
         class DockerCapsule
         class AgentClient {
-            <<Interface>>
-            +run(prompt, prompt_args, options) AgentResult
-        }
-        class AgentClientBase {
+            <<Abstract>>
             +run(prompt, prompt_args, options) AgentResult
             -_invoke(prompt, options, session, resume) AgentResult
         }
@@ -83,10 +80,9 @@ classDiagram
     NoCapsule ..|> Capsule
     DockerCapsule ..|> Capsule
     Capsule *-- AgentClient
-    AgentClientBase ..|> AgentClient
-    CopilotClient --|> AgentClientBase : Extends
-    AgentClientBase o-- PromptPreprocessor
-    AgentClientBase o-- SessionStore
+    CopilotClient --|> AgentClient : Extends
+    AgentClient o-- PromptPreprocessor
+    AgentClient o-- SessionStore
     SessionStore ..> AgentSession : Use
     AgentClient ..> AgentOptions : Use
     AgentClient ..> AgentResult : Use

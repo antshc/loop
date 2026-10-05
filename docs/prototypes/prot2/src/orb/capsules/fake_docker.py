@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from orb.contracts.capsule import CommandExecutor
-from orb.process import CommandResult
+from orb.process import CommandExecutor, CommandResult
 
 
 class FakeDocker:

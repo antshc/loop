@@ -9,7 +9,6 @@ from conftest import git
 from orb import (
     MAX_FAILED_ATTEMPTS,
     AgentClient,
-    AgentClientBase,
     AgentResult,
     Capsule,
     CopilotClient,
@@ -85,7 +84,7 @@ class DevHarness:
         self.agent = FakeAgentClient(self._handle)
         self.commits = True
 
-    def _handle(self, prompt: str, prompt_args: object, options: object) -> str | AgentResult:
+    def _handle(self, prompt: str, options: object) -> str | AgentResult:
         if self.commits:
             self.git.commit(next(iter(self.git.worktrees)), "work")
         return next(self.outputs, "")
@@ -108,15 +107,12 @@ def test_dev_commits_on_the_spec_branch_with_its_session_and_cleans_up(tmp_path:
 
     code = harness.run()
 
-    prompt, prompt_args, options = harness.agent.calls[0]
+    prompt, options = harness.agent.calls[0]
     assert code == 0
-    assert "${{SPEC_TITLE}}" in prompt
-    assert prompt_args == {
-        "SOURCE_BRANCH": "orb/spec-1",
-        "SPEC_ID": "1",
-        "SPEC_TITLE": "Add login page",
-        "SPEC_URL": "https://github.com/owner/repo/issues/1",
-    }
+    assert "branch `orb/spec-1`" in prompt
+    assert "Spec #1: Add login page" in prompt
+    assert "https://github.com/owner/repo/issues/1" in prompt
+    assert "${{" not in prompt
     assert (options.session_key, options.session_name_prefix) == ("dev-1", "orb-")
     assert len(harness.git.branches["orb/spec-1"]) == 1
     assert harness.git.worktrees == {} and len(harness.git.removed) == 1
@@ -142,7 +138,7 @@ def test_dev_stops_iterating_at_the_completion_signal(tmp_path: Path) -> None:
 
 def test_dev_reports_a_failed_agent_and_still_removes_the_worktree(tmp_path: Path) -> None:
     harness = DevHarness(tmp_path, [])
-    harness.agent = FakeAgentClient(lambda p, a, o: AgentResult("", "nope", 1))
+    harness.agent = FakeAgentClient(lambda p, o: AgentResult("", "nope", 1))
 
     code = harness.run()
 
@@ -164,7 +160,7 @@ def test_dev_resumes_the_same_agent_session_across_iterations(tmp_path: Path) ->
 
 
 def test_implementations_follow_the_contracts() -> None:
-    assert issubclass(CopilotClient, AgentClientBase) and issubclass(AgentClientBase, AgentClient)
+    assert issubclass(CopilotClient, AgentClient) and issubclass(FakeAgentClient, AgentClient)
     assert issubclass(NoCapsule, Capsule) and issubclass(DockerCapsule, Capsule)
 
 
