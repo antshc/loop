@@ -23,34 +23,35 @@ swimlane-beta TB
 
   subgraph cli [AFK CLI]
     start([Operator runs afk_dev])
-    args[Validate arguments and configure logging]
+    args[1 - Validate arguments and configure logging]
   end
 
   subgraph orb [Orb - dev use case]
-    list[List open specs]
-    anySpecs{Specs found?}
-    fetch[Fetch spec sub-issues]
-    filter{Actionable issues?}
-    reset[Clear attempt count when set]
-    cap{Attempts reached cap?}
-    compose[Compose prompt from prompt text and spec number]
-    dry{Dry run?}
-    record[Record attempt]
-    log[(Execution log)]
-    next{Another spec?}
+    list[2 - List open specs]
+    anySpecs{3 - Specs found?}
+    fetch[4 - Fetch spec sub-issues]
+    filter{5 - Actionable issues?}
+    reset[5a.1 - Clear attempt count when set]
+    cap{6 - Attempts reached cap?}
+    compose[7 - Compose prompt from prompt text and spec number]
+    dry{8 - Dry run?}
+    record[9 - Record attempt]
+    log[(9.1 - Execution log)]
+    next{10 - Another spec?}
+    nextSpec([Next spec - back to step 4])
     done([Run completed])
   end
 
   subgraph copilot [Copilot agent CLI]
-    promptIn[/Prompt: ralph:dev skill plus spec number/]
-    session[Start non-interactive session]
-    dev[[Develop Spec]]
-    exitNode[Session ends]
+    promptIn[/8b.1 - Prompt: ralph:dev skill plus spec number/]
+    session[8b.2 - Start non-interactive session]
+    dev[[8b.3 - Develop Spec]]
+    exitNode[8b.4 - Session ends]
   end
 
   subgraph ext [External systems - GitHub]
-    specs[(Open spec issues)]
-    issues[(Spec sub-issues)]
+    specs[(2.1 - Open spec issues)]
+    issues[(4.1 - Spec sub-issues)]
   end
 
   start --> args -->|repo board, attempt cap, agent alias, prompt, log dir| list
@@ -66,7 +67,7 @@ swimlane-beta TB
   dry -->|no| promptIn --> session --> dev --> exitNode -->|session ended| record
   record -->|persist count| log
   record --> next
-  next -->|yes| fetch
+  next -->|yes| nextSpec
   next -->|no| done
 
   classDef default fill:#242424,stroke:#8b949e,color:#c9d1d9,stroke-width:1px
@@ -232,21 +233,24 @@ Step numbers follow the `/ralph:dev` skill's loop sections; a dotted number such
 %% diagram-id: autonomous-spec-delivery-relationships
 flowchart LR
     actionable(["Spec has actionable issues"])
-    capped(["Spec at attempt cap"])
+    cap{"1 - Spec at attempt cap?"}
+    skipped(["Spec skipped"])
     hitl(["Issue labelled hitl"])
-    run[["Run AFK Dev Service"]]
-    dev[["Develop Spec"]]
-    loop[["Ralph Loop"]]
+    run[["2 - Run AFK Dev Service"]]
+    dev[["3 - Develop Spec"]]
+    loop[["4 - Ralph Loop"]]
     pr(["Draft pull request"])
+    backActionable(["Back to: Spec has actionable issues"])
 
-    actionable --> run
-    capped -- blocks --> run
+    actionable --> cap
+    cap -- "yes, blocks" --> skipped
+    cap -- no --> run
     run -- "one session per spec" --> dev
     dev -- "worktree built" --> loop
     dev --> pr
     loop -- "blocked or repeated partial" --> hitl
-    hitl -- excludes issue from --> actionable
-    hitl -. "Operator removes label" .-> actionable
+    hitl -- excludes issue from --> backActionable
+    hitl -. "Operator removes label" .-> backActionable
 
     classDef default fill:#242424,stroke:#8b949e,color:#c9d1d9,stroke-width:1px
 ```
