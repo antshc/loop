@@ -28,6 +28,7 @@ from orb.prompt import render_prompt
 from orb.runner import run
 from orb.capsule import DEFAULT_COMPLETION_SIGNAL, RunResult, Capsule, create_capsule
 from orb.capsules.worktree import WorktreeCapsuleProvider, worktree
+from orb.sandboxes.docker import DockerSandboxProvider, Mount, docker
 from orb.sandboxes.no_sandbox import NoSandboxProvider, no_sandbox
 from orb.worktree import Worktree, create_worktree
 from orb.stores.file import FileExecutionStore
@@ -40,12 +41,14 @@ __all__ = [
     "CommandError",
     "CopilotCliAgent",
     "DEFAULT_COMPLETION_SIGNAL",
+    "DockerSandboxProvider",
     "ExecutionStore",
     "ExtractionError",
     "FileExecutionStore",
     "Hook",
     "Hooks",
     "MAX_FAILED_ATTEMPTS",
+    "Mount",
     "NoSandboxProvider",
     "PromptError",
     "PullRequest",
@@ -66,6 +69,7 @@ __all__ = [
     "WorktreeCapsuleProvider",
     "copilot",
     "create_capsule",
+    "docker",
     "create_worktree",
     "extract_json",
     "extract_tag",

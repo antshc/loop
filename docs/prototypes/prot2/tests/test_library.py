@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,7 @@ from orb import (
     ScriptedAgent,
     create_capsule,
     create_worktree,
+    docker,
     extract_json,
     extract_tag,
     no_sandbox,
@@ -202,3 +204,28 @@ def test_capsule_runs_agent_through_the_sandbox(repo: Path) -> None:
     spy = Spy()
     run(capsule=worktree(sandbox=spy), agent=ScriptedAgent(lambda p, c: "ok"), repo=repo, prompt="x")
     assert len(spy.created) == 1
+
+
+def test_docker_sandbox_mounts_worktree_and_git_dir(
+    repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = tmp_path / "calls.txt"
+    fake = tmp_path / "bin" / "docker"
+    fake.parent.mkdir()
+    fake.write_text(f'#!/bin/sh\necho "$@" >> {calls}\n')
+    fake.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{fake.parent}:{os.environ['PATH']}")
+
+    tree = create_worktree(repo=repo, branch="d")
+    handle = docker(env={"A": "1"}, cpus=2).create(tree.path, {"B": "2"})
+    handle.exec("echo hi")
+    handle.close()
+
+    lines = calls.read_text().splitlines()
+    run_line = next(line for line in lines if line.startswith("run -d"))
+    assert f"-v {tree.path}:/home/agent/workspace:z" in run_line
+    assert f"-v {repo / '.git'}:{repo / '.git'}:z" in run_line
+    assert "-e A=1" in run_line and "-e B=2" in run_line and "--cpus 2" in run_line
+    assert run_line.endswith(f"orb:{repo.name}")
+    assert any(line.endswith("sh -c echo hi") for line in lines)
+    assert any(line.startswith("rm orb-") for line in lines)
