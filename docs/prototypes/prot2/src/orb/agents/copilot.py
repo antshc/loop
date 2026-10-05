@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from orb.contracts.agent_client import AgentClient, AgentResult
-from orb.process import execute
+from orb.contracts.sandbox import SandboxHandle
 
 
 class CopilotCliAgent(AgentClient):
@@ -25,13 +25,13 @@ class CopilotCliAgent(AgentClient):
         self._extra_args = tuple(extra_args)
         self._timeout_s = timeout_s
 
-    def run(self, prompt: str, cwd: Path) -> AgentResult:
+    def run(self, prompt: str, sandbox: SandboxHandle) -> AgentResult:
         args = [self._executable, "-p", prompt, "--silent", *self._extra_args]
         if self._model:
             args += ["--model", self._model]
         for directory in self._add_dirs:
             args += ["--add-dir", str(directory)]
-        result = execute(args, cwd=cwd, timeout_s=self._timeout_s)
+        result = sandbox.exec(args, timeout_s=self._timeout_s)
         if result.returncode == 0:
             return AgentResult(success=True, output=result.stdout)
         return AgentResult(success=False, output=result.stdout + result.stderr)

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import os
 import subprocess
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -23,6 +24,7 @@ def execute(
     args: Sequence[str] | str,
     *,
     cwd: Path | None = None,
+    env: Mapping[str, str] | None = None,
     timeout_s: float | None = None,
 ) -> CommandResult:
     """Run a process without raising on a non-zero exit; a string runs through the shell."""
@@ -31,6 +33,7 @@ def execute(
             args,
             shell=isinstance(args, str),
             cwd=cwd,
+            env=None if env is None else {**os.environ, **env},
             capture_output=True,
             text=True,
             timeout=timeout_s,

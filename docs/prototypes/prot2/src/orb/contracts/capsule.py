@@ -4,6 +4,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 
+from orb.contracts.sandbox import SandboxHandle
+
 
 @dataclass(frozen=True)
 class Hook:
@@ -30,6 +32,10 @@ class CapsuleInstance(ABC):
     @property
     @abstractmethod
     def host_branch(self) -> str: ...
+
+    @property
+    @abstractmethod
+    def sandbox(self) -> SandboxHandle: ...
 
     @abstractmethod
     def exec(self, command: str, *, timeout_s: float | None = None) -> str:

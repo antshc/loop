@@ -73,7 +73,7 @@ class Capsule:
                 },
                 execute=self._instance.exec,
             )
-            result = agent.run(text, self._instance.path)
+            result = agent.run(text, self._instance.sandbox)
             if not result.success:
                 raise AgentError(name, result.output)
             stdout = result.output

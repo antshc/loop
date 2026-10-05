@@ -10,11 +10,15 @@ from orb import (
     CommandError,
     Hook,
     Hooks,
+    NoSandboxProvider,
     PromptError,
+    SandboxHandle,
     ScriptedAgent,
     create_capsule,
+    create_worktree,
     extract_json,
     extract_tag,
+    no_sandbox,
     parallel_settled,
     render_prompt,
     run,
@@ -171,3 +175,30 @@ def test_parallel_capsules_on_distinct_branches(repo: Path) -> None:
     assert set(git(repo, "branch", "--list", "orb/*").replace("*", "").split()) == {
         f"orb/{n}" for n in "abcd"
     }
+
+
+def test_no_sandbox_execs_in_worktree_with_merged_env(repo: Path) -> None:
+    handle = no_sandbox(env={"A": "1", "B": "1"}).create(repo, {"B": "2"})
+    result = handle.exec("echo $A$B; pwd; false")
+    assert result.returncode == 1
+    assert result.stdout.split() == ["12", str(repo)]
+
+
+def test_create_worktree_is_independent_of_sandbox(repo: Path) -> None:
+    tree = create_worktree(repo=repo, branch="feature/y")
+    assert tree.branch == "feature/y" and tree.path.is_dir()
+    tree.close()
+    assert git(repo, "worktree", "list", "--porcelain").count("worktree ") == 1
+
+
+def test_capsule_runs_agent_through_the_sandbox(repo: Path) -> None:
+    class Spy(NoSandboxProvider):
+        created: list[Path] = []
+
+        def create(self, worktree_path: Path, env: dict[str, str] | None = None) -> SandboxHandle:
+            self.created.append(worktree_path)
+            return super().create(worktree_path, env)
+
+    spy = Spy()
+    run(capsule=worktree(sandbox=spy), agent=ScriptedAgent(lambda p, c: "ok"), repo=repo, prompt="x")
+    assert len(spy.created) == 1
