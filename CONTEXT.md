@@ -27,7 +27,7 @@ A harness layout in which the harness is a separate parent repository wrapping o
 _Avoid_: Wrapping harness, parent harness
 
 **Ticket**:  
-A platform-neutral unit of tracked work, such as a GitHub issue or an Azure DevOps work item, that Shipyard reads and acts on.  
+A platform-neutral unit of tracked work, such as a GitHub issue or an Azure DevOps work item, that Orb reads and acts on.  
 _Avoid_: Issue, Work item
 
 **Spec**:  
@@ -35,15 +35,15 @@ A Ticket that groups the Tickets one dev run delivers, carrying the target branc
 _Avoid_: Epic, parent issue
 
 **Workflow**:  
-One autonomous procedure Shipyard runs as a `ship` subcommand, such as `dev`, discovered and loaded as a plugin.  
+One autonomous procedure Orb runs as a `ship` subcommand, such as `dev`, discovered and loaded as a plugin.  
 _Avoid_: Slice, feature, template
 
 **Hook**:  
-A user-declared shell command that Shipyard runs on the host at a Hook point, before the agent starts.  
+A user-declared shell command that Orb runs on the host at a Hook point, before the agent starts.  
 _Avoid_: Callback, script, setup step
 
 **Hook point**:  
-A named moment in a run's lifecycle at which Shipyard runs the Hooks declared for it, such as `worktree-ready`.  
+A named moment in a run's lifecycle at which Orb runs the Hooks declared for it, such as `worktree-ready`.  
 _Avoid_: Event, trigger, stage
 
 **Capsule**:  
