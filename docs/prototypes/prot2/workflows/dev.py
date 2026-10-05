@@ -11,13 +11,13 @@ from orb import (
     AgentClient,
     ExecutionStore,
     FileExecutionStore,
-    PlatformAdapter,
     CapsuleProvider,
     OrbError,
     copilot,
     may_attempt,
-    platform_for_repo,
     run,
+    work_tracker_for_repo,
+    WorkTracker,
     worktree,
 )
 
@@ -30,7 +30,7 @@ def main(
     *,
     agent: AgentClient | None = None,
     capsule: CapsuleProvider | None = None,
-    platform: PlatformAdapter | None = None,
+    work_tracker: WorkTracker | None = None,
     store: ExecutionStore | None = None,
 ) -> int:
     parser = argparse.ArgumentParser(prog="dev")
@@ -43,7 +43,7 @@ def main(
     logging.basicConfig(level=logging.INFO, stream=sys.stderr, format="%(message)s")
 
     repo = args.repo.resolve()
-    tracker = platform or platform_for_repo(repo, dry_run=args.dry_run)
+    tracker = work_tracker or work_tracker_for_repo(repo, dry_run=args.dry_run)
     attempts = store or FileExecutionStore(args.log_dir)
     provider = capsule or worktree()
     ai = agent or copilot(args.model, add_dirs=(repo,))

@@ -11,7 +11,8 @@ from orb import (
     FileExecutionStore,
     MAX_FAILED_ATTEMPTS,
     ScriptedAgent,
-    platform_from_remote,
+    source_control_from_remote,
+    work_tracker_from_remote,
     worktree,
 )
 from orb.platforms.azure_devops import AzureDevOpsAdapter
@@ -38,9 +39,10 @@ def imports_of(path: Path) -> set[str]:
 
 @pytest.mark.parametrize("remote_url", [GITHUB_REMOTE, AZURE_REMOTE])
 def test_platforms_yield_identical_normalized_models(remote_url: str) -> None:
-    platform = platform_from_remote(remote_url, gh=FakeGh(), az=FakeAz())
+    tracker = work_tracker_from_remote(remote_url, gh=FakeGh(), az=FakeAz())
+    platform = source_control_from_remote(remote_url, gh=FakeGh(), az=FakeAz())
 
-    assert [(s.title, s.state, s.tags[0]) for s in platform.list_specs()] == [
+    assert [(s.title, s.state, s.tags[0]) for s in tracker.list_specs()] == [
         ("Add login page", "open", "spec"),
         ("Add logout button", "open", "spec"),
     ]
@@ -53,10 +55,10 @@ def test_platforms_yield_identical_normalized_models(remote_url: str) -> None:
 
 
 def test_adapter_selection_and_unsupported_remote() -> None:
-    assert isinstance(platform_from_remote(GITHUB_REMOTE, gh=FakeGh()), GitHubAdapter)
-    assert isinstance(platform_from_remote(AZURE_REMOTE, az=FakeAz()), AzureDevOpsAdapter)
+    assert isinstance(work_tracker_from_remote(GITHUB_REMOTE, gh=FakeGh()), GitHubAdapter)
+    assert isinstance(source_control_from_remote(AZURE_REMOTE, az=FakeAz()), AzureDevOpsAdapter)
     with pytest.raises(ValueError, match="unsupported remote"):
-        platform_from_remote("https://example.com/x/y")
+        work_tracker_from_remote("https://example.com/x/y")
 
 
 def test_azure_reply_posts_a_json_body_file() -> None:
@@ -157,30 +159,30 @@ def test_parallel_planner_reports_a_failed_issue_and_still_merges_others(repo: P
 
 
 def test_dev_workflow_commits_on_spec_branch_and_caps_attempts(repo: Path, tmp_path: Path) -> None:
-    platform = platform_from_remote(GITHUB_REMOTE, gh=FakeGh())
+    platform = work_tracker_from_remote(GITHUB_REMOTE, gh=FakeGh())
     store = FileExecutionStore(tmp_path / "logs")
     agent = ScriptedAgent(lambda p, cwd: "did nothing")
     argv = ["--repo", str(repo), "--limit", "1"]
 
     codes = [
-        dev.main(argv, agent=agent, platform=platform, store=store) for _ in range(MAX_FAILED_ATTEMPTS + 1)
+        dev.main(argv, agent=agent, work_tracker=platform, store=store) for _ in range(MAX_FAILED_ATTEMPTS + 1)
     ]
 
     assert codes == [1] * MAX_FAILED_ATTEMPTS + [0]
     assert len(agent.prompts) == MAX_FAILED_ATTEMPTS
 
     committing = ScriptedAgent(lambda p, cwd: commit_file(cwd, "login.txt", "x", "login") or "ok")
-    assert dev.main(argv, agent=committing, platform=platform, store=FileExecutionStore(tmp_path / "other")) == 0
+    assert dev.main(argv, agent=committing, work_tracker=platform, store=FileExecutionStore(tmp_path / "other")) == 0
     assert git(repo, "rev-list", "--count", "main..orb/spec-1") == "1"
 
 
 def test_fix_prs_workflow_commits_on_pull_request_branch(repo: Path, tmp_path: Path) -> None:
     git(repo, "branch", "feature/login")
-    platform = platform_from_remote(GITHUB_REMOTE, gh=FakeGh())
+    platform = source_control_from_remote(GITHUB_REMOTE, gh=FakeGh())
     agent = ScriptedAgent(lambda p, cwd: commit_file(cwd, "fix.txt", "x", "fix") or "ok")
 
     code = fix_prs.main(
-        ["--repo", str(repo)], agent=agent, platform=platform, store=FileExecutionStore(tmp_path)
+        ["--repo", str(repo)], agent=agent, source_control=platform, store=FileExecutionStore(tmp_path)
     )
 
     assert code == 0
@@ -190,11 +192,11 @@ def test_fix_prs_workflow_commits_on_pull_request_branch(repo: Path, tmp_path: P
 
 def test_address_prs_workflow_posts_the_agents_reply(repo: Path, tmp_path: Path) -> None:
     gh = FakeGh()
-    platform = platform_from_remote(GITHUB_REMOTE, gh=gh)
+    platform = source_control_from_remote(GITHUB_REMOTE, gh=gh)
     agent = ScriptedAgent(lambda p, cwd: "Renamed, thanks.\n")
 
     code = address_prs.main(
-        ["--repo", str(repo)], agent=agent, platform=platform, store=FileExecutionStore(tmp_path)
+        ["--repo", str(repo)], agent=agent, source_control=platform, store=FileExecutionStore(tmp_path)
     )
 
     reply = gh.calls[-1]

@@ -11,11 +11,17 @@ from orb.agents.scripted import ScriptedAgent
 from orb.attempts import MAX_FAILED_ATTEMPTS, may_attempt
 from orb.contracts.agent_client import AgentClient, AgentResult
 from orb.contracts.execution_store import ExecutionStore
-from orb.contracts.platform_adapter import PlatformAdapter, PullRequest, ReviewThread, WorkItem
+from orb.contracts.source_control_platform import PullRequest, ReviewThread, SourceControlPlatform
 from orb.contracts.capsule import Hook, Hooks, CapsuleInstance, CapsuleProvider
+from orb.contracts.work_tracker import WorkItem, WorkTracker
 from orb.errors import AgentError, CommandError, ExtractionError, PromptError, OrbError
 from orb.parallel import Settled, parallel_settled
-from orb.platforms.factory import platform_for_repo, platform_from_remote
+from orb.platforms.factory import (
+    source_control_for_repo,
+    source_control_from_remote,
+    work_tracker_for_repo,
+    work_tracker_from_remote,
+)
 from orb.process import run_command
 from orb.prompt import render_prompt
 from orb.runner import run
@@ -37,7 +43,6 @@ __all__ = [
     "Hook",
     "Hooks",
     "MAX_FAILED_ATTEMPTS",
-    "PlatformAdapter",
     "PromptError",
     "PullRequest",
     "ReviewThread",
@@ -46,9 +51,11 @@ __all__ = [
     "CapsuleInstance",
     "CapsuleProvider",
     "ScriptedAgent",
+    "SourceControlPlatform",
     "Settled",
     "OrbError",
     "WorkItem",
+    "WorkTracker",
     "WorktreeCapsuleProvider",
     "copilot",
     "create_capsule",
@@ -56,10 +63,12 @@ __all__ = [
     "extract_tag",
     "may_attempt",
     "parallel_settled",
-    "platform_for_repo",
-    "platform_from_remote",
     "render_prompt",
     "run",
     "run_command",
+    "source_control_for_repo",
+    "source_control_from_remote",
+    "work_tracker_for_repo",
+    "work_tracker_from_remote",
     "worktree",
 ]

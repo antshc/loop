@@ -4,7 +4,8 @@ import json
 from collections.abc import Callable
 from typing import Any
 
-from orb.contracts.platform_adapter import PlatformAdapter, PullRequest, ReviewThread, WorkItem
+from orb.contracts.source_control_platform import PullRequest, ReviewThread, SourceControlPlatform
+from orb.contracts.work_tracker import WorkItem, WorkTracker
 
 GhRunner = Callable[[tuple[str, ...]], str]
 
@@ -29,7 +30,7 @@ _REPLY_MUTATION = (
 )
 
 
-class GitHubAdapter(PlatformAdapter):
+class GitHubAdapter(WorkTracker, SourceControlPlatform):
     """Translates the platform-neutral contract to `gh`; no GitHub shape leaves this class."""
 
     def __init__(self, owner: str, repo: str, *, gh: GhRunner, dry_run: bool = False) -> None:

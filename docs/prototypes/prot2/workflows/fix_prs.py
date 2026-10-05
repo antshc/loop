@@ -11,13 +11,13 @@ from orb import (
     AgentClient,
     ExecutionStore,
     FileExecutionStore,
-    PlatformAdapter,
+    SourceControlPlatform,
     CapsuleProvider,
     OrbError,
     copilot,
     create_capsule,
     may_attempt,
-    platform_for_repo,
+    source_control_for_repo,
     worktree,
 )
 
@@ -30,7 +30,7 @@ def main(
     *,
     agent: AgentClient | None = None,
     capsule: CapsuleProvider | None = None,
-    platform: PlatformAdapter | None = None,
+    source_control: SourceControlPlatform | None = None,
     store: ExecutionStore | None = None,
 ) -> int:
     parser = argparse.ArgumentParser(prog="fix_prs")
@@ -42,14 +42,14 @@ def main(
     logging.basicConfig(level=logging.INFO, stream=sys.stderr, format="%(message)s")
 
     repo = args.repo.resolve()
-    tracker = platform or platform_for_repo(repo, dry_run=args.dry_run)
+    scm = source_control or source_control_for_repo(repo, dry_run=args.dry_run)
     attempts = store or FileExecutionStore(args.log_dir)
     provider = capsule or worktree()
     ai = agent or copilot(args.model, add_dirs=(repo,))
     failed = False
 
-    for pull_request in tracker.list_pull_requests():
-        threads = [t for t in tracker.review_threads(pull_request.id) if not t.resolved]
+    for pull_request in scm.list_pull_requests():
+        threads = [t for t in scm.review_threads(pull_request.id) if not t.resolved]
         if not threads:
             continue
         with create_capsule(capsule=provider, repo=repo, branch=pull_request.branch) as box:

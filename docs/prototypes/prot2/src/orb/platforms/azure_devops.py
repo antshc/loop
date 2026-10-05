@@ -5,7 +5,8 @@ import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
-from orb.contracts.platform_adapter import PlatformAdapter, PullRequest, ReviewThread, WorkItem
+from orb.contracts.source_control_platform import PullRequest, ReviewThread, SourceControlPlatform
+from orb.contracts.work_tracker import WorkItem, WorkTracker
 
 AzRunner = Callable[[tuple[str, ...]], str]
 
@@ -17,7 +18,7 @@ _SPECS_WIQL = (
 )
 
 
-class AzureDevOpsAdapter(PlatformAdapter):
+class AzureDevOpsAdapter(WorkTracker, SourceControlPlatform):
     """Translates the platform-neutral contract to `az`; no Azure DevOps shape leaves this class."""
 
     def __init__(self, org: str, project: str, repo: str, *, az: AzRunner, dry_run: bool = False) -> None:

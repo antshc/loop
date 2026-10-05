@@ -5,15 +5,6 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class WorkItem:
-    id: str
-    title: str
-    state: str
-    tags: tuple[str, ...]
-    url: str
-
-
-@dataclass(frozen=True)
 class PullRequest:
     id: str
     title: str
@@ -29,10 +20,7 @@ class ReviewThread:
     resolved: bool
 
 
-class PlatformAdapter(ABC):
-    @abstractmethod
-    def list_specs(self) -> list[WorkItem]: ...
-
+class SourceControlPlatform(ABC):
     @abstractmethod
     def list_pull_requests(self) -> list[PullRequest]: ...
 
