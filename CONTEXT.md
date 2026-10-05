@@ -35,7 +35,7 @@ A Ticket that groups the Tickets one dev run delivers, carrying the target branc
 _Avoid_: Epic, parent issue
 
 **Workflow**:  
-One autonomous procedure Orb runs as a `ship` subcommand, such as `dev`, discovered and loaded as a plugin.  
+One autonomous procedure Orb runs as a `fleet` subcommand, such as `dev`, discovered and loaded as a plugin.  
 _Avoid_: Slice, feature, template
 
 **Hook**:  
