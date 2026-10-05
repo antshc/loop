@@ -59,6 +59,13 @@ def run_command(
     return result.stdout
 
 
+def checked_output(command: str, result: CommandResult) -> str:
+    """Return stdout of a finished command; raise CommandError on a non-zero exit."""
+    if result.returncode != 0:
+        raise CommandError(command, result.returncode, result.stdout + result.stderr)
+    return result.stdout
+
+
 def cli_runner(executable: str, *, cwd: Path | None = None) -> Callable[[tuple[str, ...]], str]:
     def call(args: tuple[str, ...]) -> str:
         return run_command((executable, *args), cwd=cwd)

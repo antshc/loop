@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+from dataclasses import asdict
 from pathlib import Path
 
+from orb.contracts.agent_client import AgentSession, SessionStore
 from orb.contracts.execution_store import ExecutionStore
 
 
@@ -22,6 +24,28 @@ class FileExecutionStore(ExecutionStore):
         self._path.write_text(json.dumps(counts, indent=2))
 
     def _load(self) -> dict[str, int]:
+        if not self._path.is_file():
+            return {}
+        return json.loads(self._path.read_text())
+
+
+class FileSessionStore(SessionStore):
+    """Persists logical-session metadata as JSON in a directory; never the transcript."""
+
+    def __init__(self, directory: Path) -> None:
+        self._path = directory / "sessions.json"
+
+    def get(self, key: str) -> AgentSession | None:
+        stored = self._load().get(key)
+        return None if stored is None else AgentSession(**stored)
+
+    def save(self, session: AgentSession) -> None:
+        sessions = self._load()
+        sessions[session.key] = asdict(session)
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._path.write_text(json.dumps(sessions, indent=2))
+
+    def _load(self) -> dict[str, dict[str, str]]:
         if not self._path.is_file():
             return {}
         return json.loads(self._path.read_text())

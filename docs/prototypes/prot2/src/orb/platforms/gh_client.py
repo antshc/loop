@@ -1,14 +1,23 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
-from orb.contracts.source_control_platform import PullRequest, ReviewThread, SourceControlPlatform
-from orb.contracts.work_tracker import WorkItem, WorkTracker
+from orb.contracts.source_control import PullRequest, ReviewThread, WorkItem
+from orb.process import cli_runner, run_command
 
 GhRunner = Callable[[tuple[str, ...]], str]
 
+_ISSUES_QUERY = (
+    "query($owner: String!, $repo: String!) {"
+    " repository(owner: $owner, name: $repo) {"
+    "  issues(first: 100, states: OPEN) {"
+    "   nodes { number title url state labels(first: 20) { nodes { name } } }"
+    " } } }"
+)
 _SPECS_QUERY = (
     "query($owner: String!, $repo: String!) {"
     " repository(owner: $owner, name: $repo) {"
@@ -16,6 +25,7 @@ _SPECS_QUERY = (
     "   nodes { number title url state labels(first: 20) { nodes { name } } }"
     " } } }"
 )
+_REMOTE = re.compile(r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?/?$")
 _THREADS_QUERY = (
     "query($owner: String!, $repo: String!, $number: Int!) {"
     " repository(owner: $owner, name: $repo) {"
@@ -30,8 +40,8 @@ _REPLY_MUTATION = (
 )
 
 
-class GitHubAdapter(WorkTracker, SourceControlPlatform):
-    """Translates the platform-neutral contract to `gh`; no GitHub shape leaves this class."""
+class GitHubClient:
+    """Specs, issues, and pull requests through `gh`; no GitHub shape leaves this class."""
 
     def __init__(self, owner: str, repo: str, *, gh: GhRunner, dry_run: bool = False) -> None:
         self._owner = owner
@@ -39,21 +49,22 @@ class GitHubAdapter(WorkTracker, SourceControlPlatform):
         self._gh = gh
         self._dry_run = dry_run
 
-    def list_specs(self) -> list[WorkItem]:
-        pages = json.loads(self._graphql(_SPECS_QUERY, paginate=True))
-        return [
-            WorkItem(
-                id=str(node["number"]),
-                title=node["title"],
-                state=node["state"].lower(),
-                tags=tuple(label["name"] for label in node["labels"]["nodes"]),
-                url=node["url"],
-            )
-            for page in pages
-            for node in page["data"]["repository"]["issues"]["nodes"]
-        ]
+    @classmethod
+    def for_repo(cls, repo: Path, *, dry_run: bool = False) -> GitHubClient:
+        """Client for the GitHub repository behind `origin`."""
+        url = run_command(("git", "remote", "get-url", "origin"), cwd=repo).strip()
+        match = _REMOTE.search(url)
+        if match is None:
+            raise ValueError(f"unsupported remote: {url}")
+        return cls(match["owner"], match["repo"], gh=cli_runner("gh", cwd=repo), dry_run=dry_run)
 
-    def list_pull_requests(self) -> list[PullRequest]:
+    def get_specs(self) -> list[WorkItem]:
+        return self._work_items(_SPECS_QUERY)
+
+    def get_issues(self) -> list[WorkItem]:
+        return self._work_items(_ISSUES_QUERY)
+
+    def get_pull_requests(self) -> list[PullRequest]:
         output = self._gh(
             (
                 "pr", "list",
@@ -84,6 +95,20 @@ class GitHubAdapter(WorkTracker, SourceControlPlatform):
         if self._dry_run:
             return
         self._graphql(_REPLY_MUTATION, scoped=False, thread=thread_id, body=body)
+
+    def _work_items(self, query: str) -> list[WorkItem]:
+        pages = json.loads(self._graphql(query, paginate=True))
+        return [
+            WorkItem(
+                id=str(node["number"]),
+                title=node["title"],
+                state=node["state"].lower(),
+                tags=tuple(label["name"] for label in node["labels"]["nodes"]),
+                url=node["url"],
+            )
+            for page in pages
+            for node in page["data"]["repository"]["issues"]["nodes"]
+        ]
 
     def _graphql(self, query: str, *, paginate: bool = False, scoped: bool = True, **variables: str | int) -> str:
         args = ["api", "graphql"]

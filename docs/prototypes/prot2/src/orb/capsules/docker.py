@@ -8,13 +8,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
 
-from orb.capsules.worktree import WorktreeCapsule, WorktreeCapsuleProvider
+from orb.contracts.agent_client import AgentOptions, AgentResult
+from orb.contracts.capsule import AgentClientFactory, Capsule, CommandExecutor
 from orb.errors import OrbError
-from orb.process import CommandResult, execute, run_command
-from orb.worktree import Worktree
+from orb.process import CommandResult, checked_output, execute
 
 CAPSULE_HOME = "/home/agent"
-CAPSULE_WORKTREE = Path(CAPSULE_HOME) / "workspace"
+CAPSULE_WORKSPACE = f"{CAPSULE_HOME}/workspace"
 
 
 @dataclass(frozen=True)
@@ -48,7 +48,7 @@ def _resolve_user_mount(mount: Mount) -> Mount:
     if target == "~" or target.startswith("~/"):
         target = CAPSULE_HOME + target[1:]
     if not target.startswith("/"):
-        target = f"{CAPSULE_WORKTREE}/{target}"
+        target = f"{CAPSULE_WORKSPACE}/{target}"
     return Mount(str(host), target, mount.readonly)
 
 
@@ -58,60 +58,13 @@ def _volume_flag(mount: Mount, selinux_label: str | None) -> str:
     return f"{mount.host_path}:{mount.capsule_path}{suffix}"
 
 
-def _check_image_uid(image: str, expected_uid: int) -> None:
-    result = execute(("docker", "image", "inspect", image, "--format", "{{.Config.User}}"))
-    if result.returncode != 0:
-        raise OrbError(f"Image '{image}' not found locally; build it before using the docker capsule.")
-    uid_part = result.stdout.strip().split(":")[0]
-    # An image with no USER, or a named one, cannot be compared.
-    if uid_part.isdigit() and int(uid_part) != expected_uid:
-        raise OrbError(
-            f"UID mismatch: image '{image}' was built with UID {uid_part}, expected {expected_uid}; "
-            f"rebuild the image or pass container_uid={uid_part} to docker()."
-        )
-
-
-class DockerCapsule(WorktreeCapsule):
-    """A worktree bind-mounted into a container; commands run inside it."""
-
-    def __init__(self, worktree: Worktree, container: str) -> None:
-        super().__init__(worktree)
-        self._container = container
-        self._closed = False
-        atexit.register(self._remove)
-
-    def execute(
-        self,
-        command: Sequence[str] | str,
-        *,
-        cwd: Path | None = None,
-        timeout_s: float | None = None,
-    ) -> CommandResult:
-        args = ["docker", "exec"]
-        if cwd is not None:
-            args += ["-w", str(cwd)]
-        args.append(self._container)
-        args += ["sh", "-c", command] if isinstance(command, str) else list(command)
-        return execute(args, timeout_s=timeout_s)
-
-    def close(self) -> None:
-        if self._closed:
-            return
-        self._closed = True
-        atexit.unregister(self._remove)
-        execute(("docker", "stop", self._container))
-        execute(("docker", "rm", self._container))
-        super().close()
-
-    def _remove(self) -> None:
-        execute(("docker", "rm", "-f", self._container))
-
-
-class DockerCapsuleProvider(WorktreeCapsuleProvider):
-    """Worktree capsules whose commands run in a container with the worktree mounted at /home/agent/workspace."""
+class DockerCapsule(Capsule):
+    """Starts a container with the workspace mounted; the agent's commands run inside it via `docker exec`."""
 
     def __init__(
         self,
+        workspace: Path | str,
+        agent_factory: AgentClientFactory,
         *,
         image_name: str | None = None,
         container_uid: int | None = None,
@@ -123,73 +76,84 @@ class DockerCapsuleProvider(WorktreeCapsuleProvider):
         groups: Sequence[str | int] = (),
         devices: Sequence[str] = (),
         cpus: float | None = None,
-        worktrees_dir: Path | None = None,
+        docker: CommandExecutor | None = None,
     ) -> None:
-        super().__init__(env=env, worktrees_dir=worktrees_dir)
-        self._image_name = image_name
-        self._uid = container_uid if container_uid is not None else os.getuid()
-        self._gid = container_gid if container_gid is not None else os.getgid()
-        self._selinux_label = selinux_label
-        self._mounts = tuple(_resolve_user_mount(mount) for mount in mounts)
-        self._networks = [network] if isinstance(network, str) else list(network or ())
-        self._groups = tuple(groups)
-        self._devices = tuple(devices)
-        self._cpus = cpus
+        self._docker = docker or execute
+        host_workspace = Path(workspace)
+        uid = container_uid if container_uid is not None else os.getuid()
+        gid = container_gid if container_gid is not None else os.getgid()
+        git_mounts, repo = _git_mounts(host_workspace)
+        image = image_name or default_image_name(repo)
+        self._check_image_uid(image, uid)
+
+        volumes = [
+            Mount(str(host_workspace), CAPSULE_WORKSPACE),
+            *git_mounts,
+            *(_resolve_user_mount(mount) for mount in mounts),
+        ]
+        self._container = f"orb-{uuid4()}"
+        args = ["docker", "run", "-d", "--name", self._container]
+        for key, value in {**(env or {}), "HOME": CAPSULE_HOME}.items():
+            args += ["-e", f"{key}={value}"]
+        for mount in volumes:
+            args += ["-v", _volume_flag(mount, selinux_label)]
+        args += ["-w", CAPSULE_WORKSPACE, "--user", f"{uid}:{gid}"]
+        for name in [network] if isinstance(network, str) else list(network or ()):
+            args += ["--network", name]
+        for group in groups:
+            args += ["--group-add", str(group)]
+        for device in devices:
+            args += ["--device", device]
+        if cpus is not None:
+            args += ["--cpus", str(cpus)]
+        command = [*args, image]
+        checked_output(" ".join(command), self._docker(command))
+
+        self._closed = False
+        atexit.register(self._remove)
+        self._agent = agent_factory(self._exec_in_container)
 
     @property
-    def name(self) -> str:
-        return "docker"
+    def workspace(self) -> str:
+        return CAPSULE_WORKSPACE
 
-    def _attach(self, worktree: Worktree) -> DockerCapsule:
-        worktree_path = worktree.path
-        git_mounts, repo = _git_mounts(worktree_path)
-        image = self._image_name or default_image_name(repo)
-        _check_image_uid(image, self._uid)
+    def run(
+        self,
+        prompt: str,
+        prompt_args: Mapping[str, str] | None = None,
+        options: AgentOptions | None = None,
+    ) -> AgentResult:
+        return self._agent.run(prompt, prompt_args, options)
 
-        mounts = [Mount(str(worktree_path), str(CAPSULE_WORKTREE)), *git_mounts, *self._mounts]
-        container = f"orb-{uuid4()}"
-        args = ["docker", "run", "-d", "--name", container]
-        for key, value in {**self._env, "HOME": CAPSULE_HOME}.items():
-            args += ["-e", f"{key}={value}"]
-        for mount in mounts:
-            args += ["-v", _volume_flag(mount, self._selinux_label)]
-        args += ["-w", str(CAPSULE_WORKTREE), "--user", f"{self._uid}:{self._gid}"]
-        for network in self._networks:
-            args += ["--network", network]
-        for group in self._groups:
-            args += ["--group-add", str(group)]
-        for device in self._devices:
-            args += ["--device", device]
-        if self._cpus is not None:
-            args += ["--cpus", str(self._cpus)]
-        run_command([*args, image])
-        return DockerCapsule(worktree, container)
+    def exec(self, command: str, *, timeout_s: float | None = None) -> str:
+        return checked_output(command, self._exec_in_container(command, timeout_s=timeout_s))
 
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        atexit.unregister(self._remove)
+        self._docker(("docker", "stop", self._container))
+        self._docker(("docker", "rm", self._container))
 
-def docker(
-    *,
-    image_name: str | None = None,
-    container_uid: int | None = None,
-    container_gid: int | None = None,
-    selinux_label: str | None = "z",
-    mounts: Sequence[Mount] = (),
-    env: Mapping[str, str] | None = None,
-    network: str | Sequence[str] | None = None,
-    groups: Sequence[str | int] = (),
-    devices: Sequence[str] = (),
-    cpus: float | None = None,
-    worktrees_dir: Path | None = None,
-) -> DockerCapsuleProvider:
-    return DockerCapsuleProvider(
-        image_name=image_name,
-        container_uid=container_uid,
-        container_gid=container_gid,
-        selinux_label=selinux_label,
-        mounts=mounts,
-        env=env,
-        network=network,
-        groups=groups,
-        devices=devices,
-        cpus=cpus,
-        worktrees_dir=worktrees_dir,
-    )
+    def _exec_in_container(
+        self, command: Sequence[str] | str, *, timeout_s: float | None = None
+    ) -> CommandResult:
+        args = ["docker", "exec", "-w", CAPSULE_WORKSPACE, self._container]
+        args += ["sh", "-c", command] if isinstance(command, str) else list(command)
+        return self._docker(args, timeout_s=timeout_s)
+
+    def _remove(self) -> None:
+        self._docker(("docker", "rm", "-f", self._container))
+
+    def _check_image_uid(self, image: str, expected_uid: int) -> None:
+        result = self._docker(("docker", "image", "inspect", image, "--format", "{{.Config.User}}"))
+        if result.returncode != 0:
+            raise OrbError(f"Image '{image}' not found locally; build it before using the docker capsule.")
+        uid_part = result.stdout.strip().split(":")[0]
+        # An image with no USER, or a named one, cannot be compared.
+        if uid_part.isdigit() and int(uid_part) != expected_uid:
+            raise OrbError(
+                f"UID mismatch: image '{image}' was built with UID {uid_part}, expected {expected_uid}; "
+                f"rebuild the image or pass container_uid={uid_part}."
+            )

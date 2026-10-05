@@ -1,67 +1,54 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
-from dataclasses import dataclass
-from pathlib import Path
+from collections.abc import Callable, Mapping, Sequence
+from types import TracebackType
+from typing import Protocol
 
+from orb.contracts.agent_client import AgentClient, AgentOptions, AgentResult
 from orb.process import CommandResult
 
 
-@dataclass(frozen=True)
-class Hook:
-    command: str
-    timeout_s: float | None = None
+class CommandExecutor(Protocol):
+    """Runs a command in the capsule's environment; a non-zero exit is returned, not raised."""
+
+    def __call__(
+        self, command: Sequence[str] | str, *, timeout_s: float | None = None
+    ) -> CommandResult: ...
 
 
-@dataclass(frozen=True)
-class Hooks:
-    on_capsule_ready: tuple[Hook, ...] = ()
+AgentClientFactory = Callable[[CommandExecutor], AgentClient]
 
 
-class CapsuleInstance(ABC):
-    """One isolated working environment bound to a branch."""
-
-    @property
-    @abstractmethod
-    def path(self) -> Path: ...
+class Capsule(ABC):
+    """The environment an agent runs in; wraps an AgentClient bound to that environment."""
 
     @property
     @abstractmethod
-    def branch(self) -> str: ...
-
-    @property
-    @abstractmethod
-    def host_branch(self) -> str: ...
+    def workspace(self) -> str: ...
 
     @abstractmethod
-    def execute(
+    def run(
         self,
-        command: Sequence[str] | str,
-        *,
-        cwd: Path | None = None,
-        timeout_s: float | None = None,
-    ) -> CommandResult:
-        """Run a command, defaulting to the capsule workspace; a non-zero exit is returned, not raised."""
+        prompt: str,
+        prompt_args: Mapping[str, str] | None = None,
+        options: AgentOptions | None = None,
+    ) -> AgentResult: ...
 
     @abstractmethod
     def exec(self, command: str, *, timeout_s: float | None = None) -> str:
         """Run a shell command inside the capsule; raise CommandError on failure."""
 
     @abstractmethod
-    def head(self) -> str: ...
-
-    @abstractmethod
-    def commits_since(self, revision: str) -> tuple[str, ...]: ...
-
-    @abstractmethod
-    def merge_into_host(self) -> None: ...
-
-    @abstractmethod
     def close(self) -> None: ...
 
+    def __enter__(self) -> Capsule:
+        return self
 
-class CapsuleProvider(ABC):
-    @abstractmethod
-    def open(self, repo: Path, branch: str | None) -> CapsuleInstance:
-        """Create the capsule on `branch`, or on a fresh branch when `branch` is None."""
+    def __exit__(
+        self,
+        exception_type: type[BaseException] | None,
+        exception: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        self.close()

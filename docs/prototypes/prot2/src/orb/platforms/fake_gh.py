@@ -21,6 +21,11 @@ class FakeGh:
                 _issue(1, "Add login page"),
                 _issue(2, "Add logout button"),
             ]}}}}])
+        if "issues(first" in query:
+            return json.dumps([{"data": {"repository": {"issues": {"nodes": [
+                _issue(1, "Add login page"),
+                _issue(3, "Fix typo", "bug"),
+            ]}}}}])
         if "reviewThreads" in query:
             return json.dumps({"data": {"repository": {"pullRequest": {"reviewThreads": {"nodes": [
                 _thread("t1", False, "Rename this variable."),
@@ -29,13 +34,13 @@ class FakeGh:
         return "{}"
 
 
-def _issue(number: int, title: str) -> dict:
+def _issue(number: int, title: str, label: str = "spec") -> dict:
     return {
         "number": number,
         "title": title,
         "url": f"https://github.com/owner/repo/issues/{number}",
         "state": "OPEN",
-        "labels": {"nodes": [{"name": "spec"}]},
+        "labels": {"nodes": [{"name": label}]},
     }
 
 

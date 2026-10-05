@@ -5,31 +5,36 @@
 
 Provide a stable application-facing client for running headless AI agents through provider CLIs while isolating orchestration code from provider-specific commands, session mechanics, flags, and output handling.
 
-The client accepts an agent prompt, optionally associates the run with a logical session, and returns captured CLI execution output so Orb, Ralph, and Crew depend on one stable API instead of invoking Copilot CLI directly.
+The client accepts an agent prompt, the arguments that render it, and run options, optionally associates the run with a logical session, and returns captured CLI execution output so Orb, Ralph, and Crew depend on one stable API instead of invoking Copilot CLI directly.
 
 ## Concept
 
-An **AgentClient** wraps a provider-specific CLI adapter and uses a **SessionStore** for resumable agent sessions.
+An **AgentClient** wraps a provider-specific CLI adapter, uses a **Prompt Preprocessor** to render the prompt, and uses a **SessionStore** for resumable agent sessions. A **Capsule** owns the client and supplies the executor the CLI runs through.
 
 ```text
 Orb / Ralph / Crew
           |
           v
+       Capsule  (NoCapsule | DockerCapsule)
+          |
+          v
       AgentClient
-       /      \
-      v        v
-SessionStore  Provider CLI Adapter
-                  |
-                  v
-            Headless AI Agent
-            e.g. Copilot CLI
+     /     |      \
+    v      v       v
+Prompt  SessionStore  Provider CLI Adapter
+Preprocessor              |
+                          v
+                    Headless AI Agent
+                    e.g. Copilot CLI
 ```
 
-`AgentClient` exposes a provider-neutral `run(prompt, session_key=None)` operation. A run without a session key starts a fresh provider invocation. A run with a session key resolves the logical session through `SessionStore`; the provider adapter then creates or resumes the corresponding provider session.
+`AgentClient` exposes a provider-neutral `run(prompt, prompt_args, options)` operation. The Prompt Preprocessor first replaces `${{KEY}}` placeholders in the prompt with `prompt_args` and expands `!`cmd`` commands the template author wrote. A run without `options.session_key` starts a fresh provider invocation. A run with a session key resolves the logical session through `SessionStore`; the provider adapter then creates or resumes the corresponding provider session.
+
+The Capsule decides where the provider CLI runs. `NoCapsule` runs it directly in the workspace without a sandbox. `DockerCapsule` starts a container and runs the CLI, and the template commands, inside it. The client never knows which; it runs commands through the executor its Capsule gave it.
 
 `SessionStore` owns Orb's logical-session metadata, not the provider conversation history. It maps a logical session key to the provider-facing session reference needed for later continuation. The provider CLI remains authoritative for the actual transcript and session state.
 
-Provider-facing session names are derived from the logical session key. Agent client options may define an optional `session_name_prefix`; when configured, the prefix is prepended to every provider-facing session name. This lets Orb-owned sessions remain identifiable in provider session pickers without exposing provider naming rules to workflows.
+Provider-facing session names are derived from the logical session key. The `session_name_prefix` run option, when configured, is prepended to every provider-facing session name. This lets Orb-owned sessions remain identifiable in provider session pickers without exposing provider naming rules to workflows.
 
 The CLI adapter owns command construction, process execution, and provider-specific create/resume semantics. For Copilot CLI, a new named session is started with the provider's naming option and subsequent runs resume that same name.
 
@@ -38,15 +43,20 @@ The CLI adapter owns command construction, process execution, and provider-speci
 ## Rules
 
 - MUST make orchestration code depend on `AgentClient` rather than a concrete provider CLI.
-- MUST expose prompt execution through a stable `run(prompt, session_key=None)` operation.
+- MUST expose prompt execution through a stable `run(prompt, prompt_args, options)` operation, with the session key carried in `options`.
+- MUST render the prompt through the Prompt Preprocessor before invoking the provider CLI.
+- MUST substitute only `${{KEY}}` placeholders; a placeholder without a matching argument MUST fail the run, and an argument no placeholder uses SHOULD log a warning.
+- MUST execute only `!`cmd`` commands written in the prompt template; text arriving through `prompt_args` MUST NOT be executed.
+- MUST run the provider CLI and template commands through the executor of the owning Capsule.
 - MUST treat an omitted session key as a fresh provider invocation.
 - MUST resolve a supplied logical session key through `SessionStore`.
+- MUST persist a new session only after its first provider invocation succeeds.
 - MUST keep provider conversation history owned by the provider CLI; `SessionStore` MUST NOT duplicate or interpret the transcript.
 - MUST persist enough session metadata to resume a previously recorded logical session across later AgentClient invocations.
 - MUST derive provider-facing session names from the logical session key rather than requiring workflows to supply provider-native names.
 - MUST prepend the configured `session_name_prefix` when creating provider-facing session names.
 - MUST keep provider executable names, arguments, session creation/resume flags, and naming syntax inside the provider CLI adapter.
-- MUST execute the provider CLI in the configured working directory.
+- MUST execute the provider CLI in the workspace of the owning Capsule.
 - MUST capture stdout, stderr, and exit code for every invocation.
 - MUST return failed CLI execution output to orchestration instead of losing stderr.
 - MUST NOT make Ralph, Crew, or other orchestration workflows construct provider CLI commands or provider session identifiers directly.
@@ -58,6 +68,7 @@ The CLI adapter owns command construction, process execution, and provider-speci
 Sketch — not the implementation.
 
 ```python
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -67,6 +78,10 @@ class AgentRunResult:
     stdout: str
     stderr: str
     exit_code: int
+
+    @property
+    def success(self) -> bool:
+        return self.exit_code == 0
 
 
 @dataclass(frozen=True)
@@ -81,14 +96,21 @@ class SessionStore(Protocol):
 
 
 @dataclass(frozen=True)
-class AgentClientOptions:
+class AgentOptions:
+    session_key: str | None = None
     session_name_prefix: str = ""
+    model: str | None = None
+
+
+class PromptPreprocessor(Protocol):
+    def process(self, prompt: str, prompt_args: Mapping[str, str]) -> str: ...
 
 
 class AgentCli(Protocol):
     def run(
         self,
         prompt: str,
+        options: AgentOptions,
         session: AgentSession | None = None,
         resume: bool = False,
     ) -> AgentRunResult: ...
@@ -98,40 +120,44 @@ class AgentClient:
     def __init__(
         self,
         cli: AgentCli,
+        preprocessor: PromptPreprocessor,
         sessions: SessionStore,
-        options: AgentClientOptions,
     ) -> None:
         self._cli = cli
+        self._preprocessor = preprocessor
         self._sessions = sessions
-        self._options = options
 
     def run(
         self,
         prompt: str,
-        session_key: str | None = None,
+        prompt_args: Mapping[str, str],
+        options: AgentOptions,
     ) -> AgentRunResult:
-        if session_key is None:
-            return self._cli.run(prompt)
+        text = self._preprocessor.process(prompt, prompt_args)
 
-        session = self._sessions.get(session_key)
+        if options.session_key is None:
+            return self._cli.run(text, options)
+
+        session = self._sessions.get(options.session_key)
 
         if session is not None:
-            return self._cli.run(prompt, session=session, resume=True)
+            return self._cli.run(text, options, session=session, resume=True)
 
         session = AgentSession(
-            key=session_key,
-            name=f"{self._options.session_name_prefix}{session_key}",
+            key=options.session_key,
+            name=f"{options.session_name_prefix}{options.session_key}",
         )
 
-        result = self._cli.run(prompt, session=session)
-        self._sessions.save(session)
+        result = self._cli.run(text, options, session=session)
+        if result.success:
+            self._sessions.save(session)
         return result
 ```
 
 With:
 
 ```python
-AgentClientOptions(session_name_prefix="orb-")
+AgentOptions(session_key="issue-42", session_name_prefix="orb-")
 ```
 
 the logical session key `issue-42` becomes provider-facing session name `orb-issue-42`. The workflow continues to use only `issue-42`; the provider adapter owns how that name is created and resumed.
