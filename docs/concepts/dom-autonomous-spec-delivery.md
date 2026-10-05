@@ -84,57 +84,62 @@ swimlane-beta TB
 
   subgraph skill [Copilot agent - ralph:dev skill]
     start([Prompt received with spec number])
-    harness[Resolve harness settings]
-    hset{Settings status?}
-    sync[Sync harness repo with remote]
-    spec[Read spec issue]
-    valid{Spec and metadata valid?}
-    checkout[Derive codebase checkout]
-    checkoutOk{Checkout matches repository?}
-    branch[Compute feature branch name]
-    wt[Create feature worktree]
-    build[Build project]
-    buildOk{Build passes?}
+    harness[1 - Resolve harness settings]
+    hset{2 - Settings status?}
+    sync[2c.1 - Sync harness repo with remote]
+    spec[3 - Read spec issue]
+    valid{4 - Spec and metadata valid?}
+    checkout[5 - Derive codebase checkout]
+    checkoutOk{6 - Checkout matches repository?}
+    branch[7 - Compute feature branch name]
+    wt[8 - Create feature worktree]
+    build[9 - Build project]
+    buildOk{10 - Build passes?}
     exitFail([Exit and report])
-    loop[[Ralph Loop]]
-    pr[Open draft PR when none exists]
-    ft[Publish revision and select tests tickets]
-    ready{Dependencies complete?}
-    ftRecord[Record evidence then close or escalate]
-    hpush[Commit and push harness repo]
-    cleanup[Remove worktree]
+    loop[[11 - Ralph Loop]]
+    pr[12 - Open draft PR when none exists]
+    ft[13 - Publish revision and select tests tickets]
+    ready{14 - Dependencies complete?}
+    ftRecord[14a.2 - Record evidence then close or escalate]
+    hpush[15 - Commit and push harness repo]
+    cleanup[16 - Remove worktree]
     endNode([Spec run completed])
   end
 
   subgraph crew [Crew agents]
-    testy[Testy runs functional tests and reports]
+    testy[14a.1 - Testy runs functional tests and reports]
   end
 
   subgraph ext [External systems - GitHub]
-    issues[(Spec issue)]
-    testIssues[(Testing tickets and investigations)]
-    remote[(Source repo and harness repo remotes)]
+    syncRemote[(2c.2 - Harness repo remote)]
+    issuesRead[(3.1 - Spec issue)]
+    prWrite[(12.1 - Source repo remote)]
+    revisionWrite[(13.1 - Source repo remote)]
+    testIssuesWrite[(14a.3 - Testing tickets and investigations)]
+    harnessWrite[(15.1 - Harness repo remote)]
   end
 
   start --> harness --> hset
   hset -->|invalid| exitFail
   hset -->|missing, use cwd| spec
   hset -->|found| sync --> spec
-  sync -->|fetch and pull, reset on conflict| remote
-  spec -->|fetch spec issue| issues -->|spec, labels, metadata| valid
+  sync -->|fetch and pull, reset on conflict| syncRemote
+  spec -->|fetch spec issue| issuesRead -->|spec, labels, metadata| valid
   valid -->|no| exitFail
   valid -->|yes| checkout --> checkoutOk
   checkoutOk -->|no| exitFail
   checkoutOk -->|yes| branch --> wt --> build --> buildOk
   buildOk -->|no| exitFail
   buildOk -->|yes| loop --> pr
-  pr -->|draft PR| remote
-  pr --> ft -->|push tested revision| remote
+  pr -->|draft PR| prWrite
+  pr --> ft
+  ft -->|push tested revision| revisionWrite
   ft --> ready
   ready -->|yes| testy -->|report| ftRecord
   ready -->|no, report pending| hpush
-  ftRecord -->|evidence, close or hitl investigation| testIssues
-  ftRecord --> hpush -->|push harness changes| remote
+  ftRecord -->|evidence, close or hitl investigation| testIssuesWrite
+  ftRecord --> hpush
+  hpush -->|push harness changes| harnessWrite
   hpush --> cleanup --> endNode
 
   classDef default fill:#242424,stroke:#8b949e,color:#c9d1d9,stroke-width:1px
