@@ -20,7 +20,7 @@ from orb.process import run_command
 from orb.prompt import render_prompt
 from orb.runner import run
 from orb.sandbox import DEFAULT_COMPLETION_SIGNAL, RunResult, Sandbox, create_sandbox
-from orb.sandboxes.worktree import WorktreeSandboxProvider, worktree
+from orb.capsules.worktree import WorktreeSandboxProvider, worktree
 from orb.stores.file import FileExecutionStore
 from orb.tags import extract_json, extract_tag
 

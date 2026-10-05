@@ -203,7 +203,7 @@ def test_address_prs_workflow_posts_the_agents_reply(repo: Path, tmp_path: Path)
 
 
 def test_core_never_imports_adapters() -> None:
-    adapter_packages = ("orb.agents", "orb.sandboxes", "orb.stores", "orb.platforms")
+    adapter_packages = ("orb.agents", "orb.capsules", "orb.stores", "orb.platforms")
     core = [p for p in SRC.glob("*.py") if p.name != "__init__.py"] + list((SRC / "contracts").glob("*.py"))
     for path in core:
         for module in imports_of(path):
