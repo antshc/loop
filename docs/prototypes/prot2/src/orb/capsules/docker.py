@@ -8,18 +8,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
 
-from orb.contracts.sandbox import SandboxHandle, SandboxProvider
+from orb.capsules.worktree import WorktreeCapsule, WorktreeCapsuleProvider
 from orb.errors import OrbError
 from orb.process import CommandResult, execute, run_command
+from orb.worktree import Worktree
 
-SANDBOX_HOME = "/home/agent"
-SANDBOX_WORKTREE = Path(SANDBOX_HOME) / "workspace"
+CAPSULE_HOME = "/home/agent"
+CAPSULE_WORKTREE = Path(CAPSULE_HOME) / "workspace"
 
 
 @dataclass(frozen=True)
 class Mount:
     host_path: str
-    sandbox_path: str
+    capsule_path: str
     readonly: bool = False
 
 
@@ -43,24 +44,24 @@ def _resolve_user_mount(mount: Mount) -> Mount:
     host = Path(mount.host_path).expanduser().resolve()
     if not host.exists():
         raise ValueError(f"mount host_path does not exist: {mount.host_path}")
-    sandbox = mount.sandbox_path
-    if sandbox == "~" or sandbox.startswith("~/"):
-        sandbox = SANDBOX_HOME + sandbox[1:]
-    if not sandbox.startswith("/"):
-        sandbox = f"{SANDBOX_WORKTREE}/{sandbox}"
-    return Mount(str(host), sandbox, mount.readonly)
+    target = mount.capsule_path
+    if target == "~" or target.startswith("~/"):
+        target = CAPSULE_HOME + target[1:]
+    if not target.startswith("/"):
+        target = f"{CAPSULE_WORKTREE}/{target}"
+    return Mount(str(host), target, mount.readonly)
 
 
 def _volume_flag(mount: Mount, selinux_label: str | None) -> str:
     options = [*(["ro"] if mount.readonly else []), *([selinux_label] if selinux_label else [])]
     suffix = f":{','.join(options)}" if options else ""
-    return f"{mount.host_path}:{mount.sandbox_path}{suffix}"
+    return f"{mount.host_path}:{mount.capsule_path}{suffix}"
 
 
 def _check_image_uid(image: str, expected_uid: int) -> None:
     result = execute(("docker", "image", "inspect", image, "--format", "{{.Config.User}}"))
     if result.returncode != 0:
-        raise OrbError(f"Image '{image}' not found locally; build it before using the docker sandbox.")
+        raise OrbError(f"Image '{image}' not found locally; build it before using the docker capsule.")
     uid_part = result.stdout.strip().split(":")[0]
     # An image with no USER, or a named one, cannot be compared.
     if uid_part.isdigit() and int(uid_part) != expected_uid:
@@ -70,17 +71,16 @@ def _check_image_uid(image: str, expected_uid: int) -> None:
         )
 
 
-class DockerSandboxHandle(SandboxHandle):
-    def __init__(self, container: str) -> None:
+class DockerCapsule(WorktreeCapsule):
+    """A worktree bind-mounted into a container; commands run inside it."""
+
+    def __init__(self, worktree: Worktree, container: str) -> None:
+        super().__init__(worktree)
         self._container = container
         self._closed = False
         atexit.register(self._remove)
 
-    @property
-    def worktree_path(self) -> Path:
-        return SANDBOX_WORKTREE
-
-    def exec(
+    def execute(
         self,
         command: Sequence[str] | str,
         *,
@@ -101,13 +101,14 @@ class DockerSandboxHandle(SandboxHandle):
         atexit.unregister(self._remove)
         execute(("docker", "stop", self._container))
         execute(("docker", "rm", self._container))
+        super().close()
 
     def _remove(self) -> None:
         execute(("docker", "rm", "-f", self._container))
 
 
-class DockerSandboxProvider(SandboxProvider):
-    """Runs commands in a container with the worktree bind-mounted at /home/agent/workspace."""
+class DockerCapsuleProvider(WorktreeCapsuleProvider):
+    """Worktree capsules whose commands run in a container with the worktree mounted at /home/agent/workspace."""
 
     def __init__(
         self,
@@ -122,13 +123,14 @@ class DockerSandboxProvider(SandboxProvider):
         groups: Sequence[str | int] = (),
         devices: Sequence[str] = (),
         cpus: float | None = None,
+        worktrees_dir: Path | None = None,
     ) -> None:
+        super().__init__(env=env, worktrees_dir=worktrees_dir)
         self._image_name = image_name
         self._uid = container_uid if container_uid is not None else os.getuid()
         self._gid = container_gid if container_gid is not None else os.getgid()
         self._selinux_label = selinux_label
         self._mounts = tuple(_resolve_user_mount(mount) for mount in mounts)
-        self._env = dict(env or {})
         self._networks = [network] if isinstance(network, str) else list(network or ())
         self._groups = tuple(groups)
         self._devices = tuple(devices)
@@ -138,19 +140,20 @@ class DockerSandboxProvider(SandboxProvider):
     def name(self) -> str:
         return "docker"
 
-    def create(self, worktree_path: Path, env: Mapping[str, str] | None = None) -> SandboxHandle:
+    def _attach(self, worktree: Worktree) -> DockerCapsule:
+        worktree_path = worktree.path
         git_mounts, repo = _git_mounts(worktree_path)
         image = self._image_name or default_image_name(repo)
         _check_image_uid(image, self._uid)
 
-        mounts = [Mount(str(worktree_path), str(SANDBOX_WORKTREE)), *git_mounts, *self._mounts]
+        mounts = [Mount(str(worktree_path), str(CAPSULE_WORKTREE)), *git_mounts, *self._mounts]
         container = f"orb-{uuid4()}"
         args = ["docker", "run", "-d", "--name", container]
-        for key, value in {**self._env, **(env or {}), "HOME": SANDBOX_HOME}.items():
+        for key, value in {**self._env, "HOME": CAPSULE_HOME}.items():
             args += ["-e", f"{key}={value}"]
         for mount in mounts:
             args += ["-v", _volume_flag(mount, self._selinux_label)]
-        args += ["-w", str(SANDBOX_WORKTREE), "--user", f"{self._uid}:{self._gid}"]
+        args += ["-w", str(CAPSULE_WORKTREE), "--user", f"{self._uid}:{self._gid}"]
         for network in self._networks:
             args += ["--network", network]
         for group in self._groups:
@@ -160,7 +163,7 @@ class DockerSandboxProvider(SandboxProvider):
         if self._cpus is not None:
             args += ["--cpus", str(self._cpus)]
         run_command([*args, image])
-        return DockerSandboxHandle(container)
+        return DockerCapsule(worktree, container)
 
 
 def docker(
@@ -175,8 +178,9 @@ def docker(
     groups: Sequence[str | int] = (),
     devices: Sequence[str] = (),
     cpus: float | None = None,
-) -> DockerSandboxProvider:
-    return DockerSandboxProvider(
+    worktrees_dir: Path | None = None,
+) -> DockerCapsuleProvider:
+    return DockerCapsuleProvider(
         image_name=image_name,
         container_uid=container_uid,
         container_gid=container_gid,
@@ -187,4 +191,5 @@ def docker(
         groups=groups,
         devices=devices,
         cpus=cpus,
+        worktrees_dir=worktrees_dir,
     )

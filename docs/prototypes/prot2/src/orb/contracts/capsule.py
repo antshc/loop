@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from orb.contracts.sandbox import SandboxHandle
+from orb.process import CommandResult
 
 
 @dataclass(frozen=True)
@@ -33,9 +34,15 @@ class CapsuleInstance(ABC):
     @abstractmethod
     def host_branch(self) -> str: ...
 
-    @property
     @abstractmethod
-    def sandbox(self) -> SandboxHandle: ...
+    def execute(
+        self,
+        command: Sequence[str] | str,
+        *,
+        cwd: Path | None = None,
+        timeout_s: float | None = None,
+    ) -> CommandResult:
+        """Run a command, defaulting to the capsule workspace; a non-zero exit is returned, not raised."""
 
     @abstractmethod
     def exec(self, command: str, *, timeout_s: float | None = None) -> str:

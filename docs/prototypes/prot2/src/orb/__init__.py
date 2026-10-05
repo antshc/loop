@@ -13,7 +13,6 @@ from orb.contracts.agent_client import AgentClient, AgentResult
 from orb.contracts.execution_store import ExecutionStore
 from orb.contracts.source_control_platform import PullRequest, ReviewThread, SourceControlPlatform
 from orb.contracts.capsule import Hook, Hooks, CapsuleInstance, CapsuleProvider
-from orb.contracts.sandbox import SandboxHandle, SandboxProvider
 from orb.contracts.work_tracker import WorkItem, WorkTracker
 from orb.errors import AgentError, CommandError, ExtractionError, PromptError, OrbError
 from orb.parallel import Settled, parallel_settled
@@ -27,9 +26,8 @@ from orb.process import run_command
 from orb.prompt import render_prompt
 from orb.runner import run
 from orb.capsule import DEFAULT_COMPLETION_SIGNAL, RunResult, Capsule, create_capsule
+from orb.capsules.docker import DockerCapsuleProvider, Mount, docker
 from orb.capsules.worktree import WorktreeCapsuleProvider, worktree
-from orb.sandboxes.docker import DockerSandboxProvider, Mount, docker
-from orb.sandboxes.no_sandbox import NoSandboxProvider, no_sandbox
 from orb.worktree import Worktree, create_worktree
 from orb.stores.file import FileExecutionStore
 from orb.tags import extract_json, extract_tag
@@ -41,7 +39,7 @@ __all__ = [
     "CommandError",
     "CopilotCliAgent",
     "DEFAULT_COMPLETION_SIGNAL",
-    "DockerSandboxProvider",
+    "DockerCapsuleProvider",
     "ExecutionStore",
     "ExtractionError",
     "FileExecutionStore",
@@ -49,7 +47,6 @@ __all__ = [
     "Hooks",
     "MAX_FAILED_ATTEMPTS",
     "Mount",
-    "NoSandboxProvider",
     "PromptError",
     "PullRequest",
     "ReviewThread",
@@ -58,8 +55,6 @@ __all__ = [
     "CapsuleInstance",
     "CapsuleProvider",
     "ScriptedAgent",
-    "SandboxHandle",
-    "SandboxProvider",
     "SourceControlPlatform",
     "Settled",
     "OrbError",
@@ -74,7 +69,6 @@ __all__ = [
     "extract_json",
     "extract_tag",
     "may_attempt",
-    "no_sandbox",
     "parallel_settled",
     "render_prompt",
     "run",

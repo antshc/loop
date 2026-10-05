@@ -13,7 +13,7 @@ _lock = threading.Lock()
 
 
 class Worktree:
-    """A git worktree on its own branch, independent of any sandbox."""
+    """A git worktree on its own branch, independent of any capsule."""
 
     def __init__(
         self, *, repo: Path, path: Path, branch: str, host_branch: str, generated: bool

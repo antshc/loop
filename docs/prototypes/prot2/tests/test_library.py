@@ -11,16 +11,13 @@ from orb import (
     CommandError,
     Hook,
     Hooks,
-    NoSandboxProvider,
     PromptError,
-    SandboxHandle,
     ScriptedAgent,
     create_capsule,
     create_worktree,
     docker,
     extract_json,
     extract_tag,
-    no_sandbox,
     parallel_settled,
     render_prompt,
     run,
@@ -179,34 +176,35 @@ def test_parallel_capsules_on_distinct_branches(repo: Path) -> None:
     }
 
 
-def test_no_sandbox_execs_in_worktree_with_merged_env(repo: Path) -> None:
-    handle = no_sandbox(env={"A": "1", "B": "1"}).create(repo, {"B": "2"})
-    result = handle.exec("echo $A$B; pwd; false")
-    assert result.returncode == 1
-    assert result.stdout.split() == ["12", str(repo)]
+def test_worktree_capsule_execs_in_worktree_with_env(repo: Path) -> None:
+    capsule = worktree(env={"A": "1", "B": "2"}).open(repo, "feature/z")
+    try:
+        result = capsule.execute("echo $A$B; pwd; false")
+        assert result.returncode == 1
+        assert result.stdout.split() == ["12", str(capsule.path)]
+    finally:
+        capsule.close()
 
 
-def test_create_worktree_is_independent_of_sandbox(repo: Path) -> None:
+def test_create_worktree_is_independent_of_capsule(repo: Path) -> None:
     tree = create_worktree(repo=repo, branch="feature/y")
     assert tree.branch == "feature/y" and tree.path.is_dir()
     tree.close()
     assert git(repo, "worktree", "list", "--porcelain").count("worktree ") == 1
 
 
-def test_capsule_runs_agent_through_the_sandbox(repo: Path) -> None:
-    class Spy(NoSandboxProvider):
-        created: list[Path] = []
+def test_capsule_runs_agent_through_the_capsule(repo: Path) -> None:
+    seen: list[Path] = []
 
-        def create(self, worktree_path: Path, env: dict[str, str] | None = None) -> SandboxHandle:
-            self.created.append(worktree_path)
-            return super().create(worktree_path, env)
+    def handler(prompt: str, cwd: Path) -> str:
+        seen.append(cwd)
+        return "ok"
 
-    spy = Spy()
-    run(capsule=worktree(sandbox=spy), agent=ScriptedAgent(lambda p, c: "ok"), repo=repo, prompt="x")
-    assert len(spy.created) == 1
+    run(capsule=worktree(), agent=ScriptedAgent(handler), repo=repo, prompt="x")
+    assert len(seen) == 1 and seen[0].is_dir() is False  # worktree removed after the run
 
 
-def test_docker_sandbox_mounts_worktree_and_git_dir(
+def test_docker_capsule_mounts_worktree_and_git_dir(
     repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     calls = tmp_path / "calls.txt"
@@ -216,14 +214,13 @@ def test_docker_sandbox_mounts_worktree_and_git_dir(
     fake.chmod(0o755)
     monkeypatch.setenv("PATH", f"{fake.parent}:{os.environ['PATH']}")
 
-    tree = create_worktree(repo=repo, branch="d")
-    handle = docker(env={"A": "1"}, cpus=2).create(tree.path, {"B": "2"})
-    handle.exec("echo hi")
-    handle.close()
+    capsule = docker(env={"A": "1", "B": "2"}, cpus=2).open(repo, "d")
+    capsule.exec("echo hi")
+    capsule.close()
 
     lines = calls.read_text().splitlines()
     run_line = next(line for line in lines if line.startswith("run -d"))
-    assert f"-v {tree.path}:/home/agent/workspace:z" in run_line
+    assert f"-v {capsule.path}:/home/agent/workspace:z" in run_line
     assert f"-v {repo / '.git'}:{repo / '.git'}:z" in run_line
     assert "-e A=1" in run_line and "-e B=2" in run_line and "--cpus 2" in run_line
     assert run_line.endswith(f"orb:{repo.name}")

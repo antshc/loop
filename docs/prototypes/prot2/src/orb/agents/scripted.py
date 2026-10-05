@@ -4,7 +4,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from orb.contracts.agent_client import AgentClient, AgentResult
-from orb.contracts.sandbox import SandboxHandle
+from orb.contracts.capsule import CapsuleInstance
 
 Handler = Callable[[str, Path], str | AgentResult]
 
@@ -16,7 +16,7 @@ class ScriptedAgent(AgentClient):
         self._handler = handler
         self.prompts: list[str] = []
 
-    def run(self, prompt: str, sandbox: SandboxHandle) -> AgentResult:
+    def run(self, prompt: str, capsule: CapsuleInstance) -> AgentResult:
         self.prompts.append(prompt)
-        outcome = self._handler(prompt, sandbox.worktree_path)
+        outcome = self._handler(prompt, capsule.path)
         return outcome if isinstance(outcome, AgentResult) else AgentResult(success=True, output=outcome)
