@@ -4,13 +4,13 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from orb.contracts.agent_client import AgentClient
-from orb.contracts.sandbox import Hooks, SandboxProvider
-from orb.sandbox import DEFAULT_COMPLETION_SIGNAL, RunResult, create_sandbox
+from orb.contracts.capsule import Hooks, CapsuleProvider
+from orb.capsule import DEFAULT_COMPLETION_SIGNAL, RunResult, create_capsule
 
 
 def run(
     *,
-    sandbox: SandboxProvider,
+    capsule: CapsuleProvider,
     agent: AgentClient,
     repo: Path | None = None,
     branch: str | None = None,
@@ -23,8 +23,8 @@ def run(
     max_iterations: int = 1,
     completion_signal: str | None = DEFAULT_COMPLETION_SIGNAL,
 ) -> RunResult:
-    """One-shot run in a fresh sandbox; commits on an unnamed branch merge into the host branch."""
-    with create_sandbox(sandbox=sandbox, repo=repo, branch=branch, hooks=hooks) as box:
+    """One-shot run in a fresh capsule; commits on an unnamed branch merge into the host branch."""
+    with create_capsule(capsule=capsule, repo=repo, branch=branch, hooks=hooks) as box:
         result = box.run(
             agent=agent,
             name=name,

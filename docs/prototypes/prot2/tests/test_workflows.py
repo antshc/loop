@@ -216,7 +216,7 @@ def test_workflows_import_only_the_public_api() -> None:
             assert not module.startswith("orb.") and not module.startswith("workflows"), (path, module)
 
 
-def test_worktree_provider_is_a_sandbox_provider() -> None:
-    from orb import SandboxProvider
+def test_worktree_provider_is_a_capsule_provider() -> None:
+    from orb import CapsuleProvider
 
-    assert isinstance(worktree(), SandboxProvider)
+    assert isinstance(worktree(), CapsuleProvider)

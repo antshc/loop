@@ -12,7 +12,7 @@ from orb import (
     Hooks,
     PromptError,
     ScriptedAgent,
-    create_sandbox,
+    create_capsule,
     extract_json,
     extract_tag,
     parallel_settled,
@@ -81,7 +81,7 @@ def test_run_collects_commits_and_merges_unnamed_branch_into_host(repo: Path, tm
     agent = ScriptedAgent(lambda prompt, cwd: commit_file(cwd, "a.txt", "a", "add a") or "done")
 
     result = run(
-        sandbox=worktree(), agent=agent, repo=repo, prompt_file=prompt_file, prompt_args={"WHAT": "x"}
+        capsule=worktree(), agent=agent, repo=repo, prompt_file=prompt_file, prompt_args={"WHAT": "x"}
     )
 
     assert len(result.commits) == 1 and result.stdout == "done"
@@ -92,7 +92,7 @@ def test_run_collects_commits_and_merges_unnamed_branch_into_host(repo: Path, tm
 
 
 def test_run_without_commits_leaves_host_and_branches_untouched(repo: Path) -> None:
-    result = run(sandbox=worktree(), agent=ScriptedAgent(lambda p, c: "nothing"), repo=repo, prompt="hi")
+    result = run(capsule=worktree(), agent=ScriptedAgent(lambda p, c: "nothing"), repo=repo, prompt="hi")
 
     assert result.commits == ()
     assert git(repo, "branch", "--list") == "* main"
@@ -101,20 +101,20 @@ def test_run_without_commits_leaves_host_and_branches_untouched(repo: Path) -> N
 def test_inline_prompt_is_not_templated(repo: Path) -> None:
     agent = ScriptedAgent(lambda p, c: "ok")
 
-    run(sandbox=worktree(), agent=agent, repo=repo, prompt="{{LITERAL}}")
+    run(capsule=worktree(), agent=agent, repo=repo, prompt="{{LITERAL}}")
 
     assert agent.prompts == ["{{LITERAL}}"]
     with pytest.raises(PromptError):
-        run(sandbox=worktree(), agent=agent, repo=repo, prompt="x", prompt_args={"A": "1"})
+        run(capsule=worktree(), agent=agent, repo=repo, prompt="x", prompt_args={"A": "1"})
     with pytest.raises(PromptError):
-        run(sandbox=worktree(), agent=agent, repo=repo)
+        run(capsule=worktree(), agent=agent, repo=repo)
 
 
 def test_run_loops_until_completion_signal(repo: Path) -> None:
     outputs = iter(["working", "<promise>COMPLETE</promise>", "never"])
     agent = ScriptedAgent(lambda p, c: next(outputs))
 
-    result = run(sandbox=worktree(), agent=agent, repo=repo, prompt="go", max_iterations=5)
+    result = run(capsule=worktree(), agent=agent, repo=repo, prompt="go", max_iterations=5)
 
     assert (result.iterations, result.completed) == (2, True)
 
@@ -125,15 +125,15 @@ def test_failed_agent_raises_and_cleans_up(repo: Path) -> None:
     agent = ScriptedAgent(lambda p, c: AgentResult(success=False, output="nope"))
 
     with pytest.raises(AgentError, match="nope"):
-        run(sandbox=worktree(), agent=agent, repo=repo, prompt="go")
+        run(capsule=worktree(), agent=agent, repo=repo, prompt="go")
 
     assert git(repo, "worktree", "list", "--porcelain").count("worktree ") == 1
 
 
-def test_named_sandbox_is_reusable_and_keeps_branch(repo: Path) -> None:
+def test_named_capsule_is_reusable_and_keeps_branch(repo: Path) -> None:
     agent = ScriptedAgent(lambda prompt, cwd: commit_file(cwd, f"{len(prompt)}.txt", "x", "c") or "ok")
 
-    with create_sandbox(sandbox=worktree(), repo=repo, branch="feature/x") as box:
+    with create_capsule(capsule=worktree(), repo=repo, branch="feature/x") as box:
         first = box.run(agent=agent, prompt="one")
         second = box.run(agent=agent, prompt="three")
 
@@ -142,26 +142,26 @@ def test_named_sandbox_is_reusable_and_keeps_branch(repo: Path) -> None:
     assert (repo / "3.txt").exists() is False
 
 
-def test_hooks_run_in_sandbox_and_failure_cleans_up(repo: Path) -> None:
-    with create_sandbox(
-        sandbox=worktree(), repo=repo, branch="b", hooks=Hooks((Hook("echo hi > hooked.txt"),))
+def test_hooks_run_in_capsule_and_failure_cleans_up(repo: Path) -> None:
+    with create_capsule(
+        capsule=worktree(), repo=repo, branch="b", hooks=Hooks((Hook("echo hi > hooked.txt"),))
     ) as box:
         assert (box.path / "hooked.txt").read_text() == "hi\n"
 
     with pytest.raises(CommandError):
-        create_sandbox(sandbox=worktree(), repo=repo, branch="c", hooks=Hooks((Hook("exit 3"),)))
+        create_capsule(capsule=worktree(), repo=repo, branch="c", hooks=Hooks((Hook("exit 3"),)))
     assert git(repo, "worktree", "list", "--porcelain").count("worktree ") == 1
 
 
 def test_invalid_branch_names_are_rejected(repo: Path) -> None:
     with pytest.raises(CommandError):
-        create_sandbox(sandbox=worktree(), repo=repo, branch="--evil")
+        create_capsule(capsule=worktree(), repo=repo, branch="--evil")
 
 
-def test_parallel_sandboxes_on_distinct_branches(repo: Path) -> None:
+def test_parallel_capsules_on_distinct_branches(repo: Path) -> None:
     def work(name: str) -> tuple[str, ...]:
         agent = ScriptedAgent(lambda p, cwd: commit_file(cwd, f"{name}.txt", name, name) or "ok")
-        with create_sandbox(sandbox=provider, repo=repo, branch=f"orb/{name}") as box:
+        with create_capsule(capsule=provider, repo=repo, branch=f"orb/{name}") as box:
             return box.run(agent=agent, prompt="go").commits
 
     provider = worktree()

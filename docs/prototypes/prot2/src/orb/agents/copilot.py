@@ -8,7 +8,7 @@ from orb.process import execute
 
 
 class CopilotCliAgent(AgentClient):
-    """Runs one prompt through `copilot -p` inside the sandbox directory."""
+    """Runs one prompt through `copilot -p` inside the capsule directory."""
 
     def __init__(
         self,

@@ -12,10 +12,10 @@ from orb import (
     ExecutionStore,
     FileExecutionStore,
     PlatformAdapter,
-    SandboxProvider,
+    CapsuleProvider,
     OrbError,
     copilot,
-    create_sandbox,
+    create_capsule,
     may_attempt,
     platform_for_repo,
     worktree,
@@ -29,7 +29,7 @@ def main(
     argv: list[str] | None = None,
     *,
     agent: AgentClient | None = None,
-    sandbox: SandboxProvider | None = None,
+    capsule: CapsuleProvider | None = None,
     platform: PlatformAdapter | None = None,
     store: ExecutionStore | None = None,
 ) -> int:
@@ -44,7 +44,7 @@ def main(
     repo = args.repo.resolve()
     tracker = platform or platform_for_repo(repo, dry_run=args.dry_run)
     attempts = store or FileExecutionStore(args.log_dir)
-    provider = sandbox or worktree()
+    provider = capsule or worktree()
     ai = agent or copilot(args.model, add_dirs=(repo,))
     failed = False
 
@@ -52,7 +52,7 @@ def main(
         threads = [t for t in tracker.review_threads(pull_request.id) if not t.resolved]
         if not threads:
             continue
-        with create_sandbox(sandbox=provider, repo=repo, branch=pull_request.branch) as box:
+        with create_capsule(capsule=provider, repo=repo, branch=pull_request.branch) as box:
             for thread in threads:
                 key = f"fix-prs:{pull_request.id}:{thread.id}"
                 if not may_attempt(attempts, key):

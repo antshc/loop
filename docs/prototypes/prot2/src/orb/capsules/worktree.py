@@ -5,14 +5,14 @@ import threading
 from pathlib import Path
 from uuid import uuid4
 
-from orb.contracts.sandbox import SandboxInstance, SandboxProvider
+from orb.contracts.capsule import CapsuleInstance, CapsuleProvider
 from orb.errors import CommandError
 from orb.process import execute, run_command
 
 _logger = logging.getLogger("orb")
 
 
-class WorktreeSandbox(SandboxInstance):
+class WorktreeCapsule(CapsuleInstance):
     def __init__(
         self,
         *,
@@ -74,14 +74,14 @@ class WorktreeSandbox(SandboxInstance):
                 execute(("git", "branch", "-d", self._branch), cwd=self._repo)
 
 
-class WorktreeSandboxProvider(SandboxProvider):
+class WorktreeCapsuleProvider(CapsuleProvider):
     """Runs agents in `git worktree` checkouts on the host; no container isolation."""
 
     def __init__(self, *, worktrees_dir: Path | None = None) -> None:
         self._worktrees_dir = worktrees_dir
         self._lock = threading.Lock()
 
-    def open(self, repo: Path, branch: str | None) -> SandboxInstance:
+    def open(self, repo: Path, branch: str | None) -> CapsuleInstance:
         generated = branch is None
         name = branch or f"orb/run-{uuid4().hex[:8]}"
         # Rejects option-like and malformed names, so a branch from agent output is safe to pass to git.
@@ -95,7 +95,7 @@ class WorktreeSandboxProvider(SandboxProvider):
                 if self._worktrees_dir is None:
                     (repo / ".orb" / ".gitignore").write_text("*\n")
                 run_command(self._add_command(repo, name, path), cwd=repo)
-        return WorktreeSandbox(
+        return WorktreeCapsule(
             repo=repo,
             path=path,
             branch=name,
@@ -114,5 +114,5 @@ class WorktreeSandboxProvider(SandboxProvider):
         return ("git", "worktree", "add", "-b", branch, str(path), "HEAD")
 
 
-def worktree(*, worktrees_dir: Path | None = None) -> WorktreeSandboxProvider:
-    return WorktreeSandboxProvider(worktrees_dir=worktrees_dir)
+def worktree(*, worktrees_dir: Path | None = None) -> WorktreeCapsuleProvider:
+    return WorktreeCapsuleProvider(worktrees_dir=worktrees_dir)

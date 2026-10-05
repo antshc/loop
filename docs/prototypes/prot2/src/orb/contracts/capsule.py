@@ -13,10 +13,10 @@ class Hook:
 
 @dataclass(frozen=True)
 class Hooks:
-    on_sandbox_ready: tuple[Hook, ...] = ()
+    on_capsule_ready: tuple[Hook, ...] = ()
 
 
-class SandboxInstance(ABC):
+class CapsuleInstance(ABC):
     """One isolated working environment bound to a branch."""
 
     @property
@@ -33,7 +33,7 @@ class SandboxInstance(ABC):
 
     @abstractmethod
     def exec(self, command: str, *, timeout_s: float | None = None) -> str:
-        """Run a shell command inside the sandbox; raise CommandError on failure."""
+        """Run a shell command inside the capsule; raise CommandError on failure."""
 
     @abstractmethod
     def head(self) -> str: ...
@@ -48,7 +48,7 @@ class SandboxInstance(ABC):
     def close(self) -> None: ...
 
 
-class SandboxProvider(ABC):
+class CapsuleProvider(ABC):
     @abstractmethod
-    def open(self, repo: Path, branch: str | None) -> SandboxInstance:
-        """Create the sandbox on `branch`, or on a fresh branch when `branch` is None."""
+    def open(self, repo: Path, branch: str | None) -> CapsuleInstance:
+        """Create the capsule on `branch`, or on a fresh branch when `branch` is None."""

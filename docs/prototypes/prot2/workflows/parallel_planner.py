@@ -11,9 +11,9 @@ from orb import (
     AgentClient,
     Hook,
     Hooks,
-    SandboxProvider,
+    CapsuleProvider,
     copilot,
-    create_sandbox,
+    create_capsule,
     extract_json,
     parallel_settled,
     run,
@@ -32,7 +32,7 @@ def main(
     argv: list[str] | None = None,
     *,
     agent: AgentClient | None = None,
-    sandbox: SandboxProvider | None = None,
+    capsule: CapsuleProvider | None = None,
 ) -> int:
     parser = argparse.ArgumentParser(prog="parallel_planner")
     parser.add_argument("--repo", type=Path, default=Path.cwd())
@@ -45,16 +45,16 @@ def main(
     logging.basicConfig(level=logging.INFO, stream=sys.stderr, format="%(message)s")
 
     repo = args.repo.resolve()
-    provider = sandbox or worktree()
+    provider = capsule or worktree()
     ai = agent or copilot(args.model, add_dirs=(repo,))
-    hooks = Hooks(on_sandbox_ready=(Hook(args.setup),) if args.setup else ())
+    hooks = Hooks(on_capsule_ready=(Hook(args.setup),) if args.setup else ())
     failed = False
 
     for iteration in range(1, args.max_iterations + 1):
         logger.info("=== Iteration %d/%d ===", iteration, args.max_iterations)
 
         plan = run(
-            sandbox=provider,
+            capsule=provider,
             agent=ai,
             repo=repo,
             name="Planner",
@@ -73,7 +73,7 @@ def main(
                 "ISSUE_TITLE": issue["title"],
                 "BRANCH": issue["branch"],
             }
-            with create_sandbox(sandbox=provider, repo=repo, branch=issue["branch"], hooks=hooks) as box:
+            with create_capsule(capsule=provider, repo=repo, branch=issue["branch"], hooks=hooks) as box:
                 result = box.run(
                     agent=ai,
                     name=f"Implementer #{issue['number']}",
@@ -102,7 +102,7 @@ def main(
             continue
 
         run(
-            sandbox=provider,
+            capsule=provider,
             agent=ai,
             repo=repo,
             name="Merger",

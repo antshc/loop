@@ -1,4 +1,4 @@
-"""Autonomous dev loop: one sandbox branch per open spec, capped retries."""
+"""Autonomous dev loop: one capsule branch per open spec, capped retries."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from orb import (
     ExecutionStore,
     FileExecutionStore,
     PlatformAdapter,
-    SandboxProvider,
+    CapsuleProvider,
     OrbError,
     copilot,
     may_attempt,
@@ -29,7 +29,7 @@ def main(
     argv: list[str] | None = None,
     *,
     agent: AgentClient | None = None,
-    sandbox: SandboxProvider | None = None,
+    capsule: CapsuleProvider | None = None,
     platform: PlatformAdapter | None = None,
     store: ExecutionStore | None = None,
 ) -> int:
@@ -45,7 +45,7 @@ def main(
     repo = args.repo.resolve()
     tracker = platform or platform_for_repo(repo, dry_run=args.dry_run)
     attempts = store or FileExecutionStore(args.log_dir)
-    provider = sandbox or worktree()
+    provider = capsule or worktree()
     ai = agent or copilot(args.model, add_dirs=(repo,))
     failed = False
 
@@ -56,7 +56,7 @@ def main(
             continue
         try:
             result = run(
-                sandbox=provider,
+                capsule=provider,
                 agent=ai,
                 repo=repo,
                 branch=f"orb/spec-{spec.id}",

@@ -1,7 +1,7 @@
-"""Library for composing agent workflows on git worktree sandboxes.
+"""Library for composing agent workflows on git worktree capsules.
 
-A workflow is an ordinary Python script that calls `run()` / `create_sandbox()` with a
-sandbox provider and an agent, and owns its own control flow. Import only from here.
+A workflow is an ordinary Python script that calls `run()` / `create_capsule()` with a
+capsule provider and an agent, and owns its own control flow. Import only from here.
 """
 
 from __future__ import annotations
@@ -12,15 +12,15 @@ from orb.attempts import MAX_FAILED_ATTEMPTS, may_attempt
 from orb.contracts.agent_client import AgentClient, AgentResult
 from orb.contracts.execution_store import ExecutionStore
 from orb.contracts.platform_adapter import PlatformAdapter, PullRequest, ReviewThread, WorkItem
-from orb.contracts.sandbox import Hook, Hooks, SandboxInstance, SandboxProvider
+from orb.contracts.capsule import Hook, Hooks, CapsuleInstance, CapsuleProvider
 from orb.errors import AgentError, CommandError, ExtractionError, PromptError, OrbError
 from orb.parallel import Settled, parallel_settled
 from orb.platforms.factory import platform_for_repo, platform_from_remote
 from orb.process import run_command
 from orb.prompt import render_prompt
 from orb.runner import run
-from orb.sandbox import DEFAULT_COMPLETION_SIGNAL, RunResult, Sandbox, create_sandbox
-from orb.capsules.worktree import WorktreeSandboxProvider, worktree
+from orb.capsule import DEFAULT_COMPLETION_SIGNAL, RunResult, Capsule, create_capsule
+from orb.capsules.worktree import WorktreeCapsuleProvider, worktree
 from orb.stores.file import FileExecutionStore
 from orb.tags import extract_json, extract_tag
 
@@ -42,16 +42,16 @@ __all__ = [
     "PullRequest",
     "ReviewThread",
     "RunResult",
-    "Sandbox",
-    "SandboxInstance",
-    "SandboxProvider",
+    "Capsule",
+    "CapsuleInstance",
+    "CapsuleProvider",
     "ScriptedAgent",
     "Settled",
     "OrbError",
     "WorkItem",
-    "WorktreeSandboxProvider",
+    "WorktreeCapsuleProvider",
     "copilot",
-    "create_sandbox",
+    "create_capsule",
     "extract_json",
     "extract_tag",
     "may_attempt",

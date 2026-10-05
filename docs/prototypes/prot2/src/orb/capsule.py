@@ -7,7 +7,7 @@ from pathlib import Path
 from types import TracebackType
 
 from orb.contracts.agent_client import AgentClient
-from orb.contracts.sandbox import Hooks, SandboxInstance, SandboxProvider
+from orb.contracts.capsule import Hooks, CapsuleInstance, CapsuleProvider
 from orb.errors import AgentError, CommandError, PromptError
 from orb.prompt import render_prompt
 
@@ -25,10 +25,10 @@ class RunResult:
     completed: bool
 
 
-class Sandbox:
-    """A reusable sandbox: several agent runs share one branch and working tree."""
+class Capsule:
+    """A reusable capsule: several agent runs share one branch and working tree."""
 
-    def __init__(self, instance: SandboxInstance) -> None:
+    def __init__(self, instance: CapsuleInstance) -> None:
         self._instance = instance
 
     @property
@@ -89,7 +89,7 @@ class Sandbox:
     def close(self) -> None:
         self._instance.close()
 
-    def __enter__(self) -> Sandbox:
+    def __enter__(self) -> Capsule:
         return self
 
     def __exit__(
@@ -101,18 +101,18 @@ class Sandbox:
         self.close()
 
 
-def create_sandbox(
+def create_capsule(
     *,
-    sandbox: SandboxProvider,
+    capsule: CapsuleProvider,
     repo: Path | None = None,
     branch: str | None = None,
     hooks: Hooks | None = None,
-) -> Sandbox:
-    instance = sandbox.open((repo or Path.cwd()).resolve(), branch)
+) -> Capsule:
+    instance = capsule.open((repo or Path.cwd()).resolve(), branch)
     try:
-        for hook in (hooks or Hooks()).on_sandbox_ready:
+        for hook in (hooks or Hooks()).on_capsule_ready:
             instance.exec(hook.command, timeout_s=hook.timeout_s)
     except CommandError:
         instance.close()
         raise
-    return Sandbox(instance)
+    return Capsule(instance)
