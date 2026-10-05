@@ -39,7 +39,7 @@ from pathlib import Path
 import subprocess
 
 MAX_ITERATIONS = 3
-PROMPT_FILE = Path(".shipyard/prompt.md")
+PROMPT_FILE = Path(".orb/prompt.md")
 COMPLETION_SIGNAL = "<promise>COMPLETE</promise>"
 
 def sh(*args: str) -> str:

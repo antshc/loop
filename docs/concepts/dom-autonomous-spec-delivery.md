@@ -1,32 +1,32 @@
 # Autonomous Spec Delivery
 
 ## Purpose
-Shipyard delivers the approved work of every open `spec` to a draft pull request without an operator in the session, bounding the attempts it spends on each spec.
+Orb delivers the approved work of every open `spec` to a draft pull request without an operator in the session, bounding the attempts it spends on each spec.
 
 ## Definition
-- **Actors:** Operator; Shipyard (the `afk_dev` service); Copilot agent running the `/ralph:dev` skill; Crew agents (Codey, Chorey, Testy); GitHub.
-- **Business processes:** Run AFK Dev Service; Develop Spec; Orchestrator Loop.
+- **Actors:** Operator; Orb (the `afk_dev` service); Ralph (Copilot agent running the `/ralph:dev` skill); Crew agents (Codey, Chorey, Testy); GitHub.
+- **Business processes:** Run AFK Dev Service; Develop Spec; Ralph Loop.
 - **Starts:** Operator runs `afk_dev` for a repository board.
 - **Ends:** Every open spec was skipped or attempted and its attempt recorded; a Develop Spec run ends with its harness repo pushed and its worktree removed, or exits with a report.
 
 ## Business Processes
 
 ### Run AFK Dev Service
-Actor: Operator; Trigger: `afk_dev` is run for a repository board; Action: Shipyard lists the open specs, skips those without actionable issues or at their attempt cap, and starts one fresh headless Copilot session per remaining spec with the prompt `/ralph:dev <spec number>`; Outcome: each attempted spec has its attempt recorded, and a spec with all issues resolved has its count cleared. Notes: dry run is on unless switched off, so no session starts but the attempt is still recorded.
+Actor: Operator; Trigger: `afk_dev` is run for a repository board; Action: Orb lists the open specs, skips those without actionable issues or at their attempt cap, and starts one fresh headless Copilot session per remaining spec with the prompt `/ralph:dev <spec number>`; Outcome: each attempted spec has its attempt recorded, and a spec with all issues resolved has its count cleared. Notes: dry run is on unless switched off, so no session starts but the attempt is still recorded.
 
 ```mermaid
 %%{init: {'themeVariables': {'lineColor': '#8b949e'}}}%%
 %% diagram-id: afk-dev-run-swimlane
 swimlane-beta TB
   accTitle: AFK dev run responsibility
-  accDescr: Shows how the CLI, Shipyard, the Copilot agent and GitHub share the work of attempting each open spec.
+  accDescr: Shows how the CLI, Orb, the Copilot agent and GitHub share the work of attempting each open spec.
 
   subgraph cli [AFK CLI]
     start([Operator runs afk_dev])
     args[Validate arguments and configure logging]
   end
 
-  subgraph shipyard [Shipyard - dev use case]
+  subgraph orb [Orb - dev use case]
     list[List open specs]
     anySpecs{Specs found?}
     fetch[Fetch spec sub-issues]
@@ -73,14 +73,14 @@ swimlane-beta TB
 ```
 
 ### Develop Spec
-Actor: Copilot agent running the `/ralph:dev` skill; Trigger: a session starts with the spec number as its prompt argument; Action: resolve the harness repo and spec, compute the feature branch name, set up and build a worktree, run the Orchestrator Loop, open a draft pull request, run approved functional-testing tickets through Testy, then push the harness repo and remove the worktree; Outcome: the feature branch carries the committed work, and testing tickets are closed or escalated to a `hitl` investigation. Notes: invalid harness settings, missing spec metadata, a mismatched checkout, a failed build, or a failed commit, push or tracker write exits with a report; functional-test failures never fail the run.
+Actor: Copilot agent running the `/ralph:dev` skill; Trigger: a session starts with the spec number as its prompt argument; Action: resolve the harness repo and spec, compute the feature branch name, set up and build a worktree, run the Ralph Loop, open a draft pull request, run approved functional-testing tickets through Testy, then push the harness repo and remove the worktree; Outcome: the feature branch carries the committed work, and testing tickets are closed or escalated to a `hitl` investigation. Notes: invalid harness settings, missing spec metadata, a mismatched checkout, a failed build, or a failed commit, push or tracker write exits with a report; functional-test failures never fail the run.
 
 ```mermaid
 %%{init: {'themeVariables': {'lineColor': '#8b949e'}}}%%
 %% diagram-id: develop-spec-swimlane
 swimlane-beta TB
   accTitle: Develop Spec responsibility
-  accDescr: Shows how the ralph:dev skill, the Crew agents and GitHub share the work of delivering one spec, with the orchestrator loop as a subprocess.
+  accDescr: Shows how the ralph:dev skill, the Crew agents and GitHub share the work of delivering one spec, with the Ralph loop as a subprocess.
 
   subgraph skill [Copilot agent - ralph:dev skill]
     start([Prompt received with spec number])
@@ -96,7 +96,7 @@ swimlane-beta TB
     build[Build project]
     buildOk{Build passes?}
     exitFail([Exit and report])
-    loop[[Orchestrator Loop]]
+    loop[[Ralph Loop]]
     pr[Open draft PR when none exists]
     ft[Publish revision and select tests tickets]
     ready{Dependencies complete?}
@@ -140,14 +140,14 @@ swimlane-beta TB
   classDef default fill:#242424,stroke:#8b949e,color:#c9d1d9,stroke-width:1px
 ```
 
-### Orchestrator Loop
+### Ralph Loop
 Actor: Copilot agent running the `/ralph:dev` skill; Trigger: the worktree is built; Action: repeatedly read the eligible implementation issues, pick one by priority, implement it through Codey, review it through Chorey when Codey completed, commit and push, handle the issue by Codey's status, and merge the decisions into the spec; Outcome: no eligible task remains or the iteration cap is reached, with every attempted task closed, commented or labelled `hitl`. Notes: one task at a time, state re-read before each pick; a second consecutive partial result labels the task `hitl`.
 
 ```mermaid
 %%{init: {'themeVariables': {'lineColor': '#8b949e'}}}%%
-%% diagram-id: orchestrator-loop-swimlane
+%% diagram-id: ralph-loop-swimlane
 swimlane-beta TB
-  accTitle: Orchestrator Loop responsibility
+  accTitle: Ralph Loop responsibility
   accDescr: Shows how the ralph:dev skill, the Crew agents and GitHub share the work of implementing one task per iteration.
 
   subgraph skill [Copilot agent - ralph:dev skill]
@@ -231,7 +231,7 @@ flowchart LR
     hitl(["Issue labelled hitl"])
     run[["Run AFK Dev Service"]]
     dev[["Develop Spec"]]
-    loop[["Orchestrator Loop"]]
+    loop[["Ralph Loop"]]
     pr(["Draft pull request"])
 
     actionable --> run
@@ -251,9 +251,9 @@ A solid edge is automatic; a dotted edge is a separately initiated step, labelle
 ## Implementation Map
 | Concern | Stable anchor | Semantic locator |
 |---|---|---|
-| External contract | Operator-run service for one repository board | `shipyard`: CLI `afk_dev`, options `--github_repo_board`, `--max_executions`, `--agent`, `--prompt`, `--log-dir` |
-| External contract | Agent skill driven by the spec number | `shipyard`: skill command `/ralph:dev` |
-| Spec and issue selection | Open specs; issues that may be worked | `shipyard`: `VCSClient`, `IssueFilter` |
-| Attempt bound | Per-spec attempt count persisted across runs, cleared when issues resolve | `shipyard`: `ExecutionLog` |
-| Execution | Fresh non-interactive Copilot session per spec | `shipyard`: `AIAgent`, env key `AFK_DRY_RUN` |
-| Tests | Spec skipping, cap and count reset behavior | `shipyard`: dev handler unit tests |
+| External contract | Operator-run service for one repository board | `orb`: CLI `afk_dev`, options `--github_repo_board`, `--max_executions`, `--agent`, `--prompt`, `--log-dir` |
+| External contract | Agent skill driven by the spec number | `orb`: skill command `/ralph:dev` |
+| Spec and issue selection | Open specs; issues that may be worked | `orb`: `VCSClient`, `IssueFilter` |
+| Attempt bound | Per-spec attempt count persisted across runs, cleared when issues resolve | `orb`: `ExecutionLog` |
+| Execution | Fresh non-interactive Copilot session per spec | `orb`: `AIAgent`, env key `AFK_DRY_RUN` |
+| Tests | Spec skipping, cap and count reset behavior | `orb`: dev handler unit tests |

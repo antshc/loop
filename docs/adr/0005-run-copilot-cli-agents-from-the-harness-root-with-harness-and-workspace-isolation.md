@@ -1,6 +1,6 @@
 # Run Copilot CLI agents from the harness root with harness-and-workspace isolation
 
-Copilot CLI agents need the harness `.github` skills/instructions and `docs` while changing code in isolated worktrees. Shipyard launches the agent from the harness repository and defines the run's isolation boundary to include the harness plus the relevant workspace repositories and worktrees, so harness context remains available in both single-repo and multi-repo layouts.
+Copilot CLI agents need the harness `.github` skills/instructions and `docs` while changing code in isolated worktrees. Orb launches the agent from the harness repository and defines the run's isolation boundary to include the harness plus the relevant workspace repositories and worktrees, so harness context remains available in both single-repo and multi-repo layouts.
 
 ## Considered Options
 

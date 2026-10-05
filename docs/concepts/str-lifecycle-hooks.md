@@ -3,15 +3,15 @@
 
 ## Purpose
 
-Let a repository prepare a fresh worktree (copy `.env`, install dependencies) before a Headless AI Agent starts, without baking repository-specific setup into Shipyard workflows.
+Let a repository prepare a fresh worktree (copy `.env`, install dependencies) before a Headless AI Agent starts, without baking repository-specific setup into Orb workflows.
 
 ## Concept
 
-A Hook is a user-declared shell command that Shipyard runs at a named Hook point in a run's lifecycle. Shipyard defines one Hook point, `worktree-ready`: after the worktree is created and before the agent starts. Hooks run on the host, so a hook that needs a different environment carries that in its own command.
+A Hook is a user-declared shell command that Orb runs at a named Hook point in a run's lifecycle. Orb defines one Hook point, `worktree-ready`: after the worktree is created and before the agent starts. Hooks run on the host, so a hook that needs a different environment carries that in its own command.
 
 The runtime owns hook execution, timeout, and cancellation; the workflow only declares which hooks apply. Hooks exist only before the agent: post-iteration work is an explicit step of the workflow's use case, not a hook. Adding a Hook point later is additive because hooks are already keyed by point.
 
-Modelled on Sandcastle's host-side `onWorktreeReady` hooks ([research](../research/sandcastle-agent-invocation-and-extension-points.md)); its sandbox-side hooks have no Shipyard counterpart.
+Modelled on Sandcastle's host-side `onWorktreeReady` hooks ([research](../research/sandcastle-agent-invocation-and-extension-points.md)); its sandbox-side hooks have no Orb counterpart (Orb has no Capsule-side hooks).
 
 ## Rules
 

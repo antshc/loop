@@ -4,14 +4,14 @@ AFK automated development loop and PR review-comment automation driven by Copilo
 
 ## Language
 
-**Ralph**  
-An autonomous development loop that repeatedly invokes a coding agent in fresh sessions. Each iteration reconstructs progress from durable external state such as issues, Git commits, source files, and tests, performs bounded work, persists the result, and continues until explicit completion criteria are met.
-
 **Orb**  
-An orchestration framework for Headless AI Agents using Git worktrees. It handles running agents against a single repository or multiple repositories, Git branch/worktree lifecycle, and iterative agent execution.
+The CLI and top-level product: an orchestration framework for Headless AI Agents using Git worktrees. It handles running agents against a single repository or multiple repositories, Git branch/worktree lifecycle, and iterative agent execution.
+
+**Ralph**  
+The orchestrator: it drives the autonomous development loop, repeatedly invoking Crew agents in fresh sessions. Each iteration reconstructs progress from durable external state such as Tickets, Git commits, source files, and tests, performs bounded work, persists the result, and continues until explicit completion criteria are met.
 
 **Crew**:  
-An AI Agent Team: multiple specialized agents with distinct responsibilities coordinated toward a shared outcome. Coordination may occur through direct interaction, an orchestrator, or shared external state.  
+The AI Agent Team of Codey, Chorey, and Testy: specialized agents with distinct responsibilities coordinated toward a shared outcome. Coordination may occur through direct interaction, Ralph, or shared external state.  
 _Avoid_: AI Agent Team
 
 **Harness**:  
@@ -27,7 +27,7 @@ A harness layout in which the harness is a separate parent repository wrapping o
 _Avoid_: Wrapping harness, parent harness
 
 **Ticket**:  
-A platform-neutral unit of tracked work, such as a GitHub issue or an Azure DevOps work item, that Orb reads and acts on.  
+A platform-neutral prompt/task, such as a GitHub issue or an Azure DevOps work item, that Orb reads and hands to an agent to act on.  
 _Avoid_: Issue, Work item
 
 **Spec**:  
@@ -35,7 +35,7 @@ A Ticket that groups the Tickets one dev run delivers, carrying the target branc
 _Avoid_: Epic, parent issue
 
 **Workflow**:  
-One autonomous procedure Orb runs as a `fleet` subcommand, such as `dev`, discovered and loaded as a plugin.  
+One autonomous procedure Orb runs subcommand, such as `dev`, discovered and loaded as a plugin.  
 _Avoid_: Slice, feature, template
 
 **Hook**:  
@@ -47,5 +47,5 @@ A named moment in a run's lifecycle at which Orb runs the Hooks declared for it,
 _Avoid_: Event, trigger, stage
 
 **Capsule**:  
-An isolated sandbox workspace in which a Headless AI Agent runs, separated from the host and from other runs.  
+An isolated sandbox/workspace in which a Headless AI Agent runs, separated from the host and from other runs.  
 _Avoid_: Sandbox, container, environment

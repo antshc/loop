@@ -1,6 +1,6 @@
-# Install Shipyard with pip from the repository
+# Install Orb with pip from the repository
 
-Shipyard (`brain-tools`, exposing `afk_dev`, `afk_fix_prs`, `afk_address_prs`) must reach users in a form whose version the project controls. It is installed with `pip` from this repository (`pip install -e ".[dev]"` for development), so the repository revision defines the delivered version.
+Orb (`brain-tools`, exposing `afk_dev`, `afk_fix_prs`, `afk_address_prs`) must reach users in a form whose version the project controls. It is installed with `pip` from this repository (`pip install -e ".[dev]"` for development), so the repository revision defines the delivered version.
 
 ## Considered Options
 
@@ -11,4 +11,4 @@ Shipyard (`brain-tools`, exposing `afk_dev`, `afk_fix_prs`, `afk_address_prs`) m
 
 - Users need Python and `pip` and must update by pulling the repository and reinstalling.
 - No package index is involved; the repository is the only distribution channel.
-- Package and command names are set by [ADR 0002](0002-ship-shipyard-as-the-shipyard-package-with-a-ship-command.md).
+- Package and command names are set by [ADR 0002](0002-ship-orb-as-the-orb-package-with-an-orb-command.md).

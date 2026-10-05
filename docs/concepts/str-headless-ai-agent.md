@@ -3,7 +3,7 @@
 
 ## Purpose
 
-Define an AI coding agent that can run without an interactive chat UI so it can be invoked, isolated, observed, and composed by automation such as Shipyard and Ralph loops.
+Define an AI coding agent that can run without an interactive chat UI so it can be invoked, isolated, observed, and composed by automation such as Orb and Ralph loops.
 
 ## Concept
 
@@ -38,7 +38,7 @@ def run_headless_agent(worktree: str, prompt: str) -> subprocess.CompletedProces
     )
 
 result = run_headless_agent(
-    worktree="/tmp/shipyard/task-42",
+    worktree="/tmp/orb/task-42",
     prompt="Implement issue #42, verify it, commit the result, then exit.",
 )
 
@@ -46,7 +46,7 @@ if result.returncode != 0:
     raise RuntimeError(result.stderr)
 ```
 
-Shipyard can create the worktree and invoke the agent; a Ralph option can decide when to invoke it again in a fresh session.
+Orb can create the worktree and invoke the agent; a Ralph option can decide when to invoke it again in a fresh session.
 
 ## Benefits and Trade-offs
 

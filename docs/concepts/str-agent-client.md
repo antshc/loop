@@ -5,14 +5,14 @@
 
 Provide a stable application-facing client for running headless AI agents through provider CLIs while isolating orchestration code from provider-specific commands, session mechanics, flags, and output handling.
 
-The client accepts an agent prompt, optionally associates the run with a logical session, and returns captured CLI execution output so Shipyard, Ralph, and Crew depend on one stable API instead of invoking Copilot CLI directly.
+The client accepts an agent prompt, optionally associates the run with a logical session, and returns captured CLI execution output so Orb, Ralph, and Crew depend on one stable API instead of invoking Copilot CLI directly.
 
 ## Concept
 
 An **AgentClient** wraps a provider-specific CLI adapter and uses a **SessionStore** for resumable agent sessions.
 
 ```text
-Shipyard / Ralph / Crew
+Orb / Ralph / Crew
           |
           v
       AgentClient
@@ -27,9 +27,9 @@ SessionStore  Provider CLI Adapter
 
 `AgentClient` exposes a provider-neutral `run(prompt, session_key=None)` operation. A run without a session key starts a fresh provider invocation. A run with a session key resolves the logical session through `SessionStore`; the provider adapter then creates or resumes the corresponding provider session.
 
-`SessionStore` owns Shipyard's logical-session metadata, not the provider conversation history. It maps a logical session key to the provider-facing session reference needed for later continuation. The provider CLI remains authoritative for the actual transcript and session state.
+`SessionStore` owns Orb's logical-session metadata, not the provider conversation history. It maps a logical session key to the provider-facing session reference needed for later continuation. The provider CLI remains authoritative for the actual transcript and session state.
 
-Provider-facing session names are derived from the logical session key. Agent client options may define an optional `session_name_prefix`; when configured, the prefix is prepended to every provider-facing session name. This lets Shipyard-owned sessions remain identifiable in provider session pickers without exposing provider naming rules to workflows.
+Provider-facing session names are derived from the logical session key. Agent client options may define an optional `session_name_prefix`; when configured, the prefix is prepended to every provider-facing session name. This lets Orb-owned sessions remain identifiable in provider session pickers without exposing provider naming rules to workflows.
 
 The CLI adapter owns command construction, process execution, and provider-specific create/resume semantics. For Copilot CLI, a new named session is started with the provider's naming option and subsequent runs resume that same name.
 
@@ -131,10 +131,10 @@ class AgentClient:
 With:
 
 ```python
-AgentClientOptions(session_name_prefix="shipyard-")
+AgentClientOptions(session_name_prefix="orb-")
 ```
 
-the logical session key `issue-42` becomes provider-facing session name `shipyard-issue-42`. The workflow continues to use only `issue-42`; the provider adapter owns how that name is created and resumed.
+the logical session key `issue-42` becomes provider-facing session name `orb-issue-42`. The workflow continues to use only `issue-42`; the provider adapter owns how that name is created and resumed.
 
 For Copilot CLI, the adapter translates the session state conceptually as:
 
@@ -150,7 +150,7 @@ existing session -> copilot --resume=<provider-session-name> ...
 - Keeps provider CLI syntax and session mechanics out of orchestration workflows.
 - Gives Ralph and Crew one stable prompt execution and continuation contract.
 - Lets workflows address sessions with stable logical keys instead of provider identifiers.
-- Keeps Shipyard-owned sessions recognizable through an optional naming prefix.
+- Keeps Orb-owned sessions recognizable through an optional naming prefix.
 - Captures execution output for diagnostics, logging, and control flow.
 - Keeps the provider authoritative for conversation history.
 
@@ -158,7 +158,7 @@ existing session -> copilot --resume=<provider-session-name> ...
 
 - Resumable execution requires durable logical-session metadata.
 - Provider-specific session capabilities still differ and require adapter-specific handling.
-- A provider session may outlive Shipyard's local session metadata and require reconciliation outside the core contract.
+- A provider session may outlive Orb's local session metadata and require reconciliation outside the core contract.
 - Captured output may require provider-specific parsing if structured results are needed.
 
 ## Validation

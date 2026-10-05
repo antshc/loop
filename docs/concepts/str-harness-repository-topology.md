@@ -44,14 +44,14 @@ Work is split by repository: spec, issue, and documentation operations (and the 
 Single repo — harness and codebase are one repository:
 
 ```text
-shipyard/                         # harness root = codebase checkout
+orb/                         # harness root = codebase checkout
 ├── .github/                      # instructions, skills
 ├── CONTEXT.md
 ├── ARCHITECTURE.md
 ├── docs/
 ├── ralph/
 └── tools/
-shipyard.worktrees/               # sibling of the checkout
+orb.worktrees/               # sibling of the checkout
 └── <feature-branch>/             # worktree; all code changes happen here
 ```
 
