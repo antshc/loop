@@ -1,4 +1,4 @@
-# ralphv2
+# Orb
 
 AFK automated development loop and PR review-comment automation driven by Copilot.
 
@@ -7,8 +7,7 @@ AFK automated development loop and PR review-comment automation driven by Copilo
 **Ralph**  
 An autonomous development loop that repeatedly invokes a coding agent in fresh sessions. Each iteration reconstructs progress from durable external state such as issues, Git commits, source files, and tests, performs bounded work, persists the result, and continues until explicit completion criteria are met.
 
-
-**Shipyard**  
+**Orb**  
 An orchestration framework for Headless AI Agents using Git worktrees. It handles running agents against a single repository or multiple repositories, Git branch/worktree lifecycle, and iterative agent execution.
 
 **Crew**:  
@@ -46,3 +45,7 @@ _Avoid_: Callback, script, setup step
 **Hook point**:  
 A named moment in a run's lifecycle at which Shipyard runs the Hooks declared for it, such as `worktree-ready`.  
 _Avoid_: Event, trigger, stage
+
+**Capsule**:  
+An isolated sandbox workspace in which a Headless AI Agent runs, separated from the host and from other runs.  
+_Avoid_: Sandbox, container, environment
