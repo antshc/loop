@@ -540,7 +540,7 @@ def main(
             # Specs labeled hitl wait for a human.
             if HITL_LABEL in spec.labels:
                 continue
-            failed = failed or _process_spec(spec, deps) is Outcome.FAILED
+            failed = (_process_spec(spec, deps) is Outcome.FAILED) or failed
         return 1 if failed else 0
     except Exception as exception:  # last-resort boundary the ticket requires: log and fail, never crash bare
         logger.exception("unexpected error: %s", exception)
