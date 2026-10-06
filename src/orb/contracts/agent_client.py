@@ -16,6 +16,7 @@ class AgentOptions:
     """Per-run agent configuration."""
 
     model: str | None = None
+    agent: str | None = None
     session_key: str | None = None
     session_name_prefix: str = ""
     timeout_s: float | None = None
@@ -34,10 +35,11 @@ class AgentResult:
     stdout: str
     stderr: str
     exit_code: int
+    completed: bool = False
 
     @property
     def success(self) -> bool:
-        return self.exit_code == 0
+        return self.exit_code == 0 or self.completed
 
     @property
     def output(self) -> str:

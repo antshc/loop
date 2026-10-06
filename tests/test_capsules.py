@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -9,6 +10,7 @@ from orb import (
     Capsule,
     CommandError,
     CommandExecutor,
+    DEFAULT_COMPLETION_SIGNAL,
     DockerCapsule,
     InMemorySessionStore,
     NoCapsule,
@@ -18,6 +20,10 @@ from orb import (
 from orb.testing import FakeAgentClient, FakeCopilotCli, FakeDocker
 
 CONTAINER_WORKSPACE = "/home/agent/workspace"
+
+
+def _event(delta: str) -> str:
+    return json.dumps({"type": "assistant.message_delta", "data": {"deltaContent": delta}})
 
 
 def test_no_capsule_delegates_prompt_args_and_options_to_its_agent(tmp_path: Path) -> None:
@@ -92,6 +98,31 @@ def test_docker_capsule_mounts_the_worktrees_git_dir(tmp_path: Path) -> None:
     start = next(call for call in docker.calls if call[1:3] == ("run", "-d"))
     assert "/host/repo/.git:/host/repo/.git:z" in start
     assert start[-1] == "orb:repo"
+
+
+def test_no_capsule_streams_copilot_output_and_stops_at_the_completion_signal(tmp_path: Path) -> None:
+    cli = FakeCopilotCli(lambda prompt: [_event("working"), _event(DEFAULT_COMPLETION_SIGNAL), _event("never")])
+
+    result = NoCapsule(tmp_path, copilot(InMemorySessionStore()), executor=cli).run("go")
+
+    assert result.completed and result.success
+    assert "never" not in result.stdout
+    assert cli.terminated
+
+
+def test_docker_capsule_streams_copilot_output_and_stops_at_the_completion_signal(tmp_path: Path) -> None:
+    cli = FakeCopilotCli(lambda prompt: [_event("working"), _event(DEFAULT_COMPLETION_SIGNAL), _event("never")])
+    docker = FakeDocker(cli)
+    capsule = DockerCapsule(
+        tmp_path, copilot(InMemorySessionStore()), image_name="orb:test", container_uid=1000, docker=docker
+    )
+
+    result = capsule.run("go")
+    capsule.close()
+
+    assert result.completed and result.success
+    assert "never" not in result.stdout
+    assert cli.terminated
 
 
 def test_docker_capsule_rejects_an_image_built_for_another_uid(tmp_path: Path) -> None:

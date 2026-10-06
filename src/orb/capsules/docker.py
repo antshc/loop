@@ -11,7 +11,7 @@ from uuid import uuid4
 from orb.contracts.agent_client import AgentOptions, AgentResult
 from orb.contracts.capsule import AgentClientFactory, Capsule
 from orb.errors import OrbError
-from orb.process import CommandExecutor, CommandResult, checked_output, execute
+from orb.process import CommandExecutor, CommandResult, OnLine, checked_output, execute
 
 CAPSULE_HOME = "/home/agent"
 CAPSULE_WORKSPACE = f"{CAPSULE_HOME}/workspace"
@@ -137,11 +137,11 @@ class DockerCapsule(Capsule):
         self._docker(("docker", "rm", self._container))
 
     def _exec_in_container(
-        self, command: Sequence[str] | str, *, timeout_s: float | None = None
+        self, command: Sequence[str] | str, *, timeout_s: float | None = None, on_line: OnLine | None = None
     ) -> CommandResult:
         args = ["docker", "exec", "-w", CAPSULE_WORKSPACE, self._container]
         args += ["sh", "-c", command] if isinstance(command, str) else list(command)
-        return self._docker(args, timeout_s=timeout_s)
+        return self._docker(args, timeout_s=timeout_s, on_line=on_line)
 
     def _remove(self) -> None:
         self._docker(("docker", "rm", "-f", self._container))

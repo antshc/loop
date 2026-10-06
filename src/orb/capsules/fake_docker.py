@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from orb.process import CommandExecutor, CommandResult
+from orb.process import CommandExecutor, CommandResult, OnLine
 
 
 class FakeDocker:
@@ -14,7 +14,11 @@ class FakeDocker:
         self.calls: list[tuple[str, ...]] = []
 
     def __call__(
-        self, command: Sequence[str] | str, *, timeout_s: float | None = None
+        self,
+        command: Sequence[str] | str,
+        *,
+        timeout_s: float | None = None,
+        on_line: OnLine | None = None,
     ) -> CommandResult:
         args = tuple(command)
         self.calls.append(args)
@@ -24,5 +28,5 @@ class FakeDocker:
             # docker exec -w <dir> <container> <command...>
             inner = args[5:]
             forwarded = inner[2] if inner[:2] == ("sh", "-c") else inner
-            return self._inner(forwarded, timeout_s=timeout_s)
+            return self._inner(forwarded, timeout_s=timeout_s, on_line=on_line)
         return CommandResult(0, "", "")

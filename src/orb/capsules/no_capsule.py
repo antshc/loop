@@ -5,7 +5,7 @@ from pathlib import Path
 
 from orb.contracts.agent_client import AgentOptions, AgentResult
 from orb.contracts.capsule import AgentClientFactory, Capsule
-from orb.process import CommandExecutor, CommandResult, checked_output, execute
+from orb.process import CommandExecutor, CommandResult, OnLine, checked_output, execute
 
 
 class NoCapsule(Capsule):
@@ -41,6 +41,6 @@ class NoCapsule(Capsule):
         pass
 
     def _host_executor(
-        self, command: Sequence[str] | str, *, timeout_s: float | None = None
+        self, command: Sequence[str] | str, *, timeout_s: float | None = None, on_line: OnLine | None = None
     ) -> CommandResult:
-        return execute(command, cwd=self._workspace, timeout_s=timeout_s)
+        return execute(command, cwd=self._workspace, timeout_s=timeout_s, on_line=on_line)

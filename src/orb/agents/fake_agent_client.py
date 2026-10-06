@@ -15,7 +15,7 @@ class FakeAgentClient(AgentClient):
 
     def __init__(self, handler: Handler | None = None) -> None:
         super().__init__(
-            lambda command, *, timeout_s=None: CommandResult(0, "", ""),
+            lambda command, *, timeout_s=None, on_line=None: CommandResult(0, "", ""),
             PromptPreprocessor(lambda command: ""),
             InMemorySessionStore(),
         )
