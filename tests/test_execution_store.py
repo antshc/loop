@@ -53,7 +53,7 @@ def test_non_array_file_raises_before_any_spec_is_attempted(tmp_path: Path) -> N
         store.failed_attempts("https://github.com/o/r/issues/1")
 
 
-def test_daily_rollover_lets_a_capped_spec_be_attempted_again(tmp_path: Path) -> None:
+def test_daily_rollover_resets_the_failed_attempt_count(tmp_path: Path) -> None:
     key = "https://github.com/o/r/issues/1"
     yesterday = FileExecutionStore(tmp_path, clock=_clock("2026-01-01T00:00:00"))
     for _ in range(3):

@@ -11,7 +11,6 @@ from loop import (
     Cancelled,
     Sandbox,
     CommandError,
-    DEFAULT_COMPLETION_SIGNAL,
     DockerSandbox,
     InMemorySessionStore,
     Mount,
@@ -20,6 +19,9 @@ from loop import (
     copilot,
 )
 from loop.testing import FakeAgentClient, FakeCopilotCli, FakeDocker
+
+
+_RESPONSE = '{"identifier": "t|1", "status": "completed", "result": {}}'
 
 
 def _event(delta: str) -> str:
@@ -93,7 +95,7 @@ def test_docker_sandbox_starts_a_container_and_runs_the_agent_inside_it(tmp_path
     exec_prefix = ("docker", "exec", "-w", str(tmp_path), container)
     assert ("sh", "-c", "ls") == next(c for c in docker.calls if c[:5] == exec_prefix and "ls" in c)[5:]
     assert any(c[:5] == exec_prefix and c[5] == "copilot" for c in docker.calls)
-    assert cli.calls[0][2] == "see listing" and result.success
+    assert cli.calls[0][2] == "see listing" and result.exit_code == 0
     assert sandbox.workspace == str(tmp_path)
     assert sandbox.isolated is True
     assert ("docker", "stop", container) in docker.calls and ("docker", "rm", container) in docker.calls
@@ -149,27 +151,27 @@ def test_docker_sandbox_runs_a_different_agent_on_each_run(tmp_path: Path) -> No
     assert planner.calls[0][0] == "plan" and reviewer.calls[0][0] == "review"
 
 
-def test_no_sandbox_streams_copilot_output_and_stops_at_the_completion_signal(tmp_path: Path) -> None:
-    cli = FakeCopilotCli(lambda prompt: [_event("working"), _event(DEFAULT_COMPLETION_SIGNAL), _event("never")])
+def test_no_sandbox_streams_copilot_output_and_parses_the_response_after_exit(tmp_path: Path) -> None:
+    cli = FakeCopilotCli(lambda prompt: [_event("working"), _event(_RESPONSE), _event("trailing")])
 
     result = NoSandbox(tmp_path, executor=cli).run(copilot(InMemorySessionStore()), "go")
 
-    assert result.completed and result.success
-    assert "never" not in result.stdout
-    assert cli.terminated
+    assert result.success and json.loads(result.response)["identifier"] == "t|1"
+    assert "trailing" in result.stdout
+    assert not cli.terminated
 
 
-def test_docker_sandbox_streams_copilot_output_and_stops_at_the_completion_signal(tmp_path: Path) -> None:
-    cli = FakeCopilotCli(lambda prompt: [_event("working"), _event(DEFAULT_COMPLETION_SIGNAL), _event("never")])
+def test_docker_sandbox_streams_copilot_output_and_parses_the_response_after_exit(tmp_path: Path) -> None:
+    cli = FakeCopilotCli(lambda prompt: [_event("working"), _event(_RESPONSE), _event("trailing")])
     docker = FakeDocker(cli)
     sandbox = DockerSandbox(tmp_path, image_name="loop:test", container_uid=1000, docker=docker)
 
     result = sandbox.run(copilot(InMemorySessionStore()), "go")
     sandbox.close()
 
-    assert result.completed and result.success
-    assert "never" not in result.stdout
-    assert cli.terminated
+    assert result.success and json.loads(result.response)["status"] == "completed"
+    assert "trailing" in result.stdout
+    assert not cli.terminated
 
 
 def test_docker_sandbox_rejects_an_image_built_for_another_uid(tmp_path: Path) -> None:

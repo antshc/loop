@@ -35,7 +35,6 @@ source_modules = [
     "loop.prompt",
     "loop.tags",
     "loop.parallel",
-    "loop.attempts",
 ]
 forbidden_modules = [
     "loop.agents",
@@ -73,7 +72,6 @@ source_modules = [
     "loop.prompt",
     "loop.tags",
     "loop.parallel",
-    "loop.attempts",
     "workflows",
 ]
 forbidden_modules = ["loop.testing"]
@@ -94,7 +92,6 @@ forbidden_modules = [
     "loop.prompt",
     "loop.tags",
     "loop.parallel",
-    "loop.attempts",
     "loop.testing",
 ]
 allow_indirect_imports = true

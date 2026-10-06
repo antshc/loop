@@ -152,6 +152,34 @@ class GitClient:
         # `--grep` also matches body lines, so keep only subjects that carry the prefix.
         return [line for line in output.splitlines() if line.partition(" ")[2].startswith(prefix)]
 
+    def head_subject(self, worktree: Path) -> str:
+        """The subject line of the commit at HEAD, without its body."""
+        return self._run(("git", "log", "-1", "--format=%s"), cwd=worktree).strip()
+
+    def is_clean(self, worktree: Path) -> bool:
+        """Whether `worktree` has no staged, unstaged, or untracked changes."""
+        return not self.has_changes(worktree)
+
+    def reset_to(self, worktree: Path, commit: str) -> None:
+        """Hard-resets `worktree` to `commit` and removes untracked files and directories."""
+        self._run(("git", "reset", "--hard", commit), cwd=worktree)
+        self._run(("git", "clean", "-fd"), cwd=worktree)
+
+    def commits_with_prefix(self, worktree: Path, range_spec: str, prefix: str) -> list[str]:
+        """`<short hash> <subject>` of every commit in `range_spec` whose subject starts with `prefix`, oldest first."""
+        output = self._run(
+            ("git", "log", "--reverse", f"--grep=^{re.escape(prefix)}", "--format=%h %s", range_spec), cwd=worktree
+        )
+        # `--grep` also matches body lines, so keep only subjects that carry the prefix.
+        return [line for line in output.splitlines() if line.partition(" ")[2].startswith(prefix)]
+
+    def branch_ahead_of_remote(self, checkout: Path, branch: str, base: str) -> bool:
+        """Whether local `branch` holds commits beyond its `origin` counterpart, or beyond `base` when it has none."""
+        if not self._show_ref(checkout, f"refs/heads/{branch}"):
+            return False
+        upstream = f"origin/{branch}" if self.remote_branch_exists(checkout, branch) else base
+        return bool(self._run(("git", "rev-list", f"{upstream}..{branch}"), cwd=checkout).strip())
+
     def merge(self, checkout: Path, branch: str) -> None:
         with self._lock:
             self._run(("git", "merge", "--no-edit", branch), cwd=checkout)
