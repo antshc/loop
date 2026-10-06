@@ -12,7 +12,6 @@ import pytest
 from conftest import commit_file, git
 from loop import (
     AgentClient,
-    AgentResult,
     Sandbox,
     CommandError,
     CopilotClient,
@@ -486,62 +485,63 @@ def test_a_spec_labelled_hitl_is_skipped(tmp_path: Path) -> None:
     assert _writes(harness.gh) == []
 
 
-def test_no_actionable_tickets_with_earlier_failures_resets_and_skips(tmp_path: Path) -> None:
-    harness = DevHarness(tmp_path, tickets={1: []})
-    harness.store.record_failure(
-        "https://github.com/owner/repo/issues/1", owner="owner", repo="repo", task_id="1", title="x", items=[10]
-    )
-
-    code = harness.run()
-
-    assert code == 0
-    assert harness.store.failed_attempts("https://github.com/owner/repo/issues/1") == 0
-
-
-def test_a_spec_with_three_earlier_failures_is_still_attempted(tmp_path: Path) -> None:
+def test_a_ticket_that_failed_once_in_an_earlier_run_is_escalated_on_its_next_failure_without_a_retry(
+    tmp_path: Path,
+) -> None:
     harness = DevHarness(tmp_path)
-    key = "https://github.com/owner/repo/issues/1"
-    for _ in range(3):
-        harness.store.record_failure(key, owner="owner", repo="repo", task_id="1", title="x", items=[10])
+    harness.store.record_failure("https://github.com/owner/repo/issues/10", owner="owner", repo="repo", task_id="10", title="x", items=[10])
 
-    harness.run()
+    code = harness.run(handler=lambda prompt, options: "")
 
+    assert code == 1
     assert len(harness.agent_calls) == 1
+    assert {c[2] for c in harness.gh.calls if c[:2] == ("issue", "edit") and c[-1] == "hitl"} == {"1", "10"}
 
 
-def test_a_failed_attempt_records_count_last_run_and_last_items_in_the_days_execution_log(tmp_path: Path) -> None:
+def test_failures_persist_per_ticket_in_the_days_execution_log(tmp_path: Path) -> None:
     harness = DevHarness(tmp_path)
-    harness.git.failing_fetch.add(harness.harness_root)
     store = FileExecutionStore(harness.log_dir, clock=lambda: datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc))
 
-    code = harness.run(store=store)
+    code = harness.run(handler=lambda prompt, options: "", store=store)
 
     assert code == 1
-    path = harness.log_dir / "dev-execution-log-2026-01-01.json"
-    records = json.loads(path.read_text())
-    assert records[0]["count"] == 1
-    assert records[0]["last_run"] == "2026-01-01T12:00:00Z"
-    assert records[0]["last_items"] == [10]
+    records = json.loads((harness.log_dir / "dev-execution-log-2026-01-01.json").read_text())
+    assert (records[0]["count"], records[0]["last_run"], records[0]["last_items"]) == (2, "2026-01-01T12:00:00Z", [10])
 
 
-def test_when_the_first_spec_fails_in_git_the_second_is_still_processed(tmp_path: Path) -> None:
-    harness = DevHarness(
-        tmp_path,
-        specs=[
-            _issue(1, "Add a widget", labels=("spec", "repo:target:acme/widgets", "repo:base:main")),
-            _issue(2, "Add logout button", labels=("spec", "repo:target:owner/repo", "repo:base:main")),
-        ],
-        tickets={1: [_issue(10, "Build the widget")], 2: [_issue(20, "Add logout form")]},
-    )
-    clone = _make_repo(harness.harness_root / "workspace" / "widgets", "git@github.com:acme/widgets.git")
-    harness.git.failing_fetch.add(clone)
+def test_a_first_failure_retries_the_same_ticket_immediately_without_hitl(tmp_path: Path) -> None:
+    harness = DevHarness(tmp_path)
+    calls: list[int] = []
 
-    code = harness.run(handler=lambda prompt, options: _commit_and_report(harness, 20, initiative="2"))
+    def handler(prompt, options):
+        calls.append(1)
+        return "" if len(calls) == 1 else _commit_and_report(harness, 10)
 
-    assert code == 1
-    comments = [c for c in harness.gh.calls if c[:2] == ("issue", "comment") and c[2] == "1"]
-    closes = [c for c in harness.gh.calls if c[:2] == ("issue", "close") and c[2] == "20"]
-    assert comments and closes
+    code = harness.run(handler=handler)
+
+    assert code == 0
+    assert len(harness.agent_calls) == 2 and all(o.session_key is None for _, o in harness.agent_calls)
+    assert all(c[:2] != ("issue", "edit") for c in harness.gh.calls)
+    assert [c[2] for c in harness.gh.calls if c[:2] == ("issue", "close")] == ["10"]
+    assert harness.store.failed_attempts("https://github.com/owner/repo/issues/10") == 0
+
+
+def test_two_tickets_each_failing_once_are_not_escalated(tmp_path: Path) -> None:
+    harness = DevHarness(tmp_path, tickets={1: [_issue(10, "Add login form"), _issue(11, "Add login tests")]})
+    seen: set[str] = set()
+
+    def handler(prompt, options):
+        number = 10 if "Task id: `Checkout|10`" in prompt else 11
+        if number not in seen:
+            seen.add(number)
+            return ""
+        return _commit_and_report(harness, number)
+
+    code = harness.run(handler=handler)
+
+    assert code == 0
+    assert all(c[:2] != ("issue", "edit") for c in harness.gh.calls)
+    assert [c[2] for c in harness.gh.calls if c[:2] == ("issue", "close")] == ["10", "11"]
 
 
 def test_remote_target_branch_missing_is_labelled_hitl(tmp_path: Path) -> None:
@@ -875,7 +875,7 @@ def test_a_failed_ticket_stops_the_delivery_of_the_next_ticket(tmp_path: Path) -
     code = harness.run(handler=lambda prompt, options: "")
 
     assert code == 1
-    assert len(harness.agent_calls) == 1
+    assert len(harness.agent_calls) == 2
     assert all(c[2] != "11" for c in harness.gh.calls if c[:2] in (("issue", "close"), ("issue", "edit")))
 
 

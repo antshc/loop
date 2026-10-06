@@ -46,6 +46,7 @@ from loop import (
 LOG_DIR_NAME = ".loop"
 LOG_LEVEL = "INFO"
 HOOKS: tuple[Hook, ...] = ()
+MAX_TICKET_FAILURES = 2
 
 
 def _no_sandbox(workspace: Path, cancel: threading.Event) -> Sandbox:
@@ -198,16 +199,18 @@ def _prompt_args(
     }
 
 
-def _record_failure(run: SpecRun, deps: DevDeps) -> None:
+def _record_ticket_failure(run: SpecRun, ticket: Ticket, deps: DevDeps) -> int:
+    """Counts one failure for `ticket` and returns its persisted total."""
     owner, repo = deps.harness_slug.split("/", 1)
     deps.store.record_failure(
-        run.spec.url,
+        ticket.url,
         owner=owner,
         repo=repo,
-        task_id=str(run.spec.number),
-        title=run.spec.title,
-        items=[ticket.number for ticket in run.actionable],
+        task_id=str(ticket.number),
+        title=ticket.title,
+        items=[ticket.number],
     )
+    return deps.store.failed_attempts(ticket.url)
 
 
 def _hitl(github: GitHubClient, number: int, message: str) -> None:
@@ -216,10 +219,6 @@ def _hitl(github: GitHubClient, number: int, message: str) -> None:
 
 
 def _escalate(run: SpecRun, ticket: Ticket, deps: DevDeps, reason: str) -> None:
-    """Interim failure policy: escalate to a human on the Ticket's first failure.
-
-    A later retry slice will retry once before reaching this point.
-    """
     message = f"dev: {reason}"
     _hitl(deps.harness_github, ticket.number, message)
     _hitl(deps.harness_github, run.spec.number, message)
@@ -300,25 +299,27 @@ def _run_and_validate(
 
 
 def _deliver_ticket(run: SpecRun, ticket: Ticket, sandbox: WorktreeSandbox, deps: DevDeps) -> bool:
-    """One fresh agent run for `ticket`; on any failure resets the worktree and escalates. True on success."""
+    """Fresh agent runs for `ticket` until one is accepted or its failure cap is reached; True on success."""
     worktree = sandbox.worktree
-    head_before = deps.git.head(worktree)
     identifier = task_id(run.initiative, ticket.number)
-    prompt_args = _prompt_args(
-        ticket,
-        identifier,
-        _initiative_commits(deps.git, worktree, run.base_branch, run.initiative),
-        worktree,
-        run.base_branch,
-        run.feature_branch,
-    )
-
-    reason = _run_and_validate(run, ticket, sandbox, deps, identifier, head_before, prompt_args)
-    if reason is None:
-        return True
-    deps.git.reset_to(worktree, head_before)
-    _escalate(run, ticket, deps, reason)
-    return False
+    while True:
+        head_before = deps.git.head(worktree)
+        prompt_args = _prompt_args(
+            ticket,
+            identifier,
+            _initiative_commits(deps.git, worktree, run.base_branch, run.initiative),
+            worktree,
+            run.base_branch,
+            run.feature_branch,
+        )
+        reason = _run_and_validate(run, ticket, sandbox, deps, identifier, head_before, prompt_args)
+        if reason is None:
+            deps.store.reset(ticket.url)
+            return True
+        deps.git.reset_to(worktree, head_before)
+        if _record_ticket_failure(run, ticket, deps) >= MAX_TICKET_FAILURES:
+            _escalate(run, ticket, deps, reason)
+            return False
 
 
 def _deliver_tickets(run: SpecRun, sandbox: WorktreeSandbox, deps: DevDeps) -> bool:
@@ -333,7 +334,6 @@ def _prepare_run(spec: Spec, deps: DevDeps) -> SpecRun | None:
     # Tickets live on the harness tracker, even when the Spec targets another repo.
     actionable = tuple(deps.harness_github.get_actionable_issues(spec))
     if not actionable:
-        deps.store.reset(spec.url)
         return None
 
     initiative, bare_title = parse_initiative(spec.title)
@@ -414,7 +414,6 @@ def _process_spec(spec: Spec, deps: DevDeps) -> Outcome:
         return Outcome.SKIPPED
     except LoopError as exception:
         deps.harness_github.comment(run.spec.number, f"dev: {exception}")
-        _record_failure(run, deps)
         return Outcome.FAILED
 
     kept_on_cancel = False
@@ -422,11 +421,7 @@ def _process_spec(spec: Spec, deps: DevDeps) -> Outcome:
     try:
         delivered = _deliver_tickets(run, sandbox, deps)
         _publish_commits(run, deps, sandbox.worktree, head_before)
-        if delivered:
-            deps.store.reset(spec.url)
-            return Outcome.SUCCESS
-        _record_failure(run, deps)
-        return Outcome.FAILED
+        return Outcome.SUCCESS if delivered else Outcome.FAILED
     except Cancelled:
         # Keep the worktree only when it holds uncommitted work.
         kept_on_cancel = deps.git.has_changes(sandbox.worktree)
