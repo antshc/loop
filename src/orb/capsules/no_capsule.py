@@ -14,25 +14,32 @@ class NoCapsule(Capsule):
     def __init__(
         self,
         workspace: Path | str,
-        agent_factory: AgentClientFactory,
         *,
         executor: CommandExecutor | None = None,
     ) -> None:
         self._workspace = Path(workspace)
         self._executor = executor or self._host_executor
-        self._agent = agent_factory(self._executor)
 
     @property
     def workspace(self) -> str:
         return str(self._workspace)
 
+    @property
+    def isolated(self) -> bool:
+        return False
+
+    @property
+    def executor(self) -> CommandExecutor:
+        return self._executor
+
     def run(
         self,
+        agent: AgentClientFactory,
         prompt: str,
         prompt_args: Mapping[str, str] | None = None,
         options: AgentOptions | None = None,
     ) -> AgentResult:
-        return self._agent.run(prompt, prompt_args, options)
+        return agent(self._executor).run(prompt, prompt_args, options)
 
     def exec(self, command: str, *, timeout_s: float | None = None) -> str:
         return checked_output(command, self._executor(command, timeout_s=timeout_s))

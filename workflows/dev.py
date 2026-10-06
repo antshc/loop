@@ -49,7 +49,7 @@ PROMPT = Path(__file__).parent / "prompts" / "dev.md"
 HITL_LABEL = "hitl"
 logger = logging.getLogger("workflow.dev")
 
-CapsuleFactory = Callable[[Path, AgentClientFactory], Capsule]
+CapsuleFactory = Callable[[Path], Capsule]
 GithubFactory = Callable[[Path], GitHubClient]
 
 _STATUSES = frozenset({"complete", "partial", "blocked"})
@@ -225,11 +225,16 @@ def _ensure_pull_request(github: GitHubClient, head: str, base: str, initiative:
 
 
 def _run_report(
-    capsule: Capsule, template: str, prompt_args: dict[str, str], options: AgentOptions, retries: int
+    capsule: Capsule,
+    agent_factory: AgentClientFactory,
+    template: str,
+    prompt_args: dict[str, str],
+    options: AgentOptions,
+    retries: int,
 ) -> AgentReport | None:
     """Up to 1 + retries fresh Runs on the same Capsule; stops at the first valid report."""
     for _ in range(1 + retries):
-        result = capsule.run(template, prompt_args, options)
+        result = capsule.run(agent_factory, template, prompt_args, options)
         if not result.success:
             continue
         try:
@@ -395,11 +400,11 @@ def _process_spec(
     prompt_args = _prompt_args(spec, actionable, bare_title, initiative, worktree, base_branch, feature_branch)
     try:
         if dry_run:
-            with capsule_factory(worktree, agent_factory) as capsule:
-                capsule.run(template, prompt_args, options)
+            with capsule_factory(worktree) as capsule:
+                capsule.run(agent_factory, template, prompt_args, options)
             return None
-        with capsule_factory(worktree, agent_factory) as capsule:
-            report = _run_report(capsule, template, prompt_args, options, retries)
+        with capsule_factory(worktree) as capsule:
+            report = _run_report(capsule, agent_factory, template, prompt_args, options, retries)
         if report is None:
             _handle_exhausted_retries(
                 spec,

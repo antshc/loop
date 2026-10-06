@@ -11,15 +11,26 @@ AgentClientFactory = Callable[[CommandExecutor], AgentClient]
 
 
 class Capsule(ABC):
-    """The environment an agent runs in; wraps an AgentClient bound to that environment."""
+    """The environment an agent runs in: workspace, exec, close, and the executor an agent runs through."""
 
     @property
     @abstractmethod
     def workspace(self) -> str: ...
 
+    @property
+    @abstractmethod
+    def isolated(self) -> bool:
+        """Whether this Capsule isolates the agent from the host."""
+
+    @property
+    @abstractmethod
+    def executor(self) -> CommandExecutor:
+        """The executor an agent runs through."""
+
     @abstractmethod
     def run(
         self,
+        agent: AgentClientFactory,
         prompt: str,
         prompt_args: Mapping[str, str] | None = None,
         options: AgentOptions | None = None,

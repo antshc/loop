@@ -276,10 +276,12 @@ class DevHarness:
     ) -> int:
         git_client = git if git is not None else self.git
 
+        def tracking_handler(prompt, options):
+            self.agent_calls.append((prompt, options))
+            return (handler or (lambda prompt, options: ""))(prompt, options)
+
         def default_agent_factory(executor):
-            agent = FakeAgentClient(handler or (lambda prompt, options: ""))
-            self.agent_calls = agent.calls
-            return agent
+            return FakeAgentClient(tracking_handler)
 
         return dev.main(
             ["--harness-root", str(self.harness_root), "--log-dir", str(log_dir or self.log_dir)],
@@ -287,7 +289,7 @@ class DevHarness:
             github_factory=github_factory or (lambda checkout: self.github),
             agent_factory=agent_factory or (None if dry_run else default_agent_factory),
             capsule_factory=capsule_factory
-            or (lambda workspace, factory: NoCapsule(workspace, factory, executor=FakeCopilotCli())),
+            or (lambda workspace: NoCapsule(workspace, executor=FakeCopilotCli())),
             store=store if store is not None else self.store,
             hooks=hooks,
             retries=retries,

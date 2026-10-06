@@ -64,7 +64,6 @@ class DockerCapsule(Capsule):
     def __init__(
         self,
         workspace: Path | str,
-        agent_factory: AgentClientFactory,
         *,
         image_name: str | None = None,
         container_uid: int | None = None,
@@ -111,19 +110,27 @@ class DockerCapsule(Capsule):
 
         self._closed = False
         atexit.register(self._remove)
-        self._agent = agent_factory(self._exec_in_container)
 
     @property
     def workspace(self) -> str:
         return CAPSULE_WORKSPACE
 
+    @property
+    def isolated(self) -> bool:
+        return True
+
+    @property
+    def executor(self) -> CommandExecutor:
+        return self._exec_in_container
+
     def run(
         self,
+        agent: AgentClientFactory,
         prompt: str,
         prompt_args: Mapping[str, str] | None = None,
         options: AgentOptions | None = None,
     ) -> AgentResult:
-        return self._agent.run(prompt, prompt_args, options)
+        return agent(self._exec_in_container).run(prompt, prompt_args, options)
 
     def exec(self, command: str, *, timeout_s: float | None = None) -> str:
         return checked_output(command, self._exec_in_container(command, timeout_s=timeout_s))
