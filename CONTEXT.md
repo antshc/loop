@@ -5,7 +5,7 @@ AFK automated development loop and PR review-comment automation driven by Copilo
 ## Language
 
 **Orb**  
-The CLI and top-level product: an orchestration framework for Headless AI Agents using Git worktrees. It handles running agents against a single repository or multiple repositories, Git branch/worktree lifecycle, and iterative agent execution.
+A library, not a CLI: an orchestration framework for Headless AI Agents using Git worktrees, installed with `pip` from this repository. It handles running agents against a single repository or multiple repositories, Git branch/worktree lifecycle, and iterative agent execution.
 
 **Ralph**  
 The orchestrator: it drives the autonomous development loop, repeatedly invoking Crew agents in fresh sessions. Each iteration reconstructs progress from durable external state such as Tickets, Git commits, source files, and tests, performs bounded work, persists the result, and continues until explicit completion criteria are met.
@@ -43,7 +43,7 @@ A Ticket that groups the Tickets one dev run delivers, carrying the target branc
 _Avoid_: Epic, parent issue
 
 **Workflow**:  
-One autonomous procedure, such as `dev`, written by the user as a Python script on the Orb library in the harness workflows folder and run as `orb <name>`.  
+One autonomous procedure, such as `dev`, written by the user as a Python script on the Orb library and run through the user's own shell alias.  
 _Avoid_: Slice, feature, template, plugin, built-in workflow
 
 **Hook**:  

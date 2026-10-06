@@ -354,6 +354,7 @@ paket-files/
 **/__pycache__/
 *.pyc
 *.egg-info/
+.pytest_cache/
 
 # Cake - Uncomment if you are using it
 #tools/**

@@ -1,5 +1,7 @@
 # Ship Orb as the `orb` package with a single `orb` command
 
+**Status:** Superseded in part — the `orb` package name stands; the single `orb` console command does not. Orb ships no command: users register their own aliases for Workflow scripts ([ADR 0003](0003-ship-orb-as-a-workflow-library-with-no-built-in-workflows.md), spec #34).
+
 The Python CLI is being refactored into runtime-plus-workflows, and its names (`brain-tools` distribution, `afk` import package, `afk_dev`/`afk_fix_prs`/`afk_address_prs` scripts) predate the product name Orb. The package is named `orb` and exposes one console command, `orb`, whose subcommands are the discovered workflows (e.g. `orb dev --option <value>`).
 
 ## Considered Options
@@ -13,4 +15,4 @@ The Python CLI is being refactored into runtime-plus-workflows, and its names (`
 - The import path, `pyproject.toml` project name, and console scripts all change; existing `afk_*` invocations in skills and docs must be migrated.
 - ADR 0001's names (`brain-tools`, `afk_*`) are superseded by this naming; its distribution decision is unchanged.
 
-See [Orb Library Workflow Architecture](../concepts/str-orb-library-workflow-architecture.md) for how workflows register subcommands.
+See [Orb Library Workflow Architecture](../concepts/str-orb-library-workflow-architecture.md) for how workflows are run today.

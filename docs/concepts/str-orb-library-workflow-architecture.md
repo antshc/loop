@@ -12,8 +12,8 @@ Orb is a library of contracts and default implementations; a **workflow** is one
 - The core of Orb is the **Capsule** and git. A Capsule binds a workspace, runs a prompt template through the agent client either on the host or inside Docker, and is closed when the run ends; git creates the branch and worktree the Capsule works in.
 - Orb ships default implementations for git, GitHub, the Copilot CLI agent client, and the stores. Parts Orb's own code calls (Capsule, agent client, stores) sit behind a contract; clients only a workflow calls (`GitClient`, `GitHubClient`) are concrete helpers a user replaces by calling their own client ([ADR 0003](../adr/0003-ship-orb-as-a-workflow-library-with-no-built-in-workflows.md)).
 - Orb ships no workflows: the user writes every workflow, `dev` included; this repository's `workflows/dev.py` is only an example and test subject.
-- A workflow imports only the public `orb` API and exposes an entry point that takes an argument list and returns an exit code. Dependencies enter that entry point as optional parameters that default to the shipped implementations, so tests substitute fakes ([ADR 0003](../adr/0003-ship-orb-as-a-workflow-library-with-no-built-in-workflows.md)).
-- The `orb` command is an alias: `orb <name>` runs `workflows/<name>.py` under the git top-level of cwd ([ADR 0002](../adr/0002-ship-orb-as-the-orb-package-with-an-orb-command.md)).
+- A workflow imports only the public `orb` API and is a runnable script: its entry point takes an argument list and returns an exit code, and a `__main__` guard passes that code to the process exit. Dependencies enter that entry point as optional parameters that default to the shipped implementations, so tests substitute fakes ([ADR 0003](../adr/0003-ship-orb-as-a-workflow-library-with-no-built-in-workflows.md)).
+- Orb ships no command: the user runs a workflow script through their own shell alias (for example `alias orb-dev='python workflows/dev.py'`), with the harness as the current folder ([ADR 0003](../adr/0003-ship-orb-as-a-workflow-library-with-no-built-in-workflows.md); [ADR 0002](../adr/0002-ship-orb-as-the-orb-package-with-an-orb-command.md) is superseded).
 - The workflow file is the workflow's DSL and carries its own settings as code: harness root, log dir, the agent, retry and attempt bounds, prompt template, dry run, Capsule choice and its Docker settings, and the lifecycle hooks it passes to worktree creation. Command-line arguments are optional overrides the workflow chooses to expose; there is no Orb configuration file.
 - Inside the library, contracts and policy shared by every workflow (for example the attempt cap) never depend on the implementations.
 
@@ -21,18 +21,16 @@ Orb is a library of contracts and default implementations; a **workflow** is one
 
 - MUST ship contracts and default implementations through one public top-level `orb` API; a workflow MUST import only from it, and workflow tests MAY also import the shipped test doubles from `orb.testing`.
 - MUST define a contract as an `abc.ABC` only where Orb's own code calls a replaceable part (Capsule, agent client, stores), and make every implementation of it inherit it.
-- MUST ship clients only a workflow calls (`GitClient`, `GitHubClient`) as concrete helpers with no contract.
-- MUST NOT ship workflows in the `orb` package.
+- MUST ship clients only a workflow calls (`GitClient`, `GitHubClient`) as concrete helpers with no contract; selection of actionable Tickets (`GitHubClient.get_actionable_issues`) lives in `GitHubClient`, not in the workflow file.
+- MUST NOT ship workflows or a command in the `orb` package.
 - MUST let a user replace any shipped implementation (git, GitHub tracker, agent client, stores) with their own through the workflow's injected dependencies.
 - MUST run every agent invocation through a Capsule; a workflow MUST NOT call the agent client or provider CLI directly.
 - MUST create the branch and worktree through the git client and give that worktree to the Capsule.
 - MUST define each platform-neutral model next to the contract that returns it; there is no separate domain layer.
-- MUST write each workflow as one Python file that owns its settings, control flow, and wiring and exposes one entry point returning the exit code.
+- MUST write each workflow as one Python file that owns its settings, control flow, and wiring and exposes one entry point returning the exit code, run by a `__main__` guard.
 - MUST accept every external dependency of that entry point as an optional parameter defaulting to the shipped implementation.
 - MUST declare a workflow's settings and lifecycle hooks as code in the workflow module; a workflow MUST run with no command-line arguments and MUST NOT require a configuration file.
 - MUST treat command-line arguments as optional overrides of the workflow's coded settings, owned by that workflow.
-- MUST keep the CLI limited to resolving `<name>` to a workflow file, running it, and mapping the result to the process exit code.
-- MUST resolve `<name>` only to `workflows/<name>.py` under the git top-level of cwd, without a central registry, and fail on an unknown name.
 - MUST NOT let a workflow import another workflow.
 - MUST keep contracts and shared policy free of imports from shipped implementations.
 - MUST keep process execution (`git`, `gh`, `copilot`, `docker`) inside shipped implementations.
@@ -52,20 +50,23 @@ orb/                              # public API: contracts + default implementati
 ├── GitClient, GitHubClient               # concrete helpers, no contract
 └── policy (attempt cap)
 <harness root>/workflows/         # user-written; imports only `orb`; main(argv) -> int
-├── dev.py
+├── dev.py                        # runs via the user's alias
 └── review.py                     # may call its own tracker client
 ```
 
 ```python
-def main(argv=None, *, git=None, github=None, store=None, capsule_factory=None) -> int:
-    git = git or GitClient(repo)
-    github = github or GitHubClient.for_repo(repo)
+def main(argv=None, *, git=None, github_factory=None, store=None, capsule_factory=None) -> int:
+    git = git or GitClient()
+    github_factory = github_factory or (lambda checkout: GitHubClient.for_repo(checkout)[0])
     ...
     with capsule_factory(worktree, agent_factory) as capsule:
         capsule.run(template, prompt_args, options)
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
 ```
 
-`orb dev` and `orb review` call the harness files' entry points.
+The user's aliases (`alias orb-dev='python workflows/dev.py'`) call the script; Orb provides no command.
 
 ## Benefits and Trade-offs
 
@@ -86,7 +87,6 @@ def main(argv=None, *, git=None, github=None, store=None, capsule_factory=None) 
 - Workflow tests run against fakes at every process boundary.
 - Architecture checks (import-linter) verify that the shared contracts and policy import no implementation and that no workflow imports another workflow.
 - The example `dev` workflow imports only the public `orb` API.
-- Dispatching an unknown workflow name fails.
 
 ## Options Considered
 
@@ -97,4 +97,4 @@ def main(argv=None, *, git=None, github=None, store=None, capsule_factory=None) 
 | Pipeline of replaceable steps | Rejected. Implicit coupling through shared run state and harder tracing. |
 | Plugin folders with a `Command` contract, a composition-root `command.py`, and runtime-only imports for user workflows | Rejected. The prot2 prototype shows plain scripts over a public library suffice, without the command contract or per-workflow adapters. |
 | Built-in workflows shipped in the `orb` package | Rejected ([ADR 0003](../adr/0003-ship-orb-as-a-workflow-library-with-no-built-in-workflows.md)). Repository settings and hooks would need an override channel back into the built-in. |
-| **Public library of contracts and default implementations; user-written workflows as plain modules dispatched by `orb <name>`** | **Chosen.** Workflows own control flow, as Sandcastle templates do. |
+| **Public library of contracts and default implementations; user-written workflows as plain runnable scripts run through the user's own alias** | **Chosen.** Workflows own control flow, as Sandcastle templates do. |
