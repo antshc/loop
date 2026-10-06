@@ -43,8 +43,8 @@ A Ticket that groups the Tickets one dev run delivers, carrying the target branc
 _Avoid_: Epic, parent issue
 
 **Workflow**:  
-One autonomous procedure Orb runs subcommand, such as `dev`, discovered and loaded as a plugin.  
-_Avoid_: Slice, feature, template
+One autonomous procedure, such as `dev`, written by the user as a Python script on the Orb library in the harness workflows folder and run as `orb <name>`.  
+_Avoid_: Slice, feature, template, plugin, built-in workflow
 
 **Hook**:  
 A user-declared shell command that Orb runs on the host at a Hook point, before the agent starts.  

@@ -13,7 +13,7 @@ A **plugin** is a unit the CLI discovers and loads dynamically. A **workflow** i
 
 The **runtime** is the shared kernel. It defines contracts (CLI command, agent client, work tracker, execution store), the platform-neutral models those contracts return (`Ticket`, `Spec`, `PullRequest`), and execution policy (attempt cap, run context, exit codes). It never knows which workflows exist.
 
-Built-in workflows ship inside the `orb` package and may use the shared `adapters/` package. Workflows loaded from user-supplied directories may import only `orb.runtime` and bring their own adapters ([ADR 0003](../adr/0003-build-workflows-on-the-public-orb-library-api.md)).
+Built-in workflows ship inside the `orb` package and may use the shared `adapters/` package. Workflows loaded from user-supplied directories may import only `orb.runtime` and bring their own adapters ([ADR 0003](../adr/0003-ship-orb-as-a-workflow-library-with-no-built-in-workflows.md)).
 
 | | Built-in workflow | User-supplied workflow |
 |---|---|---|
