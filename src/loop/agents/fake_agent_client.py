@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from loop.agents.copilot import CopilotOutputParser
 from loop.contracts.agent_client import AgentClient, AgentOptions, AgentResult, AgentSession
 from loop.process import CommandResult
 from loop.prompt import PromptPreprocessor
@@ -32,4 +33,4 @@ class FakeAgentClient(AgentClient):
     ) -> AgentResult:
         self.calls.append((prompt, options))
         outcome = self._handler(prompt, options)
-        return outcome if isinstance(outcome, AgentResult) else AgentResult(outcome, "", 0)
+        return outcome if isinstance(outcome, AgentResult) else CopilotOutputParser().parse(outcome, "", 0)

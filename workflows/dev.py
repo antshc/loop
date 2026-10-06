@@ -1,7 +1,7 @@
-"""Autonomous dev loop: one branch, worktree, and sandbox per open Spec, capped retries.
+"""Autonomous dev loop: one branch, worktree, and sandbox per open Spec, one Ticket per fresh agent run.
 
-Control flow, metadata parsing, the branch-name rule, and the agent report parser are
-owned here, not by the loop library (see docs/concepts/str-loop-library-workflow-architecture.md).
+Control flow, metadata parsing, the branch-name rule, and the dev result model are owned here,
+not by the loop library (see docs/concepts/str-loop-library-workflow-architecture.md).
 """
 
 from __future__ import annotations
@@ -45,7 +45,6 @@ from loop import (
 # Settings as code; --harness-root, --log-dir, and --log-level are the only CLI overrides.
 LOG_DIR_NAME = ".loop"
 LOG_LEVEL = "INFO"
-RETRIES = 1
 HOOKS: tuple[Hook, ...] = ()
 
 
@@ -57,15 +56,10 @@ SANDBOX_FACTORY = _no_sandbox
 
 PROMPT = Path(__file__).parent / "prompts" / "dev.md"
 HITL_LABEL = "hitl"
-# Subject prefix of the agent's commits; the prompt's recent-commits state is filtered by it.
-COMMIT_PREFIX = "ccode:"
-RECENT_COMMITS = 10
 logger = logging.getLogger("workflow.dev")
 
 GithubFactory = Callable[[Path], GitHubClient]
 
-_STATUSES = frozenset({"complete", "partial", "blocked"})
-_FENCE = re.compile(r"```(?:json)?\s*\n?(.*?)```", re.DOTALL)
 _INITIATIVE = re.compile(r"^(?P<initiative>[^:]+):\s*(?P<title>.+)$")
 _TARGET_PREFIX = "repo:target:"
 _BASE_PREFIX = "repo:base:"
@@ -73,8 +67,8 @@ _SLUG = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
 _VERSION = re.compile(r"(\d+(?:\.\d+)+)")
 
 
-class ReportError(Exception):
-    """The agent's final fenced JSON block is missing or malformed."""
+class DevResultError(Exception):
+    """The agent's response is missing, not valid JSON, or missing a required `result` field."""
 
 
 class Outcome(Enum):
@@ -84,15 +78,15 @@ class Outcome(Enum):
 
 
 @dataclass(frozen=True)
-class TicketReport:
-    number: int
+class DevResult:
+    """The decoded `result` of a run's response envelope: `commit`/`summary`/`verification`, or `reason`."""
+
+    identifier: str
     status: str
-    summary: str
-
-
-@dataclass(frozen=True)
-class AgentReport:
-    tickets: tuple[TicketReport, ...]
+    commit: str | None = None
+    summary: str | None = None
+    verification: str | None = None
+    reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -106,7 +100,6 @@ class DevDeps:
     sandbox_factory: SandboxFactory
     store: ExecutionStore
     hooks: Sequence[Hook]
-    retries: int
     template: str
     cancel: threading.Event
 
@@ -115,7 +108,7 @@ class DevDeps:
 class SpecRun:
     spec: Spec
     actionable: tuple[Ticket, ...]
-    initiative: str | None
+    initiative: str
     bare_title: str
     target: str
     base_branch: str
@@ -124,34 +117,26 @@ class SpecRun:
     target_github: GitHubClient
 
 
-@dataclass(frozen=True)
-class AgentExecution:
-    head_before: str | None
-    report: AgentReport | None
-
-
-def parse_report(text: str) -> AgentReport:
-    """The final fenced JSON block of the run's assistant text: `{"tickets": [...]}`."""
-    blocks = _FENCE.findall(text)
-    if not blocks:
-        raise ReportError("no fenced JSON block in agent output")
+def parse_dev_result(response: str) -> DevResult:
+    """Decodes a run's response envelope for the `completed` and `failed` shapes `dev` understands."""
     try:
-        data = json.loads(blocks[-1])
+        envelope = json.loads(response)
     except json.JSONDecodeError as exception:
-        raise ReportError(f"final fenced block is not valid JSON: {exception}") from exception
-    if not isinstance(data, dict) or not isinstance(data.get("tickets"), list):
-        raise ReportError("report is missing a 'tickets' array")
-    tickets = []
-    for item in data["tickets"]:
-        if (
-            not isinstance(item, dict)
-            or not isinstance(item.get("number"), int)
-            or item.get("status") not in _STATUSES
-            or not isinstance(item.get("summary"), str)
-        ):
-            raise ReportError(f"malformed ticket entry: {item!r}")
-        tickets.append(TicketReport(item["number"], item["status"], item["summary"]))
-    return AgentReport(tuple(tickets))
+        raise DevResultError(f"response is not valid JSON: {exception}") from exception
+    if not isinstance(envelope, dict):
+        raise DevResultError(f"response is not a JSON object: {response!r}")
+    identifier, status, result = envelope.get("identifier"), envelope.get("status"), envelope.get("result")
+    if not isinstance(identifier, str) or status not in ("completed", "failed") or not isinstance(result, dict):
+        raise DevResultError(f"malformed response envelope: {envelope!r}")
+    if status == "failed":
+        reason = result.get("reason")
+        if not isinstance(reason, str):
+            raise DevResultError(f"failed response is missing result.reason: {result!r}")
+        return DevResult(identifier, status, reason=reason)
+    commit, summary, verification = result.get("commit"), result.get("summary"), result.get("verification")
+    if not isinstance(commit, str) or not isinstance(summary, str) or not isinstance(verification, str):
+        raise DevResultError(f"completed response is missing a required result field: {result!r}")
+    return DevResult(identifier, status, commit=commit, summary=summary, verification=verification)
 
 
 def parse_initiative(title: str) -> tuple[str | None, str]:
@@ -185,46 +170,35 @@ def feature_branch_name(base_branch: str, title: str) -> str:
     return slug if match is None else f"{match[1].replace('.', '_')}_{slug}"
 
 
+def task_id(initiative: str, ticket_number: int) -> str:
+    """The response envelope's `identifier`, and the commit subject's parenthesized tag."""
+    return f"{initiative}|{ticket_number}"
+
+
+def commit_subject_prefix(identifier: str) -> str:
+    """The required prefix of a Ticket's delivering commit subject."""
+    return f"ccode({identifier}): "
+
+
 def _prompt_args(
-    spec: Spec,
-    actionable: Sequence[Ticket],
-    recent_commits: Sequence[str],
+    ticket: Ticket,
+    identifier: str,
+    initiative_commits: Sequence[str],
     worktree: Path,
     base_branch: str,
     feature_branch: str,
 ) -> dict[str, str]:
     return {
-        "RECENT_COMMITS": "\n".join(recent_commits) or "(none)",
-        "SPEC_JSON": json.dumps(asdict(spec), indent=2),
-        "TICKETS_JSON": json.dumps([asdict(ticket) for ticket in actionable], indent=2),
+        "TICKET_JSON": json.dumps(asdict(ticket), indent=2),
+        "INITIATIVE_COMMITS": "\n".join(initiative_commits) or "No task commits for this Initiative exist on the feature branch yet.",
+        "TASK_ID": identifier,
         "WORKTREE_PATH": str(worktree),
         "TARGET_BRANCH": base_branch,
         "FEATURE_BRANCH": feature_branch,
     }
 
 
-def _hitl(github: GitHubClient, spec: Spec, message: str) -> None:
-    github.add_label(spec.number, HITL_LABEL)
-    github.comment(spec.number, message)
-
-
-def _ensure_pull_request(github: GitHubClient, head: str, base: str, initiative: str | None, title: str) -> None:
-    # One draft PR per feature branch; reruns reuse it.
-    if github.find_pull_request(head) is not None:
-        return
-    github.create_draft_pull_request(head, base, f"{initiative}: {title}" if initiative else title)
-
-
-def _publish_commits(run: SpecRun, deps: DevDeps, worktree: Path, head_before: str | None) -> bool:
-    """Push the agent's new commits and ensure the draft PR; False when there are none."""
-    if head_before is None or deps.git.head(worktree) == head_before:
-        return False
-    deps.git.push(worktree, run.feature_branch)
-    _ensure_pull_request(run.target_github, run.feature_branch, run.base_branch, run.initiative, run.bare_title)
-    return True
-
-
-def _record_failure(run: SpecRun, deps: DevDeps, **kwargs: object) -> None:
+def _record_failure(run: SpecRun, deps: DevDeps) -> None:
     owner, repo = deps.harness_slug.split("/", 1)
     deps.store.record_failure(
         run.spec.url,
@@ -233,44 +207,126 @@ def _record_failure(run: SpecRun, deps: DevDeps, **kwargs: object) -> None:
         task_id=str(run.spec.number),
         title=run.spec.title,
         items=[ticket.number for ticket in run.actionable],
-        **kwargs,
     )
 
 
-def _fail_attempt(
+def _hitl(github: GitHubClient, number: int, message: str) -> None:
+    github.add_label(number, HITL_LABEL)
+    github.comment(number, message)
+
+
+def _escalate(run: SpecRun, ticket: Ticket, deps: DevDeps, reason: str) -> None:
+    """Interim failure policy: escalate to a human on the Ticket's first failure.
+
+    A later retry slice will retry once before reaching this point.
+    """
+    message = f"dev: {reason}"
+    _hitl(deps.harness_github, ticket.number, message)
+    _hitl(deps.harness_github, run.spec.number, message)
+
+
+def _ensure_pull_request(github: GitHubClient, head: str, base: str, initiative: str, title: str) -> None:
+    # One draft PR per feature branch; reruns reuse it.
+    if github.find_pull_request(head) is not None:
+        return
+    github.create_draft_pull_request(head, base, f"{initiative}: {title}")
+
+
+def _publish_commits(run: SpecRun, deps: DevDeps, worktree: Path, head_before: str | None) -> bool:
+    """Push the delivered commits and ensure the draft PR; False when there are none."""
+    if head_before is None or deps.git.head(worktree) == head_before:
+        return False
+    deps.git.push(worktree, run.feature_branch)
+    _ensure_pull_request(run.target_github, run.feature_branch, run.base_branch, run.initiative, run.bare_title)
+    return True
+
+
+def _initiative_commits(git: GitClient, worktree: Path, base_branch: str, initiative: str) -> list[str]:
+    """This Initiative's `ccode(<initiative-id>|` commits on the feature branch since the base branch."""
+    return git.commits_with_prefix(worktree, f"{base_branch}..HEAD", f"ccode({initiative}|")
+
+
+def _run_and_validate(
     run: SpecRun,
-    deps: DevDeps,
-    exception: Exception,
-    *,
-    worktree: Path | None = None,
-    head_before: str | None = None,
-) -> Outcome:
-    # Preserve the agent's commits on the feature branch before the failure is recorded.
-    if worktree is not None:
-        _publish_commits(run, deps, worktree, head_before)
-    deps.harness_github.comment(run.spec.number, f"dev: {exception}")
-    _record_failure(run, deps)
-    return Outcome.FAILED
-
-
-def _run_report(
+    ticket: Ticket,
     sandbox: WorktreeSandbox,
-    agent_factory: AgentClientFactory,
-    template: str,
+    deps: DevDeps,
+    identifier: str,
+    head_before: str,
     prompt_args: dict[str, str],
-    options: AgentOptions,
-    retries: int,
-) -> AgentReport | None:
-    """Up to 1 + retries fresh Runs on the same WorktreeSandbox; stops at the first valid report."""
-    for _ in range(1 + retries):
-        result = sandbox.run(agent_factory, template, prompt_args, options).result
-        if not result.success:
-            continue
-        try:
-            return parse_report(result.output)
-        except ReportError as exception:
-            logger.warning("malformed report: %s", exception)
+) -> str | None:
+    """Runs the agent and validates its response and Git; returns the failure reason, or None on success."""
+    worktree = sandbox.worktree
+    try:
+        outcome = sandbox.run(deps.agent_factory, deps.template, prompt_args, AgentOptions(session_key=None)).result
+    except Cancelled:
+        raise
+    except LoopError as exception:
+        return str(exception)
+
+    try:
+        dev_result = parse_dev_result(outcome.response) if outcome.response else None
+    except DevResultError as exception:
+        return str(exception)
+    if dev_result is None:
+        return "no response object in agent output"
+    if dev_result.identifier != identifier:
+        return f"response identifier {dev_result.identifier!r} does not match task {identifier!r}"
+    if dev_result.status == "failed":
+        return dev_result.reason
+    if not outcome.success:
+        return "agent process did not exit successfully"
+
+    head = deps.git.head(worktree)
+    if head == head_before:
+        return "HEAD did not change: the agent made no commit"
+    new_commits = deps.git.commits_between(worktree, head_before, head)
+    if len(new_commits) != 1:
+        return f"expected exactly one commit since {head_before}, found {len(new_commits)}"
+    prefix = commit_subject_prefix(identifier)
+    subject = deps.git.head_subject(worktree)
+    if not subject.startswith(prefix):
+        return f"HEAD subject {subject!r} does not start with {prefix!r}"
+    if not deps.git.is_clean(worktree):
+        return "the worktree has uncommitted changes"
+    if dev_result.commit != head:
+        return f"result.commit {dev_result.commit!r} does not equal HEAD {head!r}"
+
+    deps.harness_github.close_with_comment(
+        ticket.number,
+        f"Delivered in {dev_result.commit}.\n\n{dev_result.summary}\n\n{dev_result.verification}",
+    )
     return None
+
+
+def _deliver_ticket(run: SpecRun, ticket: Ticket, sandbox: WorktreeSandbox, deps: DevDeps) -> bool:
+    """One fresh agent run for `ticket`; on any failure resets the worktree and escalates. True on success."""
+    worktree = sandbox.worktree
+    head_before = deps.git.head(worktree)
+    identifier = task_id(run.initiative, ticket.number)
+    prompt_args = _prompt_args(
+        ticket,
+        identifier,
+        _initiative_commits(deps.git, worktree, run.base_branch, run.initiative),
+        worktree,
+        run.base_branch,
+        run.feature_branch,
+    )
+
+    reason = _run_and_validate(run, ticket, sandbox, deps, identifier, head_before, prompt_args)
+    if reason is None:
+        return True
+    deps.git.reset_to(worktree, head_before)
+    _escalate(run, ticket, deps, reason)
+    return False
+
+
+def _deliver_tickets(run: SpecRun, sandbox: WorktreeSandbox, deps: DevDeps) -> bool:
+    """Deliver Ticket for each actionable Ticket in order; stops at the first failure."""
+    for ticket in run.actionable:
+        if not _deliver_ticket(run, ticket, sandbox, deps):
+            return False
+    return True
 
 
 def _prepare_run(spec: Spec, deps: DevDeps) -> SpecRun | None:
@@ -281,10 +337,11 @@ def _prepare_run(spec: Spec, deps: DevDeps) -> SpecRun | None:
         return None
 
     initiative, bare_title = parse_initiative(spec.title)
+    initiative = initiative or str(spec.number)
     target = parse_target_label(spec.labels)
     base_branch = parse_base_label(spec.labels)
     if target is None or base_branch is None:
-        _hitl(deps.harness_github, spec, f"dev: cannot resolve repo:target/repo:base labels on {spec.url}")
+        _hitl(deps.harness_github, spec.number, f"dev: cannot resolve repo:target/repo:base labels on {spec.url}")
         return None
 
     if same_slug(deps.harness_slug, target):
@@ -295,7 +352,7 @@ def _prepare_run(spec: Spec, deps: DevDeps) -> SpecRun | None:
         if not same_slug(checkout_slug, target):
             _hitl(
                 deps.harness_github,
-                spec,
+                spec.number,
                 f"dev: expected checkout at {checkout} with origin {target}; found {checkout_slug or 'no clone'}",
             )
             return None
@@ -319,7 +376,7 @@ def _prepare_sandbox(run: SpecRun, deps: DevDeps) -> WorktreeSandbox | None:
     if not deps.git.remote_branch_exists(run.checkout, run.base_branch):
         _hitl(
             deps.harness_github,
-            run.spec,
+            run.spec.number,
             f"dev: target branch {run.base_branch!r} does not exist on {run.target}",
         )
         return None
@@ -335,94 +392,6 @@ def _prepare_sandbox(run: SpecRun, deps: DevDeps) -> WorktreeSandbox | None:
     )
 
 
-def _execute_agent(
-    run: SpecRun,
-    sandbox: WorktreeSandbox,
-    deps: DevDeps,
-    head_before: str | None,
-) -> AgentExecution:
-    worktree = sandbox.worktree
-    prompt_args = _prompt_args(
-        run.spec,
-        run.actionable,
-        deps.git.recent_commits(worktree, COMMIT_PREFIX, RECENT_COMMITS),
-        worktree,
-        run.base_branch,
-        run.feature_branch,
-    )
-    options = AgentOptions(session_key=None)
-    report = _run_report(sandbox, deps.agent_factory, deps.template, prompt_args, options, deps.retries)
-    return AgentExecution(head_before, report)
-
-
-def _apply_report(
-    run: SpecRun,
-    report: AgentReport,
-    deps: DevDeps,
-    worktree: Path,
-    head_before: str | None,
-) -> Outcome:
-    # Ignore report entries for Tickets that were not part of this run.
-    actionable_numbers = {ticket.number for ticket in run.actionable}
-    by_number = {entry.number: entry for entry in report.tickets if entry.number in actionable_numbers}
-    any_complete = any(entry.status == "complete" for entry in by_number.values())
-    had_changes = _publish_commits(run, deps, worktree, head_before)
-
-    partial_tickets: list[int] = []
-    resolved_tickets: list[int] = []
-    for ticket in run.actionable:
-        entry = by_number.get(ticket.number)
-        if entry is None:
-            continue
-        if entry.status == "complete":
-            deps.harness_github.close_with_comment(ticket.number, entry.summary)
-            resolved_tickets.append(ticket.number)
-        elif entry.status == "partial":
-            deps.harness_github.comment(ticket.number, entry.summary)
-            partial_tickets.append(ticket.number)
-        else:  # blocked
-            deps.harness_github.add_label(ticket.number, HITL_LABEL)
-            resolved_tickets.append(ticket.number)
-
-    # No commit and no completed Ticket means no progress; it counts as a failed attempt.
-    if not had_changes and not any_complete:
-        _record_failure(
-            run,
-            deps,
-            partial_tickets=partial_tickets,
-            resolved_tickets=resolved_tickets,
-        )
-        for number in partial_tickets:
-            # A Ticket that stays partial across attempts is escalated to a human.
-            if deps.store.partial_count(run.spec.url, number) >= 2:
-                deps.harness_github.add_label(number, HITL_LABEL)
-        return Outcome.FAILED
-
-    deps.store.reset(run.spec.url)
-    return Outcome.SUCCESS
-
-
-def _handle_exhausted_retries(
-    run: SpecRun,
-    deps: DevDeps,
-    worktree: Path,
-    head_before: str | None,
-) -> Outcome:
-    _publish_commits(run, deps, worktree, head_before)
-    deps.harness_github.add_label(run.spec.number, HITL_LABEL)
-    deps.harness_github.comment(run.spec.number, "dev: every agent run returned no valid report after retries")
-    for ticket in run.actionable:
-        deps.harness_github.add_label(ticket.number, HITL_LABEL)
-    _record_failure(run, deps)
-    return Outcome.FAILED
-
-
-def _complete_run(run: SpecRun, execution: AgentExecution, sandbox: WorktreeSandbox, deps: DevDeps) -> Outcome:
-    if execution.report is None:
-        return _handle_exhausted_retries(run, deps, sandbox.worktree, execution.head_before)
-    return _apply_report(run, execution.report, deps, sandbox.worktree, execution.head_before)
-
-
 def _report_cancelled(spec: Spec, worktree: Path | None) -> None:
     if worktree is not None:
         logger.warning("spec #%s run cancelled; worktree kept at %s", spec.number, worktree)
@@ -431,7 +400,7 @@ def _report_cancelled(spec: Spec, worktree: Path | None) -> None:
 
 
 def _process_spec(spec: Spec, deps: DevDeps) -> Outcome:
-    """Prepare, execute, and complete one Spec."""
+    """Prepare, deliver, and publish one Spec."""
     run = _prepare_run(spec, deps)
     if run is None:
         return Outcome.SKIPPED
@@ -444,27 +413,25 @@ def _process_spec(spec: Spec, deps: DevDeps) -> Outcome:
         _report_cancelled(spec, exception.worktree)
         return Outcome.SKIPPED
     except LoopError as exception:
-        return _fail_attempt(run, deps, exception)
+        deps.harness_github.comment(run.spec.number, f"dev: {exception}")
+        _record_failure(run, deps)
+        return Outcome.FAILED
 
     kept_on_cancel = False
-    head_before: str | None = None
+    head_before = deps.git.head(sandbox.worktree)
     try:
-        head_before = deps.git.head(sandbox.worktree)
-        execution = _execute_agent(run, sandbox, deps, head_before)
-        return _complete_run(run, execution, sandbox, deps)
+        delivered = _deliver_tickets(run, sandbox, deps)
+        _publish_commits(run, deps, sandbox.worktree, head_before)
+        if delivered:
+            deps.store.reset(spec.url)
+            return Outcome.SUCCESS
+        _record_failure(run, deps)
+        return Outcome.FAILED
     except Cancelled:
         # Keep the worktree only when it holds uncommitted work.
         kept_on_cancel = deps.git.has_changes(sandbox.worktree)
         _report_cancelled(spec, sandbox.worktree if kept_on_cancel else None)
         return Outcome.SKIPPED
-    except LoopError as exception:
-        return _fail_attempt(
-            run,
-            deps,
-            exception,
-            worktree=sandbox.worktree,
-            head_before=head_before,
-        )
     finally:
         sandbox.close(keep_worktree=kept_on_cancel)
 
@@ -478,7 +445,6 @@ def main(
     sandbox_factory: SandboxFactory | None = None,
     store: ExecutionStore | None = None,
     hooks: Sequence[Hook] = HOOKS,
-    retries: int = RETRIES,
     cancel: threading.Event | None = None,
 ) -> int:
     parser = argparse.ArgumentParser(prog="dev")
@@ -512,7 +478,6 @@ def main(
         sandbox_factory=sandbox_factory,
         store=store,
         hooks=hooks,
-        retries=retries,
         template=PROMPT.read_text(),
         cancel=cancel or threading.Event(),
     )

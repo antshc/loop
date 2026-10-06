@@ -6,11 +6,11 @@ and owns its own control flow. Import only from here.
 
 from __future__ import annotations
 
-from loop.agents.copilot import CopilotClient, copilot
+from loop.agents.copilot import CopilotClient, CopilotOutputParser, copilot
 from loop.contracts.agent_client import (
-    DEFAULT_COMPLETION_SIGNAL,
     AgentClient,
     AgentOptions,
+    AgentOutputParser,
     AgentResult,
     AgentSession,
     SessionStore,
@@ -47,11 +47,11 @@ from loop.stores.memory import InMemoryExecutionStore, InMemorySessionStore
 from loop.tags import extract_json, extract_tag
 
 __all__ = [
-    "DEFAULT_COMPLETION_SIGNAL",
     "AgentClient",
     "AgentClientFactory",
     "AgentError",
     "AgentOptions",
+    "AgentOutputParser",
     "AgentResult",
     "AgentSession",
     "Cancelled",
@@ -60,6 +60,7 @@ __all__ = [
     "CommandResult",
     "Comment",
     "CopilotClient",
+    "CopilotOutputParser",
     "DockerSandbox",
     "ExecutionStore",
     "ExecutionStoreError",

@@ -8,8 +8,6 @@ from pathlib import Path
 from loop.process import CommandExecutor
 from loop.prompt import PromptPreprocessor
 
-DEFAULT_COMPLETION_SIGNAL = "<promise>COMPLETE</promise>"
-
 
 @dataclass(frozen=True)
 class AgentOptions:
@@ -36,15 +34,19 @@ class AgentResult:
     stdout: str
     stderr: str
     exit_code: int
-    completed: bool = False
-
-    @property
-    def success(self) -> bool:
-        return self.exit_code == 0 or self.completed
+    response: str = ""
+    success: bool = False
 
     @property
     def output(self) -> str:
         return self.stdout if self.success else self.stdout + self.stderr
+
+
+class AgentOutputParser(ABC):
+    """Extracts the agent's response envelope from captured process output and decides success, after exit."""
+
+    @abstractmethod
+    def parse(self, stdout: str, stderr: str, exit_code: int) -> AgentResult: ...
 
 
 class SessionStore(ABC):
