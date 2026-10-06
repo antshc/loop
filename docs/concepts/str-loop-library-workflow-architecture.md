@@ -14,7 +14,7 @@ Loop is a library of contracts and default implementations; a **workflow** is on
 - Loop ships no workflows: the user writes every workflow, `dev` included; this repository's `workflows/dev.py` is only an example and test subject.
 - A workflow imports only the public `loop` API and is a runnable script: its entry point takes an argument list and returns an exit code, and a `__main__` guard passes that code to the process exit. Dependencies enter that entry point as optional parameters that default to the shipped implementations, so tests substitute fakes ([ADR 0003](../adr/0003-ship-loop-as-a-workflow-library-with-no-built-in-workflows.md)).
 - Loop ships no command: the user runs a workflow script through their own shell alias (for example `alias loop-dev='python workflows/dev.py'`), with the harness as the current folder ([ADR 0003](../adr/0003-ship-loop-as-a-workflow-library-with-no-built-in-workflows.md); [ADR 0002](../adr/0002-ship-loop-as-the-loop-package-with-an-loop-command.md) is superseded).
-- The workflow file is the workflow's DSL and carries its own settings as code: harness root, log dir, the agent, retry and attempt bounds, prompt template, dry run, Sandbox choice and its Docker settings, and the lifecycle hooks it passes to worktree creation. Command-line arguments are optional overrides the workflow chooses to expose; there is no Loop configuration file.
+- The workflow file is the workflow's DSL and carries its own settings as code: harness root, log dir, the agent, retry and failure bounds, prompt template, Sandbox choice and its Docker settings, and the lifecycle hooks it passes to worktree creation. Command-line arguments are optional overrides the workflow chooses to expose; there is no Loop configuration file.
 - Inside the library, contracts and policy shared by every workflow (for example the attempt cap) never depend on the implementations.
 
 ## Rules
@@ -35,7 +35,7 @@ Loop is a library of contracts and default implementations; a **workflow** is on
 - MUST keep contracts and shared policy free of imports from shipped implementations.
 - MUST keep process execution (`git`, `gh`, `copilot`, `docker`) inside shipped implementations.
 - MUST NOT run a workflow file from outside the harness-root workflows folder; running it executes its code.
-- MUST place only logic whose business meaning is identical across workflows in the shared library policy; workflow-specific parsing, models, and rules (e.g. `dev`'s report parser) stay in the workflow file.
+- MUST place only logic whose business meaning is identical across workflows in the shared library policy; workflow-specific parsing, models, and rules (e.g. `dev`'s `result` model and Git validation) stay in the workflow file; extracting the agent's response envelope from provider output is library work owned by the agent kind's output parser ([ADR 0007](../adr/0007-stream-agent-output-live-and-parse-it-after-exit-with-a-per-agent-kind-output-parser.md)).
 - SHOULD accept small duplication between workflows over extracting shared code that only looks similar.
 
 ## Example

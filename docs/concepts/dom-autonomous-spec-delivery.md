@@ -1,230 +1,107 @@
 # Autonomous Spec Delivery
 
 ## Purpose
-Loop delivers the approved work of every open `spec` to a draft pull request without an operator in the session, bounding the attempts it spends on each spec.
+Loop delivers the approved Tickets of every open Spec to a draft pull request without an operator in the session, one fresh agent run per Ticket, and escalates a Ticket to a human once it keeps failing.
 
 ## Definition
-- **Actors:** Operator; Loop (the example `dev` Workflow); Ralph (Copilot agent running the `/ralph:dev` skill); Crew agents (Codey, Chorey, Testy); GitHub.
-- **Business processes:** Run AFK Dev Service; Develop Spec; Ralph Loop.
+- **Actors:** Operator; Loop (the example `dev` Workflow); Copilot agent (one fresh headless run per Ticket); GitHub.
+- **Business processes:** Run AFK Dev Service; Develop Spec; Deliver Ticket.
 - **Starts:** Operator runs the `dev` Workflow script (through their own alias) for a repository board.
-- **Ends:** Every open spec was skipped or attempted and its attempt recorded; a Develop Spec run ends with its harness repo pushed and its worktree removed, or exits with a report.
+- **Ends:** Every open Spec not labelled `hitl` was attempted; each Develop Spec run ends with its validated commits pushed and its draft pull request ensured.
 
 ## Business Processes
 
 ### Run AFK Dev Service
-Actor: Operator; Trigger: the `dev` Workflow script is run for a repository board; Action: Loop lists the open specs, skips those without actionable issues or at their attempt cap, and starts one fresh headless Copilot session per remaining spec with the prompt `/ralph:dev <spec number>`; Outcome: each attempted spec has its attempt recorded, and a spec with all issues resolved has its count cleared. Notes: dry run is on unless switched off, so no session starts but the attempt is still recorded.
-
-```mermaid
-%%{init: {'themeVariables': {'lineColor': '#8b949e'}}}%%
-%% diagram-id: afk-dev-run-swimlane
-swimlane-beta TB
-  accTitle: AFK dev run responsibility
-  accDescr: Shows how the CLI, Loop, the Copilot agent and GitHub share the work of attempting each open spec.
-
-  subgraph cli [AFK CLI]
-    start([Operator runs the dev Workflow])
-    args[1 - Validate arguments and configure logging]
-  end
-
-  subgraph loop [Loop - dev use case]
-    list[2 - List open specs]
-    anySpecs{3 - Specs found?}
-    fetch[4 - Fetch spec sub-issues]
-    filter{5 - Actionable issues?}
-    reset[5a.1 - Clear attempt count when set]
-    cap{6 - Attempts reached cap?}
-    compose[7 - Compose prompt from prompt text and spec number]
-    dry{8 - Dry run?}
-    record[9 - Record attempt]
-    log[(9.1 - Execution log)]
-    next{10 - Another spec?}
-    nextSpec([Next spec - back to step 4])
-    done([Run completed])
-  end
-
-  subgraph copilot [Copilot agent CLI]
-    promptIn[/8b.1 - Prompt: ralph:dev skill plus spec number/]
-    session[8b.2 - Start non-interactive session]
-    dev[[8b.3 - Develop Spec]]
-    exitNode[8b.4 - Session ends]
-  end
-
-  subgraph ext [External systems - GitHub]
-    specs[(2.1 - Open spec issues)]
-    issues[(4.1 - Spec sub-issues)]
-  end
-
-  start --> args -->|repo board, attempt cap, agent alias, prompt, log dir| list
-  list -->|query open specs| specs -->|open specs| anySpecs
-  anySpecs -->|none| done
-  anySpecs -->|found| fetch
-  fetch -->|query sub-issues| issues -->|sub-issues| filter
-  filter -->|none| reset --> next
-  filter -->|some| cap
-  cap -->|yes, skip| next
-  cap -->|no| compose --> dry
-  dry -->|yes, no session| record
-  dry -->|no| promptIn --> session --> dev --> exitNode -->|session ended| record
-  record -->|persist count| log
-  record --> next
-  next -->|yes| nextSpec
-  next -->|no| done
-
-  classDef default fill:#242424,stroke:#8b949e,color:#c9d1d9,stroke-width:1px
-```
+Actor: Operator; Trigger: the `dev` Workflow script is run for a repository board; Action: Loop lists the open Specs, skips those labelled `hitl`, and runs Develop Spec for each remaining one; Outcome: every remaining Spec was attempted. Notes: there is no dry run and no Spec-level attempt cap; failures are counted per Ticket.
 
 ### Develop Spec
-Actor: Copilot agent running the `/ralph:dev` skill; Trigger: a session starts with the spec number as its prompt argument; Action: resolve the harness repo and spec, compute the feature branch name, set up and build a worktree, run the Ralph Loop, open a draft pull request, run approved functional-testing tickets through Testy, then push the harness repo and remove the worktree; Outcome: the feature branch carries the committed work, and testing tickets are closed or escalated to a `hitl` investigation. Notes: invalid harness settings, missing spec metadata, a mismatched checkout, a failed build, or a failed commit, push or tracker write exits with a report; functional-test failures never fail the run.
+Actor: Loop; Trigger: a Spec not labelled `hitl`; Action: resolve the Initiative id from the Spec title prefix and the target repository and base branch, push the local feature branch and ensure the draft pull request when it is ahead of `origin`, create the worktree, then run Deliver Ticket for the first actionable Ticket until none remains or the Spec is labelled `hitl`; finally push and ensure the draft pull request; Outcome: all Tickets delivered — the pull request link is commented on the Spec, which stays open for the human merge — or the Spec stopped on `hitl` with its validated work pushed.
 
 ```mermaid
 %%{init: {'themeVariables': {'lineColor': '#8b949e'}}}%%
 %% diagram-id: develop-spec-swimlane
 swimlane-beta TB
   accTitle: Develop Spec responsibility
-  accDescr: Shows how the ralph:dev skill, the Crew agents and GitHub share the work of delivering one spec, with the Ralph loop as a subprocess.
+  accDescr: Shows how Loop, the Copilot agent and GitHub share the work of delivering one Spec one Ticket at a time.
 
-  subgraph skill [Copilot agent - ralph:dev skill]
-    start([Prompt received with spec number])
-    harness[1 - Resolve harness settings]
-    hset{2 - Settings status?}
-    sync[2c.1 - Sync harness repo with remote]
-    spec[3 - Read spec issue]
-    valid{4 - Spec and metadata valid?}
-    checkout[5 - Derive codebase checkout]
-    checkoutOk{6 - Checkout matches repository?}
-    branch[7 - Compute feature branch name]
-    wt[8 - Create feature worktree]
-    build[9 - Build project]
-    buildOk{10 - Build passes?}
-    exitFail([Exit and report])
-    loop[[11 - Ralph Loop]]
-    pr[12 - Open draft PR when none exists]
-    ft[13 - Publish revision and select tests tickets]
-    ready{14 - Dependencies complete?}
-    ftRecord[14a.2 - Record evidence then close or escalate]
-    hpush[15 - Commit and push harness repo]
-    cleanup[16 - Remove worktree]
-    endNode([Spec run completed])
-  end
-
-  subgraph crew [Crew agents]
-    testy[14a.1 - Testy runs functional tests and reports]
+  subgraph loop [Loop - dev Workflow]
+    start([Spec not labelled hitl])
+    meta[1 - Resolve Initiative id, target repo, base branch]
+    ahead{2 - Local feature branch ahead of origin?}
+    pre[2a - Push and ensure draft PR]
+    wt[3 - Create worktree]
+    pick{4 - Actionable Ticket left?}
+    deliver[[5 - Deliver Ticket]]
+    stopped{6 - Spec labelled hitl?}
+    publish[7 - Push and ensure draft PR]
+    link[8 - Comment PR link on Spec]
+    endNode([Spec run ended])
   end
 
   subgraph ext [External systems - GitHub]
-    syncRemote[(2c.2 - Harness repo remote)]
-    issuesRead[(3.1 - Spec issue)]
-    prWrite[(12.1 - Source repo remote)]
-    revisionWrite[(13.1 - Source repo remote)]
-    testIssuesWrite[(14a.3 - Testing tickets and investigations)]
-    harnessWrite[(15.1 - Harness repo remote)]
+    tickets[(Spec sub-issues)]
+    remote[(Target repo remote and PR)]
+    spec[(Spec issue)]
   end
 
-  start --> harness --> hset
-  hset -->|invalid| exitFail
-  hset -->|missing, use cwd| spec
-  hset -->|found| sync --> spec
-  sync -->|fetch and pull, reset on conflict| syncRemote
-  spec -->|fetch spec issue| issuesRead -->|spec, labels, metadata| valid
-  valid -->|no| exitFail
-  valid -->|yes| checkout --> checkoutOk
-  checkoutOk -->|no| exitFail
-  checkoutOk -->|yes| branch --> wt --> build --> buildOk
-  buildOk -->|no| exitFail
-  buildOk -->|yes| loop --> pr
-  pr -->|draft PR| prWrite
-  pr --> ft
-  ft -->|push tested revision| revisionWrite
-  ft --> ready
-  ready -->|yes| testy -->|report| ftRecord
-  ready -->|no, report pending| hpush
-  ftRecord -->|evidence, close or hitl investigation| testIssuesWrite
-  ftRecord --> hpush
-  hpush -->|push harness changes| harnessWrite
-  hpush --> cleanup --> endNode
+  start --> meta --> ahead
+  ahead -->|yes| pre --> wt
+  ahead -->|no| wt
+  pre -->|push, PR| remote
+  wt --> pick
+  pick -->|query actionable| tickets
+  pick -->|yes, first| deliver --> stopped
+  stopped -->|no| pick
+  stopped -->|yes| publish
+  pick -->|none| publish
+  publish -->|push, PR| remote
+  publish --> link -->|all delivered| spec
+  link --> endNode
 
   classDef default fill:#242424,stroke:#8b949e,color:#c9d1d9,stroke-width:1px
 ```
 
-### Ralph Loop
-Actor: Copilot agent running the `/ralph:dev` skill; Trigger: the worktree is built; Action: repeatedly read the eligible implementation issues, pick one by priority, implement it through Codey, review it through Chorey when Codey completed, commit and push, handle the issue by Codey's status, and merge the decisions into the spec; Outcome: no eligible task remains or the iteration cap is reached, with every attempted task closed, commented or labelled `hitl`. Notes: one task at a time, state re-read before each pick; a second consecutive partial result labels the task `hitl`.
+### Deliver Ticket
+Actor: Loop and one fresh Copilot agent run; Trigger: Develop Spec selects the first actionable Ticket; Action: Python records `previous_head`, renders the prompt with the Ticket, the Initiative's `ccode(<initiative-id>|` commits on the branch, the task id `<initiative-id>|<ticket-number>`, and the contract; the agent implements, verifies, makes one `ccode(<initiative-id>|<ticket-number>): <message>` commit, and returns the response envelope; Python validates the response and Git; Outcome: success closes the Ticket with the commit SHA, summary, and verification and resets its failure count; any failure resets the worktree to `previous_head` and counts once, and the second failure labels the Ticket and the Spec `hitl` with the reason commented on both. Notes: a failure is an agent-reported `failed`, a missing or invalid response, an `identifier` other than this Ticket's, HEAD unchanged, a non-matching subject, a dirty tree, a reported SHA other than HEAD, or a crashed or timed-out run.
 
 ```mermaid
 %%{init: {'themeVariables': {'lineColor': '#8b949e'}}}%%
-%% diagram-id: ralph-loop-swimlane
+%% diagram-id: deliver-ticket-swimlane
 swimlane-beta TB
-  accTitle: Ralph Loop responsibility
-  accDescr: Shows how the ralph:dev skill, the Crew agents and GitHub share the work of implementing one task per iteration.
+  accTitle: Deliver Ticket responsibility
+  accDescr: Shows how Loop and one fresh Copilot agent run share the work of delivering and validating one Ticket.
 
-  subgraph skill [Copilot agent - ralph:dev skill]
-    start([Start - worktree built])
-    read[1 - Read recent commits and eligible tasks]
-    any{1.1 - Task left and under iteration cap?}
-    select[2 - Select next task by priority]
-    elig{2.1 - Still eligible?}
-    agent[3 - Pick implementation agent]
-    distill[4 - Distill Implementation Decisions]
-    stage[5 - Stage changes]
-    rev{6 - Codey complete and Chorey available?}
-    commit[7 - Commit and push]
-    status{8 - Codey status?}
-    close[8.1 - Close task]
-    partial{8.2 - Second consecutive partial?}
-    labelPartial[8.2.1 - Label task hitl]
-    comment[8.2.2 - Comment summary on task]
-    labelBlocked[8.3 - Label task hitl]
-    update[9 - Update spec Implementation Decisions]
-    endNode([End - loop ended])
-    again([Next iteration - back to step 1])
-    reread([Skip - back to step 1])
+  subgraph loop [Loop - dev Workflow]
+    start([First actionable Ticket])
+    head[1 - Record previous HEAD]
+    prompt[2 - Render prompt with Ticket, Initiative commits, task id, contract]
+    parse[4 - Parse response envelope]
+    valid{5 - Response and Git valid?}
+    close[6 - Close Ticket with SHA, summary, verification]
+    reset[7 - Reset worktree to previous HEAD]
+    cap{8 - Second failure?}
+    hitl[9 - Label Ticket and Spec hitl, comment reason]
+    endNode([Back to Develop Spec])
   end
 
-  subgraph crew [Crew agents]
-    codey[3.1 - Codey implements task and reports]
-    chorey[6.1 - Chorey reviews staged diff]
+  subgraph agent [Copilot agent - fresh run]
+    work[3 - Implement, verify, commit once, return response]
   end
 
   subgraph ext [External systems - GitHub]
-    issuesRead[(Spec and task issues)]
-    issuesRefresh[(Selected task issue)]
-    remote[(Source repo remote)]
-    issuesWrite[(Spec and task issues updated)]
+    issues[(Ticket and Spec issues)]
   end
 
-  start --> read
-  read -->|query open implementation sub-issues| issuesRead -->|eligible tasks| any
-  any -->|1.1.1 none or cap reached| endNode
-  any -->|1.1.2 yes| select
-  select -->|refresh task and comments| issuesRefresh
-  issuesRefresh -->|current task| elig
-  elig -->|2.1.1 no| reread
-  elig -->|2.1.2 yes| agent
-  agent -->|task and recent commits| codey
-  codey -->|report| distill --> stage --> rev
-  rev -->|6.1 yes| chorey -->|cleanup report| commit
-  rev -->|6.2 no| commit
-  commit -->|push branch| remote
-  commit --> status
-  status -->|8.1 complete| close
-  status -->|8.2 partial| partial
-  status -->|8.3 blocked| labelBlocked
-  partial -->|yes| labelPartial
-  partial -->|no| comment
-  close -->|close| issuesWrite
-  comment -->|comment| issuesWrite
-  labelPartial -->|add label| issuesWrite
-  labelBlocked -->|add label| issuesWrite
-  close --> update
-  comment --> update
-  labelPartial --> update
-  labelBlocked --> update
-  update -->|Implementation Decisions| issuesWrite
-  update --> again
+  start --> head --> prompt --> work --> parse --> valid
+  valid -->|yes| close -->|close| issues
+  valid -->|no| reset --> cap
+  cap -->|no, retry same Ticket| endNode
+  cap -->|yes| hitl -->|labels, comments| issues
+  close --> endNode
+  hitl --> endNode
 
   classDef default fill:#242424,stroke:#8b949e,color:#c9d1d9,stroke-width:1px
 ```
-
-Step numbers follow the `/ralph:dev` skill's loop sections; a dotted number such as `8.2.1` is a branch of step `8`.
 
 ## Relationships
 
@@ -232,37 +109,31 @@ Step numbers follow the `/ralph:dev` skill's loop sections; a dotted number such
 %%{init: {'themeVariables': {'lineColor': '#8b949e'}}}%%
 %% diagram-id: autonomous-spec-delivery-relationships
 flowchart LR
-    actionable(["Spec has actionable issues"])
-    cap{"1 - Spec at attempt cap?"}
-    skipped(["Spec skipped"])
-    hitl(["Issue labelled hitl"])
-    run[["2 - Run AFK Dev Service"]]
-    dev[["3 - Develop Spec"]]
-    loop[["4 - Ralph Loop"]]
+    run[["1 - Run AFK Dev Service"]]
+    dev[["2 - Develop Spec"]]
+    ticket[["3 - Deliver Ticket"]]
     pr(["Draft pull request"])
-    backActionable(["Back to: Spec has actionable issues"])
+    hitl(["Ticket and Spec labelled hitl"])
+    back(["Back to: Run AFK Dev Service"])
 
-    actionable --> cap
-    cap -- "yes, blocks" --> skipped
-    cap -- no --> run
-    run -- "one session per spec" --> dev
-    dev -- "worktree built" --> loop
+    run -- "Spec not hitl" --> dev
+    dev -- "one fresh agent run per Ticket" --> ticket
+    ticket -- "second failure" --> hitl
     dev --> pr
-    loop -- "blocked or repeated partial" --> hitl
-    hitl -- excludes issue from --> backActionable
-    hitl -. "Operator removes label" .-> backActionable
+    hitl -. "Operator removes label" .-> back
 
     classDef default fill:#242424,stroke:#8b949e,color:#c9d1d9,stroke-width:1px
 ```
 
 A solid edge is automatic; a dotted edge is a separately initiated step, labelled with its initiator.
 
+Decisions: [ADR 0009](../adr/0009-run-one-fresh-agent-per-ticket-from-python-and-let-the-agent-commit-it.md) (per-Ticket run, task commit, Git validation), [ADR 0007](../adr/0007-stream-agent-output-live-and-parse-it-after-exit-with-a-per-agent-kind-output-parser.md) (response envelope and output parser), [ADR 0006](../adr/0006-keep-commit-push-pull-request-and-ticket-state-changes-in-python.md) (Python owns push, pull request, and Ticket state).
+
 ## Implementation Map
 | Concern | Stable anchor | Semantic locator |
 |---|---|---|
 | External contract | Operator-run service for one repository board | `workflows/dev.py`: runnable script `main(argv)`, options `--harness-root`, `--log-dir`, `--log-level` |
-| External contract | Agent skill driven by the spec number | `loop`: skill command `/ralph:dev` |
-| Spec and issue selection | Open specs; issues that may be worked | `loop`: `VCSClient`, `IssueFilter` |
-| Attempt bound | Per-spec attempt count persisted across runs, cleared when issues resolve | `loop`: `ExecutionLog` |
-| Execution | Fresh non-interactive Copilot session per spec | `loop`: `AgentClient`, `Sandbox`; `DRY_RUN` setting in `workflows/dev.py` |
-| Tests | Spec skipping, cap and count reset behavior | `loop`: dev handler unit tests |
+| Spec and Ticket selection | Open Specs; actionable Tickets | `loop`: `GitHubClient.get_specs`, `GitHubClient.get_actionable_issues` |
+| Execution | Fresh non-interactive Copilot run per Ticket | `loop`: `AgentClient`, `Sandbox` |
+| Failure bound | Per-Ticket failure count across runs | `loop`: `ExecutionStore` |
+| Tests | Workflow scenarios against fakes | `tests/test_workflows.py` |

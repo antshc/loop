@@ -17,7 +17,7 @@ No config file. A Workflow declares its settings and hooks as code and injects d
 
 ## Persisted data
 
-`FileExecutionStore` (attempt counts per key) and `FileSessionStore` (logical agent session keys to provider session names); in-memory variants for tests and dry runs.
+`FileExecutionStore` (failure counts per workflow-chosen key) and `FileSessionStore` (logical agent session keys to provider session names); in-memory variants for tests.
 
 ## Source-folder structure
 
@@ -27,7 +27,7 @@ Paths relative to `src/loop/`.
 __init__.py     public API
 contracts/      ABCs: Sandbox, AgentClient, SessionStore, ExecutionStore
 sandboxes/       NoSandbox (host), DockerSandbox (container), FakeDocker double
-agents/         CopilotClient, DryRunAgentClient, fake agent and Copilot CLI doubles
+agents/         CopilotClient, AgentOutputParser per agent kind, fake agent and Copilot CLI doubles
 platforms/      GitClient (git CLI), GitHubClient (gh CLI), fake doubles
 sandbox/        create_sandbox (WorktreeSandbox: worktree + Sandbox), with_sandbox_lifecycle, run_host_hooks
 stores/         file and in-memory execution/session stores
@@ -63,7 +63,7 @@ C4Component
 
     Container_Boundary(loop, "loop library") {
         Component(sandboxes, "Sandboxes", "NoSandbox, DockerSandbox", "Environment for one or more agent runs: workspace, exec, close, and the executor handed to the agent.")
-        Component(agents, "Agent clients", "CopilotClient, DryRunAgentClient", "Render the prompt, run the provider CLI through the Sandbox's executor, and parse streamed output into a provider-neutral result.")
+        Component(agents, "Agent clients", "CopilotClient, AgentOutputParser", "Render the prompt, run the provider CLI through the Sandbox's executor, stream its output for logging, and after exit parse the response envelope with the agent kind's output parser.")
         Component(platforms, "Git and GitHub clients", "GitClient, GitHubClient", "Worktrees, commit, push, pull requests, and actionable Spec and Ticket queries.")
         Component(sandbox, "Worktree sandbox", "create_sandbox, with_sandbox_lifecycle", "Builds a long-lived worktree plus Sandbox, and wraps each run with setup hooks, base head, and commit collection.")
         ComponentDb(stores, "Stores", "File and in-memory", "Persist session keys and attempt counts.")
@@ -133,6 +133,6 @@ Likewise indexed in [ARCHITECTURE.md](../../ARCHITECTURE.md#architecture-decisio
 ## Key features
 
 - **Sandboxes:** host (`NoSandbox`) or container (`DockerSandbox`) environment; the agent is passed per run ([ADR 0008](../adr/0008-pass-the-agent-to-each-sandbox-run-instead-of-binding-it-to-the-sandbox.md)).
-- **Agent clients:** Copilot CLI with live output streaming and a dry-run client ([ADR 0007](../adr/0007-stream-agent-output-live-and-parse-it-after-exit-with-a-per-agent-kind-output-parser.md)).
+- **Agent clients:** Copilot CLI with live output streaming and a per-agent-kind output parser run after exit ([ADR 0007](../adr/0007-stream-agent-output-live-and-parse-it-after-exit-with-a-per-agent-kind-output-parser.md)).
 - **Git and GitHub helpers:** worktrees with `worktree-ready` hooks ([ADR 0004](../adr/0004-run-only-pre-agent-shell-command-hooks-on-the-host.md)); push and pull requests stay in Python ([ADR 0006](../adr/0006-keep-commit-push-pull-request-and-ticket-state-changes-in-python.md)), while the agent commits each task ([ADR 0009](../adr/0009-run-one-fresh-agent-per-ticket-from-python-and-let-the-agent-commit-it.md)).
 - **Test doubles:** `loop.testing` fakes every process boundary.

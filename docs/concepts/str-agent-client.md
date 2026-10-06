@@ -5,7 +5,7 @@
 
 Provide a stable application-facing client for running headless AI agents through provider CLIs while isolating orchestration code from provider-specific commands, session mechanics, flags, and output handling.
 
-The client accepts an agent prompt, the arguments that render it, and run options, optionally associates the run with a logical session, and returns captured CLI execution output so Loop, Ralph, and Crew depend on one stable API instead of invoking Copilot CLI directly.
+The client accepts an agent prompt, the arguments that render it, and run options, optionally associates the run with a logical session, and returns the captured CLI execution output plus the agent's response as extracted by the agent kind's output parser, so Loop, Ralph, and Crew depend on one stable API instead of invoking Copilot CLI directly.
 
 ## Concept
 
@@ -59,9 +59,11 @@ The CLI adapter owns command construction, process execution, and provider-speci
 - MUST keep provider executable names, arguments, session creation/resume flags, and naming syntax inside the provider CLI adapter.
 - MUST execute the provider CLI in the workspace of the owning Sandbox.
 - MUST capture stdout, stderr, and exit code for every invocation.
-- MUST stream provider output line by line through the Sandbox executor while the process runs, and parse the provider's own event format only inside its CLI adapter ([ADR 0007](../adr/0007-stream-agent-output-live-and-parse-it-after-exit-with-a-per-agent-kind-output-parser.md)).
-- MUST mark the result completed and terminate the provider process when the parsed output carries the completion signal; a completed result is a success, distinct from a timeout.
-- MUST implement dry run as a `DryRunAgentClient` that renders and logs the prompt and returns success without invoking a provider; test doubles stay in `loop.testing`.
+- MUST stream provider output line by line through the Sandbox executor for live logging while the process runs, and parse it only after the process exits, through the `AgentOutputParser` of the agent kind ([ADR 0007](../adr/0007-stream-agent-output-live-and-parse-it-after-exit-with-a-per-agent-kind-output-parser.md)).
+- MUST let the output parser fill `AgentResult`'s response string from the generic envelope (`identifier`, `status`, `result`) and decide success or error from `status`; the parser MUST NOT check workflow-specific fields or the expected `identifier`.
+- MUST keep `AgentClient` and its output parsers agnostic of what a prompt asks for: they run a prompt and return its response; Tickets, Specs, and identifier meaning belong to the workflow.
+- MUST NOT terminate the provider process early; it runs until it exits or times out.
+- MUST keep test doubles in `loop.testing`; there is no dry-run agent client.
 - MUST return failed CLI execution output to orchestration instead of losing stderr.
 - MUST NOT make Ralph, Crew, or other orchestration workflows construct provider CLI commands or provider session identifiers directly.
 - SHOULD keep the raw provider output available for diagnostics and execution logs.
