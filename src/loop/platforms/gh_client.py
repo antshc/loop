@@ -13,7 +13,17 @@ from loop.process import cli_runner, run_command
 logger = logging.getLogger("loop.platforms.github")
 
 _BLOCKING_LABELS = frozenset({"hitl", "spec"})
-_ISSUE_FIELDS = "number title url state labels(first: 20) { nodes { name } }"
+_ISSUE_FIELDS = (
+    "number title url state body labels(first: 20) { nodes { name } }"
+    " comments(first: 50) { nodes { author { login } body createdAt } }"
+)
+
+
+@dataclass(frozen=True)
+class Comment:
+    author: str
+    body: str
+    created_at: str
 
 
 @dataclass(frozen=True)
@@ -22,6 +32,8 @@ class Spec:
     title: str
     url: str
     labels: tuple[str, ...]
+    body: str = ""
+    comments: tuple[Comment, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -31,6 +43,8 @@ class Ticket:
     state: str
     labels: tuple[str, ...]
     url: str
+    body: str = ""
+    comments: tuple[Comment, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -47,6 +61,14 @@ class ReviewThread:
     path: str
     body: str
     resolved: bool
+
+
+def _comments(node: dict[str, Any]) -> tuple[Comment, ...]:
+    return tuple(
+        # `author` is null for deleted accounts.
+        Comment((comment["author"] or {}).get("login", "ghost"), comment["body"], comment["createdAt"])
+        for comment in node["comments"]["nodes"]
+    )
 
 
 class GhCli:
@@ -123,6 +145,8 @@ class GitHubClient:
                 title=node["title"],
                 url=node["url"],
                 labels=tuple(label["name"] for label in node["labels"]["nodes"]),
+                body=node["body"],
+                comments=_comments(node),
             )
             for page in pages
             for node in page["data"]["repository"]["issues"]["nodes"]
@@ -137,6 +161,8 @@ class GitHubClient:
                 state=node["state"].lower(),
                 labels=tuple(label["name"] for label in node["labels"]["nodes"]),
                 url=node["url"],
+                body=node["body"],
+                comments=_comments(node),
             )
             for page in pages
             for node in page["data"]["repository"]["issue"]["subIssues"]["nodes"]

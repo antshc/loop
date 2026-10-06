@@ -31,7 +31,7 @@ from loop.errors import (
 )
 from loop.logging_config import configure_logging
 from loop.parallel import Settled, parallel_settled
-from loop.platforms.gh_client import GitHubClient, PullRequest, ReviewThread, Spec, Ticket
+from loop.platforms.gh_client import Comment, GitHubClient, PullRequest, ReviewThread, Spec, Ticket
 from loop.platforms.git_client import GitClient, Hook, origin_slug, same_slug
 from loop.process import CommandExecutor, CommandResult
 from loop.prompt import PromptPreprocessor
@@ -61,6 +61,7 @@ __all__ = [
     "CommandError",
     "CommandExecutor",
     "CommandResult",
+    "Comment",
     "CopilotClient",
     "DockerSandbox",
     "DryRunAgentClient",

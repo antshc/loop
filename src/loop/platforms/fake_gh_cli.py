@@ -71,7 +71,11 @@ def _ticket(number: int, title: str, *, state: str = "OPEN", labels: list[str] |
         "title": title,
         "url": f"https://github.com/owner/repo/issues/{number}",
         "state": state,
+        "body": f"Body of #{number}",
         "labels": {"nodes": [{"name": label} for label in labels or []]},
+        "comments": {
+            "nodes": [{"author": {"login": "alice"}, "body": f"Comment on #{number}", "createdAt": "2026-01-01T00:00:00Z"}]
+        },
     }
 
 

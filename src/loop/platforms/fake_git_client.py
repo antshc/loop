@@ -33,6 +33,7 @@ class FakeGitClient(GitClient):
         self.detached: set[Path] = set()
         self.merged: list[tuple[Path, str]] = []
         self.deleted_branches: list[str] = []
+        self.subjects: dict[str, str] = {}
 
     def fetch(self, checkout: Path) -> None:
         if checkout in self.failing_fetch:
@@ -118,7 +119,17 @@ class FakeGitClient(GitClient):
         commits = self.branches[self.worktrees[worktree]]
         commit = f"{len(commits) + 1:040d}"
         commits.append(commit)
+        self.subjects[commit] = subject
         return commit
+
+    def recent_commits(self, worktree: Path, prefix: str, limit: int) -> list[str]:
+        commits = self.branches[self.worktrees[worktree]]
+        matching = [
+            f"{commit[-7:]} {self.subjects[commit]}"
+            for commit in reversed(commits)
+            if self.subjects.get(commit, "").startswith(prefix)
+        ]
+        return matching[:limit]
 
     def push(self, worktree: Path, branch: str) -> None:
         self.pushed.append((worktree, branch))

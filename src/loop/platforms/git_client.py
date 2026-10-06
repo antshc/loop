@@ -144,6 +144,14 @@ class GitClient:
         output = self._run(("git", "rev-list", f"{base}..{tip}"), cwd=worktree)
         return list(reversed(output.split()))
 
+    def recent_commits(self, worktree: Path, prefix: str, limit: int) -> list[str]:
+        """`<short hash> <subject>` of the newest `limit` commits whose subject starts with `prefix`, newest first."""
+        output = self._run(
+            ("git", "log", "-n", str(limit), f"--grep=^{re.escape(prefix)}", "--format=%h %s"), cwd=worktree
+        )
+        # `--grep` also matches body lines, so keep only subjects that carry the prefix.
+        return [line for line in output.splitlines() if line.partition(" ")[2].startswith(prefix)]
+
     def merge(self, checkout: Path, branch: str) -> None:
         with self._lock:
             self._run(("git", "merge", "--no-edit", branch), cwd=checkout)

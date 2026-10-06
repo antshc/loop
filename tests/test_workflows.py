@@ -133,23 +133,6 @@ def test_parse_report_accepts_extra_tickets_beyond_the_actionable_set() -> None:
     assert [ticket.number for ticket in report.tickets] == [10, 999]
 
 
-def test_commit_message_prefixes_the_subject_with_the_initiative() -> None:
-    subject, body = dev.commit_message(
-        "Checkout",
-        "Add login page",
-        [dev.TicketReport(10, "complete", "added the form"), dev.TicketReport(11, "partial", "started tests")],
-    )
-
-    assert subject == "Checkout: Add login page"
-    assert body == "#10: added the form\n#11: started tests"
-
-
-def test_commit_message_has_no_prefix_without_an_initiative() -> None:
-    subject, _ = dev.commit_message(None, "Add login page", [])
-
-    assert subject == "Add login page"
-
-
 def test_feature_branch_name_prefixes_the_slug_with_an_underscored_version() -> None:
     assert dev.feature_branch_name("release/2.4", "Add Login Page!") == "2_4_add-login-page"
 
@@ -195,11 +178,28 @@ def test_parse_base_label_returns_none_when_missing_empty_or_duplicated(labels: 
 def test_prompt_template_placeholders_match_the_supplied_arguments_exactly() -> None:
     spec = GitHubClient("o", "r", gh=FakeGhCli()).get_specs()[0]
     actionable = GitHubClient("o", "r", gh=FakeGhCli()).get_actionable_issues(spec)
-    args = dev._prompt_args(spec, actionable, "Add login page", "Checkout", Path("/w"), "main", "feature")
+    args = dev._prompt_args(spec, actionable, ["abc1234 ccode: first"], Path("/w"), "main", "feature")
 
     placeholders = set(_PLACEHOLDER.findall(dev.PROMPT.read_text()))
 
     assert placeholders == set(args.keys())
+
+
+def test_prompt_args_render_the_spec_and_tickets_as_json_with_bodies_and_comments() -> None:
+    github = GitHubClient("o", "r", gh=FakeGhCli())
+    spec = github.get_specs()[0]
+    actionable = github.get_actionable_issues(spec)
+
+    args = dev._prompt_args(spec, actionable, [], Path("/w"), "main", "feature")
+
+    spec_json = json.loads(args["SPEC_JSON"])
+    tickets_json = json.loads(args["TICKETS_JSON"])
+    assert (spec_json["number"], spec_json["body"]) == (1, "Body of #1")
+    assert [ticket["number"] for ticket in tickets_json] == [10]
+    assert tickets_json[0]["comments"] == [
+        {"author": "alice", "body": "Comment on #10", "created_at": "2026-01-01T00:00:00Z"}
+    ]
+    assert args["RECENT_COMMITS"] == "(none)"
 
 
 # --- Functional tests: drive dev.main with fakes at every process boundary --------------------------------
@@ -211,7 +211,9 @@ def _issue(number: int, title: str, *, state: str = "OPEN", labels: tuple[str, .
         "title": title,
         "url": f"https://github.com/owner/repo/issues/{number}",
         "state": state,
+        "body": f"Body of #{number}",
         "labels": {"nodes": [{"name": label} for label in labels]},
+        "comments": {"nodes": []},
     }
 
 
@@ -809,7 +811,7 @@ def test_dry_run_prepares_the_worktree_runs_hooks_logs_the_prompt_and_writes_not
     assert harness.git.worktrees == {}
     assert [c for c in harness.gh.calls if c[0] != "api"] == []
     log_text = (harness.log_dir / "dev.log").read_text()
-    assert "Spec #1" in log_text and "Add login page" in log_text
+    assert '\\"number\\": 1' in log_text and "Add login page" in log_text
 
 
 def test_every_complete_ticket_with_changes_commits_pushes_prs_and_closes(tmp_path: Path) -> None:
@@ -822,6 +824,29 @@ def test_every_complete_ticket_with_changes_commits_pushes_prs_and_closes(tmp_pa
     closes = [c for c in harness.gh.calls if c[:2] == ("issue", "close")]
     assert closes and closes[0][2] == "10" and closes[0][-1] == "added the form"
     assert any(c[:2] == ("pr", "create") for c in harness.gh.calls)
+
+
+def test_python_pushes_the_agents_commit_without_committing_itself(tmp_path: Path) -> None:
+    harness = DevHarness(tmp_path)
+
+    code = harness.run(handler=lambda prompt, options: _commit_and_report(harness, 10))
+
+    assert code == 0
+    assert list(harness.git.subjects.values()) == ["work"]
+    assert len(harness.git.pushed) == 1
+
+
+def test_the_prompt_carries_earlier_ccode_commits_and_commits_before_the_run_are_not_pushed(tmp_path: Path) -> None:
+    harness = DevHarness(tmp_path)
+    harness.git.branches["add-login-page"] = ["c1", "c2"]
+    harness.git.subjects.update({"c1": "ccode: earlier work", "c2": "unrelated"})
+
+    code = harness.run(handler=lambda prompt, options: _report(10))
+
+    assert code == 0
+    assert "ccode: earlier work" in harness.agent_calls[0][0]
+    assert "unrelated" not in harness.agent_calls[0][0]
+    assert harness.git.pushed == []
 
 
 def test_a_draft_pr_already_open_for_the_branch_is_not_duplicated(tmp_path: Path) -> None:

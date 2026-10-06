@@ -265,6 +265,18 @@ def test_commit_without_a_body_uses_a_single_message() -> None:
     assert runner.calls[-1] == ("git commit -m subject", TARGET, None)
 
 
+def test_recent_commits_keeps_newest_prefixed_subjects_only(repo: Path) -> None:
+    commit_file(repo, "a.txt", "1", "ccode: first")
+    commit_file(repo, "b.txt", "2", "unrelated")
+    commit_file(repo, "c.txt", "3", "subject\n\nccode: only in the body")
+    commit_file(repo, "d.txt", "4", "ccode: second")
+
+    commits = GitClient().recent_commits(repo, "ccode:", 5)
+
+    assert [line.partition(" ")[2] for line in commits] == ["ccode: second", "ccode: first"]
+    assert [line.partition(" ")[2] for line in GitClient().recent_commits(repo, "ccode:", 1)] == ["ccode: second"]
+
+
 def test_push_is_a_plain_push_with_no_force_flag() -> None:
     runner = FakeRunner()
     GitClient(run=runner).push(TARGET, "feature-x")

@@ -1,5 +1,7 @@
 # Keep commit, push, pull request, and ticket-state changes in Python
 
+The commit part is superseded by [ADR 0009](0009-let-the-agent-commit-each-task-while-python-publishes-and-updates-tickets.md): the agent commits, and Python still pushes, opens the pull request, and updates Tickets.
+
 The `dev` Workflow runs the agent against a worktree and must then publish its work. Loop's Python workflow performs the commit, push, draft pull request, and ticket close or label itself; the agent is told not to commit or push and returns a machine-readable report that Python acts on.
 
 ## Considered Options

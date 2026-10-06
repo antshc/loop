@@ -4,10 +4,6 @@ description: AFK development loop — implements approved sub-tickets of a spec 
 argument-hint: '<spec-issue-number-or-url>'
 ---
 
-# WORKTREE SETUP
-
-# ORCHESTRATOR LOOP
-
 ## 1. Read state
 
 The last comments fidlet by the ccode prefix:

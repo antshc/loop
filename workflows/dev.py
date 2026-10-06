@@ -1,6 +1,6 @@
 """Autonomous dev loop: one branch, worktree, and sandbox per open Spec, capped retries.
 
-Control flow, metadata parsing, the commit/branch-name rules, and the agent report parser are
+Control flow, metadata parsing, the branch-name rule, and the agent report parser are
 owned here, not by the loop library (see docs/concepts/str-loop-library-workflow-architecture.md).
 """
 
@@ -13,7 +13,7 @@ import re
 import sys
 import threading
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from loop import (
@@ -59,6 +59,9 @@ SANDBOX_FACTORY = _no_sandbox
 
 PROMPT = Path(__file__).parent / "prompts" / "dev.md"
 HITL_LABEL = "hitl"
+# Subject prefix of the agent's commits; the prompt's recent-commits state is filtered by it.
+COMMIT_PREFIX = "ccode:"
+RECENT_COMMITS = 10
 logger = logging.getLogger("workflow.dev")
 
 GithubFactory = Callable[[Path], GitHubClient]
@@ -143,28 +146,18 @@ def feature_branch_name(base_branch: str, title: str) -> str:
     return slug if match is None else f"{match[1].replace('.', '_')}_{slug}"
 
 
-def commit_message(initiative: str | None, title: str, tickets: Sequence[TicketReport]) -> tuple[str, str]:
-    """Subject carries the Spec title with its Initiative; body lists one line per Ticket summary."""
-    subject = f"{initiative}: {title}" if initiative else title
-    body = "\n".join(f"#{ticket.number}: {ticket.summary}" for ticket in tickets)
-    return subject, body
-
-
 def _prompt_args(
     spec: Spec,
     actionable: Sequence[Ticket],
-    title: str,
-    initiative: str | None,
+    recent_commits: Sequence[str],
     worktree: Path,
     base_branch: str,
     feature_branch: str,
 ) -> dict[str, str]:
     return {
-        "SPEC_NUMBER": str(spec.number),
-        "SPEC_TITLE": title,
-        "SPEC_URL": spec.url,
-        "INITIATIVE": initiative or "",
-        "TICKET_NUMBERS": ", ".join(f"#{ticket.number}" for ticket in actionable),
+        "RECENT_COMMITS": "\n".join(recent_commits) or "(none)",
+        "SPEC_JSON": json.dumps(asdict(spec), indent=2),
+        "TICKETS_JSON": json.dumps([asdict(ticket) for ticket in actionable], indent=2),
         "WORKTREE_PATH": str(worktree),
         "TARGET_BRANCH": base_branch,
         "FEATURE_BRANCH": feature_branch,
@@ -176,23 +169,22 @@ def _hitl(github: GitHubClient, spec: Spec, message: str) -> None:
     github.comment(spec.number, message)
 
 
-def _commit_leftover_changes(
+def _publish_commits(
     git: GitClient,
     worktree: Path,
+    head_before: str | None,
     target_github: GitHubClient,
     feature_branch: str,
     base_branch: str,
     bare_title: str,
     initiative: str | None,
-) -> None:
-    """Commit and push any uncommitted worktree changes, and ensure the draft PR."""
-    if not git.has_changes(worktree):
-        return
-    # No per-Ticket summaries are available here, so the body is empty.
-    subject, body = commit_message(initiative, bare_title, ())
-    git.commit(worktree, subject, body)
+) -> bool:
+    """Push the commits the agent made since `head_before` and ensure the draft PR; False when there are none."""
+    if head_before is None or git.head(worktree) == head_before:
+        return False
     git.push(worktree, feature_branch)
     _ensure_pull_request(target_github, feature_branch, base_branch, initiative, bare_title)
+    return True
 
 
 def _fail_attempt(
@@ -206,16 +198,17 @@ def _fail_attempt(
     dry_run: bool,
     git: GitClient | None = None,
     worktree: Path | None = None,
+    head_before: str | None = None,
     target_github: GitHubClient | None = None,
     feature_branch: str | None = None,
     base_branch: str | None = None,
     bare_title: str | None = None,
     initiative: str | None = None,
 ) -> None:
-    # Preserve partial work on the feature branch before the failure is recorded.
+    # Preserve the agent's commits on the feature branch before the failure is recorded.
     if not dry_run and git is not None and worktree is not None:
-        _commit_leftover_changes(
-            git, worktree, target_github, feature_branch, base_branch, bare_title, initiative
+        _publish_commits(
+            git, worktree, head_before, target_github, feature_branch, base_branch, bare_title, initiative
         )
     github.comment(spec.number, f"dev: {exception}")
     if dry_run:
@@ -267,6 +260,7 @@ def _apply_report(
     target_github: GitHubClient,
     git: GitClient,
     worktree: Path,
+    head_before: str | None,
     feature_branch: str,
     base_branch: str,
     bare_title: str,
@@ -277,14 +271,10 @@ def _apply_report(
     # Ignore report entries for Tickets that were not part of this run.
     actionable_numbers = {ticket.number for ticket in actionable}
     by_number = {entry.number: entry for entry in report.tickets if entry.number in actionable_numbers}
-    had_changes = git.has_changes(worktree)
     any_complete = any(entry.status == "complete" for entry in by_number.values())
-
-    if had_changes:
-        subject, body = commit_message(initiative, bare_title, list(by_number.values()))
-        git.commit(worktree, subject, body)
-        git.push(worktree, feature_branch)
-        _ensure_pull_request(target_github, feature_branch, base_branch, initiative, bare_title)
+    had_changes = _publish_commits(
+        git, worktree, head_before, target_github, feature_branch, base_branch, bare_title, initiative
+    )
 
     partial_tickets: list[int] = []
     resolved_tickets: list[int] = []
@@ -333,6 +323,7 @@ def _handle_exhausted_retries(
     target_github: GitHubClient,
     git: GitClient,
     worktree: Path,
+    head_before: str | None,
     feature_branch: str,
     base_branch: str,
     bare_title: str,
@@ -340,7 +331,9 @@ def _handle_exhausted_retries(
     store: ExecutionStore,
     harness_slug: str,
 ) -> None:
-    _commit_leftover_changes(git, worktree, target_github, feature_branch, base_branch, bare_title, initiative)
+    _publish_commits(
+        git, worktree, head_before, target_github, feature_branch, base_branch, bare_title, initiative
+    )
     harness_github.add_label(spec.number, HITL_LABEL)
     harness_github.comment(spec.number, "dev: every agent run returned no valid report after retries")
     for ticket in actionable:
@@ -440,9 +433,18 @@ def _process_spec(
 
     worktree = sandbox.worktree
     options = AgentOptions(session_key=None)
-    prompt_args = _prompt_args(spec, actionable, bare_title, initiative, worktree, base_branch, feature_branch)
+    head_before: str | None = None
     kept_on_cancel = False
     try:
+        head_before = git.head(worktree)
+        prompt_args = _prompt_args(
+            spec,
+            actionable,
+            git.recent_commits(worktree, COMMIT_PREFIX, RECENT_COMMITS),
+            worktree,
+            base_branch,
+            feature_branch,
+        )
         if dry_run:
             sandbox.run(agent_factory, template, prompt_args, options)
             return None
@@ -455,6 +457,7 @@ def _process_spec(
                 target_github=target_github,
                 git=git,
                 worktree=worktree,
+                head_before=head_before,
                 feature_branch=feature_branch,
                 base_branch=base_branch,
                 bare_title=bare_title,
@@ -471,6 +474,7 @@ def _process_spec(
             target_github=target_github,
             git=git,
             worktree=worktree,
+            head_before=head_before,
             feature_branch=feature_branch,
             base_branch=base_branch,
             bare_title=bare_title,
@@ -494,6 +498,7 @@ def _process_spec(
             dry_run=dry_run,
             git=git,
             worktree=worktree,
+            head_before=head_before,
             target_github=target_github,
             feature_branch=feature_branch,
             base_branch=base_branch,

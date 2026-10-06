@@ -12,7 +12,7 @@ Loop ships no command and no built-in Workflows. You write each Workflow as a pl
 
 - **Sandboxes** — run agents on a Git worktree directly on the host (`NoSandbox`) or in a container (`DockerSandbox`).
 - **Agent clients** — Copilot CLI client with live output streaming, session resume, and a dry-run client.
-- **Git and GitHub clients** — worktrees, branches, commits, pushes, draft pull requests, and Ticket state, kept in Python rather than left to the agent.
+- **Git and GitHub clients** — worktrees, branches, commits, pushes, draft pull requests, and Ticket state; Python owns push, pull requests, and Ticket state, while the agent commits each task.
 - **Lifecycle hooks** — shell-command hooks run on the host before the agent starts.
 - **Stores** — file and in-memory stores for sessions and executions.
 - **Test doubles** — fakes for `gh`, `git`, Docker, and the Copilot CLI in `loop.testing`.
