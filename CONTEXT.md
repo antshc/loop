@@ -38,8 +38,12 @@ _Avoid_: Repos folder
 A platform-neutral prompt/task, such as a GitHub issue or an Azure DevOps work item, that Loop reads and hands to an agent to act on.  
 _Avoid_: Issue, Work item
 
+**Initiative**:  
+A coordinated product change tracked as one planning effort, identified by an Initiative id; it has at most one Spec per target repository.  
+_Avoid_: Project, epic
+
 **Spec**:  
-A Ticket that groups the Tickets one dev run delivers, carrying the target branch and initiative in its metadata.  
+A Ticket that groups the Tickets one dev run delivers for one Initiative and one target repository; its title is prefixed with the Initiative id, and it names its target repository and base branch.  
 _Avoid_: Epic, parent issue
 
 **Workflow**:  

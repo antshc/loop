@@ -133,6 +133,6 @@ Likewise indexed in [ARCHITECTURE.md](../../ARCHITECTURE.md#architecture-decisio
 ## Key features
 
 - **Sandboxes:** host (`NoSandbox`) or container (`DockerSandbox`) environment; the agent is passed per run ([ADR 0008](../adr/0008-pass-the-agent-to-each-sandbox-run-instead-of-binding-it-to-the-sandbox.md)).
-- **Agent clients:** Copilot CLI with live output streaming and a dry-run client ([ADR 0007](../adr/0007-stream-agent-output-live-and-parse-it-in-the-provider-adapter.md)).
-- **Git and GitHub helpers:** worktrees with `worktree-ready` hooks ([ADR 0004](../adr/0004-run-only-pre-agent-shell-command-hooks-on-the-host.md)); push and pull requests stay in Python ([ADR 0006](../adr/0006-keep-commit-push-pull-request-and-ticket-state-changes-in-python.md)), while the agent commits each task ([ADR 0009](../adr/0009-let-the-agent-commit-each-task-while-python-publishes-and-updates-tickets.md)).
+- **Agent clients:** Copilot CLI with live output streaming and a dry-run client ([ADR 0007](../adr/0007-stream-agent-output-live-and-parse-it-after-exit-with-a-per-agent-kind-output-parser.md)).
+- **Git and GitHub helpers:** worktrees with `worktree-ready` hooks ([ADR 0004](../adr/0004-run-only-pre-agent-shell-command-hooks-on-the-host.md)); push and pull requests stay in Python ([ADR 0006](../adr/0006-keep-commit-push-pull-request-and-ticket-state-changes-in-python.md)), while the agent commits each task ([ADR 0009](../adr/0009-run-one-fresh-agent-per-ticket-from-python-and-let-the-agent-commit-it.md)).
 - **Test doubles:** `loop.testing` fakes every process boundary.
