@@ -26,6 +26,14 @@ _Avoid_: Monorepo, standalone harness
 A harness layout in which the harness is a separate parent repository wrapping one or more source repositories.  
 _Avoid_: Wrapping harness, parent harness
 
+**Codebase Checkout**:  
+The clone of a Spec's target repository whose code changes through worktrees: the harness itself in a Single Repo, a clone inside the Workspace Folder in a Multi Repo.  
+_Avoid_: Working copy, source clone
+
+**Workspace Folder**:  
+The folder of a Multi Repo harness that holds one clone per wrapped source repository.  
+_Avoid_: Repos folder
+
 **Ticket**:  
 A platform-neutral prompt/task, such as a GitHub issue or an Azure DevOps work item, that Orb reads and hands to an agent to act on.  
 _Avoid_: Issue, Work item

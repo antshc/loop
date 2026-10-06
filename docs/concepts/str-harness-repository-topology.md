@@ -9,15 +9,18 @@ Ralph skills run against a **harness** (where docs, specs, instructions, and ski
 
 The **harness repo** is the root from which the agent is executed; it supplies the agent's instructions and skills. The **codebase checkout** is the repository whose code is changed. Both are the same repository in the single-repo layout and different repositories in the multi-repo layout. Code is never changed in the checkout itself: every change happens in a **worktree** placed beside the checkout in a sibling folder named after it with a `.worktrees` suffix, one subfolder per feature branch.
 
-Skills resolve the harness path first, then derive the codebase checkout by comparing the target repository's identity (`owner/name`) with the harness's own `origin` remote: equal → the harness is the checkout; different → the checkout is the repository folder of that name inside the harness's `workspace` folder. The configured repository list never takes part in this decision.
+Workflows resolve the harness path first, then derive the codebase checkout by comparing the target repository's identity (`owner/name`) with the harness's own `origin` remote: equal → the harness is the checkout; different → the checkout is the repository folder of that name inside the harness's `workspace` folder, whose own `origin` must equal the target. The configured repository list never takes part in this decision. Identities are compared case-insensitively after normalizing ssh, https, and `.git` forms; only `github.com` remotes resolve.
 
 Work is split by repository: spec, issue, and documentation operations (and the final harness commit and push) target the harness; code, build, and pull request operations target the worktree.
 
 ## Rules
 
-- MUST resolve the harness path through the `/harness` skill from cwd; when its settings are missing, use cwd as the harness path; when invalid, stop and report.
-- MUST derive the codebase checkout by comparing the target repository with the harness `origin`: equal → checkout is the harness; otherwise → checkout is the named repository inside the workspace folder.
-- MUST confirm the checkout exists and its own `origin` matches the target repository; on a missing or mismatched checkout, stop before creating a worktree or touching any review thread.
+- MUST resolve the harness path as the git top-level of cwd (the user runs Orb from the harness repo); when cwd is not in a git repository or the harness `origin` is absent or not `github.com`, fail the whole run before touching any spec.
+- MUST derive the codebase checkout by comparing the target repository with the harness `origin`: equal → checkout is the harness; otherwise → checkout is `<harness>/workspace/<repository name>`.
+- MUST confirm the checkout exists and its own `origin` matches the target repository; on a missing or mismatched checkout, create no worktree and touch no review thread, label the spec `hitl` with a comment naming the expected path and actual `origin`, and continue with the other specs.
+- MUST NOT clone a missing checkout during a run.
+- MUST take the target repository from the spec's `repo:target:<owner/name>` label; a missing, malformed, or duplicated label is handled like a missing checkout, with no default to the harness.
+- MUST send spec and ticket operations through a platform instance bound to the harness repository and pull request operations through a separate instance bound to the resolved target repository.
 - MUST NOT use the configured repository list to choose a checkout; it is only the input of the pull command.
 - MUST create each worktree beside its checkout as `<checkout>.worktrees/<feature-branch>`, never inside the checkout.
 - MUST run code, build, and pull request commands inside the worktree and spec, issue, and documentation commands against the harness repo.
