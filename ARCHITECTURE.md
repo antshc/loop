@@ -8,7 +8,17 @@ Build a headless AI development environment that orchestrates coding agents acro
 
 ## Context
 
-Shared language is defined in [CONTEXT.md](CONTEXT.md).
+Shared language is defined in [CONTEXT.md](CONTEXT.md). The system context and solution container diagrams are in [docs/building-blocks/system-context.md](docs/building-blocks/system-context.md).
+
+## Building blocks
+
+Orb is a single Deployable; Workflow scripts are user-owned and outside it.
+
+#### Deployables
+
+| Building block | Trigger condition | Summary | Location |
+|---|---|---|---|
+| **[Orb](docs/building-blocks/orb.md)** (orb) | orb library, public orb API, Capsule, NoCapsule, DockerCapsule, AgentClient, CopilotClient, GitClient, GitHubClient, worktree-ready hook, SessionStore, ExecutionStore, test doubles, import-linter, component diagram, building block, source layout | Python library of Capsules, agent clients, git/GitHub clients, stores, and shared policy for composing Workflow scripts; no command, no built-in Workflows. | `src/orb` — `https://github.com/antshc/orb` |
 
 ## Codebase Structure
 
