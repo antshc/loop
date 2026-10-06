@@ -3,17 +3,23 @@ from __future__ import annotations
 import atexit
 import os
 import re
-from collections.abc import Mapping, Sequence
+import time
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
 
 from orb.contracts.agent_client import AgentOptions, AgentResult
 from orb.contracts.capsule import AgentClientFactory, Capsule, CapsuleBinding
-from orb.errors import OrbError
+from orb.errors import CommandError, OrbError
 from orb.process import CommandExecutor, CommandResult, OnLine, checked_output, execute
 
 CAPSULE_HOME = "/home/agent"
+
+# Transient exit codes, retry count, and delay are copied from Sandcastle's sandbox lifecycle.
+_TRANSIENT_EXIT_CODES = {126, 137}
+_START_RETRIES = 2
+_RETRY_DELAY_S = 0.25
 
 
 @dataclass(frozen=True)
@@ -62,9 +68,13 @@ class DockerCapsule(Capsule):
         groups: Sequence[str | int] = (),
         devices: Sequence[str] = (),
         cpus: float | None = None,
+        start_timeout_s: float = 60,
+        sleep: Callable[[float], None] | None = None,
         docker: CommandExecutor | None = None,
     ) -> None:
         self._docker = docker or execute
+        self._start_timeout_s = start_timeout_s
+        self._sleep = sleep or time.sleep
         host_workspace = Path(workspace)
         self._workspace = host_workspace
         uid = container_uid if container_uid is not None else os.getuid()
@@ -92,7 +102,7 @@ class DockerCapsule(Capsule):
         if cpus is not None:
             args += ["--cpus", str(cpus)]
         command = [*args, image]
-        checked_output(" ".join(command), self._docker(command))
+        self._start_container(command)
 
         self._closed = False
         atexit.register(self._remove)
@@ -139,6 +149,24 @@ class DockerCapsule(Capsule):
 
     def _remove(self) -> None:
         self._docker(("docker", "rm", "-f", self._container))
+
+    def _start_container(self, command: Sequence[str]) -> None:
+        attempt = 0
+        while True:
+            try:
+                result = self._docker(command, timeout_s=self._start_timeout_s)
+            except CommandError:
+                self._remove()
+                raise
+            if result.returncode == 0:
+                return
+            if result.returncode in _TRANSIENT_EXIT_CODES and attempt < _START_RETRIES:
+                self._remove()
+                attempt += 1
+                self._sleep(_RETRY_DELAY_S)
+                continue
+            self._remove()
+            checked_output(" ".join(command), result)
 
     def _check_image_uid(self, image: str, expected_uid: int) -> None:
         result = self._docker(("docker", "image", "inspect", image, "--format", "{{.Config.User}}"))

@@ -177,6 +177,65 @@ def test_docker_capsule_rejects_an_image_built_for_another_uid(tmp_path: Path) -
         DockerCapsule(tmp_path, image_name="orb:x", container_uid=1000, docker=docker)
 
 
+def test_docker_capsule_retries_a_transient_exit_code_then_starts_normally(tmp_path: Path) -> None:
+    docker = FakeDocker(FakeCopilotCli(), run_results=[137, 0])
+    sleeps: list[float] = []
+
+    capsule = DockerCapsule(tmp_path, container_uid=1000, docker=docker, sleep=sleeps.append)
+    capsule.close()
+
+    run_calls = [call for call in docker.calls if call[1:3] == ("run", "-d")]
+    assert len(run_calls) == 2
+    assert sleeps == [0.25]
+    assert sum(1 for call in docker.calls if call[1:3] == ("rm", "-f")) == 1
+
+
+def test_docker_capsule_fails_after_exhausting_retries_on_a_transient_exit_code(tmp_path: Path) -> None:
+    docker = FakeDocker(FakeCopilotCli(), run_results=[137, 137, 137])
+    sleeps: list[float] = []
+
+    with pytest.raises(CommandError, match="137"):
+        DockerCapsule(tmp_path, container_uid=1000, docker=docker, sleep=sleeps.append)
+
+    run_calls = [call for call in docker.calls if call[1:3] == ("run", "-d")]
+    assert len(run_calls) == 3
+    assert sleeps == [0.25, 0.25]
+    assert sum(1 for call in docker.calls if call[1:3] == ("rm", "-f")) == 3
+
+
+def test_docker_capsule_fails_at_once_on_a_non_transient_exit_code(tmp_path: Path) -> None:
+    docker = FakeDocker(FakeCopilotCli(), run_results=[1])
+
+    with pytest.raises(CommandError, match="1"):
+        DockerCapsule(tmp_path, container_uid=1000, docker=docker)
+
+    run_calls = [call for call in docker.calls if call[1:3] == ("run", "-d")]
+    assert len(run_calls) == 1
+    assert sum(1 for call in docker.calls if call[1:3] == ("rm", "-f")) == 1
+
+
+def test_docker_capsule_fails_at_once_on_a_start_timeout_and_removes_the_container(tmp_path: Path) -> None:
+    docker = FakeDocker(FakeCopilotCli(), run_results=[CommandError("docker run", None, "timed out after 60s")])
+
+    with pytest.raises(CommandError, match="timed out"):
+        DockerCapsule(tmp_path, container_uid=1000, docker=docker)
+
+    run_calls = [call for call in docker.calls if call[1:3] == ("run", "-d")]
+    assert len(run_calls) == 1
+    assert sum(1 for call in docker.calls if call[1:3] == ("rm", "-f")) == 1
+
+
+def test_docker_capsule_bounds_each_start_attempt_with_a_custom_timeout(tmp_path: Path) -> None:
+    docker = FakeDocker(FakeCopilotCli(), run_results=[137, 0])
+
+    capsule = DockerCapsule(
+        tmp_path, container_uid=1000, docker=docker, start_timeout_s=5, sleep=lambda _: None
+    )
+    capsule.close()
+
+    assert docker.run_timeouts == [5, 5]
+
+
 def test_docker_capsule_run_carries_allow_all_and_no_allow_all_tools(tmp_path: Path) -> None:
     cli = FakeCopilotCli()
     capsule = DockerCapsule(tmp_path, container_uid=1000, docker=FakeDocker(cli))
