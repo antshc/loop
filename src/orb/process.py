@@ -23,6 +23,11 @@ OnLine = Callable[[str], "bool | None"]
 
 _CANCEL_POLL_S = 0.05
 
+# Transient exit codes, retry count, and delay are copied from Sandcastle's sandbox lifecycle.
+TRANSIENT_EXIT_CODES = frozenset({126, 137})
+TRANSIENT_RETRIES = 2
+TRANSIENT_RETRY_DELAY_S = 0.25
+
 
 class CommandExecutor(Protocol):
     """Runs a command in a capsule's environment; a non-zero exit is returned, not raised."""

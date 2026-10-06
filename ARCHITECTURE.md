@@ -24,7 +24,7 @@ Orb is a single Deployable; Workflow scripts are user-owned and outside it.
 
 | Location | Contents |
 |----------|----------|
-| `src/orb/` | The `orb` library package: public top-level API, contracts, and shipped implementations (Capsules, agent client, git and GitHub clients, stores). |
+| `src/orb/` | The `orb` library package: public top-level API, contracts, and shipped implementations (Capsules, agent client, git and GitHub clients, sandbox setup and lifecycle, stores). |
 | `src/orb/testing/` | Test doubles for every process boundary (`gh`, `git`, Docker, the Copilot CLI, the agent client). |
 | `workflows/` | The example `dev` Workflow (`dev.py`, a runnable script) and its prompt template (`prompts/dev.md`); not part of the `orb` package. |
 | `tests/` | The test suite, including import-linter architecture checks. |

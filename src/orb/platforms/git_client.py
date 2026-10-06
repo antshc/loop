@@ -101,7 +101,7 @@ class GitClient:
 
         try:
             for hook in on_ready:
-                self._run_hook(hook, target, cancel)
+                self.run_hook(hook, target, cancel)
         except HookError:
             self.remove_worktree(target)
             raise
@@ -126,6 +126,34 @@ class GitClient:
 
     def has_changes(self, worktree: Path) -> bool:
         return bool(self._run(("git", "status", "--porcelain"), cwd=worktree).strip())
+
+    def head(self, worktree: Path) -> str:
+        return self._run(("git", "rev-parse", "HEAD"), cwd=worktree).strip()
+
+    def current_branch(self, path: Path) -> str | None:
+        """The checked-out branch of `path`, or None on a detached HEAD."""
+        name = self._run(("git", "rev-parse", "--abbrev-ref", "HEAD"), cwd=path).strip()
+        return None if name == "HEAD" else name
+
+    def config_get(self, path: Path, key: str) -> str | None:
+        result = self._execute(("git", "config", "--get", key), cwd=path)
+        return result.stdout.strip() or None if result.returncode == 0 else None
+
+    def commits_between(self, worktree: Path, base: str, tip: str = "HEAD") -> list[str]:
+        """Commits reachable from `tip` but not `base`, oldest first."""
+        output = self._run(("git", "rev-list", f"{base}..{tip}"), cwd=worktree)
+        return list(reversed(output.split()))
+
+    def merge(self, checkout: Path, branch: str) -> None:
+        with self._lock:
+            self._run(("git", "merge", "--no-edit", branch), cwd=checkout)
+
+    def detach(self, worktree: Path) -> None:
+        self._run(("git", "checkout", "--detach"), cwd=worktree)
+
+    def delete_branch(self, checkout: Path, branch: str) -> None:
+        with self._lock:
+            self._run(("git", "branch", "-D", branch), cwd=checkout)
 
     def commit(self, worktree: Path, subject: str, body: str = "") -> None:
         self._run(("git", "add", "-A"), cwd=worktree)
@@ -163,7 +191,7 @@ class GitClient:
             entries.append((path, branch))
         return entries
 
-    def _run_hook(self, hook: Hook, worktree: Path, cancel: threading.Event | None) -> None:
+    def run_hook(self, hook: Hook, worktree: Path, cancel: threading.Event | None = None) -> None:
         try:
             result = self._execute(hook.command, cwd=worktree, timeout_s=hook.timeout_s, cancel=cancel)
         except CommandError as exception:

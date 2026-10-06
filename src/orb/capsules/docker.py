@@ -13,14 +13,18 @@ from uuid import uuid4
 from orb.contracts.agent_client import AgentOptions, AgentResult
 from orb.contracts.capsule import AgentClientFactory, Capsule, CapsuleBinding
 from orb.errors import Cancelled, CommandError, OrbError
-from orb.process import CommandExecutor, CommandResult, OnLine, checked_output, execute
+from orb.process import (
+    TRANSIENT_EXIT_CODES,
+    TRANSIENT_RETRIES,
+    TRANSIENT_RETRY_DELAY_S,
+    CommandExecutor,
+    CommandResult,
+    OnLine,
+    checked_output,
+    execute,
+)
 
 CAPSULE_HOME = "/home/agent"
-
-# Transient exit codes, retry count, and delay are copied from Sandcastle's sandbox lifecycle.
-_TRANSIENT_EXIT_CODES = {126, 137}
-_START_RETRIES = 2
-_RETRY_DELAY_S = 0.25
 
 
 @dataclass(frozen=True)
@@ -182,10 +186,10 @@ class DockerCapsule(Capsule):
                 raise Cancelled()
             if result.returncode == 0:
                 return
-            if result.returncode in _TRANSIENT_EXIT_CODES and attempt < _START_RETRIES:
+            if result.returncode in TRANSIENT_EXIT_CODES and attempt < TRANSIENT_RETRIES:
                 self._remove()
                 attempt += 1
-                self._sleep(_RETRY_DELAY_S)
+                self._sleep(TRANSIENT_RETRY_DELAY_S)
                 continue
             self._remove()
             checked_output(" ".join(command), result)

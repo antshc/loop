@@ -41,9 +41,16 @@ forbidden_modules = [
     "orb.agents",
     "orb.capsules",
     "orb.platforms",
+    "orb.sandbox",
     "orb.stores",
     "orb.testing",
 ]
+
+[[tool.importlinter.contracts]]
+name = "Adapters import no sandbox code"
+type = "forbidden"
+source_modules = ["orb.agents", "orb.capsules", "orb.platforms", "orb.stores"]
+forbidden_modules = ["orb.sandbox"]
 
 [[tool.importlinter.contracts]]
 name = "The git platform module imports no GitHub or workflow code"
@@ -58,6 +65,7 @@ source_modules = [
     "orb.agents",
     "orb.capsules",
     "orb.platforms",
+    "orb.sandbox",
     "orb.stores",
     "orb.contracts",
     "orb.errors",
@@ -79,6 +87,7 @@ forbidden_modules = [
     "orb.agents",
     "orb.capsules",
     "orb.platforms",
+    "orb.sandbox",
     "orb.stores",
     "orb.errors",
     "orb.process",

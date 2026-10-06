@@ -436,3 +436,28 @@ def test_create_worktree_modifies_no_tracked_file_of_the_checkout(tmp_path: Path
     client.create_worktree(checkout, "feature-x", "main", checkout)
 
     assert git(checkout, "status", "--porcelain") == ""
+
+
+def test_branch_primitives_report_head_commits_merge_and_cleanup_against_a_real_repository(
+    repo: Path, tmp_path: Path
+) -> None:
+    client = GitClient()
+    worktree = tmp_path / "wt"
+    git(repo, "worktree", "add", "-b", "tmp", str(worktree))
+    base = client.head(worktree)
+
+    commit_file(worktree, "a.txt", "a\n", "first")
+    commit_file(worktree, "b.txt", "b\n", "second")
+    first, second = git(worktree, "rev-list", "--reverse", f"{base}..HEAD").split()
+
+    assert client.current_branch(repo) == "main" and client.current_branch(worktree) == "tmp"
+    assert client.commits_between(worktree, base, client.head(worktree)) == [first, second]
+    assert client.config_get(repo, "user.name") == "Test" and client.config_get(repo, "no.such") is None
+
+    client.merge(repo, "tmp")
+    client.detach(worktree)
+    client.delete_branch(repo, "tmp")
+
+    assert (repo / "b.txt").exists()
+    assert client.current_branch(worktree) is None
+    assert git(repo, "branch", "--list", "tmp") == ""

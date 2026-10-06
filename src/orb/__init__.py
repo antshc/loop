@@ -37,6 +37,13 @@ from orb.platforms.gh_client import GitHubClient, PullRequest, ReviewThread, Spe
 from orb.platforms.git_client import GitClient, Hook, origin_slug, same_slug
 from orb.process import CommandExecutor, CommandResult
 from orb.prompt import PromptPreprocessor
+from orb.sandbox.create_sandbox import CapsuleFactory, Sandbox, SandboxRunResult, create_sandbox
+from orb.sandbox.sandbox_lifecycle import (
+    LifecycleResult,
+    SandboxHooks,
+    run_host_hooks,
+    with_sandbox_lifecycle,
+)
 from orb.stores.file import FileExecutionStore, FileSessionStore
 from orb.stores.memory import InMemoryExecutionStore, InMemorySessionStore
 from orb.tags import extract_json, extract_tag
@@ -51,6 +58,7 @@ __all__ = [
     "Cancelled",
     "Capsule",
     "CapsuleBinding",
+    "CapsuleFactory",
     "CommandError",
     "CommandExecutor",
     "CommandResult",
@@ -69,6 +77,7 @@ __all__ = [
     "HookError",
     "InMemoryExecutionStore",
     "InMemorySessionStore",
+    "LifecycleResult",
     "MAX_FAILED_ATTEMPTS",
     "Mount",
     "NoCapsule",
@@ -77,17 +86,23 @@ __all__ = [
     "PromptPreprocessor",
     "PullRequest",
     "ReviewThread",
+    "Sandbox",
+    "SandboxHooks",
+    "SandboxRunResult",
     "SessionStore",
     "Settled",
     "Spec",
     "Ticket",
     "configure_logging",
     "copilot",
+    "create_sandbox",
     "dry_run",
     "extract_json",
     "extract_tag",
     "may_attempt",
     "origin_slug",
     "parallel_settled",
+    "run_host_hooks",
     "same_slug",
+    "with_sandbox_lifecycle",
 ]

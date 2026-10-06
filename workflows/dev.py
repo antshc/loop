@@ -21,6 +21,7 @@ from orb import (
     AgentOptions,
     Cancelled,
     Capsule,
+    CapsuleFactory,
     ExecutionStore,
     FileExecutionStore,
     GitClient,
@@ -29,10 +30,13 @@ from orb import (
     InMemorySessionStore,
     NoCapsule,
     OrbError,
+    Sandbox,
+    SandboxHooks,
     Spec,
     Ticket,
     configure_logging,
     copilot,
+    create_sandbox,
     may_attempt,
     origin_slug,
     same_slug,
@@ -57,7 +61,6 @@ PROMPT = Path(__file__).parent / "prompts" / "dev.md"
 HITL_LABEL = "hitl"
 logger = logging.getLogger("workflow.dev")
 
-CapsuleFactory = Callable[[Path, threading.Event], Capsule]
 GithubFactory = Callable[[Path], GitHubClient]
 
 _STATUSES = frozenset({"complete", "partial", "blocked"})
@@ -233,16 +236,16 @@ def _ensure_pull_request(github: GitHubClient, head: str, base: str, initiative:
 
 
 def _run_report(
-    capsule: Capsule,
+    sandbox: Sandbox,
     agent_factory: AgentClientFactory,
     template: str,
     prompt_args: dict[str, str],
     options: AgentOptions,
     retries: int,
 ) -> AgentReport | None:
-    """Up to 1 + retries fresh Runs on the same Capsule; stops at the first valid report."""
+    """Up to 1 + retries fresh Runs on the same Sandbox; stops at the first valid report."""
     for _ in range(1 + retries):
-        result = capsule.run(agent_factory, template, prompt_args, options)
+        result = sandbox.run(agent_factory, template, prompt_args, options).result
         if not result.success:
             continue
         try:
@@ -407,8 +410,15 @@ def _process_spec(
             _hitl(harness_github, spec, f"dev: target branch {base_branch!r} does not exist on {target}")
             return None
         feature_branch = feature_branch_name(base_branch, bare_title)
-        worktree = git.create_worktree(
-            checkout, feature_branch, base_branch, harness_root, on_ready=hooks, cancel=cancel
+        sandbox = create_sandbox(
+            git,
+            capsule_factory,
+            checkout=checkout,
+            harness_root=harness_root,
+            base=base_branch,
+            branch=feature_branch,
+            hooks=SandboxHooks(worktree_ready=tuple(hooks)),
+            cancel=cancel,
         )
     except Cancelled as exception:
         _report_cancelled(spec, exception.worktree)
@@ -417,16 +427,15 @@ def _process_spec(
         _fail_attempt(harness_github, store, spec, harness_slug, actionable, exception, dry_run=dry_run)
         return False
 
+    worktree = sandbox.worktree
     options = AgentOptions(session_key=None)
     prompt_args = _prompt_args(spec, actionable, bare_title, initiative, worktree, base_branch, feature_branch)
     kept_on_cancel = False
     try:
         if dry_run:
-            with capsule_factory(harness_root, cancel) as capsule:
-                capsule.run(agent_factory, template, prompt_args, options)
+            sandbox.run(agent_factory, template, prompt_args, options)
             return None
-        with capsule_factory(harness_root, cancel) as capsule:
-            report = _run_report(capsule, agent_factory, template, prompt_args, options, retries)
+        report = _run_report(sandbox, agent_factory, template, prompt_args, options, retries)
         if report is None:
             _handle_exhausted_retries(
                 spec,
@@ -481,8 +490,7 @@ def _process_spec(
         )
         return False
     finally:
-        if not kept_on_cancel:
-            git.remove_worktree(worktree)
+        sandbox.close(keep_worktree=kept_on_cancel)
 
 
 def main(

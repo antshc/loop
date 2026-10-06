@@ -29,6 +29,7 @@ contracts/      ABCs: Capsule, AgentClient, SessionStore, ExecutionStore
 capsules/       NoCapsule (host), DockerCapsule (container), FakeDocker double
 agents/         CopilotClient, DryRunAgentClient, fake agent and Copilot CLI doubles
 platforms/      GitClient (git CLI), GitHubClient (gh CLI), fake doubles
+sandbox/        create_sandbox (Sandbox: worktree + Capsule), with_sandbox_lifecycle, run_host_hooks
 stores/         file and in-memory execution/session stores
 process.py      CommandExecutor, streaming/cancellable subprocess execution
 prompt.py       PromptPreprocessor (prompt placeholders and args)
@@ -40,7 +41,7 @@ logging_config.py  configure_logging
 testing/        public test doubles for every process boundary
 ```
 
-Dependency rule (enforced by import-linter in `pyproject.toml`): contracts and shared policy import no implementation; only `orb.testing` imports test doubles; `workflows.dev` imports only the public `orb` API.
+Dependency rule (enforced by import-linter in `pyproject.toml`): contracts and shared policy import no implementation; adapters (`agents`, `capsules`, `platforms`, `stores`) import no `sandbox` code; only `orb.testing` imports test doubles; `workflows.dev` imports only the public `orb` API.
 
 ## Container view
 
@@ -64,6 +65,7 @@ C4Component
         Component(capsules, "Capsules", "NoCapsule, DockerCapsule", "Environment for one or more agent runs: workspace, exec, close, and the executor handed to the agent.")
         Component(agents, "Agent clients", "CopilotClient, DryRunAgentClient", "Render the prompt, run the provider CLI through the Capsule's executor, and parse streamed output into a provider-neutral result.")
         Component(platforms, "Git and GitHub clients", "GitClient, GitHubClient", "Worktrees, commit, push, pull requests, and actionable Spec and Ticket queries.")
+        Component(sandbox, "Sandbox", "create_sandbox, with_sandbox_lifecycle", "Builds a long-lived worktree plus Capsule, and wraps each run with setup hooks, base head, and commit collection.")
         ComponentDb(stores, "Stores", "File and in-memory", "Persist session keys and attempt counts.")
         Component(contracts, "Contracts", "ABCs", "Capsule, AgentClient, SessionStore, and ExecutionStore boundaries.")
         Component(policy, "Shared policy", "process, prompt, tags, parallel, attempts, errors", "Command execution, prompt preprocessing, tag extraction, parallel settling, attempt cap, and errors.")
@@ -76,6 +78,9 @@ C4Component
 
     Rel(workflow, capsules, "Runs agents in")
     Rel(workflow, platforms, "Manages worktrees and tickets with")
+    Rel(workflow, sandbox, "Creates sandboxes and runs agents in them with")
+    Rel(sandbox, capsules, "Starts and runs agents in")
+    Rel(sandbox, platforms, "Creates worktrees and collects commits with")
     Rel(capsules, agents, "Passes its executor to")
     Rel(agents, stores, "Resolves sessions through")
     Rel(capsules, policy, "Executes commands through")

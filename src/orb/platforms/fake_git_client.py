@@ -8,6 +8,9 @@ from orb.errors import Cancelled, CommandError, HookError
 from orb.platforms.git_client import GitClient, Hook
 
 
+_BASE_COMMIT = "0" * 40
+
+
 class FakeGitClient(GitClient):
     """In-memory git: simulates fetches, remote branches, leftovers, branch-in-use, and Hook outcomes."""
 
@@ -25,6 +28,11 @@ class FakeGitClient(GitClient):
         self.branches: dict[str, list[str]] = {}
         self.pushed: list[tuple[Path, str]] = []
         self.removed: list[Path] = []
+        self.host_branch: str | None = "main"
+        self.config: dict[str, str] = {}
+        self.detached: set[Path] = set()
+        self.merged: list[tuple[Path, str]] = []
+        self.deleted_branches: list[str] = []
 
     def fetch(self, checkout: Path) -> None:
         if checkout in self.failing_fetch:
@@ -56,11 +64,7 @@ class FakeGitClient(GitClient):
         self.branches.setdefault(branch, [])
         try:
             for hook in on_ready:
-                self.hook_calls.append(hook.command)
-                if hook.command in self.failing_hooks:
-                    raise HookError(hook.command, "fake hook failure")
-                if hook.command in self.cancelled_hooks:
-                    raise Cancelled()
+                self.run_hook(hook, path, cancel)
         except HookError:
             self.remove_worktree(path)
             raise
@@ -70,6 +74,41 @@ class FakeGitClient(GitClient):
             self.remove_worktree(path)
             raise
         return path
+
+    def run_hook(self, hook: Hook, worktree: Path, cancel: threading.Event | None = None) -> None:
+        self.hook_calls.append(hook.command)
+        if hook.command in self.failing_hooks:
+            raise HookError(hook.command, "fake hook failure")
+        if hook.command in self.cancelled_hooks:
+            raise Cancelled()
+
+    def head(self, worktree: Path) -> str:
+        commits = self.branches[self.worktrees[worktree]]
+        return commits[-1] if commits else _BASE_COMMIT
+
+    def current_branch(self, path: Path) -> str | None:
+        if path in self.worktrees:
+            return None if path in self.detached else self.worktrees[path]
+        return self.host_branch
+
+    def config_get(self, path: Path, key: str) -> str | None:
+        return self.config.get(key)
+
+    def commits_between(self, worktree: Path, base: str, tip: str = "HEAD") -> list[str]:
+        commits = self.branches[self.worktrees[worktree]]
+        start = commits.index(base) + 1 if base in commits else 0
+        end = commits.index(tip) + 1 if tip in commits else len(commits)
+        return commits[start:end]
+
+    def merge(self, checkout: Path, branch: str) -> None:
+        self.merged.append((checkout, branch))
+
+    def detach(self, worktree: Path) -> None:
+        self.detached.add(worktree)
+
+    def delete_branch(self, checkout: Path, branch: str) -> None:
+        self.deleted_branches.append(branch)
+        self.branches.pop(branch, None)
 
     def has_changes(self, worktree: Path) -> bool:
         # fake: "changed" means the branch picked up a commit, not real working-tree dirt.
