@@ -79,7 +79,7 @@ The runtime prototype already exposes `AgentClient` as a one-prompt-to-one-resul
 
 ## References
 
-- [CLI Runtime Workflow Architecture](str-cli-runtime-workflow-architecture.md)
+- [Orb Library Workflow Architecture](str-orb-library-workflow-architecture.md)
 - [Headless AI Agent](str-headless-ai-agent.md)
 - [Harness Repository Topology](str-harness-repository-topology.md)
 

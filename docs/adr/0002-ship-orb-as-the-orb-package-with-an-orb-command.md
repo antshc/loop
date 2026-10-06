@@ -13,4 +13,4 @@ The Python CLI is being refactored into runtime-plus-workflows, and its names (`
 - The import path, `pyproject.toml` project name, and console scripts all change; existing `afk_*` invocations in skills and docs must be migrated.
 - ADR 0001's names (`brain-tools`, `afk_*`) are superseded by this naming; its distribution decision is unchanged.
 
-See [CLI Runtime Workflow Architecture](../concepts/str-cli-runtime-workflow-architecture.md) for how workflows register subcommands.
+See [Orb Library Workflow Architecture](../concepts/str-orb-library-workflow-architecture.md) for how workflows register subcommands.
