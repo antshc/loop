@@ -224,20 +224,23 @@ def _escalate(run: SpecRun, ticket: Ticket, deps: DevDeps, reason: str) -> None:
     _hitl(deps.harness_github, run.spec.number, message)
 
 
-def _ensure_pull_request(github: GitHubClient, head: str, base: str, initiative: str, title: str) -> None:
-    # One draft PR per feature branch; reruns reuse it.
-    if github.find_pull_request(head) is not None:
-        return
-    github.create_draft_pull_request(head, base, f"{initiative}: {title}")
+def _ensure_pull_request(github: GitHubClient, head: str, base: str, initiative: str, title: str) -> str:
+    """One draft PR per feature branch; reruns reuse it. Returns its URL."""
+    existing = github.find_pull_request(head)
+    if existing is not None:
+        return existing.url
+    return github.create_draft_pull_request(head, base, f"{initiative}: {title}").url
 
 
-def _publish_commits(run: SpecRun, deps: DevDeps, worktree: Path, head_before: str | None) -> bool:
-    """Push the delivered commits and ensure the draft PR; False when there are none."""
-    if head_before is None or deps.git.head(worktree) == head_before:
-        return False
-    deps.git.push(worktree, run.feature_branch)
-    _ensure_pull_request(run.target_github, run.feature_branch, run.base_branch, run.initiative, run.bare_title)
-    return True
+def _publish(run: SpecRun, deps: DevDeps, pusher: Path) -> str | None:
+    """Pushes the feature branch from `pusher` and ensures its draft PR when it is ahead of origin.
+
+    Returns the PR URL, or None when there was nothing to publish.
+    """
+    if not deps.git.branch_ahead_of_remote(run.checkout, run.feature_branch, f"origin/{run.base_branch}"):
+        return None
+    deps.git.push(pusher, run.feature_branch)
+    return _ensure_pull_request(run.target_github, run.feature_branch, run.base_branch, run.initiative, run.bare_title)
 
 
 def _initiative_commits(git: GitClient, worktree: Path, base_branch: str, initiative: str) -> list[str]:
@@ -333,15 +336,14 @@ def _deliver_tickets(run: SpecRun, sandbox: WorktreeSandbox, deps: DevDeps) -> b
 def _prepare_run(spec: Spec, deps: DevDeps) -> SpecRun | None:
     # Tickets live on the harness tracker, even when the Spec targets another repo.
     actionable = tuple(deps.harness_github.get_actionable_issues(spec))
-    if not actionable:
-        return None
 
     initiative, bare_title = parse_initiative(spec.title)
     initiative = initiative or str(spec.number)
     target = parse_target_label(spec.labels)
     base_branch = parse_base_label(spec.labels)
     if target is None or base_branch is None:
-        _hitl(deps.harness_github, spec.number, f"dev: cannot resolve repo:target/repo:base labels on {spec.url}")
+        if actionable:
+            _hitl(deps.harness_github, spec.number, f"dev: cannot resolve repo:target/repo:base labels on {spec.url}")
         return None
 
     if same_slug(deps.harness_slug, target):
@@ -350,11 +352,12 @@ def _prepare_run(spec: Spec, deps: DevDeps) -> SpecRun | None:
         checkout = deps.harness_root / "workspace" / target.split("/", 1)[1]
         checkout_slug = origin_slug(checkout) if checkout.is_dir() else None
         if not same_slug(checkout_slug, target):
-            _hitl(
-                deps.harness_github,
-                spec.number,
-                f"dev: expected checkout at {checkout} with origin {target}; found {checkout_slug or 'no clone'}",
-            )
+            if actionable:
+                _hitl(
+                    deps.harness_github,
+                    spec.number,
+                    f"dev: expected checkout at {checkout} with origin {target}; found {checkout_slug or 'no clone'}",
+                )
             return None
 
     target_github = deps.harness_github if checkout == deps.harness_root else deps.github_factory(checkout)
@@ -380,6 +383,8 @@ def _prepare_sandbox(run: SpecRun, deps: DevDeps) -> WorktreeSandbox | None:
             f"dev: target branch {run.base_branch!r} does not exist on {run.target}",
         )
         return None
+    # Worktree creation force-resets the local feature branch, so publish earlier runs' commits first.
+    _publish(run, deps, run.checkout)
     return create_sandbox(
         deps.git,
         deps.sandbox_factory,
@@ -406,6 +411,10 @@ def _process_spec(spec: Spec, deps: DevDeps) -> Outcome:
         return Outcome.SKIPPED
 
     try:
+        if not run.actionable:
+            deps.git.fetch(run.checkout)
+            _publish(run, deps, run.checkout)
+            return Outcome.SKIPPED
         sandbox = _prepare_sandbox(run, deps)
         if sandbox is None:
             return Outcome.SKIPPED
@@ -417,10 +426,11 @@ def _process_spec(spec: Spec, deps: DevDeps) -> Outcome:
         return Outcome.FAILED
 
     kept_on_cancel = False
-    head_before = deps.git.head(sandbox.worktree)
     try:
         delivered = _deliver_tickets(run, sandbox, deps)
-        _publish_commits(run, deps, sandbox.worktree, head_before)
+        pull_request_url = _publish(run, deps, sandbox.worktree)
+        if delivered and pull_request_url is not None:
+            deps.harness_github.comment(run.spec.number, f"dev: all Tickets delivered; draft pull request: {pull_request_url}")
         return Outcome.SUCCESS if delivered else Outcome.FAILED
     except Cancelled:
         # Keep the worktree only when it holds uncommitted work.

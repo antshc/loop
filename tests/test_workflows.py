@@ -615,6 +615,8 @@ def test_a_cancelled_hook_on_a_dirty_worktree_keeps_it_with_no_publication_or_la
     harness = DevHarness(tmp_path)
     harness.git.cancelled_hooks.add("setup.sh")
     harness.git.branches["add-login-page"] = ["already-dirty"]
+    harness.git.remote_branches.add("add-login-page")
+    harness.git.remote_heads["add-login-page"] = "already-dirty"
 
     code = harness.run(hooks=(Hook("setup.sh"),))
 
@@ -761,6 +763,87 @@ def test_the_prompt_states_when_the_initiative_has_no_task_commits(tmp_path: Pat
     harness.run(handler=lambda prompt, options: "")
 
     assert "No task commits for this Initiative" in harness.agent_calls[0][0]
+
+
+def test_all_tickets_delivered_pushes_one_draft_pr_and_comments_its_link_on_the_open_spec(tmp_path: Path) -> None:
+    harness = DevHarness(tmp_path, tickets={1: [_issue(10, "Add login form"), _issue(11, "Add login tests")]})
+    numbers = iter((10, 11))
+
+    code = harness.run(handler=lambda prompt, options: _commit_and_report(harness, next(numbers)))
+
+    assert code == 0
+    assert len(harness.git.pushed) == 1
+    assert len([c for c in harness.gh.calls if c[:2] == ("pr", "create")]) == 1
+    spec_comments = [c for c in harness.gh.calls if c[:2] == ("issue", "comment") and c[2] == "1"]
+    assert len(spec_comments) == 1 and "pull" in spec_comments[0][-1]
+    assert all(c[2] != "1" for c in harness.gh.calls if c[:2] == ("issue", "close"))
+
+
+def test_a_hitl_stop_still_pushes_the_commits_of_tickets_closed_in_the_run(tmp_path: Path) -> None:
+    harness = DevHarness(tmp_path, tickets={1: [_issue(10, "Add login form"), _issue(11, "Add login tests")]})
+
+    def handler(prompt, options):
+        return _commit_and_report(harness, 10) if "Task id: `Checkout|10`" in prompt else ""
+
+    code = harness.run(handler=handler)
+
+    assert code == 1
+    assert len(harness.git.pushed) == 1
+    assert any(c[:2] == ("pr", "create") for c in harness.gh.calls)
+    assert all("pull request" not in c[-1] for c in harness.gh.calls if c[:2] == ("issue", "comment") and c[2] == "1")
+
+
+def test_a_branch_ahead_at_spec_start_is_pushed_from_the_checkout_before_the_worktree_is_created(
+    tmp_path: Path,
+) -> None:
+    harness = DevHarness(tmp_path)
+    harness.git.branches["add-login-page"] = ["c1"]
+    harness.git.subjects["c1"] = "ccode(Checkout|9): earlier"
+    created_after_push: list[bool] = []
+    original = harness.git.create_worktree
+
+    def spy(*args, **kwargs):
+        created_after_push.append(bool(harness.git.pushed))
+        return original(*args, **kwargs)
+
+    harness.git.create_worktree = spy
+
+    harness.run(handler=lambda prompt, options: "")
+
+    assert harness.git.pushed[0] == (harness.harness_root, "add-login-page")
+    assert created_after_push == [True]
+    assert harness.git.remote_heads["add-login-page"] == "c1"
+    assert any(c[:2] == ("pr", "create") for c in harness.gh.calls)
+
+
+def test_a_spec_with_no_actionable_ticket_and_a_branch_ahead_is_pushed_with_its_pr(tmp_path: Path) -> None:
+    harness = DevHarness(tmp_path, tickets={1: []})
+    harness.git.branches["add-login-page"] = ["c1"]
+
+    code = harness.run()
+
+    assert code == 0
+    assert harness.git.pushed == [(harness.harness_root, "add-login-page")]
+    assert any(c[:2] == ("pr", "create") for c in harness.gh.calls)
+
+
+def test_nothing_ahead_means_no_push_and_no_pull_request(tmp_path: Path) -> None:
+    harness = DevHarness(tmp_path, tickets={1: []})
+
+    code = harness.run()
+
+    assert code == 0
+    assert harness.git.pushed == [] and _writes(harness.gh) == []
+
+
+def test_repeating_a_run_with_the_remote_up_to_date_pushes_nothing_more(tmp_path: Path) -> None:
+    harness = DevHarness(tmp_path)
+
+    harness.run(handler=lambda prompt, options: _commit_and_report(harness, 10))
+    pushes = len(harness.git.pushed)
+    harness.run(handler=lambda prompt, options: "")
+
+    assert pushes == 1 and len(harness.git.pushed) == 1
 
 
 def test_a_draft_pr_already_open_for_the_branch_is_not_duplicated(tmp_path: Path) -> None:

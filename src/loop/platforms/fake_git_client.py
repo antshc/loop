@@ -169,6 +169,9 @@ class FakeGitClient(GitClient):
 
     def push(self, worktree: Path, branch: str) -> None:
         self.pushed.append((worktree, branch))
+        commits = self.branches.get(branch, [])
+        self.remote_branches.add(branch)
+        self.remote_heads[branch] = commits[-1] if commits else _BASE_COMMIT
 
     def remove_worktree(self, worktree: Path) -> None:
         self.worktrees.pop(worktree)
