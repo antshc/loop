@@ -36,6 +36,7 @@ Confirm each rule below against neighboring files in the same package before tru
 
 - MUST comment non-obvious intent the code cannot show: why, invariants, business rules, cross-boundary effects.
 - MUST keep each comment to one short line; no multi-paragraph docstrings where one line suffices.
+- MUST document every public contract (ABC, public API class, function, or method) with a one-line docstring stating its responsibility.
 - Place the comment on the line above the statement or branch it explains.
 
 ## Scope discipline
