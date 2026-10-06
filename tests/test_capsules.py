@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import threading
 from pathlib import Path
 
 import pytest
 
 from orb import (
     AgentOptions,
+    Cancelled,
     Capsule,
     CommandError,
     DEFAULT_COMPLETION_SIGNAL,
@@ -307,3 +309,54 @@ def test_docker_capsule_closing_twice_stops_and_removes_the_container_once(tmp_p
 
     assert sum(1 for call in docker.calls if call[1] == "stop") == 1
     assert sum(1 for call in docker.calls if call[1] == "rm") == 1
+
+
+def test_no_capsule_cancels_an_in_flight_agent_run_and_reports_cancelled(tmp_path: Path) -> None:
+    cli = FakeCopilotCli(lambda prompt: [_event("working"), _event("never")])
+    cancel = threading.Event()
+    cancel.set()
+
+    with pytest.raises(Cancelled):
+        NoCapsule(tmp_path, executor=cli, cancel=cancel).run(copilot(InMemorySessionStore()), "go")
+
+    assert cli.terminated
+
+
+def test_no_capsule_without_cancel_runs_the_agent_as_before(tmp_path: Path) -> None:
+    cli = FakeCopilotCli(lambda prompt: "done")
+
+    result = NoCapsule(tmp_path, executor=cli).run(copilot(InMemorySessionStore()), "go")
+
+    assert result.stdout == "done" and not cli.terminated
+
+
+def test_docker_capsule_cancels_an_in_flight_start_and_leaves_no_container(tmp_path: Path) -> None:
+    docker = FakeDocker(FakeCopilotCli())
+    cancel = threading.Event()
+    cancel.set()
+
+    with pytest.raises(Cancelled):
+        DockerCapsule(tmp_path, container_uid=1000, docker=docker, cancel=cancel)
+
+    run_calls = [call for call in docker.calls if call[1:3] == ("run", "-d")]
+    assert len(run_calls) == 1
+    assert sum(1 for call in docker.calls if call[1:3] == ("rm", "-f")) == 1
+
+
+def test_docker_capsule_cancels_an_in_flight_agent_run_terminates_and_closes(tmp_path: Path) -> None:
+    cli = FakeCopilotCli(lambda prompt: [_event("working"), _event("never")])
+    docker = FakeDocker(cli)
+    cancel = threading.Event()
+    capsule = DockerCapsule(tmp_path, container_uid=1000, docker=docker, cancel=cancel)
+    cancel.set()
+
+    with pytest.raises(Cancelled):
+        capsule.run(copilot(InMemorySessionStore()), "go")
+
+    assert cli.terminated
+    start = next(call for call in docker.calls if call[1:3] == ("run", "-d"))
+    container = start[start.index("--name") + 1]
+    assert ("docker", "rm", "-f", container) in docker.calls
+
+    capsule.close()
+    assert sum(1 for call in docker.calls if call[1:3] == ("rm", "-f")) == 1

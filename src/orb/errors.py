@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 
 class OrbError(Exception):
     """Base class for every error the library raises on purpose."""
@@ -37,3 +39,12 @@ class HookError(OrbError):
         super().__init__(f"hook failed ({command}):\n{output}".rstrip())
         self.command = command
         self.output = output
+
+
+class Cancelled(OrbError):
+    """A run was cancelled; `worktree` carries its location when a dirty worktree was kept."""
+
+    def __init__(self, worktree: Path | None = None) -> None:
+        suffix = f" (worktree kept at {worktree})" if worktree else ""
+        super().__init__(f"run cancelled{suffix}")
+        self.worktree = worktree

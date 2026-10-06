@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from orb.errors import CommandError, HookError
+from orb.errors import Cancelled, CommandError, HookError
 from orb.process import CommandResult, checked_output, execute
 
 DEFAULT_HOOK_TIMEOUT_S = 120.0
@@ -19,7 +19,12 @@ class GitRunner(Protocol):
     """Runs one git (or Hook) command in a given directory; a non-zero exit is returned, not raised."""
 
     def __call__(
-        self, args: Sequence[str] | str, *, cwd: Path | None = None, timeout_s: float | None = None
+        self,
+        args: Sequence[str] | str,
+        *,
+        cwd: Path | None = None,
+        timeout_s: float | None = None,
+        cancel: threading.Event | None = None,
     ) -> CommandResult: ...
 
 
@@ -67,6 +72,7 @@ class GitClient:
         harness_root: Path,
         *,
         on_ready: Sequence[Hook] = (),
+        cancel: threading.Event | None = None,
     ) -> Path:
         self._run(("git", "check-ref-format", "--branch", branch), cwd=checkout)
         target = harness_root / "workspace" / f"{checkout.name}.worktrees" / branch
@@ -95,8 +101,13 @@ class GitClient:
 
         try:
             for hook in on_ready:
-                self._run_hook(hook, target)
+                self._run_hook(hook, target, cancel)
         except HookError:
+            self.remove_worktree(target)
+            raise
+        except Cancelled:
+            if self.has_changes(target):
+                raise Cancelled(target)
             self.remove_worktree(target)
             raise
         return target
@@ -152,11 +163,15 @@ class GitClient:
             entries.append((path, branch))
         return entries
 
-    def _run_hook(self, hook: Hook, worktree: Path) -> None:
+    def _run_hook(self, hook: Hook, worktree: Path, cancel: threading.Event | None) -> None:
         try:
-            result = self._execute(hook.command, cwd=worktree, timeout_s=hook.timeout_s)
+            result = self._execute(hook.command, cwd=worktree, timeout_s=hook.timeout_s, cancel=cancel)
         except CommandError as exception:
+            if cancel is not None and cancel.is_set():
+                raise Cancelled() from exception
             raise HookError(hook.command, str(exception)) from exception
+        if cancel is not None and cancel.is_set():
+            raise Cancelled()
         if result.returncode != 0:
             raise HookError(hook.command, result.stdout + result.stderr)
 

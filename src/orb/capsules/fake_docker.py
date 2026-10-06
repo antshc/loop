@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from collections.abc import Sequence
 
 from orb.process import CommandExecutor, CommandResult, OnLine
@@ -27,6 +28,7 @@ class FakeDocker:
         *,
         timeout_s: float | None = None,
         on_line: OnLine | None = None,
+        cancel: threading.Event | None = None,
     ) -> CommandResult:
         args = tuple(command)
         self.calls.append(args)
@@ -44,5 +46,5 @@ class FakeDocker:
             # docker exec -w <dir> <container> <command...>
             inner = args[5:]
             forwarded = inner[2] if inner[:2] == ("sh", "-c") else inner
-            return self._inner(forwarded, timeout_s=timeout_s, on_line=on_line)
+            return self._inner(forwarded, timeout_s=timeout_s, on_line=on_line, cancel=cancel)
         return CommandResult(0, "", "")

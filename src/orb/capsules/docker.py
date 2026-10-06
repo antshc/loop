@@ -3,6 +3,7 @@ from __future__ import annotations
 import atexit
 import os
 import re
+import threading
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -11,7 +12,7 @@ from uuid import uuid4
 
 from orb.contracts.agent_client import AgentOptions, AgentResult
 from orb.contracts.capsule import AgentClientFactory, Capsule, CapsuleBinding
-from orb.errors import CommandError, OrbError
+from orb.errors import Cancelled, CommandError, OrbError
 from orb.process import CommandExecutor, CommandResult, OnLine, checked_output, execute
 
 CAPSULE_HOME = "/home/agent"
@@ -71,10 +72,12 @@ class DockerCapsule(Capsule):
         start_timeout_s: float = 60,
         sleep: Callable[[float], None] | None = None,
         docker: CommandExecutor | None = None,
+        cancel: threading.Event | None = None,
     ) -> None:
         self._docker = docker or execute
         self._start_timeout_s = start_timeout_s
         self._sleep = sleep or time.sleep
+        self._cancel = cancel
         host_workspace = Path(workspace)
         self._workspace = host_workspace
         uid = container_uid if container_uid is not None else os.getuid()
@@ -127,7 +130,11 @@ class DockerCapsule(Capsule):
         options: AgentOptions | None = None,
     ) -> AgentResult:
         binding = CapsuleBinding(self._exec_in_container, self.isolated, self.workspace)
-        return agent(binding).run(prompt, prompt_args, options)
+        result = agent(binding).run(prompt, prompt_args, options)
+        if self._is_cancelled():
+            self._cancel_close()
+            raise Cancelled()
+        return result
 
     def exec(self, command: str, *, timeout_s: float | None = None) -> str:
         return checked_output(command, self._exec_in_container(command, timeout_s=timeout_s))
@@ -140,12 +147,22 @@ class DockerCapsule(Capsule):
         self._docker(("docker", "stop", self._container))
         self._docker(("docker", "rm", self._container))
 
+    def _cancel_close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        atexit.unregister(self._remove)
+        self._remove()
+
+    def _is_cancelled(self) -> bool:
+        return self._cancel is not None and self._cancel.is_set()
+
     def _exec_in_container(
         self, command: Sequence[str] | str, *, timeout_s: float | None = None, on_line: OnLine | None = None
     ) -> CommandResult:
         args = ["docker", "exec", "-w", str(self._workspace), self._container]
         args += ["sh", "-c", command] if isinstance(command, str) else list(command)
-        return self._docker(args, timeout_s=timeout_s, on_line=on_line)
+        return self._docker(args, timeout_s=timeout_s, on_line=on_line, cancel=self._cancel)
 
     def _remove(self) -> None:
         self._docker(("docker", "rm", "-f", self._container))
@@ -154,10 +171,15 @@ class DockerCapsule(Capsule):
         attempt = 0
         while True:
             try:
-                result = self._docker(command, timeout_s=self._start_timeout_s)
-            except CommandError:
+                result = self._docker(command, timeout_s=self._start_timeout_s, cancel=self._cancel)
+            except CommandError as exception:
                 self._remove()
+                if self._is_cancelled():
+                    raise Cancelled() from exception
                 raise
+            if self._is_cancelled():
+                self._remove()
+                raise Cancelled()
             if result.returncode == 0:
                 return
             if result.returncode in _TRANSIENT_EXIT_CODES and attempt < _START_RETRIES:

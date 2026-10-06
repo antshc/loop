@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import re
+import threading
 from pathlib import Path
 
 import pytest
 
 from conftest import commit_file, git
-from orb import CommandError, CommandResult, GitClient, Hook, HookError, origin_slug, same_slug
+from orb import Cancelled, CommandError, CommandResult, GitClient, Hook, HookError, origin_slug, same_slug
 
 
 class FakeRunner:
@@ -20,7 +21,12 @@ class FakeRunner:
         self.raise_for: dict[object, Exception] = {}
 
     def __call__(
-        self, args: tuple[str, ...] | str, *, cwd: Path | None = None, timeout_s: float | None = None
+        self,
+        args: tuple[str, ...] | str,
+        *,
+        cwd: Path | None = None,
+        timeout_s: float | None = None,
+        cancel: threading.Event | None = None,
     ) -> CommandResult:
         label = args if isinstance(args, str) else " ".join(args)
         self.calls.append((label, cwd, timeout_s))
@@ -174,6 +180,39 @@ def test_create_worktree_removes_the_worktree_and_raises_hook_error_on_a_non_zer
     assert excinfo.value.command == "setup.sh"
     labels = [label for label, _, _ in runner.calls]
     assert labels[-1] == f"git worktree remove --force {target}"
+
+
+def test_create_worktree_cancelled_on_a_clean_worktree_removes_it_and_reports_cancelled(tmp_path: Path) -> None:
+    target = _target(tmp_path)
+    runner = FakeRunner()
+    _no_leftovers_no_remote_branches(runner)
+    runner.stdout_for[("git status --porcelain", target)] = ""
+    client = GitClient(run=runner)
+    cancel = threading.Event()
+    cancel.set()
+
+    with pytest.raises(Cancelled) as excinfo:
+        client.create_worktree(CHECKOUT, "feature-x", "main", tmp_path, on_ready=(Hook("setup.sh"),), cancel=cancel)
+
+    assert excinfo.value.worktree is None
+    labels = [label for label, _, _ in runner.calls]
+    assert labels[-1] == f"git worktree remove --force {target}"
+
+
+def test_create_worktree_cancelled_on_a_dirty_worktree_keeps_it_and_reports_its_location(tmp_path: Path) -> None:
+    target = _target(tmp_path)
+    runner = FakeRunner()
+    _no_leftovers_no_remote_branches(runner)
+    runner.stdout_for[("git status --porcelain", target)] = " M dirty.txt\n"
+    client = GitClient(run=runner)
+    cancel = threading.Event()
+    cancel.set()
+
+    with pytest.raises(Cancelled) as excinfo:
+        client.create_worktree(CHECKOUT, "feature-x", "main", tmp_path, on_ready=(Hook("setup.sh"),), cancel=cancel)
+
+    assert excinfo.value.worktree == target
+    assert not any("worktree remove" in label for label, _, _ in runner.calls)
 
 
 def test_create_worktree_removes_the_worktree_and_raises_hook_error_on_timeout(tmp_path: Path) -> None:
