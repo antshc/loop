@@ -14,26 +14,27 @@ import sys
 import threading
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass
+from enum import Enum, auto
 from pathlib import Path
 
 from loop import (
     AgentClientFactory,
     AgentOptions,
     Cancelled,
-    Sandbox,
-    SandboxFactory,
     ExecutionStore,
     FileExecutionStore,
     GitClient,
     GitHubClient,
     Hook,
     InMemorySessionStore,
-    NoSandbox,
     LoopError,
-    WorktreeSandbox,
+    NoSandbox,
+    Sandbox,
+    SandboxFactory,
     SandboxHooks,
     Spec,
     Ticket,
+    WorktreeSandbox,
     configure_logging,
     copilot,
     create_sandbox,
@@ -79,6 +80,12 @@ class ReportError(Exception):
     """The agent's final fenced JSON block is missing or malformed."""
 
 
+class Outcome(Enum):
+    SUCCESS = auto()
+    FAILED = auto()
+    SKIPPED = auto()
+
+
 @dataclass(frozen=True)
 class TicketReport:
     number: int
@@ -89,6 +96,42 @@ class TicketReport:
 @dataclass(frozen=True)
 class AgentReport:
     tickets: tuple[TicketReport, ...]
+
+
+@dataclass(frozen=True)
+class DevDeps:
+    harness_root: Path
+    harness_slug: str
+    harness_github: GitHubClient
+    github_factory: GithubFactory
+    git: GitClient
+    agent_factory: AgentClientFactory
+    sandbox_factory: SandboxFactory
+    store: ExecutionStore
+    hooks: Sequence[Hook]
+    retries: int
+    template: str
+    dry_run: bool
+    cancel: threading.Event
+
+
+@dataclass(frozen=True)
+class SpecRun:
+    spec: Spec
+    actionable: tuple[Ticket, ...]
+    initiative: str | None
+    bare_title: str
+    target: str
+    base_branch: str
+    feature_branch: str
+    checkout: Path
+    target_github: GitHubClient
+
+
+@dataclass(frozen=True)
+class AgentExecution:
+    head_before: str | None
+    report: AgentReport | None
 
 
 def parse_report(text: str) -> AgentReport:
@@ -169,66 +212,50 @@ def _hitl(github: GitHubClient, spec: Spec, message: str) -> None:
     github.comment(spec.number, message)
 
 
-def _publish_commits(
-    git: GitClient,
-    worktree: Path,
-    head_before: str | None,
-    target_github: GitHubClient,
-    feature_branch: str,
-    base_branch: str,
-    bare_title: str,
-    initiative: str | None,
-) -> bool:
-    """Push the commits the agent made since `head_before` and ensure the draft PR; False when there are none."""
-    if head_before is None or git.head(worktree) == head_before:
-        return False
-    git.push(worktree, feature_branch)
-    _ensure_pull_request(target_github, feature_branch, base_branch, initiative, bare_title)
-    return True
-
-
-def _fail_attempt(
-    github: GitHubClient,
-    store: ExecutionStore,
-    spec: Spec,
-    harness_slug: str,
-    actionable: Sequence[Ticket],
-    exception: Exception,
-    *,
-    dry_run: bool,
-    git: GitClient | None = None,
-    worktree: Path | None = None,
-    head_before: str | None = None,
-    target_github: GitHubClient | None = None,
-    feature_branch: str | None = None,
-    base_branch: str | None = None,
-    bare_title: str | None = None,
-    initiative: str | None = None,
-) -> None:
-    # Preserve the agent's commits on the feature branch before the failure is recorded.
-    if not dry_run and git is not None and worktree is not None:
-        _publish_commits(
-            git, worktree, head_before, target_github, feature_branch, base_branch, bare_title, initiative
-        )
-    github.comment(spec.number, f"dev: {exception}")
-    if dry_run:
-        return
-    owner, repo = harness_slug.split("/", 1)
-    store.record_failure(
-        spec.url,
-        owner=owner,
-        repo=repo,
-        task_id=str(spec.number),
-        title=spec.title,
-        items=[ticket.number for ticket in actionable],
-    )
-
-
 def _ensure_pull_request(github: GitHubClient, head: str, base: str, initiative: str | None, title: str) -> None:
     # One draft PR per feature branch; reruns reuse it.
     if github.find_pull_request(head) is not None:
         return
     github.create_draft_pull_request(head, base, f"{initiative}: {title}" if initiative else title)
+
+
+def _publish_commits(run: SpecRun, deps: DevDeps, worktree: Path, head_before: str | None) -> bool:
+    """Push the agent's new commits and ensure the draft PR; False when there are none."""
+    if head_before is None or deps.git.head(worktree) == head_before:
+        return False
+    deps.git.push(worktree, run.feature_branch)
+    _ensure_pull_request(run.target_github, run.feature_branch, run.base_branch, run.initiative, run.bare_title)
+    return True
+
+
+def _record_failure(run: SpecRun, deps: DevDeps, **kwargs: object) -> None:
+    owner, repo = deps.harness_slug.split("/", 1)
+    deps.store.record_failure(
+        run.spec.url,
+        owner=owner,
+        repo=repo,
+        task_id=str(run.spec.number),
+        title=run.spec.title,
+        items=[ticket.number for ticket in run.actionable],
+        **kwargs,
+    )
+
+
+def _fail_attempt(
+    run: SpecRun,
+    deps: DevDeps,
+    exception: Exception,
+    *,
+    worktree: Path | None = None,
+    head_before: str | None = None,
+) -> Outcome:
+    # Preserve the agent's commits on the feature branch before the failure is recorded.
+    if not deps.dry_run and worktree is not None:
+        _publish_commits(run, deps, worktree, head_before)
+    deps.harness_github.comment(run.spec.number, f"dev: {exception}")
+    if not deps.dry_run:
+        _record_failure(run, deps)
+    return Outcome.FAILED
 
 
 def _run_report(
@@ -251,102 +278,162 @@ def _run_report(
     return None
 
 
+def _prepare_run(spec: Spec, deps: DevDeps) -> SpecRun | None:
+    # Tickets live on the harness tracker, even when the Spec targets another repo.
+    actionable = tuple(deps.harness_github.get_actionable_issues(spec))
+    if not actionable:
+        if not deps.dry_run:
+            deps.store.reset(spec.url)
+        return None
+    if not may_attempt(deps.store, spec.url):
+        return None
+
+    initiative, bare_title = parse_initiative(spec.title)
+    target = parse_target_label(spec.labels)
+    base_branch = parse_base_label(spec.labels)
+    if target is None or base_branch is None:
+        _hitl(deps.harness_github, spec, f"dev: cannot resolve repo:target/repo:base labels on {spec.url}")
+        return None
+
+    if same_slug(deps.harness_slug, target):
+        checkout = deps.harness_root
+    else:
+        checkout = deps.harness_root / "workspace" / target.split("/", 1)[1]
+        checkout_slug = origin_slug(checkout) if checkout.is_dir() else None
+        if not same_slug(checkout_slug, target):
+            _hitl(
+                deps.harness_github,
+                spec,
+                f"dev: expected checkout at {checkout} with origin {target}; found {checkout_slug or 'no clone'}",
+            )
+            return None
+
+    target_github = deps.harness_github if checkout == deps.harness_root else deps.github_factory(checkout)
+    return SpecRun(
+        spec=spec,
+        actionable=actionable,
+        initiative=initiative,
+        bare_title=bare_title,
+        target=target,
+        base_branch=base_branch,
+        feature_branch=feature_branch_name(base_branch, bare_title),
+        checkout=checkout,
+        target_github=target_github,
+    )
+
+
+def _prepare_sandbox(run: SpecRun, deps: DevDeps) -> WorktreeSandbox | None:
+    deps.git.fetch(run.checkout)
+    if not deps.git.remote_branch_exists(run.checkout, run.base_branch):
+        _hitl(
+            deps.harness_github,
+            run.spec,
+            f"dev: target branch {run.base_branch!r} does not exist on {run.target}",
+        )
+        return None
+    return create_sandbox(
+        deps.git,
+        deps.sandbox_factory,
+        checkout=run.checkout,
+        harness_root=deps.harness_root,
+        base=run.base_branch,
+        branch=run.feature_branch,
+        hooks=SandboxHooks(worktree_ready=tuple(deps.hooks)),
+        cancel=deps.cancel,
+    )
+
+
+def _execute_agent(
+    run: SpecRun,
+    sandbox: WorktreeSandbox,
+    deps: DevDeps,
+    head_before: str | None,
+) -> AgentExecution:
+    worktree = sandbox.worktree
+    prompt_args = _prompt_args(
+        run.spec,
+        run.actionable,
+        deps.git.recent_commits(worktree, COMMIT_PREFIX, RECENT_COMMITS),
+        worktree,
+        run.base_branch,
+        run.feature_branch,
+    )
+    options = AgentOptions(session_key=None)
+    if deps.dry_run:
+        sandbox.run(deps.agent_factory, deps.template, prompt_args, options)
+        return AgentExecution(head_before, None)
+    report = _run_report(sandbox, deps.agent_factory, deps.template, prompt_args, options, deps.retries)
+    return AgentExecution(head_before, report)
+
+
 def _apply_report(
-    spec: Spec,
-    actionable: Sequence[Ticket],
+    run: SpecRun,
     report: AgentReport,
-    *,
-    harness_github: GitHubClient,
-    target_github: GitHubClient,
-    git: GitClient,
+    deps: DevDeps,
     worktree: Path,
     head_before: str | None,
-    feature_branch: str,
-    base_branch: str,
-    bare_title: str,
-    initiative: str | None,
-    store: ExecutionStore,
-    harness_slug: str,
-) -> bool:
+) -> Outcome:
     # Ignore report entries for Tickets that were not part of this run.
-    actionable_numbers = {ticket.number for ticket in actionable}
+    actionable_numbers = {ticket.number for ticket in run.actionable}
     by_number = {entry.number: entry for entry in report.tickets if entry.number in actionable_numbers}
     any_complete = any(entry.status == "complete" for entry in by_number.values())
-    had_changes = _publish_commits(
-        git, worktree, head_before, target_github, feature_branch, base_branch, bare_title, initiative
-    )
+    had_changes = _publish_commits(run, deps, worktree, head_before)
 
     partial_tickets: list[int] = []
     resolved_tickets: list[int] = []
-    for ticket in actionable:
+    for ticket in run.actionable:
         entry = by_number.get(ticket.number)
         if entry is None:
             continue
         if entry.status == "complete":
-            harness_github.close_with_comment(ticket.number, entry.summary)
+            deps.harness_github.close_with_comment(ticket.number, entry.summary)
             resolved_tickets.append(ticket.number)
         elif entry.status == "partial":
-            harness_github.comment(ticket.number, entry.summary)
+            deps.harness_github.comment(ticket.number, entry.summary)
             partial_tickets.append(ticket.number)
         else:  # blocked
-            harness_github.add_label(ticket.number, HITL_LABEL)
+            deps.harness_github.add_label(ticket.number, HITL_LABEL)
             resolved_tickets.append(ticket.number)
 
     # No commit and no completed Ticket means no progress; it counts toward the attempt cap.
-    attempt_failed = not had_changes and not any_complete
-    if attempt_failed:
-        owner, repo = harness_slug.split("/", 1)
-        store.record_failure(
-            spec.url,
-            owner=owner,
-            repo=repo,
-            task_id=str(spec.number),
-            title=spec.title,
-            items=[ticket.number for ticket in actionable],
+    if not had_changes and not any_complete:
+        _record_failure(
+            run,
+            deps,
             partial_tickets=partial_tickets,
             resolved_tickets=resolved_tickets,
         )
         for number in partial_tickets:
             # A Ticket that stays partial across attempts is escalated to a human.
-            if store.partial_count(spec.url, number) >= 2:
-                harness_github.add_label(number, HITL_LABEL)
-    else:
-        store.reset(spec.url)
-    return not attempt_failed
+            if deps.store.partial_count(run.spec.url, number) >= 2:
+                deps.harness_github.add_label(number, HITL_LABEL)
+        return Outcome.FAILED
+
+    deps.store.reset(run.spec.url)
+    return Outcome.SUCCESS
 
 
 def _handle_exhausted_retries(
-    spec: Spec,
-    actionable: Sequence[Ticket],
-    *,
-    harness_github: GitHubClient,
-    target_github: GitHubClient,
-    git: GitClient,
+    run: SpecRun,
+    deps: DevDeps,
     worktree: Path,
     head_before: str | None,
-    feature_branch: str,
-    base_branch: str,
-    bare_title: str,
-    initiative: str | None,
-    store: ExecutionStore,
-    harness_slug: str,
-) -> None:
-    _publish_commits(
-        git, worktree, head_before, target_github, feature_branch, base_branch, bare_title, initiative
-    )
-    harness_github.add_label(spec.number, HITL_LABEL)
-    harness_github.comment(spec.number, "dev: every agent run returned no valid report after retries")
-    for ticket in actionable:
-        harness_github.add_label(ticket.number, HITL_LABEL)
-    owner, repo = harness_slug.split("/", 1)
-    store.record_failure(
-        spec.url,
-        owner=owner,
-        repo=repo,
-        task_id=str(spec.number),
-        title=spec.title,
-        items=[ticket.number for ticket in actionable],
-    )
+) -> Outcome:
+    _publish_commits(run, deps, worktree, head_before)
+    deps.harness_github.add_label(run.spec.number, HITL_LABEL)
+    deps.harness_github.comment(run.spec.number, "dev: every agent run returned no valid report after retries")
+    for ticket in run.actionable:
+        deps.harness_github.add_label(ticket.number, HITL_LABEL)
+    _record_failure(run, deps)
+    return Outcome.FAILED
+
+
+def _complete_run(run: SpecRun, execution: AgentExecution, sandbox: WorktreeSandbox, deps: DevDeps) -> Outcome:
+    if deps.dry_run:
+        return Outcome.SKIPPED
+    if execution.report is None:
+        return _handle_exhausted_retries(run, deps, sandbox.worktree, execution.head_before)
+    return _apply_report(run, execution.report, deps, sandbox.worktree, execution.head_before)
 
 
 def _report_cancelled(spec: Spec, worktree: Path | None) -> None:
@@ -356,156 +443,41 @@ def _report_cancelled(spec: Spec, worktree: Path | None) -> None:
         logger.info("spec #%s run cancelled", spec.number)
 
 
-def _process_spec(
-    spec: Spec,
-    *,
-    harness_root: Path,
-    harness_slug: str,
-    harness_github: GitHubClient,
-    github_factory: GithubFactory,
-    git: GitClient,
-    agent_factory: AgentClientFactory,
-    sandbox_factory: SandboxFactory,
-    store: ExecutionStore,
-    hooks: Sequence[Hook],
-    retries: int,
-    template: str,
-    dry_run: bool,
-    cancel: threading.Event,
-) -> bool | None:
-    """Return True/False for an attempted Spec, or None when it was skipped or only explored (dry run)."""
-    # Tickets live on the harness tracker, even when the Spec targets another repo.
-    actionable = harness_github.get_actionable_issues(spec)
-    if not actionable:
-        # Nothing left to do, so clear earlier failures; a dry run must not change state.
-        if not dry_run:
-            store.reset(spec.url)
-        return None
-    # Skip Specs that already reached the failed-attempt cap.
-    if not may_attempt(store, spec.url):
-        return None
-
-    initiative, bare_title = parse_initiative(spec.title)
-    target = parse_target_label(spec.labels)
-    base_branch = parse_base_label(spec.labels)
-    if target is None or base_branch is None:
-        _hitl(harness_github, spec, f"dev: cannot resolve repo:target/repo:base labels on {spec.url}")
-        return None
-
-    # The harness is its own checkout; any other target must be cloned under workspace/.
-    if same_slug(harness_slug, target):
-        checkout = harness_root
-    else:
-        checkout = harness_root / "workspace" / target.split("/", 1)[1]
-        checkout_slug = origin_slug(checkout) if checkout.is_dir() else None
-        if not same_slug(checkout_slug, target):
-            _hitl(
-                harness_github,
-                spec,
-                f"dev: expected checkout at {checkout} with origin {target}; found {checkout_slug or 'no clone'}",
-            )
-            return None
-    # Pull requests go to the target repo; Ticket updates stay on the harness.
-    target_github = harness_github if checkout == harness_root else github_factory(checkout)
+def _process_spec(spec: Spec, deps: DevDeps) -> Outcome:
+    """Prepare, execute, and complete one Spec."""
+    run = _prepare_run(spec, deps)
+    if run is None:
+        return Outcome.SKIPPED
 
     try:
-        git.fetch(checkout)
-        if not git.remote_branch_exists(checkout, base_branch):
-            _hitl(harness_github, spec, f"dev: target branch {base_branch!r} does not exist on {target}")
-            return None
-        feature_branch = feature_branch_name(base_branch, bare_title)
-        sandbox = create_sandbox(
-            git,
-            sandbox_factory,
-            checkout=checkout,
-            harness_root=harness_root,
-            base=base_branch,
-            branch=feature_branch,
-            hooks=SandboxHooks(worktree_ready=tuple(hooks)),
-            cancel=cancel,
-        )
+        sandbox = _prepare_sandbox(run, deps)
+        if sandbox is None:
+            return Outcome.SKIPPED
     except Cancelled as exception:
         _report_cancelled(spec, exception.worktree)
-        return None
+        return Outcome.SKIPPED
     except LoopError as exception:
-        _fail_attempt(harness_github, store, spec, harness_slug, actionable, exception, dry_run=dry_run)
-        return False
+        return _fail_attempt(run, deps, exception)
 
-    worktree = sandbox.worktree
-    options = AgentOptions(session_key=None)
-    head_before: str | None = None
     kept_on_cancel = False
+    head_before: str | None = None
     try:
-        head_before = git.head(worktree)
-        prompt_args = _prompt_args(
-            spec,
-            actionable,
-            git.recent_commits(worktree, COMMIT_PREFIX, RECENT_COMMITS),
-            worktree,
-            base_branch,
-            feature_branch,
-        )
-        if dry_run:
-            sandbox.run(agent_factory, template, prompt_args, options)
-            return None
-        report = _run_report(sandbox, agent_factory, template, prompt_args, options, retries)
-        if report is None:
-            _handle_exhausted_retries(
-                spec,
-                actionable,
-                harness_github=harness_github,
-                target_github=target_github,
-                git=git,
-                worktree=worktree,
-                head_before=head_before,
-                feature_branch=feature_branch,
-                base_branch=base_branch,
-                bare_title=bare_title,
-                initiative=initiative,
-                store=store,
-                harness_slug=harness_slug,
-            )
-            return False
-        return _apply_report(
-            spec,
-            actionable,
-            report,
-            harness_github=harness_github,
-            target_github=target_github,
-            git=git,
-            worktree=worktree,
-            head_before=head_before,
-            feature_branch=feature_branch,
-            base_branch=base_branch,
-            bare_title=bare_title,
-            initiative=initiative,
-            store=store,
-            harness_slug=harness_slug,
-        )
+        head_before = deps.git.head(sandbox.worktree)
+        execution = _execute_agent(run, sandbox, deps, head_before)
+        return _complete_run(run, execution, sandbox, deps)
     except Cancelled:
         # Keep the worktree only when it holds uncommitted work.
-        kept_on_cancel = git.has_changes(worktree)
-        _report_cancelled(spec, worktree if kept_on_cancel else None)
-        return None
+        kept_on_cancel = deps.git.has_changes(sandbox.worktree)
+        _report_cancelled(spec, sandbox.worktree if kept_on_cancel else None)
+        return Outcome.SKIPPED
     except LoopError as exception:
-        _fail_attempt(
-            harness_github,
-            store,
-            spec,
-            harness_slug,
-            actionable,
+        return _fail_attempt(
+            run,
+            deps,
             exception,
-            dry_run=dry_run,
-            git=git,
-            worktree=worktree,
+            worktree=sandbox.worktree,
             head_before=head_before,
-            target_github=target_github,
-            feature_branch=feature_branch,
-            base_branch=base_branch,
-            bare_title=bare_title,
-            initiative=initiative,
         )
-        return False
     finally:
         sandbox.close(keep_worktree=kept_on_cancel)
 
@@ -546,8 +518,21 @@ def main(
     )
     sandbox_factory = sandbox_factory or SANDBOX_FACTORY
     store = store or FileExecutionStore(log_dir)
-    template = PROMPT.read_text()
-    cancel = cancel or threading.Event()
+    deps = DevDeps(
+        harness_root=harness_root,
+        harness_slug=harness_slug,
+        harness_github=harness_github,
+        github_factory=github_factory,
+        git=git,
+        agent_factory=agent_factory,
+        sandbox_factory=sandbox_factory,
+        store=store,
+        hooks=hooks,
+        retries=retries,
+        template=PROMPT.read_text(),
+        dry_run=dry_run,
+        cancel=cancel or threading.Event(),
+    )
 
     try:
         failed = False
@@ -555,23 +540,7 @@ def main(
             # Specs labeled hitl wait for a human.
             if HITL_LABEL in spec.labels:
                 continue
-            outcome = _process_spec(
-                spec,
-                harness_root=harness_root,
-                harness_slug=harness_slug,
-                harness_github=harness_github,
-                github_factory=github_factory,
-                git=git,
-                agent_factory=agent_factory,
-                sandbox_factory=sandbox_factory,
-                store=store,
-                hooks=hooks,
-                retries=retries,
-                template=template,
-                dry_run=dry_run,
-                cancel=cancel,
-            )
-            failed = failed or outcome is False
+            failed = failed or _process_spec(spec, deps) is Outcome.FAILED
         return 1 if failed else 0
     except Exception as exception:  # last-resort boundary the ticket requires: log and fail, never crash bare
         logger.exception("unexpected error: %s", exception)
