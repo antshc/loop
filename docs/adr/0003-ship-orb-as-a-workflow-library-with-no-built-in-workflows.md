@@ -14,11 +14,11 @@ Contracts (`abc.ABC`) exist only where Orb's own code calls a replaceable part: 
 
 ## Consequences
 
-- A `pip install` alone yields no runnable `orb <name>`; `orb dev` works only once the harness holds `workflows/dev.py`.
+- A `pip install` alone yields no runnable Workflow and no command; a Workflow runs only once the user has a script such as `workflows/dev.py` and their own shell alias for it (e.g. `alias orb-dev='python workflows/dev.py'`).
 - The repository's example `dev` workflow is not part of the compatibility surface.
 
 - The shipped implementations (Capsules, git and GitHub clients, agent client, stores) are part of the compatibility surface; breaking them breaks user-supplied workflows.
 - Importing anything other than the public `orb` API from a workflow is a violation.
 - Running a workflow file executes its code; the harness workflows folder is trusted by the act of placing a file there.
 
-See [Orb Library Workflow Architecture](../concepts/str-orb-library-workflow-architecture.md) for how workflows are discovered and composed.
+See [Orb Library Workflow Architecture](../concepts/str-orb-library-workflow-architecture.md) for how workflows are composed and run. Orb ships no `orb <name>` dispatch command; this supersedes the command decision of [ADR 0002](0002-ship-orb-as-the-orb-package-with-an-orb-command.md).

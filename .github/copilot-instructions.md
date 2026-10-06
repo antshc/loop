@@ -5,7 +5,7 @@
 Single repo: docs and codebase live together at the reporoot. There is no `workspace/` split and no `.harness.env`.
 
 - **Docs & decisions:** `CONTEXT.md` (domain glossary) and `ARCHITECTURE.md` (ADR index, Concept index, and Codebase Structure), with ADRs under `docs/adr/` and Crosscutting Concepts under `docs/concepts/`.
-- **Code:** `ralph/` (the `ralph` plugin and its skills) and `tools/` (Python package `brain-tools`: `tools/src/afk`, `tools/src/modules`, `tools/tests`). The source hierarchy is documented under **Codebase Structure** in `ARCHITECTURE.md`.
+- **Code:** `src/orb/` (the `orb` library; `src/orb/testing/` holds the test doubles), `workflows/` (the example `dev` Workflow script and its prompt template `workflows/prompts/dev.md`), and `tests/`. Orb is a library with no command. The layout is documented under **Codebase Structure** in `ARCHITECTURE.md`.
 - **Archive:** `archive/` holds retired prototypes as a parts source only. It is excluded from editor search and file watching (see `.vscode/settings.json`) — do not navigate into it, edit it, or import from it.
 
 Within this file, resolve conflicts in this order: **safety and repository targeting → authoritative sources → navigation → build and validation → documentation conventions.** This ordering scopes only the rules in this file; it does not override `AGENTS.md`, path-scoped instructions, or user instructions.
@@ -26,27 +26,20 @@ Consult these before searching the code:
 
 - **Domain glossary:** [`CONTEXT.md`](../CONTEXT.md).
 - **Architecture:** [`ARCHITECTURE.md`](../ARCHITECTURE.md) — ADR index, Concept index, and Codebase Structure.
-- **Skills overview:** [`ralph/skills/README.md`](../ralph/skills/README.md).
 
 ## 4. Navigation policy
 
 1. Read the relevant authoritative source first and state which doc you checked (or that none applies) before searching.
-2. Use `ARCHITECTURE.md`'s Codebase Structure to scope searches to `ralph/` or `tools/`.
+2. Use `ARCHITECTURE.md`'s Codebase Structure to scope searches to `src/orb/`, `workflows/`, or `tests/`.
 3. Exact symbol (definition, references, rename) → language-server tools; concept or behavior → semantic search; literal or config value → text search.
 4. Docs are leads, not proof — confirm behavior against current source or tests, then stop searching.
 
 ## 5. Build and validation policy
 
 - Install: `pip install -e ".[dev]"` from the reporoot.
-- Test: `pytest` (configured in `pyproject.toml`, `testpaths = ["tools/tests"]`).
+- Test: `pytest` from the reporoot (configured in `pyproject.toml`, `testpaths = ["tests"]`); it includes the import-linter architecture checks.
 
 ## 6. Documentation conventions
 
 - Author all docs (`CONTEXT.md`, `ARCHITECTURE.md`, ADRs, Crosscutting Concepts) at the reporoot.
 - Keep `CONTEXT.md` and `ARCHITECTURE.md` high-level — no implementation details, specs, or scratch notes.
-
-## 7. Skills
-
-- Plugin skills live under `ralph/skills/<skill-name>/` (`SKILL.md` plus any supporting files).
-- Do NOT reference a skill's own files via bare relative markdown links; they resolve against the runtime CWD and can silently fail. Use the skill's absolute base directory.
-- Available skills: `address`, `create-worktree`, `delete-worktree`, `dev`, `fix`, `init-harness`, `ralph-build` — see each `SKILL.md` frontmatter for trigger conditions; do not restate them here.

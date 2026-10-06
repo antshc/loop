@@ -4,15 +4,15 @@
 Orb delivers the approved work of every open `spec` to a draft pull request without an operator in the session, bounding the attempts it spends on each spec.
 
 ## Definition
-- **Actors:** Operator; Orb (the `afk_dev` service); Ralph (Copilot agent running the `/ralph:dev` skill); Crew agents (Codey, Chorey, Testy); GitHub.
+- **Actors:** Operator; Orb (the example `dev` Workflow); Ralph (Copilot agent running the `/ralph:dev` skill); Crew agents (Codey, Chorey, Testy); GitHub.
 - **Business processes:** Run AFK Dev Service; Develop Spec; Ralph Loop.
-- **Starts:** Operator runs `afk_dev` for a repository board.
+- **Starts:** Operator runs the `dev` Workflow script (through their own alias) for a repository board.
 - **Ends:** Every open spec was skipped or attempted and its attempt recorded; a Develop Spec run ends with its harness repo pushed and its worktree removed, or exits with a report.
 
 ## Business Processes
 
 ### Run AFK Dev Service
-Actor: Operator; Trigger: `afk_dev` is run for a repository board; Action: Orb lists the open specs, skips those without actionable issues or at their attempt cap, and starts one fresh headless Copilot session per remaining spec with the prompt `/ralph:dev <spec number>`; Outcome: each attempted spec has its attempt recorded, and a spec with all issues resolved has its count cleared. Notes: dry run is on unless switched off, so no session starts but the attempt is still recorded.
+Actor: Operator; Trigger: the `dev` Workflow script is run for a repository board; Action: Orb lists the open specs, skips those without actionable issues or at their attempt cap, and starts one fresh headless Copilot session per remaining spec with the prompt `/ralph:dev <spec number>`; Outcome: each attempted spec has its attempt recorded, and a spec with all issues resolved has its count cleared. Notes: dry run is on unless switched off, so no session starts but the attempt is still recorded.
 
 ```mermaid
 %%{init: {'themeVariables': {'lineColor': '#8b949e'}}}%%
@@ -22,7 +22,7 @@ swimlane-beta TB
   accDescr: Shows how the CLI, Orb, the Copilot agent and GitHub share the work of attempting each open spec.
 
   subgraph cli [AFK CLI]
-    start([Operator runs afk_dev])
+    start([Operator runs the dev Workflow])
     args[1 - Validate arguments and configure logging]
   end
 
@@ -260,9 +260,9 @@ A solid edge is automatic; a dotted edge is a separately initiated step, labelle
 ## Implementation Map
 | Concern | Stable anchor | Semantic locator |
 |---|---|---|
-| External contract | Operator-run service for one repository board | `orb`: CLI `afk_dev`, options `--github_repo_board`, `--max_executions`, `--agent`, `--prompt`, `--log-dir` |
+| External contract | Operator-run service for one repository board | `workflows/dev.py`: runnable script `main(argv)`, options `--harness-root`, `--log-dir`, `--log-level` |
 | External contract | Agent skill driven by the spec number | `orb`: skill command `/ralph:dev` |
 | Spec and issue selection | Open specs; issues that may be worked | `orb`: `VCSClient`, `IssueFilter` |
 | Attempt bound | Per-spec attempt count persisted across runs, cleared when issues resolve | `orb`: `ExecutionLog` |
-| Execution | Fresh non-interactive Copilot session per spec | `orb`: `AIAgent`, env key `AFK_DRY_RUN` |
+| Execution | Fresh non-interactive Copilot session per spec | `orb`: `AgentClient`, `Capsule`; `DRY_RUN` setting in `workflows/dev.py` |
 | Tests | Spec skipping, cap and count reset behavior | `orb`: dev handler unit tests |
