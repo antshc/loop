@@ -15,7 +15,8 @@ class Capsule(ABC):
 
     @property
     @abstractmethod
-    def workspace(self) -> str: ...
+    def workspace(self) -> str:
+        """The harness root, as an absolute path identical inside and outside the Capsule."""
 
     @property
     @abstractmethod

@@ -12,13 +12,12 @@ from orb import (
     DEFAULT_COMPLETION_SIGNAL,
     DockerCapsule,
     InMemorySessionStore,
+    Mount,
     NoCapsule,
     OrbError,
     copilot,
 )
 from orb.testing import FakeAgentClient, FakeCopilotCli, FakeDocker
-
-CONTAINER_WORKSPACE = "/home/agent/workspace"
 
 
 def _event(delta: str) -> str:
@@ -82,19 +81,19 @@ def test_docker_capsule_starts_a_container_and_runs_the_agent_inside_it(tmp_path
     capsule.close()
 
     start = next(call for call in docker.calls if call[1:3] == ("run", "-d"))
-    assert f"{tmp_path}:{CONTAINER_WORKSPACE}:z" in start and "A=1" in start and "2" in start
+    assert f"{tmp_path}:{tmp_path}:z" in start and "A=1" in start and "2" in start
     assert start[-1] == "orb:test"
     container = start[start.index("--name") + 1]
-    exec_prefix = ("docker", "exec", "-w", CONTAINER_WORKSPACE, container)
+    exec_prefix = ("docker", "exec", "-w", str(tmp_path), container)
     assert ("sh", "-c", "ls") == next(c for c in docker.calls if c[:5] == exec_prefix and "ls" in c)[5:]
     assert any(c[:5] == exec_prefix and c[5] == "copilot" for c in docker.calls)
     assert cli.calls[0][2] == "see listing" and result.success
-    assert capsule.workspace == CONTAINER_WORKSPACE
+    assert capsule.workspace == str(tmp_path)
     assert capsule.isolated is True
     assert ("docker", "stop", container) in docker.calls and ("docker", "rm", container) in docker.calls
 
 
-def test_docker_capsule_mounts_the_worktrees_git_dir(tmp_path: Path) -> None:
+def test_docker_capsule_mounts_only_the_harness_root_at_its_host_path(tmp_path: Path) -> None:
     (tmp_path / ".git").write_text("gitdir: /host/repo/.git/worktrees/w\n")
     docker = FakeDocker(FakeCopilotCli())
 
@@ -102,8 +101,32 @@ def test_docker_capsule_mounts_the_worktrees_git_dir(tmp_path: Path) -> None:
     capsule.close()
 
     start = next(call for call in docker.calls if call[1:3] == ("run", "-d"))
-    assert "/host/repo/.git:/host/repo/.git:z" in start
-    assert start[-1] == "orb:repo"
+    assert start.count("-v") == 1
+    assert f"{tmp_path}:{tmp_path}:z" in start
+    assert start[start.index("-w") + 1] == str(tmp_path)
+
+
+def test_docker_capsule_derives_the_image_name_from_the_workspace_folder(tmp_path: Path) -> None:
+    docker = FakeDocker(FakeCopilotCli())
+    workspace = tmp_path / "My Repo!"
+
+    capsule = DockerCapsule(workspace, container_uid=1000, docker=docker)
+    capsule.close()
+
+    start = next(call for call in docker.calls if call[1:3] == ("run", "-d"))
+    assert start[-1] == "orb:my-repo-"
+
+
+def test_docker_capsule_resolves_a_relative_user_mount_against_the_harness_root(tmp_path: Path) -> None:
+    extra = tmp_path / "extra"
+    extra.mkdir()
+    docker = FakeDocker(FakeCopilotCli())
+
+    capsule = DockerCapsule(tmp_path, container_uid=1000, docker=docker, mounts=[Mount(str(extra), "added")])
+    capsule.close()
+
+    start = next(call for call in docker.calls if call[1:3] == ("run", "-d"))
+    assert f"{extra}:{tmp_path / 'added'}:z" in start
 
 
 def test_docker_capsule_runs_a_different_agent_on_each_run(tmp_path: Path) -> None:

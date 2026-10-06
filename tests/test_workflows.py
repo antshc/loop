@@ -305,6 +305,25 @@ def _writes(gh: FakeGhCli) -> list[tuple[str, ...]]:
     return [call for call in gh.calls if call[0] in ("issue", "pr")]
 
 
+def test_capsule_is_created_on_the_harness_root_while_the_prompt_carries_the_worktree(tmp_path: Path) -> None:
+    harness = DevHarness(tmp_path)
+    capsule_workspaces: list[Path] = []
+
+    def capsule_factory(workspace: Path):
+        capsule_workspaces.append(workspace)
+        return NoCapsule(workspace, executor=FakeCopilotCli())
+
+    code = harness.run(
+        handler=lambda prompt, options: _commit_and_report(harness, 10), capsule_factory=capsule_factory
+    )
+
+    assert code == 0
+    assert capsule_workspaces == [harness.harness_root]
+    worktree = harness.git.removed[-1]
+    assert worktree != harness.harness_root
+    assert str(worktree) in harness.agent_calls[0][0]
+
+
 def test_no_arguments_use_the_current_folder_as_the_harness_root_and_its_exit_code(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

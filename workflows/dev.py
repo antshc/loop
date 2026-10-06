@@ -400,10 +400,10 @@ def _process_spec(
     prompt_args = _prompt_args(spec, actionable, bare_title, initiative, worktree, base_branch, feature_branch)
     try:
         if dry_run:
-            with capsule_factory(worktree) as capsule:
+            with capsule_factory(harness_root) as capsule:
                 capsule.run(agent_factory, template, prompt_args, options)
             return None
-        with capsule_factory(worktree) as capsule:
+        with capsule_factory(harness_root) as capsule:
             report = _run_report(capsule, agent_factory, template, prompt_args, options, retries)
         if report is None:
             _handle_exhausted_retries(
