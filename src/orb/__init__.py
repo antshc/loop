@@ -21,7 +21,15 @@ from orb.contracts.agent_client import (
 )
 from orb.contracts.capsule import AgentClientFactory, Capsule
 from orb.contracts.execution_store import ExecutionStore
-from orb.errors import AgentError, CommandError, ExtractionError, HookError, OrbError, PromptError
+from orb.errors import (
+    AgentError,
+    CommandError,
+    ExecutionStoreError,
+    ExtractionError,
+    HookError,
+    OrbError,
+    PromptError,
+)
 from orb.logging_config import configure_logging
 from orb.parallel import Settled, parallel_settled
 from orb.platforms.gh_client import GitHubClient, PullRequest, ReviewThread, Spec, Ticket
@@ -29,7 +37,7 @@ from orb.platforms.git_client import GitClient, Hook, origin_slug, same_slug
 from orb.process import CommandExecutor, CommandResult
 from orb.prompt import PromptPreprocessor
 from orb.stores.file import FileExecutionStore, FileSessionStore
-from orb.stores.memory import InMemorySessionStore
+from orb.stores.memory import InMemoryExecutionStore, InMemorySessionStore
 from orb.tags import extract_json, extract_tag
 
 __all__ = [
@@ -48,6 +56,7 @@ __all__ = [
     "DockerCapsule",
     "DryRunAgentClient",
     "ExecutionStore",
+    "ExecutionStoreError",
     "ExtractionError",
     "FileExecutionStore",
     "FileSessionStore",
@@ -55,6 +64,7 @@ __all__ = [
     "GitHubClient",
     "Hook",
     "HookError",
+    "InMemoryExecutionStore",
     "InMemorySessionStore",
     "MAX_FAILED_ATTEMPTS",
     "Mount",

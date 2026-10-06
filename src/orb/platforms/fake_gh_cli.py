@@ -6,7 +6,13 @@ import json
 class FakeGhCli:
     """Stands in for the `gh` binary: returns canned JSON for reads and records every call."""
 
-    def __init__(self, *, tickets: dict[int, list[dict]] | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        tickets: dict[int, list[dict]] | None = None,
+        specs: list[dict] | None = None,
+        prs: list[dict] | None = None,
+    ) -> None:
         self.calls: list[tuple[str, ...]] = []
         self._tickets = (
             tickets
@@ -20,6 +26,15 @@ class FakeGhCli:
                 ],
             }
         )
+        self._specs = (
+            specs
+            if specs is not None
+            else [
+                _ticket(1, "Add login page", labels=["spec"]),
+                _ticket(2, "Add logout button", labels=["spec"]),
+            ]
+        )
+        self._prs = prs if prs is not None else [_pr(10, "feature/login")]
 
     def __call__(self, args: tuple[str, ...]) -> str:
         self.calls.append(args)
@@ -35,10 +50,7 @@ class FakeGhCli:
             nodes = self._tickets.get(number, [])
             return json.dumps([{"data": {"repository": {"issue": {"subIssues": {"nodes": nodes}}}}}])
         if "labels: [" in query:
-            return json.dumps([{"data": {"repository": {"issues": {"nodes": [
-                _ticket(1, "Add login page", labels=["spec"]),
-                _ticket(2, "Add logout button", labels=["spec"]),
-            ]}}}}])
+            return json.dumps([{"data": {"repository": {"issues": {"nodes": self._specs}}}}])
         if "reviewThreads" in query:
             return json.dumps({"data": {"repository": {"pullRequest": {"reviewThreads": {"nodes": [
                 _thread("t1", False, "Rename this variable."),
@@ -49,8 +61,8 @@ class FakeGhCli:
     def _pr_list(self, args: tuple[str, ...]) -> str:
         if "--head" in args:
             head = args[args.index("--head") + 1]
-            return json.dumps([_pr(10, "feature/login")] if head == "feature/login" else [])
-        return json.dumps([_pr(10, "feature/login")])
+            return json.dumps([pr for pr in self._prs if pr["headRefName"] == head])
+        return json.dumps(self._prs)
 
 
 def _ticket(number: int, title: str, *, state: str = "OPEN", labels: list[str] | None = None) -> dict:

@@ -28,6 +28,10 @@ class ExtractionError(OrbError):
     pass
 
 
+class ExecutionStoreError(OrbError):
+    pass
+
+
 class HookError(OrbError):
     def __init__(self, command: str, output: str) -> None:
         super().__init__(f"hook failed ({command}):\n{output}".rstrip())

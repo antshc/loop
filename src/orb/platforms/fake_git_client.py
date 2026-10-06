@@ -18,12 +18,15 @@ class FakeGitClient(GitClient):
         self.dirty_leftovers: set[Path] = set()
         self.hook_calls: list[str] = []
         self.failing_hooks: set[str] = set()
+        self.failing_fetch: set[Path] = set()
         self.worktrees: dict[Path, str] = {}
         self.branches: dict[str, list[str]] = {}
         self.pushed: list[tuple[Path, str]] = []
         self.removed: list[Path] = []
 
     def fetch(self, checkout: Path) -> None:
+        if checkout in self.failing_fetch:
+            raise CommandError("git fetch", None, f"fetch failed: {checkout}")
         self.fetched.append(checkout)
 
     def remote_branch_exists(self, checkout: Path, branch: str) -> bool:
