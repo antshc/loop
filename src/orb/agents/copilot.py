@@ -11,7 +11,7 @@ from orb.contracts.agent_client import (
     AgentSession,
     SessionStore,
 )
-from orb.contracts.capsule import AgentClientFactory
+from orb.contracts.capsule import AgentClientFactory, CapsuleBinding
 from orb.process import CommandExecutor, checked_output
 from orb.prompt import PromptPreprocessor
 
@@ -27,10 +27,14 @@ class CopilotClient(AgentClient):
         preprocessor: PromptPreprocessor,
         sessions: SessionStore,
         *,
+        isolated: bool,
+        workspace: str,
         executable: str = "copilot",
         completion_signal: str = DEFAULT_COMPLETION_SIGNAL,
     ) -> None:
         super().__init__(executor, preprocessor, sessions)
+        self._isolated = isolated
+        self._workspace = workspace
         self._executable = executable
         self._completion_signal = completion_signal
 
@@ -42,7 +46,9 @@ class CopilotClient(AgentClient):
         *,
         resume: bool,
     ) -> AgentResult:
-        args = [self._executable, "-p", prompt, "--output-format", "json", *options.extra_args]
+        args = [self._executable, "-p", prompt, "--output-format", "json"]
+        args += ["--allow-all"] if self._isolated else ["--allow-all-tools", "--add-dir", self._workspace]
+        args += list(options.extra_args)
         if session is not None:
             args += [f"--resume={session.name}"] if resume else ["--name", session.name]
         if options.model:
@@ -51,6 +57,8 @@ class CopilotClient(AgentClient):
             args += ["--agent", options.agent]
         for directory in options.add_dirs:
             args += ["--add-dir", str(directory)]
+        for tool in options.deny_tools:
+            args += ["--deny-tool", tool]
 
         text_parts: list[str] = []
         completed = False
@@ -80,13 +88,20 @@ def _parse_event(line: str) -> dict | None:
 
 
 def copilot(sessions: SessionStore, *, executable: str = "copilot") -> AgentClientFactory:
-    """A factory a capsule calls with its own executor, so the CLI runs where the capsule runs."""
+    """A factory a capsule calls with its own binding, so the CLI runs where the capsule runs."""
 
-    def create(executor: CommandExecutor) -> CopilotClient:
+    def create(binding: CapsuleBinding) -> CopilotClient:
         def execute(command: str) -> str:
-            return checked_output(command, executor(command))
+            return checked_output(command, binding.executor(command))
 
-        return CopilotClient(executor, PromptPreprocessor(execute), sessions, executable=executable)
+        return CopilotClient(
+            binding.executor,
+            PromptPreprocessor(execute),
+            sessions,
+            isolated=binding.isolated,
+            workspace=binding.workspace,
+            executable=executable,
+        )
 
     return create
 

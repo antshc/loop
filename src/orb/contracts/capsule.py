@@ -2,24 +2,47 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from types import TracebackType
 
 from orb.contracts.agent_client import AgentClient, AgentOptions, AgentResult
 from orb.process import CommandExecutor
 
-AgentClientFactory = Callable[[CommandExecutor], AgentClient]
+
+@dataclass(frozen=True)
+class CapsuleBinding:
+    """What a Capsule gives the agent factory on each run: its executor, isolation, and workspace."""
+
+    executor: CommandExecutor
+    isolated: bool
+    workspace: str
+
+
+AgentClientFactory = Callable[[CapsuleBinding], AgentClient]
 
 
 class Capsule(ABC):
-    """The environment an agent runs in; wraps an AgentClient bound to that environment."""
+    """The environment an agent runs in: workspace, exec, close, and the executor an agent runs through."""
 
     @property
     @abstractmethod
-    def workspace(self) -> str: ...
+    def workspace(self) -> str:
+        """The harness root, as an absolute path identical inside and outside the Capsule."""
+
+    @property
+    @abstractmethod
+    def isolated(self) -> bool:
+        """Whether this Capsule isolates the agent from the host."""
+
+    @property
+    @abstractmethod
+    def executor(self) -> CommandExecutor:
+        """The executor an agent runs through."""
 
     @abstractmethod
     def run(
         self,
+        agent: AgentClientFactory,
         prompt: str,
         prompt_args: Mapping[str, str] | None = None,
         options: AgentOptions | None = None,

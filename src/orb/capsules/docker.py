@@ -3,18 +3,24 @@ from __future__ import annotations
 import atexit
 import os
 import re
-from collections.abc import Mapping, Sequence
+import threading
+import time
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
 
 from orb.contracts.agent_client import AgentOptions, AgentResult
-from orb.contracts.capsule import AgentClientFactory, Capsule
-from orb.errors import OrbError
+from orb.contracts.capsule import AgentClientFactory, Capsule, CapsuleBinding
+from orb.errors import Cancelled, CommandError, OrbError
 from orb.process import CommandExecutor, CommandResult, OnLine, checked_output, execute
 
 CAPSULE_HOME = "/home/agent"
-CAPSULE_WORKSPACE = f"{CAPSULE_HOME}/workspace"
+
+# Transient exit codes, retry count, and delay are copied from Sandcastle's sandbox lifecycle.
+_TRANSIENT_EXIT_CODES = {126, 137}
+_START_RETRIES = 2
+_RETRY_DELAY_S = 0.25
 
 
 @dataclass(frozen=True)
@@ -24,31 +30,19 @@ class Mount:
     readonly: bool = False
 
 
-def default_image_name(repo: Path) -> str:
-    return f"orb:{re.sub(r'[^a-z0-9_.-]', '-', repo.name.lower()) or 'local'}"
+def default_image_name(workspace: Path) -> str:
+    return f"orb:{re.sub(r'[^a-z0-9_.-]', '-', workspace.name.lower()) or 'local'}"
 
 
-def _git_mounts(worktree_path: Path) -> tuple[list[Mount], Path]:
-    """Mounts that make a worktree's `gitdir:` pointer resolve inside the container; also the repo dir."""
-    git_file = worktree_path / ".git"
-    if git_file.is_file():
-        match = re.match(r"gitdir:\s*(.+)", git_file.read_text().strip())
-        if match:
-            # gitdir is <repo>/.git/worktrees/<name>; the container needs <repo>/.git at the same path.
-            parent_git = Path(match.group(1)).parent.parent
-            return [Mount(str(parent_git), str(parent_git))], parent_git.parent
-    return [], worktree_path
-
-
-def _resolve_user_mount(mount: Mount) -> Mount:
+def _resolve_user_mount(mount: Mount, workspace: Path) -> Mount:
     host = Path(mount.host_path).expanduser().resolve()
     if not host.exists():
         raise ValueError(f"mount host_path does not exist: {mount.host_path}")
     target = mount.capsule_path
     if target == "~" or target.startswith("~/"):
         target = CAPSULE_HOME + target[1:]
-    if not target.startswith("/"):
-        target = f"{CAPSULE_WORKSPACE}/{target}"
+    elif not target.startswith("/"):
+        target = str(workspace / target)
     return Mount(str(host), target, mount.readonly)
 
 
@@ -64,7 +58,6 @@ class DockerCapsule(Capsule):
     def __init__(
         self,
         workspace: Path | str,
-        agent_factory: AgentClientFactory,
         *,
         image_name: str | None = None,
         container_uid: int | None = None,
@@ -76,20 +69,25 @@ class DockerCapsule(Capsule):
         groups: Sequence[str | int] = (),
         devices: Sequence[str] = (),
         cpus: float | None = None,
+        start_timeout_s: float = 60,
+        sleep: Callable[[float], None] | None = None,
         docker: CommandExecutor | None = None,
+        cancel: threading.Event | None = None,
     ) -> None:
         self._docker = docker or execute
+        self._start_timeout_s = start_timeout_s
+        self._sleep = sleep or time.sleep
+        self._cancel = cancel
         host_workspace = Path(workspace)
+        self._workspace = host_workspace
         uid = container_uid if container_uid is not None else os.getuid()
         gid = container_gid if container_gid is not None else os.getgid()
-        git_mounts, repo = _git_mounts(host_workspace)
-        image = image_name or default_image_name(repo)
+        image = image_name or default_image_name(host_workspace)
         self._check_image_uid(image, uid)
 
         volumes = [
-            Mount(str(host_workspace), CAPSULE_WORKSPACE),
-            *git_mounts,
-            *(_resolve_user_mount(mount) for mount in mounts),
+            Mount(str(host_workspace), str(host_workspace)),
+            *(_resolve_user_mount(mount, host_workspace) for mount in mounts),
         ]
         self._container = f"orb-{uuid4()}"
         args = ["docker", "run", "-d", "--name", self._container]
@@ -97,7 +95,7 @@ class DockerCapsule(Capsule):
             args += ["-e", f"{key}={value}"]
         for mount in volumes:
             args += ["-v", _volume_flag(mount, selinux_label)]
-        args += ["-w", CAPSULE_WORKSPACE, "--user", f"{uid}:{gid}"]
+        args += ["-w", str(host_workspace), "--user", f"{uid}:{gid}"]
         for name in [network] if isinstance(network, str) else list(network or ()):
             args += ["--network", name]
         for group in groups:
@@ -107,23 +105,36 @@ class DockerCapsule(Capsule):
         if cpus is not None:
             args += ["--cpus", str(cpus)]
         command = [*args, image]
-        checked_output(" ".join(command), self._docker(command))
+        self._start_container(command)
 
         self._closed = False
         atexit.register(self._remove)
-        self._agent = agent_factory(self._exec_in_container)
 
     @property
     def workspace(self) -> str:
-        return CAPSULE_WORKSPACE
+        return str(self._workspace)
+
+    @property
+    def isolated(self) -> bool:
+        return True
+
+    @property
+    def executor(self) -> CommandExecutor:
+        return self._exec_in_container
 
     def run(
         self,
+        agent: AgentClientFactory,
         prompt: str,
         prompt_args: Mapping[str, str] | None = None,
         options: AgentOptions | None = None,
     ) -> AgentResult:
-        return self._agent.run(prompt, prompt_args, options)
+        binding = CapsuleBinding(self._exec_in_container, self.isolated, self.workspace)
+        result = agent(binding).run(prompt, prompt_args, options)
+        if self._is_cancelled():
+            self._cancel_close()
+            raise Cancelled()
+        return result
 
     def exec(self, command: str, *, timeout_s: float | None = None) -> str:
         return checked_output(command, self._exec_in_container(command, timeout_s=timeout_s))
@@ -136,15 +147,48 @@ class DockerCapsule(Capsule):
         self._docker(("docker", "stop", self._container))
         self._docker(("docker", "rm", self._container))
 
+    def _cancel_close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        atexit.unregister(self._remove)
+        self._remove()
+
+    def _is_cancelled(self) -> bool:
+        return self._cancel is not None and self._cancel.is_set()
+
     def _exec_in_container(
         self, command: Sequence[str] | str, *, timeout_s: float | None = None, on_line: OnLine | None = None
     ) -> CommandResult:
-        args = ["docker", "exec", "-w", CAPSULE_WORKSPACE, self._container]
+        args = ["docker", "exec", "-w", str(self._workspace), self._container]
         args += ["sh", "-c", command] if isinstance(command, str) else list(command)
-        return self._docker(args, timeout_s=timeout_s, on_line=on_line)
+        return self._docker(args, timeout_s=timeout_s, on_line=on_line, cancel=self._cancel)
 
     def _remove(self) -> None:
         self._docker(("docker", "rm", "-f", self._container))
+
+    def _start_container(self, command: Sequence[str]) -> None:
+        attempt = 0
+        while True:
+            try:
+                result = self._docker(command, timeout_s=self._start_timeout_s, cancel=self._cancel)
+            except CommandError as exception:
+                self._remove()
+                if self._is_cancelled():
+                    raise Cancelled() from exception
+                raise
+            if self._is_cancelled():
+                self._remove()
+                raise Cancelled()
+            if result.returncode == 0:
+                return
+            if result.returncode in _TRANSIENT_EXIT_CODES and attempt < _START_RETRIES:
+                self._remove()
+                attempt += 1
+                self._sleep(_RETRY_DELAY_S)
+                continue
+            self._remove()
+            checked_output(" ".join(command), result)
 
     def _check_image_uid(self, image: str, expected_uid: int) -> None:
         result = self._docker(("docker", "image", "inspect", image, "--format", "{{.Config.User}}"))

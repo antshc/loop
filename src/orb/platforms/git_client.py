@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from orb.errors import CommandError, HookError
+from orb.errors import Cancelled, CommandError, HookError
 from orb.process import CommandResult, checked_output, execute
 
 DEFAULT_HOOK_TIMEOUT_S = 120.0
@@ -19,7 +19,12 @@ class GitRunner(Protocol):
     """Runs one git (or Hook) command in a given directory; a non-zero exit is returned, not raised."""
 
     def __call__(
-        self, args: Sequence[str] | str, *, cwd: Path | None = None, timeout_s: float | None = None
+        self,
+        args: Sequence[str] | str,
+        *,
+        cwd: Path | None = None,
+        timeout_s: float | None = None,
+        cancel: threading.Event | None = None,
     ) -> CommandResult: ...
 
 
@@ -64,11 +69,13 @@ class GitClient:
         checkout: Path,
         branch: str,
         base: str,
+        harness_root: Path,
         *,
         on_ready: Sequence[Hook] = (),
+        cancel: threading.Event | None = None,
     ) -> Path:
         self._run(("git", "check-ref-format", "--branch", branch), cwd=checkout)
-        target = Path(f"{checkout}.worktrees") / branch
+        target = harness_root / "workspace" / f"{checkout.name}.worktrees" / branch
         with self._lock:
             worktrees = self._list_worktrees(checkout)
             other = next(
@@ -90,14 +97,32 @@ class GitClient:
             else:
                 self._run(("git", "worktree", "add", "-b", branch, str(target), start_ref), cwd=checkout)
             self._worktrees[target] = checkout
+            self._exclude_workspace(harness_root)
 
         try:
             for hook in on_ready:
-                self._run_hook(hook, target)
+                self._run_hook(hook, target, cancel)
         except HookError:
             self.remove_worktree(target)
             raise
+        except Cancelled:
+            if self.has_changes(target):
+                raise Cancelled(target)
+            self.remove_worktree(target)
+            raise
         return target
+
+    def _exclude_workspace(self, harness_root: Path) -> None:
+        """Adds `workspace/` to the harness checkout's local exclude list, once."""
+        exclude_file = harness_root / ".git" / "info" / "exclude"
+        exclude_file.parent.mkdir(parents=True, exist_ok=True)
+        existing = exclude_file.read_text() if exclude_file.exists() else ""
+        if "workspace/" in existing.splitlines():
+            return
+        with exclude_file.open("a") as handle:
+            if existing and not existing.endswith("\n"):
+                handle.write("\n")
+            handle.write("workspace/\n")
 
     def has_changes(self, worktree: Path) -> bool:
         return bool(self._run(("git", "status", "--porcelain"), cwd=worktree).strip())
@@ -138,11 +163,15 @@ class GitClient:
             entries.append((path, branch))
         return entries
 
-    def _run_hook(self, hook: Hook, worktree: Path) -> None:
+    def _run_hook(self, hook: Hook, worktree: Path, cancel: threading.Event | None) -> None:
         try:
-            result = self._execute(hook.command, cwd=worktree, timeout_s=hook.timeout_s)
+            result = self._execute(hook.command, cwd=worktree, timeout_s=hook.timeout_s, cancel=cancel)
         except CommandError as exception:
+            if cancel is not None and cancel.is_set():
+                raise Cancelled() from exception
             raise HookError(hook.command, str(exception)) from exception
+        if cancel is not None and cancel.is_set():
+            raise Cancelled()
         if result.returncode != 0:
             raise HookError(hook.command, result.stdout + result.stderr)
 

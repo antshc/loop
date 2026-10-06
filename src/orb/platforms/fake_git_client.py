@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import threading
 from collections.abc import Sequence
 from pathlib import Path
 
-from orb.errors import CommandError, HookError
+from orb.errors import Cancelled, CommandError, HookError
 from orb.platforms.git_client import GitClient, Hook
 
 
@@ -18,6 +19,7 @@ class FakeGitClient(GitClient):
         self.dirty_leftovers: set[Path] = set()
         self.hook_calls: list[str] = []
         self.failing_hooks: set[str] = set()
+        self.cancelled_hooks: set[str] = set()
         self.failing_fetch: set[Path] = set()
         self.worktrees: dict[Path, str] = {}
         self.branches: dict[str, list[str]] = {}
@@ -33,7 +35,14 @@ class FakeGitClient(GitClient):
         return branch in self.remote_branches
 
     def create_worktree(
-        self, checkout: Path, branch: str, base: str, *, on_ready: Sequence[Hook] = ()
+        self,
+        checkout: Path,
+        branch: str,
+        base: str,
+        harness_root: Path,
+        *,
+        on_ready: Sequence[Hook] = (),
+        cancel: threading.Event | None = None,
     ) -> Path:
         if branch in self.branch_in_use:
             raise CommandError(
@@ -50,7 +59,14 @@ class FakeGitClient(GitClient):
                 self.hook_calls.append(hook.command)
                 if hook.command in self.failing_hooks:
                     raise HookError(hook.command, "fake hook failure")
+                if hook.command in self.cancelled_hooks:
+                    raise Cancelled()
         except HookError:
+            self.remove_worktree(path)
+            raise
+        except Cancelled:
+            if self.has_changes(path):
+                raise Cancelled(path)
             self.remove_worktree(path)
             raise
         return path

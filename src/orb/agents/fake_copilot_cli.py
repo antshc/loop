@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from collections.abc import Callable, Sequence
 
 from orb.process import CommandResult, OnLine
@@ -31,6 +32,7 @@ class FakeCopilotCli:
         *,
         timeout_s: float | None = None,
         on_line: OnLine | None = None,
+        cancel: threading.Event | None = None,
     ) -> CommandResult:
         if isinstance(command, str):
             self.shell_commands.append(command)
@@ -41,7 +43,7 @@ class FakeCopilotCli:
         stdout, stderr, exit_code = _as_result(outcome)
         if on_line is not None:
             for line in stdout.splitlines():
-                if on_line(line):
+                if on_line(line) or (cancel is not None and cancel.is_set()):
                     self.terminated = True
                     break
         return CommandResult(exit_code, stdout, stderr)
