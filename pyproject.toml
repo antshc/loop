@@ -1,29 +1,88 @@
 [build-system]
-requires = ["setuptools>=64", "wheel"]
+requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "brain-tools"
-version = "0.1.0"
-description = "AFK automated PR review service driven by Copilot"
-readme = "README.md"
-requires-python = ">=3.10"
-license = { text = "MIT" }
+name = "orb"
+version = "0.0.0"
+description = "Library for composing agent workflows on git worktree capsules."
+requires-python = ">=3.12"
 dependencies = [
     "python-json-logger>=2.0",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest"]
-
-[project.scripts]
-afk_fix_prs = "afk.features.fix_prs.cli:main"
-afk_address_prs = "afk.features.address_prs.cli:main"
-afk_dev = "afk.features.dev.cli:main"
+dev = ["pytest", "import-linter"]
 
 [tool.setuptools.packages.find]
-where = ["tools/src"]
-include = ["afk*", "modules*"]
+where = ["src"]
 
 [tool.pytest.ini_options]
-testpaths = ["tools/tests"]
+pythonpath = ["src", "."]
+testpaths = ["tests"]
+norecursedirs = ["archive", ".*"]
+
+[tool.importlinter]
+root_packages = ["orb", "workflows"]
+
+[[tool.importlinter.contracts]]
+name = "Contracts and shared policy import no implementation"
+type = "forbidden"
+source_modules = [
+    "orb.contracts",
+    "orb.errors",
+    "orb.process",
+    "orb.prompt",
+    "orb.tags",
+    "orb.parallel",
+    "orb.attempts",
+    "orb.worktree",
+]
+forbidden_modules = [
+    "orb.agents",
+    "orb.capsules",
+    "orb.platforms",
+    "orb.stores",
+    "orb.testing",
+]
+
+[[tool.importlinter.contracts]]
+name = "Only orb.testing imports orb.testing"
+type = "forbidden"
+source_modules = [
+    "orb.agents",
+    "orb.capsules",
+    "orb.platforms",
+    "orb.stores",
+    "orb.contracts",
+    "orb.errors",
+    "orb.process",
+    "orb.prompt",
+    "orb.tags",
+    "orb.parallel",
+    "orb.attempts",
+    "orb.worktree",
+    "workflows",
+]
+forbidden_modules = ["orb.testing"]
+
+[[tool.importlinter.contracts]]
+name = "The dev workflow imports only the public orb API"
+type = "forbidden"
+source_modules = ["workflows.dev"]
+forbidden_modules = [
+    "orb.contracts",
+    "orb.agents",
+    "orb.capsules",
+    "orb.platforms",
+    "orb.stores",
+    "orb.errors",
+    "orb.process",
+    "orb.prompt",
+    "orb.tags",
+    "orb.parallel",
+    "orb.attempts",
+    "orb.worktree",
+    "orb.testing",
+]
+allow_indirect_imports = true

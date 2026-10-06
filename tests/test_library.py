@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import logging
+import subprocess
+import sys
+import tomllib
 from pathlib import Path
 
 import pytest
 
+import orb
+import orb.testing
 from conftest import commit_file, git
 from orb import (
     CommandError,
@@ -16,6 +21,11 @@ from orb import (
     extract_tag,
     parallel_settled,
 )
+
+ROOT = Path(__file__).parents[1]
+SRC = ROOT / "src" / "orb"
+WORKFLOWS = ROOT / "workflows"
+FAKES = {"FakeGh", "FakeGitClient", "FakeDocker", "FakeCopilotCli", "FakeAgentClient"}
 
 
 def test_preprocessor_substitutes_placeholders_and_runs_template_commands() -> None:
@@ -97,3 +107,29 @@ def test_git_client_rejects_invalid_branch_names_and_unknown_worktrees(repo: Pat
         client.create_branch("--evil")
     with pytest.raises(CommandError):
         client.head(tmp_path)
+
+
+def test_public_api_exposes_no_fake_and_testing_exposes_every_fake() -> None:
+    assert not FAKES & set(orb.__all__)
+    assert FAKES <= set(orb.testing.__all__)
+
+
+def test_packaging_declares_no_scripts_and_ships_no_workflow_file() -> None:
+    config = tomllib.loads((ROOT / "pyproject.toml").read_text())
+    workflow_files = {p.name for p in WORKFLOWS.glob("*.py") if p.name != "__init__.py"}
+    package_files = {p.name for p in SRC.rglob("*.py") if p.name != "__init__.py"}
+
+    assert "scripts" not in config["project"]
+    assert not workflow_files & package_files
+
+
+def test_import_linter_contracts_pass() -> None:
+    lint_imports = Path(sys.executable).parent / "lint-imports"
+    result = subprocess.run(
+        [str(lint_imports)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr

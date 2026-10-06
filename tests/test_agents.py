@@ -7,11 +7,11 @@ from orb import (
     AgentResult,
     AgentSession,
     CommandResult,
-    FakeCopilotCli,
     FileSessionStore,
     InMemorySessionStore,
     copilot,
 )
+from orb.testing import FakeCopilotCli
 
 
 def flags(argv: tuple[str, ...]) -> set[str]:

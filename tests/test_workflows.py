@@ -13,16 +13,13 @@ from orb import (
     Capsule,
     CopilotClient,
     DockerCapsule,
-    FakeAgentClient,
-    FakeCopilotCli,
-    FakeGh,
-    FakeGitClient,
     FileExecutionStore,
     GitHubClient,
     InMemorySessionStore,
     NoCapsule,
     copilot,
 )
+from orb.testing import FakeAgentClient, FakeCopilotCli, FakeGh, FakeGitClient
 from workflows import dev
 
 SRC = Path(__file__).parents[1] / "src" / "orb"

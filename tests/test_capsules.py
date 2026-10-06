@@ -10,14 +10,12 @@ from orb import (
     CommandError,
     CommandExecutor,
     DockerCapsule,
-    FakeAgentClient,
-    FakeCopilotCli,
-    FakeDocker,
     InMemorySessionStore,
     NoCapsule,
     OrbError,
     copilot,
 )
+from orb.testing import FakeAgentClient, FakeCopilotCli, FakeDocker
 
 CONTAINER_WORKSPACE = "/home/agent/workspace"
 
