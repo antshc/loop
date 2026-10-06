@@ -11,6 +11,7 @@ import json
 import logging
 import re
 import sys
+import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,6 +19,7 @@ from pathlib import Path
 from orb import (
     AgentClientFactory,
     AgentOptions,
+    Cancelled,
     Capsule,
     ExecutionStore,
     FileExecutionStore,
@@ -43,13 +45,19 @@ LOG_LEVEL = "INFO"
 RETRIES = 1
 DRY_RUN = False
 HOOKS: tuple[Hook, ...] = ()
-CAPSULE_FACTORY = NoCapsule
+
+
+def _no_capsule(workspace: Path, cancel: threading.Event) -> Capsule:
+    return NoCapsule(workspace, cancel=cancel)
+
+
+CAPSULE_FACTORY = _no_capsule
 
 PROMPT = Path(__file__).parent / "prompts" / "dev.md"
 HITL_LABEL = "hitl"
 logger = logging.getLogger("workflow.dev")
 
-CapsuleFactory = Callable[[Path], Capsule]
+CapsuleFactory = Callable[[Path, threading.Event], Capsule]
 GithubFactory = Callable[[Path], GitHubClient]
 
 _STATUSES = frozenset({"complete", "partial", "blocked"})
@@ -339,6 +347,13 @@ def _handle_exhausted_retries(
     )
 
 
+def _report_cancelled(spec: Spec, worktree: Path | None) -> None:
+    if worktree is not None:
+        logger.warning("spec #%s run cancelled; worktree kept at %s", spec.number, worktree)
+    else:
+        logger.info("spec #%s run cancelled", spec.number)
+
+
 def _process_spec(
     spec: Spec,
     *,
@@ -354,6 +369,7 @@ def _process_spec(
     retries: int,
     template: str,
     dry_run: bool,
+    cancel: threading.Event,
 ) -> bool | None:
     """Return True/False for an attempted Spec, or None when it was skipped or only explored (dry run)."""
     actionable = harness_github.get_actionable_issues(spec)
@@ -391,19 +407,25 @@ def _process_spec(
             _hitl(harness_github, spec, f"dev: target branch {base_branch!r} does not exist on {target}")
             return None
         feature_branch = feature_branch_name(base_branch, bare_title)
-        worktree = git.create_worktree(checkout, feature_branch, base_branch, harness_root, on_ready=hooks)
+        worktree = git.create_worktree(
+            checkout, feature_branch, base_branch, harness_root, on_ready=hooks, cancel=cancel
+        )
+    except Cancelled as exception:
+        _report_cancelled(spec, exception.worktree)
+        return None
     except OrbError as exception:
         _fail_attempt(harness_github, store, spec, harness_slug, actionable, exception, dry_run=dry_run)
         return False
 
     options = AgentOptions(session_key=None)
     prompt_args = _prompt_args(spec, actionable, bare_title, initiative, worktree, base_branch, feature_branch)
+    kept_on_cancel = False
     try:
         if dry_run:
-            with capsule_factory(harness_root) as capsule:
+            with capsule_factory(harness_root, cancel) as capsule:
                 capsule.run(agent_factory, template, prompt_args, options)
             return None
-        with capsule_factory(harness_root) as capsule:
+        with capsule_factory(harness_root, cancel) as capsule:
             report = _run_report(capsule, agent_factory, template, prompt_args, options, retries)
         if report is None:
             _handle_exhausted_retries(
@@ -436,6 +458,10 @@ def _process_spec(
             store=store,
             harness_slug=harness_slug,
         )
+    except Cancelled:
+        kept_on_cancel = git.has_changes(worktree)
+        _report_cancelled(spec, worktree if kept_on_cancel else None)
+        return None
     except OrbError as exception:
         _fail_attempt(
             harness_github,
@@ -455,7 +481,8 @@ def _process_spec(
         )
         return False
     finally:
-        git.remove_worktree(worktree)
+        if not kept_on_cancel:
+            git.remove_worktree(worktree)
 
 
 def main(
@@ -469,6 +496,7 @@ def main(
     hooks: Sequence[Hook] = HOOKS,
     retries: int = RETRIES,
     dry_run: bool = DRY_RUN,
+    cancel: threading.Event | None = None,
 ) -> int:
     parser = argparse.ArgumentParser(prog="dev")
     parser.add_argument("--harness-root", type=Path, default=None)
@@ -494,6 +522,7 @@ def main(
     capsule_factory = capsule_factory or CAPSULE_FACTORY
     store = store or FileExecutionStore(log_dir)
     template = PROMPT.read_text()
+    cancel = cancel or threading.Event()
 
     try:
         failed = False
@@ -514,6 +543,7 @@ def main(
                 retries=retries,
                 template=template,
                 dry_run=dry_run,
+                cancel=cancel,
             )
             failed = failed or outcome is False
         return 1 if failed else 0

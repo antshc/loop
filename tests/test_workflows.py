@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import json
 import re
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -273,6 +274,7 @@ class DevHarness:
         retries=0,
         dry_run=False,
         log_dir: Path | None = None,
+        cancel: threading.Event | None = None,
     ) -> int:
         git_client = git if git is not None else self.git
 
@@ -289,11 +291,12 @@ class DevHarness:
             github_factory=github_factory or (lambda checkout: self.github),
             agent_factory=agent_factory or (None if dry_run else default_agent_factory),
             capsule_factory=capsule_factory
-            or (lambda workspace: NoCapsule(workspace, executor=FakeCopilotCli())),
+            or (lambda workspace, cancel: NoCapsule(workspace, executor=FakeCopilotCli(), cancel=cancel)),
             store=store if store is not None else self.store,
             hooks=hooks,
             retries=retries,
             dry_run=dry_run,
+            cancel=cancel,
         )
 
 
@@ -309,9 +312,9 @@ def test_capsule_is_created_on_the_harness_root_while_the_prompt_carries_the_wor
     harness = DevHarness(tmp_path)
     capsule_workspaces: list[Path] = []
 
-    def capsule_factory(workspace: Path):
+    def capsule_factory(workspace: Path, cancel: threading.Event):
         capsule_workspaces.append(workspace)
-        return NoCapsule(workspace, executor=FakeCopilotCli())
+        return NoCapsule(workspace, executor=FakeCopilotCli(), cancel=cancel)
 
     code = harness.run(
         handler=lambda prompt, options: _commit_and_report(harness, 10), capsule_factory=capsule_factory
@@ -656,6 +659,72 @@ def test_a_failing_worktree_ready_hook_removes_the_worktree_and_fails_the_attemp
     assert harness.git.worktrees == {}
     assert len(harness.git.removed) == 1
     assert harness.agent_calls == []
+
+
+def test_a_cancelled_hook_on_a_clean_worktree_is_reported_cancelled_and_removes_it(tmp_path: Path) -> None:
+    harness = DevHarness(tmp_path)
+    harness.git.cancelled_hooks.add("setup.sh")
+
+    code = harness.run(hooks=(Hook("setup.sh"),))
+
+    assert code == 0
+    assert harness.git.worktrees == {}
+    assert len(harness.git.removed) == 1
+    assert _writes(harness.gh) == []
+    assert harness.store.failed_attempts("https://github.com/owner/repo/issues/1") == 0
+
+
+def test_a_cancelled_hook_on_a_dirty_worktree_keeps_it_with_no_publication_or_label(tmp_path: Path) -> None:
+    harness = DevHarness(tmp_path)
+    harness.git.cancelled_hooks.add("setup.sh")
+    harness.git.branches["add-login-page"] = ["already-dirty"]
+
+    code = harness.run(hooks=(Hook("setup.sh"),))
+
+    assert code == 0
+    assert harness.git.worktrees
+    assert harness.git.removed == []
+    assert _writes(harness.gh) == []
+    assert harness.store.failed_attempts("https://github.com/owner/repo/issues/1") == 0
+
+
+def test_a_cancelled_agent_run_with_no_changes_is_reported_cancelled_and_removes_the_worktree(
+    tmp_path: Path,
+) -> None:
+    harness = DevHarness(tmp_path)
+    cancel = threading.Event()
+
+    def handler(prompt: str, options: object) -> str:
+        cancel.set()
+        return ""
+
+    code = harness.run(handler=handler, cancel=cancel)
+
+    assert code == 0
+    assert harness.git.worktrees == {}
+    assert len(harness.git.removed) == 1
+    assert _writes(harness.gh) == []
+    assert harness.store.failed_attempts("https://github.com/owner/repo/issues/1") == 0
+
+
+def test_a_cancelled_agent_run_with_committed_changes_keeps_the_worktree_with_no_publication_or_label(
+    tmp_path: Path,
+) -> None:
+    harness = DevHarness(tmp_path)
+    cancel = threading.Event()
+
+    def handler(prompt: str, options: object) -> str:
+        harness.git.commit(_only_worktree(harness.git), "partial work")
+        cancel.set()
+        return ""
+
+    code = harness.run(handler=handler, cancel=cancel)
+
+    assert code == 0
+    assert harness.git.worktrees
+    assert harness.git.removed == []
+    assert _writes(harness.gh) == []
+    assert harness.store.failed_attempts("https://github.com/owner/repo/issues/1") == 0
 
 
 def test_any_attempt_ending_removes_the_worktree_but_keeps_the_local_branch(tmp_path: Path) -> None:
