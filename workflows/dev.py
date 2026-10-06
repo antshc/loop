@@ -188,6 +188,7 @@ def _commit_leftover_changes(
     """Commit and push any uncommitted worktree changes, and ensure the draft PR."""
     if not git.has_changes(worktree):
         return
+    # No per-Ticket summaries are available here, so the body is empty.
     subject, body = commit_message(initiative, bare_title, ())
     git.commit(worktree, subject, body)
     git.push(worktree, feature_branch)
@@ -211,6 +212,7 @@ def _fail_attempt(
     bare_title: str | None = None,
     initiative: str | None = None,
 ) -> None:
+    # Preserve partial work on the feature branch before the failure is recorded.
     if not dry_run and git is not None and worktree is not None:
         _commit_leftover_changes(
             git, worktree, target_github, feature_branch, base_branch, bare_title, initiative
@@ -230,6 +232,7 @@ def _fail_attempt(
 
 
 def _ensure_pull_request(github: GitHubClient, head: str, base: str, initiative: str | None, title: str) -> None:
+    # One draft PR per feature branch; reruns reuse it.
     if github.find_pull_request(head) is not None:
         return
     github.create_draft_pull_request(head, base, f"{initiative}: {title}" if initiative else title)
@@ -271,6 +274,7 @@ def _apply_report(
     store: ExecutionStore,
     harness_slug: str,
 ) -> bool:
+    # Ignore report entries for Tickets that were not part of this run.
     actionable_numbers = {ticket.number for ticket in actionable}
     by_number = {entry.number: entry for entry in report.tickets if entry.number in actionable_numbers}
     had_changes = git.has_changes(worktree)
@@ -298,6 +302,7 @@ def _apply_report(
             harness_github.add_label(ticket.number, HITL_LABEL)
             resolved_tickets.append(ticket.number)
 
+    # No commit and no completed Ticket means no progress; it counts toward the attempt cap.
     attempt_failed = not had_changes and not any_complete
     if attempt_failed:
         owner, repo = harness_slug.split("/", 1)
@@ -312,6 +317,7 @@ def _apply_report(
             resolved_tickets=resolved_tickets,
         )
         for number in partial_tickets:
+            # A Ticket that stays partial across attempts is escalated to a human.
             if store.partial_count(spec.url, number) >= 2:
                 harness_github.add_label(number, HITL_LABEL)
     else:
@@ -375,11 +381,14 @@ def _process_spec(
     cancel: threading.Event,
 ) -> bool | None:
     """Return True/False for an attempted Spec, or None when it was skipped or only explored (dry run)."""
+    # Tickets live on the harness tracker, even when the Spec targets another repo.
     actionable = harness_github.get_actionable_issues(spec)
     if not actionable:
+        # Nothing left to do, so clear earlier failures; a dry run must not change state.
         if not dry_run:
             store.reset(spec.url)
         return None
+    # Skip Specs that already reached the failed-attempt cap.
     if not may_attempt(store, spec.url):
         return None
 
@@ -390,6 +399,7 @@ def _process_spec(
         _hitl(harness_github, spec, f"dev: cannot resolve repo:target/repo:base labels on {spec.url}")
         return None
 
+    # The harness is its own checkout; any other target must be cloned under workspace/.
     if same_slug(harness_slug, target):
         checkout = harness_root
     else:
@@ -402,6 +412,7 @@ def _process_spec(
                 f"dev: expected checkout at {checkout} with origin {target}; found {checkout_slug or 'no clone'}",
             )
             return None
+    # Pull requests go to the target repo; Ticket updates stay on the harness.
     target_github = harness_github if checkout == harness_root else github_factory(checkout)
 
     try:
@@ -468,6 +479,7 @@ def _process_spec(
             harness_slug=harness_slug,
         )
     except Cancelled:
+        # Keep the worktree only when it holds uncommitted work.
         kept_on_cancel = git.has_changes(worktree)
         _report_cancelled(spec, worktree if kept_on_cancel else None)
         return None
@@ -535,6 +547,7 @@ def main(
     try:
         failed = False
         for spec in harness_github.get_specs():
+            # Specs labeled hitl wait for a human.
             if HITL_LABEL in spec.labels:
                 continue
             outcome = _process_spec(
