@@ -113,22 +113,6 @@ def test_ticket_writes_map_to_the_matching_gh_command() -> None:
     ]
 
 
-def test_dry_run_suppresses_every_write_and_logs_it(caplog: pytest.LogCaptureFixture) -> None:
-    gh = FakeGhCli()
-    client = GitHubClient("owner", "repo", gh=gh, dry_run=True)
-
-    with caplog.at_level("INFO", logger="loop.platforms.github"):
-        client.comment(1, "x")
-        client.add_label(1, "ready")
-        client.close_with_comment(1, "done")
-        client.create_draft_pull_request("feature/x", "main", "title")
-        client.update_pull_request(1, title="new title")
-        client.reply_to_thread("10", "t1", "x")
-
-    assert gh.calls == []
-    assert len(caplog.records) == 6
-
-
 def test_non_zero_gh_exit_raises_a_command_error_with_the_command_and_output() -> None:
     gh = Mock(side_effect=CommandError("gh issue comment 1", 1, "not found"))
     client = GitHubClient("owner", "repo", gh=gh)

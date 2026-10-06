@@ -1,10 +1,7 @@
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
-
-import pytest
 
 from loop import (
     DEFAULT_COMPLETION_SIGNAL,
@@ -16,7 +13,6 @@ from loop import (
     FileSessionStore,
     InMemorySessionStore,
     copilot,
-    dry_run,
 )
 from loop.testing import FakeCopilotCli
 
@@ -164,29 +160,6 @@ def test_agent_option_selects_the_named_agent_and_is_omitted_when_unset() -> Non
     first, second = cli.calls
     assert first[first.index("--agent") + 1] == "reviewer"
     assert "--agent" not in second
-
-
-def test_afk_dry_run_env_var_has_no_effect(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("AFK_DRY_RUN", "1")
-    cli = FakeCopilotCli(lambda prompt: "hi")
-
-    result = copilot(InMemorySessionStore())(binding(cli)).run("go")
-
-    assert cli.calls and result.stdout == "hi"
-
-
-def test_dry_run_agent_client_logs_the_rendered_prompt_and_never_starts_a_provider(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    cli = FakeCopilotCli()
-    sessions = InMemorySessionStore()
-
-    with caplog.at_level(logging.INFO, logger="loop.agents.dry_run"):
-        result = dry_run(sessions)(binding(cli)).run("hi ${{A}}", {"A": "1"})
-
-    assert result == AgentResult("", "", 0)
-    assert "hi 1" in caplog.text
-    assert cli.calls == [] and cli.shell_commands == []
 
 
 def test_template_commands_run_through_the_sandbox_executor() -> None:

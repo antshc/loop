@@ -35,7 +35,6 @@ process.py      CommandExecutor, streaming/cancellable subprocess execution
 prompt.py       PromptPreprocessor (prompt placeholders and args)
 tags.py         extract_tag, extract_json
 parallel.py     parallel_settled
-attempts.py     may_attempt (attempt cap policy)
 errors.py       LoopError hierarchy
 logging_config.py  configure_logging
 testing/        public test doubles for every process boundary
@@ -68,7 +67,7 @@ C4Component
         Component(sandbox, "Worktree sandbox", "create_sandbox, with_sandbox_lifecycle", "Builds a long-lived worktree plus Sandbox, and wraps each run with setup hooks, base head, and commit collection.")
         ComponentDb(stores, "Stores", "File and in-memory", "Persist session keys and attempt counts.")
         Component(contracts, "Contracts", "ABCs", "Sandbox, AgentClient, SessionStore, and ExecutionStore boundaries.")
-        Component(policy, "Shared policy", "process, prompt, tags, parallel, attempts, errors", "Command execution, prompt preprocessing, tag extraction, parallel settling, attempt cap, and errors.")
+        Component(policy, "Shared policy", "process, prompt, tags, parallel, errors", "Command execution, prompt preprocessing, tag extraction, parallel settling, and errors.")
     }
 
     System_Ext(copilot, "Copilot CLI", "Headless coding agent.")

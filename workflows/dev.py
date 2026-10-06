@@ -38,17 +38,14 @@ from loop import (
     configure_logging,
     copilot,
     create_sandbox,
-    may_attempt,
     origin_slug,
     same_slug,
 )
-from loop import dry_run as dry_run_agent
 
 # Settings as code; --harness-root, --log-dir, and --log-level are the only CLI overrides.
 LOG_DIR_NAME = ".loop"
 LOG_LEVEL = "INFO"
 RETRIES = 1
-DRY_RUN = False
 HOOKS: tuple[Hook, ...] = ()
 
 
@@ -111,7 +108,6 @@ class DevDeps:
     hooks: Sequence[Hook]
     retries: int
     template: str
-    dry_run: bool
     cancel: threading.Event
 
 
@@ -250,11 +246,10 @@ def _fail_attempt(
     head_before: str | None = None,
 ) -> Outcome:
     # Preserve the agent's commits on the feature branch before the failure is recorded.
-    if not deps.dry_run and worktree is not None:
+    if worktree is not None:
         _publish_commits(run, deps, worktree, head_before)
     deps.harness_github.comment(run.spec.number, f"dev: {exception}")
-    if not deps.dry_run:
-        _record_failure(run, deps)
+    _record_failure(run, deps)
     return Outcome.FAILED
 
 
@@ -282,10 +277,7 @@ def _prepare_run(spec: Spec, deps: DevDeps) -> SpecRun | None:
     # Tickets live on the harness tracker, even when the Spec targets another repo.
     actionable = tuple(deps.harness_github.get_actionable_issues(spec))
     if not actionable:
-        if not deps.dry_run:
-            deps.store.reset(spec.url)
-        return None
-    if not may_attempt(deps.store, spec.url):
+        deps.store.reset(spec.url)
         return None
 
     initiative, bare_title = parse_initiative(spec.title)
@@ -359,9 +351,6 @@ def _execute_agent(
         run.feature_branch,
     )
     options = AgentOptions(session_key=None)
-    if deps.dry_run:
-        sandbox.run(deps.agent_factory, deps.template, prompt_args, options)
-        return AgentExecution(head_before, None)
     report = _run_report(sandbox, deps.agent_factory, deps.template, prompt_args, options, deps.retries)
     return AgentExecution(head_before, report)
 
@@ -395,7 +384,7 @@ def _apply_report(
             deps.harness_github.add_label(ticket.number, HITL_LABEL)
             resolved_tickets.append(ticket.number)
 
-    # No commit and no completed Ticket means no progress; it counts toward the attempt cap.
+    # No commit and no completed Ticket means no progress; it counts as a failed attempt.
     if not had_changes and not any_complete:
         _record_failure(
             run,
@@ -429,8 +418,6 @@ def _handle_exhausted_retries(
 
 
 def _complete_run(run: SpecRun, execution: AgentExecution, sandbox: WorktreeSandbox, deps: DevDeps) -> Outcome:
-    if deps.dry_run:
-        return Outcome.SKIPPED
     if execution.report is None:
         return _handle_exhausted_retries(run, deps, sandbox.worktree, execution.head_before)
     return _apply_report(run, execution.report, deps, sandbox.worktree, execution.head_before)
@@ -492,7 +479,6 @@ def main(
     store: ExecutionStore | None = None,
     hooks: Sequence[Hook] = HOOKS,
     retries: int = RETRIES,
-    dry_run: bool = DRY_RUN,
     cancel: threading.Event | None = None,
 ) -> int:
     parser = argparse.ArgumentParser(prog="dev")
@@ -511,11 +497,9 @@ def main(
         return 1
 
     git = git or GitClient()
-    github_factory = github_factory or (lambda checkout: GitHubClient.for_repo(checkout, dry_run=dry_run)[0])
+    github_factory = github_factory or (lambda checkout: GitHubClient.for_repo(checkout)[0])
     harness_github = github_factory(harness_root)
-    agent_factory = agent_factory or (
-        dry_run_agent(InMemorySessionStore()) if dry_run else copilot(InMemorySessionStore())
-    )
+    agent_factory = agent_factory or copilot(InMemorySessionStore())
     sandbox_factory = sandbox_factory or SANDBOX_FACTORY
     store = store or FileExecutionStore(log_dir)
     deps = DevDeps(
@@ -530,7 +514,6 @@ def main(
         hooks=hooks,
         retries=retries,
         template=PROMPT.read_text(),
-        dry_run=dry_run,
         cancel=cancel or threading.Event(),
     )
 

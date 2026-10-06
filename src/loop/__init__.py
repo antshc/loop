@@ -7,8 +7,6 @@ and owns its own control flow. Import only from here.
 from __future__ import annotations
 
 from loop.agents.copilot import CopilotClient, copilot
-from loop.agents.dry_run import DryRunAgentClient, dry_run
-from loop.attempts import MAX_FAILED_ATTEMPTS, may_attempt
 from loop.contracts.agent_client import (
     DEFAULT_COMPLETION_SIGNAL,
     AgentClient,
@@ -50,7 +48,6 @@ from loop.tags import extract_json, extract_tag
 
 __all__ = [
     "DEFAULT_COMPLETION_SIGNAL",
-    "MAX_FAILED_ATTEMPTS",
     "AgentClient",
     "AgentClientFactory",
     "AgentError",
@@ -64,7 +61,6 @@ __all__ = [
     "Comment",
     "CopilotClient",
     "DockerSandbox",
-    "DryRunAgentClient",
     "ExecutionStore",
     "ExecutionStoreError",
     "ExtractionError",
@@ -97,10 +93,8 @@ __all__ = [
     "configure_logging",
     "copilot",
     "create_sandbox",
-    "dry_run",
     "extract_json",
     "extract_tag",
-    "may_attempt",
     "origin_slug",
     "parallel_settled",
     "run_host_hooks",

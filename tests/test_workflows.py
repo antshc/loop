@@ -11,7 +11,6 @@ import pytest
 
 from conftest import commit_file, git
 from loop import (
-    MAX_FAILED_ATTEMPTS,
     AgentClient,
     AgentResult,
     Sandbox,
@@ -63,15 +62,6 @@ def test_github_client_reads_specs_tickets_and_pull_requests() -> None:
     assert pull_request is not None and (pull_request.number, pull_request.branch) == (10, "feature/login")
     assert client.find_pull_request("missing-branch") is None
     assert [(thread.id, thread.resolved) for thread in threads] == [("t1", False), ("t2", True)]
-
-
-def test_github_client_dry_run_skips_the_reply() -> None:
-    gh = FakeGhCli()
-
-    GitHubClient("owner", "repo", gh=gh, dry_run=True).reply_to_thread("10", "t1", "x")
-    GitHubClient("owner", "repo", gh=gh).reply_to_thread("10", "t1", "x")
-
-    assert len(gh.calls) == 1 and "thread=t1" in gh.calls[0]
 
 
 def test_github_client_for_repo_reads_the_origin_remote(repo: Path) -> None:
@@ -274,7 +264,6 @@ class DevHarness:
         store=None,
         hooks=(),
         retries=0,
-        dry_run=False,
         log_dir: Path | None = None,
         cancel: threading.Event | None = None,
     ) -> int:
@@ -291,13 +280,12 @@ class DevHarness:
             ["--harness-root", str(self.harness_root), "--log-dir", str(log_dir or self.log_dir)],
             git=git_client,
             github_factory=github_factory or (lambda checkout: self.github),
-            agent_factory=agent_factory or (None if dry_run else default_agent_factory),
+            agent_factory=agent_factory or default_agent_factory,
             sandbox_factory=sandbox_factory
             or (lambda workspace, cancel: NoSandbox(workspace, executor=FakeCopilotCli(), cancel=cancel)),
             store=store if store is not None else self.store,
             hooks=hooks,
             retries=retries,
-            dry_run=dry_run,
             cancel=cancel,
         )
 
@@ -497,20 +485,6 @@ def test_bad_target_label_is_labelled_hitl_and_never_falls_back_to_the_harness(
     assert edits and edits[0][-1] == "hitl"
 
 
-def test_checkout_failure_in_a_dry_run_is_only_logged_with_no_label_or_comment(tmp_path: Path) -> None:
-    harness = DevHarness(
-        tmp_path,
-        specs=[_issue(1, "Add a widget", labels=("spec", "repo:target:acme/widgets", "repo:base:main"))],
-        tickets={1: [_issue(10, "Build the widget")]},
-    )
-    dry_github = GitHubClient("owner", "repo", gh=harness.gh, dry_run=True)
-
-    code = harness.run(github_factory=lambda checkout: dry_github, dry_run=True)
-
-    assert code == 0
-    assert _writes(harness.gh) == []
-
-
 def test_a_spec_labelled_hitl_is_skipped(tmp_path: Path) -> None:
     harness = DevHarness(
         tmp_path,
@@ -536,16 +510,15 @@ def test_no_actionable_tickets_with_earlier_failures_resets_and_skips(tmp_path: 
     assert harness.store.failed_attempts("https://github.com/owner/repo/issues/1") == 0
 
 
-def test_a_spec_at_the_failed_attempt_cap_is_skipped_without_a_label(tmp_path: Path) -> None:
+def test_a_spec_with_three_earlier_failures_is_still_attempted(tmp_path: Path) -> None:
     harness = DevHarness(tmp_path)
     key = "https://github.com/owner/repo/issues/1"
-    for _ in range(MAX_FAILED_ATTEMPTS):
+    for _ in range(3):
         harness.store.record_failure(key, owner="owner", repo="repo", task_id="1", title="x", items=[10])
 
-    code = harness.run()
+    harness.run()
 
-    assert code == 0
-    assert _writes(harness.gh) == []
+    assert len(harness.agent_calls) == 1
 
 
 def test_a_failed_attempt_records_count_last_run_and_last_items_in_the_days_execution_log(tmp_path: Path) -> None:
@@ -561,32 +534,6 @@ def test_a_failed_attempt_records_count_last_run_and_last_items_in_the_days_exec
     assert records[0]["count"] == 1
     assert records[0]["last_run"] == "2026-01-01T12:00:00Z"
     assert records[0]["last_items"] == [10]
-
-
-def test_a_new_utc_day_lets_a_spec_capped_yesterday_be_attempted_again(tmp_path: Path) -> None:
-    harness = DevHarness(tmp_path)
-    key = "https://github.com/owner/repo/issues/1"
-    yesterday = FileExecutionStore(harness.log_dir, clock=lambda: datetime(2026, 1, 1, tzinfo=timezone.utc))
-    for _ in range(MAX_FAILED_ATTEMPTS):
-        yesterday.record_failure(key, owner="owner", repo="repo", task_id="1", title="x", items=[10])
-    today = FileExecutionStore(harness.log_dir, clock=lambda: datetime(2026, 1, 2, tzinfo=timezone.utc))
-
-    code = harness.run(store=today)
-
-    assert code == 1
-    assert _writes(harness.gh) != []
-
-
-def test_a_non_array_execution_log_file_fails_before_any_spec_is_attempted(tmp_path: Path) -> None:
-    harness = DevHarness(tmp_path)
-    harness.log_dir.mkdir(parents=True)
-    (harness.log_dir / "dev-execution-log-2026-01-01.json").write_text('{"not": "an array"}')
-    store = FileExecutionStore(harness.log_dir, clock=lambda: datetime(2026, 1, 1, tzinfo=timezone.utc))
-
-    code = harness.run(store=store)
-
-    assert code == 1
-    assert _writes(harness.gh) == []
 
 
 def test_when_the_first_spec_fails_in_git_the_second_is_still_processed(tmp_path: Path) -> None:
@@ -799,19 +746,6 @@ def test_a_valid_partial_report_is_not_retried(tmp_path: Path) -> None:
     harness.run(handler=handler, retries=2)
 
     assert len(harness.agent_calls) == 1
-
-
-def test_dry_run_prepares_the_worktree_runs_hooks_logs_the_prompt_and_writes_nothing(tmp_path: Path) -> None:
-    harness = DevHarness(tmp_path)
-
-    code = harness.run(dry_run=True, hooks=(Hook("echo ready"),))
-
-    assert code == 0
-    assert harness.git.hook_calls == ["echo ready"]
-    assert harness.git.worktrees == {}
-    assert [c for c in harness.gh.calls if c[0] != "api"] == []
-    log_text = (harness.log_dir / "dev.log").read_text()
-    assert '\\"number\\": 1' in log_text and "Add login page" in log_text
 
 
 def test_every_complete_ticket_with_changes_commits_pushes_prs_and_closes(tmp_path: Path) -> None:

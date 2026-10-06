@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -9,8 +8,6 @@ from pathlib import Path
 from typing import Any
 
 from loop.process import cli_runner, run_command
-
-logger = logging.getLogger("loop.platforms.github")
 
 _BLOCKING_LABELS = frozenset({"hitl", "spec"})
 _ISSUE_FIELDS = (
@@ -113,29 +110,26 @@ _REPLY_MUTATION = (
 class GitHubClient:
     """Specs, Tickets, and pull requests through `gh`; no GitHub shape leaves this class."""
 
-    def __init__(self, owner: str, repo: str, *, gh: GhRunner, dry_run: bool = False) -> None:
+    def __init__(self, owner: str, repo: str, *, gh: GhRunner) -> None:
         self._owner = owner
         self._repo = repo
         self._gh = gh
-        self._dry_run = dry_run
 
     @classmethod
-    def for_repo(
-        cls, harness_repo: Path, target_repo: Path | None = None, *, dry_run: bool = False
-    ) -> tuple[GitHubClient, GitHubClient]:
+    def for_repo(cls, harness_repo: Path, target_repo: Path | None = None) -> tuple[GitHubClient, GitHubClient]:
         """The harness client (Specs, Tickets) and the target client (pull requests); the same repo by default."""
-        harness = cls._from_origin(harness_repo, dry_run=dry_run)
+        harness = cls._from_origin(harness_repo)
         if target_repo is None or target_repo == harness_repo:
             return harness, harness
-        return harness, cls._from_origin(target_repo, dry_run=dry_run)
+        return harness, cls._from_origin(target_repo)
 
     @classmethod
-    def _from_origin(cls, repo: Path, *, dry_run: bool) -> GitHubClient:
+    def _from_origin(cls, repo: Path) -> GitHubClient:
         url = run_command(("git", "remote", "get-url", "origin"), cwd=repo).strip()
         match = _REMOTE.search(url)
         if match is None:
             raise ValueError(f"unsupported remote: {url}")
-        return cls(match["owner"], match["repo"], gh=GhCli(cwd=repo), dry_run=dry_run)
+        return cls(match["owner"], match["repo"], gh=GhCli(cwd=repo))
 
     def get_specs(self) -> list[Spec]:
         pages = json.loads(self._graphql(_SPECS_QUERY, paginate=True))
@@ -201,7 +195,7 @@ class GitHubClient:
     def close_with_comment(self, number: int, body: str) -> None:
         self._write(("issue", "close", str(number), "--repo", self._slug, "--comment", body))
 
-    def create_draft_pull_request(self, head: str, base: str, title: str, body: str = "") -> PullRequest | None:
+    def create_draft_pull_request(self, head: str, base: str, title: str, body: str = "") -> PullRequest:
         output = self._write(
             (
                 "pr", "create",
@@ -213,8 +207,6 @@ class GitHubClient:
                 "--draft",
             )
         )
-        if output is None:
-            return None
         match = re.search(r"/pull/(\d+)", output.strip())
         number = int(match.group(1)) if match else 0
         return PullRequest(number=number, title=title, url=output.strip(), branch=head)
@@ -241,19 +233,13 @@ class GitHubClient:
         ]
 
     def reply_to_thread(self, pull_request_id: str, thread_id: str, body: str) -> None:
-        if self._dry_run:
-            logger.info("dry-run: skipped reply to thread %s", thread_id)
-            return
         self._graphql(_REPLY_MUTATION, scoped=False, thread=thread_id, body=body)
 
     @property
     def _slug(self) -> str:
         return f"{self._owner}/{self._repo}"
 
-    def _write(self, args: tuple[str, ...]) -> str | None:
-        if self._dry_run:
-            logger.info("dry-run: skipped gh %s", " ".join(args))
-            return None
+    def _write(self, args: tuple[str, ...]) -> str:
         return self._gh(args)
 
     def _graphql(self, query: str, *, paginate: bool = False, scoped: bool = True, **variables: str | int) -> str:
