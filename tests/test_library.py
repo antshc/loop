@@ -25,7 +25,7 @@ from orb import (
 ROOT = Path(__file__).parents[1]
 SRC = ROOT / "src" / "orb"
 WORKFLOWS = ROOT / "workflows"
-FAKES = {"FakeGh", "FakeGitClient", "FakeDocker", "FakeCopilotCli", "FakeAgentClient"}
+FAKES = {"FakeGhCli", "FakeGitClient", "FakeDocker", "FakeCopilotCli", "FakeAgentClient"}
 
 
 def test_preprocessor_substitutes_placeholders_and_runs_template_commands() -> None:

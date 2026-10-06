@@ -19,7 +19,7 @@ from orb import (
     NoCapsule,
     copilot,
 )
-from orb.testing import FakeAgentClient, FakeCopilotCli, FakeGh, FakeGitClient
+from orb.testing import FakeAgentClient, FakeCopilotCli, FakeGhCli, FakeGitClient
 from workflows import dev
 
 SRC = Path(__file__).parents[1] / "src" / "orb"
@@ -36,25 +36,31 @@ def imports_of(path: Path) -> set[str]:
     return found
 
 
-def test_github_client_reads_specs_issues_and_pull_requests() -> None:
-    client = GitHubClient("owner", "repo", gh=FakeGh())
+def test_github_client_reads_specs_tickets_and_pull_requests() -> None:
+    client = GitHubClient("owner", "repo", gh=FakeGhCli())
 
     specs = client.get_specs()
-    issues = client.get_issues()
-    pull_requests = client.get_pull_requests()
+    tickets = client.get_tickets(specs[0])
+    pull_request = client.find_pull_request("feature/login")
     threads = client.review_threads("10")
 
-    assert [(item.id, item.title, item.tags) for item in specs] == [
-        ("1", "Add login page", ("spec",)),
-        ("2", "Add logout button", ("spec",)),
+    assert [(item.number, item.title, item.labels) for item in specs] == [
+        (1, "Add login page", ("spec",)),
+        (2, "Add logout button", ("spec",)),
     ]
-    assert [item.id for item in issues] == ["1", "3"]
-    assert [(pr.id, pr.branch) for pr in pull_requests] == [("10", "feature/login")]
+    assert [(ticket.number, ticket.state, ticket.labels) for ticket in tickets] == [
+        (10, "open", ()),
+        (11, "open", ("hitl",)),
+        (12, "open", ("spec",)),
+        (13, "closed", ()),
+    ]
+    assert pull_request is not None and (pull_request.number, pull_request.branch) == (10, "feature/login")
+    assert client.find_pull_request("missing-branch") is None
     assert [(thread.id, thread.resolved) for thread in threads] == [("t1", False), ("t2", True)]
 
 
 def test_github_client_dry_run_skips_the_reply() -> None:
-    gh = FakeGh()
+    gh = FakeGhCli()
 
     GitHubClient("owner", "repo", gh=gh, dry_run=True).reply_to_thread("10", "t1", "x")
     GitHubClient("owner", "repo", gh=gh).reply_to_thread("10", "t1", "x")
@@ -68,7 +74,8 @@ def test_github_client_for_repo_reads_the_origin_remote(repo: Path) -> None:
         GitHubClient.for_repo(repo)
 
     git(repo, "remote", "set-url", "origin", "git@github.com:owner/repo.git")
-    assert isinstance(GitHubClient.for_repo(repo), GitHubClient)
+    harness, target = GitHubClient.for_repo(repo)
+    assert isinstance(harness, GitHubClient) and target is harness
 
 
 class DevHarness:
@@ -94,7 +101,7 @@ class DevHarness:
                 workspace, factory, executor=executor or FakeCopilotCli()
             ),
             git=self.git,
-            github=GitHubClient("owner", "repo", gh=FakeGh()),
+            github=GitHubClient("owner", "repo", gh=FakeGhCli()),
             store=FileExecutionStore(self.tmp_path / "logs"),
         )
 

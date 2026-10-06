@@ -22,7 +22,7 @@ from orb.contracts.capsule import AgentClientFactory, Capsule
 from orb.contracts.execution_store import ExecutionStore
 from orb.errors import AgentError, CommandError, ExtractionError, OrbError, PromptError
 from orb.parallel import Settled, parallel_settled
-from orb.platforms.gh_client import GitHubClient, PullRequest, ReviewThread, WorkItem
+from orb.platforms.gh_client import GitHubClient, PullRequest, ReviewThread, Spec, Ticket
 from orb.platforms.git_client import GitClient
 from orb.process import CommandExecutor, CommandResult
 from orb.prompt import PromptPreprocessor
@@ -61,7 +61,8 @@ __all__ = [
     "ReviewThread",
     "SessionStore",
     "Settled",
-    "WorkItem",
+    "Spec",
+    "Ticket",
     "copilot",
     "extract_json",
     "extract_tag",

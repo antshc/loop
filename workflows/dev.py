@@ -23,7 +23,7 @@ from orb import (
     NoCapsule,
     OrbError,
     SessionStore,
-    WorkItem,
+    Spec,
     copilot,
     may_attempt,
 )
@@ -58,7 +58,7 @@ def main(
 
     repo = args.repo.resolve()
     git = git or GitClient(repo)
-    github = github or GitHubClient.for_repo(repo, dry_run=args.dry_run)
+    github = github or GitHubClient.for_repo(repo, dry_run=args.dry_run)[0]
     attempts = store or FileExecutionStore(args.log_dir)
     agent_factory = agent_factory or copilot(sessions or FileSessionStore(args.log_dir))
     capsule_factory = capsule_factory or (
@@ -70,13 +70,13 @@ def main(
     failed = False
 
     for spec in github.get_specs()[: args.limit]:
-        key = f"dev:{spec.id}"
+        key = f"dev:{spec.number}"
         if not may_attempt(attempts, key):
             logger.warning("skip %s: attempt cap reached", key)
             continue
         options = AgentOptions(
             model=args.model,
-            session_key=f"dev-{spec.id}",
+            session_key=f"dev-{spec.number}",
             session_name_prefix=SESSION_PREFIX,
             add_dirs=add_dirs,
         )
@@ -92,7 +92,7 @@ def main(
 
 
 def _develop(
-    spec: WorkItem,
+    spec: Spec,
     template: str,
     options: AgentOptions,
     max_iterations: int,
@@ -101,12 +101,12 @@ def _develop(
     agent_factory: AgentClientFactory,
 ) -> bool:
     """Ralph loop on the spec's branch; success means the agent left commits."""
-    branch = f"orb/spec-{spec.id}"
+    branch = f"orb/spec-{spec.number}"
     git.create_branch(branch)
     workspace = git.create_worktree(branch)
     prompt_args = {
         "SOURCE_BRANCH": branch,
-        "SPEC_ID": spec.id,
+        "SPEC_ID": str(spec.number),
         "SPEC_TITLE": spec.title,
         "SPEC_URL": spec.url,
     }
@@ -114,10 +114,10 @@ def _develop(
         with capsule_factory(workspace, agent_factory) as capsule:
             base = git.head(workspace)
             for iteration in range(1, max_iterations + 1):
-                logger.info("[Dev #%s] iteration %d/%d on %s", spec.id, iteration, max_iterations, branch)
+                logger.info("[Dev #%s] iteration %d/%d on %s", spec.number, iteration, max_iterations, branch)
                 result = capsule.run(template, prompt_args, options)
                 if not result.success:
-                    raise AgentError(f"Dev #{spec.id}", result.output)
+                    raise AgentError(f"Dev #{spec.number}", result.output)
                 if DEFAULT_COMPLETION_SIGNAL in result.stdout:
                     break
         return bool(git.commits_since(workspace, base))
