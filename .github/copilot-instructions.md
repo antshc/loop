@@ -14,10 +14,10 @@ Within this file, resolve conflicts in this order: **safety and repository targe
 Before the first `git`/`gh` write action in a session (including `git worktree add`), run this check and stop if it fails:
 
 ```
-python -c 'import re,subprocess,sys; url=subprocess.run(["git","remote","get-url","origin"],capture_output=True,text=True,check=True).stdout.strip(); slug=re.sub(r"\.git$","",re.sub(r"^(git@github\.com:|https://github\.com/)","",url)); sys.exit(0 if slug=="antshc/ralphv2" else 1)'
+python -c 'import re,subprocess,sys; url=subprocess.run(["git","remote","get-url","origin"],capture_output=True,text=True,check=True).stdout.strip(); slug=re.sub(r"\.git$","",re.sub(r"^(git@github\.com:|https://github\.com/)","",url)); sys.exit(0 if slug=="antshc/orb" else 1)'
 ```
 
-Confirm the repo root with `git rev-parse --show-toplevel`. Origin: `antshc/ralphv2`.
+Confirm the repo root with `git rev-parse --show-toplevel`. Origin: `antshc/orb`.
 
 ## 3. Authoritative sources
 
