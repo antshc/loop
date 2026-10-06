@@ -34,6 +34,8 @@ class FakeGitClient(GitClient):
         self.merged: list[tuple[Path, str]] = []
         self.deleted_branches: list[str] = []
         self.subjects: dict[str, str] = {}
+        self.dirty_worktrees: set[Path] = set()
+        self.remote_heads: dict[str, str] = {}
 
     def fetch(self, checkout: Path) -> None:
         if checkout in self.failing_fetch:
@@ -130,6 +132,40 @@ class FakeGitClient(GitClient):
             if self.subjects.get(commit, "").startswith(prefix)
         ]
         return matching[:limit]
+
+    def head_subject(self, worktree: Path) -> str:
+        return self.subjects.get(self.head(worktree), "")
+
+    def is_clean(self, worktree: Path) -> bool:
+        return worktree not in self.dirty_worktrees
+
+    def reset_to(self, worktree: Path, commit: str) -> None:
+        branch = self.worktrees[worktree]
+        commits = self.branches[branch]
+        if commit in commits:
+            del commits[commits.index(commit) + 1 :]
+        else:
+            commits.clear()
+        self.dirty_worktrees.discard(worktree)
+
+    def commits_with_prefix(self, worktree: Path, range_spec: str, prefix: str) -> list[str]:
+        commits = self.branches[self.worktrees[worktree]]
+        base, _, tip = range_spec.partition("..")
+        start = commits.index(base) + 1 if base in commits else 0
+        end = commits.index(tip) + 1 if tip in commits else len(commits)
+        return [
+            f"{commit[-7:]} {self.subjects[commit]}"
+            for commit in commits[start:end]
+            if self.subjects.get(commit, "").startswith(prefix)
+        ]
+
+    def branch_ahead_of_remote(self, checkout: Path, branch: str, base: str) -> bool:
+        if branch not in self.branches:
+            return False
+        commits = self.branches[branch]
+        upstream = self.remote_heads.get(branch) if branch in self.remote_branches else base
+        start = commits.index(upstream) + 1 if upstream in commits else 0
+        return len(commits) > start
 
     def push(self, worktree: Path, branch: str) -> None:
         self.pushed.append((worktree, branch))
