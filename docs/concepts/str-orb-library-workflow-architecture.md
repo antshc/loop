@@ -19,7 +19,7 @@ Orb is a library of contracts and default implementations; a **workflow** is one
 
 ## Rules
 
-- MUST ship contracts and default implementations through one public top-level `orb` API; a workflow MUST import only from it.
+- MUST ship contracts and default implementations through one public top-level `orb` API; a workflow MUST import only from it, and workflow tests MAY also import the shipped test doubles from `orb.testing`.
 - MUST define a contract as an `abc.ABC` only where Orb's own code calls a replaceable part (Capsule, agent client, stores), and make every implementation of it inherit it.
 - MUST ship clients only a workflow calls (`GitClient`, `GitHubClient`) as concrete helpers with no contract.
 - MUST NOT ship workflows in the `orb` package.

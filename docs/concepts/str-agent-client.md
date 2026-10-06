@@ -58,6 +58,9 @@ The CLI adapter owns command construction, process execution, and provider-speci
 - MUST keep provider executable names, arguments, session creation/resume flags, and naming syntax inside the provider CLI adapter.
 - MUST execute the provider CLI in the workspace of the owning Capsule.
 - MUST capture stdout, stderr, and exit code for every invocation.
+- MUST stream provider output line by line through the Capsule executor while the process runs, and parse the provider's own event format only inside its CLI adapter ([ADR 0007](../adr/0007-stream-agent-output-live-and-parse-it-in-the-provider-adapter.md)).
+- MUST mark the result completed and terminate the provider process when the parsed output carries the completion signal; a completed result is a success, distinct from a timeout.
+- MUST implement dry run as a `DryRunAgentClient` that renders and logs the prompt and returns success without invoking a provider; test doubles stay in `orb.testing`.
 - MUST return failed CLI execution output to orchestration instead of losing stderr.
 - MUST NOT make Ralph, Crew, or other orchestration workflows construct provider CLI commands or provider session identifiers directly.
 - SHOULD keep the raw provider output available for diagnostics and execution logs.
