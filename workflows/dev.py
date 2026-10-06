@@ -57,7 +57,7 @@ def main(
     logging.basicConfig(level=logging.INFO, stream=sys.stderr, format="%(message)s")
 
     repo = args.repo.resolve()
-    git = git or GitClient(repo)
+    git = git or GitClient()
     github = github or GitHubClient.for_repo(repo, dry_run=args.dry_run)[0]
     attempts = store or FileExecutionStore(args.log_dir)
     agent_factory = agent_factory or copilot(sessions or FileSessionStore(args.log_dir))
@@ -81,7 +81,7 @@ def main(
             add_dirs=add_dirs,
         )
         try:
-            success = _develop(spec, template, options, args.max_iterations, git, capsule_factory, agent_factory)
+            success = _develop(spec, template, options, args.max_iterations, repo, git, capsule_factory, agent_factory)
         except OrbError as exception:
             logger.error("%s: %s", key, exception)
             success = False
@@ -96,14 +96,15 @@ def _develop(
     template: str,
     options: AgentOptions,
     max_iterations: int,
+    repo: Path,
     git: GitClient,
     capsule_factory: CapsuleFactory,
     agent_factory: AgentClientFactory,
 ) -> bool:
-    """Ralph loop on the spec's branch; success means the agent left commits."""
+    """Ralph loop on the spec's branch; success means the agent left changes to commit."""
     branch = f"orb/spec-{spec.number}"
-    git.create_branch(branch)
-    workspace = git.create_worktree(branch)
+    # TODO(#40): resolve the real target branch instead of assuming "main".
+    workspace = git.create_worktree(repo, branch, "main")
     prompt_args = {
         "SOURCE_BRANCH": branch,
         "SPEC_ID": str(spec.number),
@@ -112,7 +113,6 @@ def _develop(
     }
     try:
         with capsule_factory(workspace, agent_factory) as capsule:
-            base = git.head(workspace)
             for iteration in range(1, max_iterations + 1):
                 logger.info("[Dev #%s] iteration %d/%d on %s", spec.number, iteration, max_iterations, branch)
                 result = capsule.run(template, prompt_args, options)
@@ -120,7 +120,7 @@ def _develop(
                     raise AgentError(f"Dev #{spec.number}", result.output)
                 if DEFAULT_COMPLETION_SIGNAL in result.stdout:
                     break
-        return bool(git.commits_since(workspace, base))
+        return git.has_changes(workspace)
     finally:
         git.remove_worktree(workspace)
 

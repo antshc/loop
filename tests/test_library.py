@@ -10,11 +10,8 @@ import pytest
 
 import orb
 import orb.testing
-from conftest import commit_file, git
 from orb import (
-    CommandError,
     ExtractionError,
-    GitClient,
     PromptError,
     PromptPreprocessor,
     extract_json,
@@ -79,34 +76,6 @@ def test_parallel_settled_isolates_failures_and_keeps_order() -> None:
     assert isinstance(outcomes[1].error, ValueError)
     with pytest.raises(ValueError):
         parallel_settled([1], worker, max_parallel=0)
-
-
-def test_git_client_creates_branch_and_worktree_reports_commits_and_merges(repo: Path) -> None:
-    client = GitClient(repo)
-
-    client.create_branch("feature/x")
-    client.create_branch("feature/x")
-    path = client.create_worktree("feature/x")
-    base = client.head(path)
-    commit_file(path, "a.txt", "a", "add a")
-    commits = client.commits_since(path, base)
-    client.merge_into_host(path)
-    client.remove_worktree(path)
-
-    assert len(commits) == 1
-    assert (repo / "a.txt").read_text() == "a"
-    assert not path.exists()
-    assert git(repo, "worktree", "list", "--porcelain").count("worktree ") == 1
-    assert git(repo, "branch", "--list", "feature/x").strip() == "feature/x"
-
-
-def test_git_client_rejects_invalid_branch_names_and_unknown_worktrees(repo: Path, tmp_path: Path) -> None:
-    client = GitClient(repo)
-
-    with pytest.raises(CommandError):
-        client.create_branch("--evil")
-    with pytest.raises(CommandError):
-        client.head(tmp_path)
 
 
 def test_public_api_exposes_no_fake_and_testing_exposes_every_fake() -> None:

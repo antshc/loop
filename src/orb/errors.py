@@ -26,3 +26,10 @@ class AgentError(OrbError):
 
 class ExtractionError(OrbError):
     pass
+
+
+class HookError(OrbError):
+    def __init__(self, command: str, output: str) -> None:
+        super().__init__(f"hook failed ({command}):\n{output}".rstrip())
+        self.command = command
+        self.output = output

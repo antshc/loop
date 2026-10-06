@@ -1,48 +1,151 @@
 from __future__ import annotations
 
+import re
+import threading
+from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 
-from orb.errors import CommandError
-from orb.process import execute, run_command
-from orb.worktree import Worktree, create_worktree
+from orb.errors import CommandError, HookError
+from orb.process import CommandResult, checked_output, execute
+
+DEFAULT_HOOK_TIMEOUT_S = 120.0
+
+_REMOTE = re.compile(r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?/?$", re.IGNORECASE)
+
+
+class GitRunner(Protocol):
+    """Runs one git (or Hook) command in a given directory; a non-zero exit is returned, not raised."""
+
+    def __call__(
+        self, args: Sequence[str] | str, *, cwd: Path | None = None, timeout_s: float | None = None
+    ) -> CommandResult: ...
+
+
+@dataclass(frozen=True)
+class Hook:
+    """A `worktree-ready` shell command; `timeout_s` overrides the default for this Hook."""
+
+    command: str
+    timeout_s: float = DEFAULT_HOOK_TIMEOUT_S
+
+
+def origin_slug(path: Path, *, run: GitRunner = execute) -> str | None:
+    """The `owner/name` of `path`'s `origin` remote on github.com, or None when unresolvable."""
+    result = run(("git", "remote", "get-url", "origin"), cwd=path)
+    if result.returncode != 0:
+        return None
+    match = _REMOTE.search(result.stdout.strip())
+    return f"{match['owner']}/{match['repo']}" if match else None
+
+
+def same_slug(a: str | None, b: str | None) -> bool:
+    """Case-insensitive equality for two `origin_slug` results."""
+    return a is not None and b is not None and a.casefold() == b.casefold()
 
 
 class GitClient:
-    """Branches, worktrees, and commit queries for one repository."""
+    """The worktree lifecycle an attempt needs: fetch, branch, Hooks, commit, push, remove."""
 
-    def __init__(self, repo: Path, *, worktrees_dir: Path | None = None) -> None:
-        self._repo = repo
-        self._worktrees_dir = worktrees_dir
-        self._worktrees: dict[Path, Worktree] = {}
+    def __init__(self, *, run: GitRunner = execute) -> None:
+        self._execute = run
+        self._lock = threading.Lock()
+        self._worktrees: dict[Path, Path] = {}
 
-    def create_branch(self, name: str, base: str = "HEAD") -> None:
-        """Create the branch from `base` unless it already exists locally."""
-        # Rejects option-like and malformed names, so a branch from agent output is safe to pass to git.
-        run_command(("git", "check-ref-format", "--branch", name), cwd=self._repo)
-        exists = execute(("git", "show-ref", "--verify", "--quiet", f"refs/heads/{name}"), cwd=self._repo)
-        if exists.returncode != 0:
-            run_command(("git", "branch", name, base), cwd=self._repo)
+    def fetch(self, checkout: Path) -> None:
+        self._run(("git", "fetch", "--all", "--prune"), cwd=checkout)
 
-    def create_worktree(self, branch: str) -> Path:
-        worktree = create_worktree(repo=self._repo, branch=branch, worktrees_dir=self._worktrees_dir)
-        self._worktrees[worktree.path] = worktree
-        return worktree.path
+    def remote_branch_exists(self, checkout: Path, branch: str) -> bool:
+        return self._show_ref(checkout, f"refs/remotes/origin/{branch}")
 
-    def head(self, worktree: Path) -> str:
-        return self._tracked(worktree).head()
+    def create_worktree(
+        self,
+        checkout: Path,
+        branch: str,
+        base: str,
+        *,
+        on_ready: Sequence[Hook] = (),
+    ) -> Path:
+        self._run(("git", "check-ref-format", "--branch", branch), cwd=checkout)
+        target = Path(f"{checkout}.worktrees") / branch
+        with self._lock:
+            worktrees = self._list_worktrees(checkout)
+            other = next(
+                (path for path, ref in worktrees if ref == f"refs/heads/{branch}" and path != target), None
+            )
+            if other is not None:
+                raise CommandError("git worktree add", None, f"branch {branch!r} is checked out in {other}")
+            if any(path == target for path, _ in worktrees):
+                if self.has_changes(target):
+                    raise CommandError(
+                        "git worktree add", None, f"leftover worktree has uncommitted changes: {target}"
+                    )
+                self._run(("git", "worktree", "remove", "--force", str(target)), cwd=checkout)
 
-    def commits_since(self, worktree: Path, revision: str) -> tuple[str, ...]:
-        return self._tracked(worktree).commits_since(revision)
+            start_ref = f"origin/{branch}" if self.remote_branch_exists(checkout, branch) else f"origin/{base}"
+            if self._show_ref(checkout, f"refs/heads/{branch}"):
+                self._run(("git", "branch", "-f", branch, start_ref), cwd=checkout)
+                self._run(("git", "worktree", "add", str(target), branch), cwd=checkout)
+            else:
+                self._run(("git", "worktree", "add", "-b", branch, str(target), start_ref), cwd=checkout)
+            self._worktrees[target] = checkout
 
-    def merge_into_host(self, worktree: Path) -> None:
-        self._tracked(worktree).merge_into_host()
+        try:
+            for hook in on_ready:
+                self._run_hook(hook, target)
+        except HookError:
+            self.remove_worktree(target)
+            raise
+        return target
+
+    def has_changes(self, worktree: Path) -> bool:
+        return bool(self._run(("git", "status", "--porcelain"), cwd=worktree).strip())
+
+    def commit(self, worktree: Path, subject: str, body: str = "") -> None:
+        self._run(("git", "add", "-A"), cwd=worktree)
+        args = ("git", "commit", "-m", subject, "-m", body) if body else ("git", "commit", "-m", subject)
+        self._run(args, cwd=worktree)
+
+    def push(self, worktree: Path, branch: str) -> None:
+        self._run(("git", "push", "origin", branch), cwd=worktree)
 
     def remove_worktree(self, worktree: Path) -> None:
-        self._tracked(worktree).close()
-        self._worktrees.pop(worktree, None)
-
-    def _tracked(self, worktree: Path) -> Worktree:
         try:
-            return self._worktrees[worktree]
+            checkout = self._worktrees.pop(worktree)
         except KeyError as exception:
-            raise CommandError("git", None, f"unknown worktree: {worktree}") from exception
+            raise CommandError("git worktree remove", None, f"unknown worktree: {worktree}") from exception
+        with self._lock:
+            self._run(("git", "worktree", "remove", "--force", str(worktree)), cwd=checkout)
+
+    def _show_ref(self, checkout: Path, ref: str) -> bool:
+        return self._execute(("git", "show-ref", "--verify", "--quiet", ref), cwd=checkout).returncode == 0
+
+    def _list_worktrees(self, checkout: Path) -> list[tuple[Path, str | None]]:
+        output = self._run(("git", "worktree", "list", "--porcelain"), cwd=checkout)
+        entries: list[tuple[Path, str | None]] = []
+        path: Path | None = None
+        branch: str | None = None
+        for line in output.splitlines():
+            if line.startswith("worktree "):
+                if path is not None:
+                    entries.append((path, branch))
+                path = Path(line[len("worktree ") :])
+                branch = None
+            elif line.startswith("branch "):
+                branch = line[len("branch ") :]
+        if path is not None:
+            entries.append((path, branch))
+        return entries
+
+    def _run_hook(self, hook: Hook, worktree: Path) -> None:
+        try:
+            result = self._execute(hook.command, cwd=worktree, timeout_s=hook.timeout_s)
+        except CommandError as exception:
+            raise HookError(hook.command, str(exception)) from exception
+        if result.returncode != 0:
+            raise HookError(hook.command, result.stdout + result.stderr)
+
+    def _run(self, args: Sequence[str] | str, *, cwd: Path) -> str:
+        result = self._execute(args, cwd=cwd)
+        return checked_output(args if isinstance(args, str) else " ".join(args), result)

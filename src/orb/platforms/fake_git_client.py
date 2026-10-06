@@ -1,47 +1,69 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 
-from orb.errors import CommandError
-from orb.platforms.git_client import GitClient
+from orb.errors import CommandError, HookError
+from orb.platforms.git_client import GitClient, Hook
 
 
 class FakeGitClient(GitClient):
-    """In-memory git: branches hold commit ids, and `commit()` lets a fake agent add work to a worktree."""
+    """In-memory git: simulates fetches, remote branches, leftovers, branch-in-use, and Hook outcomes."""
 
     def __init__(self, root: Path = Path("/fake/worktrees")) -> None:
         self._root = root
-        self.branches: dict[str, list[str]] = {}
+        self.fetched: list[Path] = []
+        self.remote_branches: set[str] = set()
+        self.branch_in_use: dict[str, Path] = {}
+        self.dirty_leftovers: set[Path] = set()
+        self.hook_calls: list[str] = []
+        self.failing_hooks: set[str] = set()
         self.worktrees: dict[Path, str] = {}
-        self.merged: list[str] = []
+        self.branches: dict[str, list[str]] = {}
+        self.pushed: list[tuple[Path, str]] = []
         self.removed: list[Path] = []
 
-    def create_branch(self, name: str, base: str = "HEAD") -> None:
-        self.branches.setdefault(name, [])
+    def fetch(self, checkout: Path) -> None:
+        self.fetched.append(checkout)
 
-    def create_worktree(self, branch: str) -> Path:
-        if branch not in self.branches:
-            raise CommandError("git worktree add", 128, f"unknown branch: {branch}")
+    def remote_branch_exists(self, checkout: Path, branch: str) -> bool:
+        return branch in self.remote_branches
+
+    def create_worktree(
+        self, checkout: Path, branch: str, base: str, *, on_ready: Sequence[Hook] = ()
+    ) -> Path:
+        if branch in self.branch_in_use:
+            raise CommandError(
+                "git worktree add", None, f"branch {branch!r} is checked out in {self.branch_in_use[branch]}"
+            )
         path = self._root / branch.replace("/", "__")
+        if path in self.dirty_leftovers:
+            raise CommandError("git worktree add", None, f"leftover worktree has uncommitted changes: {path}")
+        self.dirty_leftovers.discard(path)
         self.worktrees[path] = branch
+        self.branches.setdefault(branch, [])
+        try:
+            for hook in on_ready:
+                self.hook_calls.append(hook.command)
+                if hook.command in self.failing_hooks:
+                    raise HookError(hook.command, "fake hook failure")
+        except HookError:
+            self.remove_worktree(path)
+            raise
         return path
 
-    def commit(self, worktree: Path, message: str) -> str:
+    def has_changes(self, worktree: Path) -> bool:
+        # fake: "changed" means the branch picked up a commit, not real working-tree dirt.
+        return bool(self.branches[self.worktrees[worktree]])
+
+    def commit(self, worktree: Path, subject: str, body: str = "") -> str:
         commits = self.branches[self.worktrees[worktree]]
         commit = f"{len(commits) + 1:040d}"
         commits.append(commit)
         return commit
 
-    def head(self, worktree: Path) -> str:
-        commits = self.branches[self.worktrees[worktree]]
-        return commits[-1] if commits else "0" * 40
-
-    def commits_since(self, worktree: Path, revision: str) -> tuple[str, ...]:
-        commits = self.branches[self.worktrees[worktree]]
-        return tuple(commits[commits.index(revision) + 1 :]) if revision in commits else tuple(commits)
-
-    def merge_into_host(self, worktree: Path) -> None:
-        self.merged.append(self.worktrees[worktree])
+    def push(self, worktree: Path, branch: str) -> None:
+        self.pushed.append((worktree, branch))
 
     def remove_worktree(self, worktree: Path) -> None:
         self.worktrees.pop(worktree)

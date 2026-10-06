@@ -36,7 +36,6 @@ source_modules = [
     "orb.tags",
     "orb.parallel",
     "orb.attempts",
-    "orb.worktree",
 ]
 forbidden_modules = [
     "orb.agents",
@@ -45,6 +44,12 @@ forbidden_modules = [
     "orb.stores",
     "orb.testing",
 ]
+
+[[tool.importlinter.contracts]]
+name = "The git platform module imports no GitHub or workflow code"
+type = "forbidden"
+source_modules = ["orb.platforms.git_client"]
+forbidden_modules = ["orb.platforms.gh_client", "workflows"]
 
 [[tool.importlinter.contracts]]
 name = "Only orb.testing imports orb.testing"
@@ -61,7 +66,6 @@ source_modules = [
     "orb.tags",
     "orb.parallel",
     "orb.attempts",
-    "orb.worktree",
     "workflows",
 ]
 forbidden_modules = ["orb.testing"]
@@ -82,7 +86,6 @@ forbidden_modules = [
     "orb.tags",
     "orb.parallel",
     "orb.attempts",
-    "orb.worktree",
     "orb.testing",
 ]
 allow_indirect_imports = true
