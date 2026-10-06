@@ -15,7 +15,7 @@ Work is split by repository: spec, issue, and documentation operations (and the 
 
 ## Rules
 
-- MUST resolve the harness path as the git top-level of cwd (the user runs Orb from the harness repo); when cwd is not in a git repository or the harness `origin` is absent or not `github.com`, fail the whole run before touching any spec.
+- MUST default the harness path to the git top-level of cwd (the user runs Orb from the harness repo); a workflow sets it as a coded setting and may expose its own argument to override it; when the resolved path is not in a git repository or the harness `origin` is absent or not `github.com`, fail the whole run before touching any spec.
 - MUST derive the codebase checkout by comparing the target repository with the harness `origin`: equal → checkout is the harness; otherwise → checkout is `<harness>/workspace/<repository name>`.
 - MUST confirm the checkout exists and its own `origin` matches the target repository; on a missing or mismatched checkout, create no worktree and touch no review thread, label the spec `hitl` with a comment naming the expected path and actual `origin`, and continue with the other specs.
 - MUST NOT clone a missing checkout during a run.
