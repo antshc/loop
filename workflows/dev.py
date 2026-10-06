@@ -396,7 +396,7 @@ def _process_spec(
         _fail_attempt(harness_github, store, spec, harness_slug, actionable, exception, dry_run=dry_run)
         return False
 
-    options = AgentOptions(session_key=None, add_dirs=(harness_root,))
+    options = AgentOptions(session_key=None)
     prompt_args = _prompt_args(spec, actionable, bare_title, initiative, worktree, base_branch, feature_branch)
     try:
         if dry_run:

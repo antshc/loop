@@ -19,7 +19,7 @@ from orb.contracts.agent_client import (
     AgentSession,
     SessionStore,
 )
-from orb.contracts.capsule import AgentClientFactory, Capsule
+from orb.contracts.capsule import AgentClientFactory, Capsule, CapsuleBinding
 from orb.contracts.execution_store import ExecutionStore
 from orb.errors import (
     AgentError,
@@ -48,6 +48,7 @@ __all__ = [
     "AgentResult",
     "AgentSession",
     "Capsule",
+    "CapsuleBinding",
     "CommandError",
     "CommandExecutor",
     "CommandResult",

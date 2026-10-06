@@ -2,12 +2,23 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from types import TracebackType
 
 from orb.contracts.agent_client import AgentClient, AgentOptions, AgentResult
 from orb.process import CommandExecutor
 
-AgentClientFactory = Callable[[CommandExecutor], AgentClient]
+
+@dataclass(frozen=True)
+class CapsuleBinding:
+    """What a Capsule gives the agent factory on each run: its executor, isolation, and workspace."""
+
+    executor: CommandExecutor
+    isolated: bool
+    workspace: str
+
+
+AgentClientFactory = Callable[[CapsuleBinding], AgentClient]
 
 
 class Capsule(ABC):

@@ -21,7 +21,8 @@ class AgentOptions:
     session_name_prefix: str = ""
     timeout_s: float | None = None
     add_dirs: tuple[Path, ...] = ()
-    extra_args: tuple[str, ...] = ("--allow-all-tools", "--no-color")
+    deny_tools: tuple[str, ...] = ()
+    extra_args: tuple[str, ...] = ("--no-color",)
 
 
 @dataclass(frozen=True)

@@ -24,6 +24,10 @@ def _event(delta: str) -> str:
     return json.dumps({"type": "assistant.message_delta", "data": {"deltaContent": delta}})
 
 
+def _flags(argv: tuple[str, ...]) -> set[str]:
+    return set(argv[3:])
+
+
 def test_no_capsule_delegates_prompt_args_and_options_to_its_agent(tmp_path: Path) -> None:
     agent = FakeAgentClient(lambda prompt, options: f"{prompt}:{options.model}")
 
@@ -171,6 +175,61 @@ def test_docker_capsule_rejects_an_image_built_for_another_uid(tmp_path: Path) -
 
     with pytest.raises(OrbError, match="UID mismatch"):
         DockerCapsule(tmp_path, image_name="orb:x", container_uid=1000, docker=docker)
+
+
+def test_docker_capsule_run_carries_allow_all_and_no_allow_all_tools(tmp_path: Path) -> None:
+    cli = FakeCopilotCli()
+    capsule = DockerCapsule(tmp_path, container_uid=1000, docker=FakeDocker(cli))
+
+    capsule.run(copilot(InMemorySessionStore()), "go")
+    capsule.close()
+
+    call_flags = _flags(cli.calls[0])
+    assert "--allow-all" in call_flags
+    assert "--allow-all-tools" not in call_flags
+
+
+def test_no_capsule_run_carries_allow_all_tools_and_add_dir_for_the_harness_root_and_added_dirs(
+    tmp_path: Path,
+) -> None:
+    cli = FakeCopilotCli()
+    extra = tmp_path / "extra"
+
+    NoCapsule(tmp_path, executor=cli).run(
+        copilot(InMemorySessionStore()), "go", options=AgentOptions(add_dirs=(extra,))
+    )
+
+    argv = cli.calls[0]
+    call_flags = _flags(argv)
+    assert "--allow-all-tools" in call_flags and "--allow-all" not in call_flags
+    add_dir_values = [argv[i + 1] for i, arg in enumerate(argv) if arg == "--add-dir"]
+    assert add_dir_values == [str(tmp_path), str(extra)]
+
+
+def test_deny_rules_are_passed_on_both_a_host_and_a_container_capsule(tmp_path: Path) -> None:
+    host_cli = FakeCopilotCli()
+    NoCapsule(tmp_path, executor=host_cli).run(
+        copilot(InMemorySessionStore()), "go", options=AgentOptions(deny_tools=("shell",))
+    )
+    container_cli = FakeCopilotCli()
+    container_capsule = DockerCapsule(tmp_path, container_uid=1000, docker=FakeDocker(container_cli))
+
+    container_capsule.run(copilot(InMemorySessionStore()), "go", options=AgentOptions(deny_tools=("shell",)))
+    container_capsule.close()
+
+    for cli in (host_cli, container_cli):
+        argv = cli.calls[0]
+        assert argv[argv.index("--deny-tool") + 1] == "shell"
+
+
+def test_custom_agent_options_do_not_change_the_isolation_driven_permission_level(tmp_path: Path) -> None:
+    cli = FakeCopilotCli()
+    options = AgentOptions(extra_args=("--allow-all", "--no-color"))
+
+    NoCapsule(tmp_path, executor=cli).run(copilot(InMemorySessionStore()), "go", options=options)
+
+    argv = cli.calls[0]
+    assert argv.count("--allow-all-tools") == 1
 
 
 def test_no_capsule_closing_twice_is_a_no_op(tmp_path: Path) -> None:

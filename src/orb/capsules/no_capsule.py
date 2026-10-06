@@ -4,7 +4,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from orb.contracts.agent_client import AgentOptions, AgentResult
-from orb.contracts.capsule import AgentClientFactory, Capsule
+from orb.contracts.capsule import AgentClientFactory, Capsule, CapsuleBinding
 from orb.process import CommandExecutor, CommandResult, OnLine, checked_output, execute
 
 
@@ -39,7 +39,8 @@ class NoCapsule(Capsule):
         prompt_args: Mapping[str, str] | None = None,
         options: AgentOptions | None = None,
     ) -> AgentResult:
-        return agent(self._executor).run(prompt, prompt_args, options)
+        binding = CapsuleBinding(self._executor, self.isolated, self.workspace)
+        return agent(binding).run(prompt, prompt_args, options)
 
     def exec(self, command: str, *, timeout_s: float | None = None) -> str:
         return checked_output(command, self._executor(command, timeout_s=timeout_s))

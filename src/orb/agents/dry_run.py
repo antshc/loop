@@ -3,8 +3,8 @@ from __future__ import annotations
 import logging
 
 from orb.contracts.agent_client import AgentClient, AgentOptions, AgentResult, AgentSession, SessionStore
-from orb.contracts.capsule import AgentClientFactory
-from orb.process import CommandExecutor, checked_output
+from orb.contracts.capsule import AgentClientFactory, CapsuleBinding
+from orb.process import checked_output
 from orb.prompt import PromptPreprocessor
 
 logger = logging.getLogger("orb.agents.dry_run")
@@ -26,12 +26,12 @@ class DryRunAgentClient(AgentClient):
 
 
 def dry_run(sessions: SessionStore) -> AgentClientFactory:
-    """A factory a capsule calls with its own executor; the executor is only used for template commands."""
+    """A factory a capsule calls with its own binding; the executor is only used for template commands."""
 
-    def create(executor: CommandExecutor) -> DryRunAgentClient:
+    def create(binding: CapsuleBinding) -> DryRunAgentClient:
         def execute(command: str) -> str:
-            return checked_output(command, executor(command))
+            return checked_output(command, binding.executor(command))
 
-        return DryRunAgentClient(executor, PromptPreprocessor(execute), sessions)
+        return DryRunAgentClient(binding.executor, PromptPreprocessor(execute), sessions)
 
     return create
