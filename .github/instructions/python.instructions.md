@@ -32,6 +32,12 @@ Confirm each rule below against neighboring files in the same package before tru
 - MUST print user-facing errors to `sys.stderr`.
 - SHOULD reuse the module's existing `logging` pattern for diagnostic detail when one already exists.
 
+## Comments
+
+- MUST comment non-obvious intent the code cannot show: why, invariants, business rules, cross-boundary effects.
+- MUST keep each comment to one short line; no multi-paragraph docstrings where one line suffices.
+- Place the comment on the line above the statement or branch it explains.
+
 ## Scope discipline
 
 - MUST NOT add docstrings/comments that restate the next line.
