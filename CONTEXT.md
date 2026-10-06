@@ -1,10 +1,10 @@
-# Orb
+# Loop
 
 AFK automated development loop and PR review-comment automation driven by Copilot.
 
 ## Language
 
-**Orb**  
+**Loop**  
 A library, not a CLI: an orchestration framework for Headless AI Agents using Git worktrees, installed with `pip` from this repository. It handles running agents against a single repository or multiple repositories, Git branch/worktree lifecycle, and iterative agent execution.
 
 **Ralph**  
@@ -35,7 +35,7 @@ The harness's `workspace` folder: it holds one clone per wrapped source reposito
 _Avoid_: Repos folder
 
 **Ticket**:  
-A platform-neutral prompt/task, such as a GitHub issue or an Azure DevOps work item, that Orb reads and hands to an agent to act on.  
+A platform-neutral prompt/task, such as a GitHub issue or an Azure DevOps work item, that Loop reads and hands to an agent to act on.  
 _Avoid_: Issue, Work item
 
 **Spec**:  
@@ -43,25 +43,25 @@ A Ticket that groups the Tickets one dev run delivers, carrying the target branc
 _Avoid_: Epic, parent issue
 
 **Workflow**:  
-One autonomous procedure, such as `dev`, written by the user as a Python script on the Orb library and run through the user's own shell alias.  
+One autonomous procedure, such as `dev`, written by the user as a Python script on the Loop library and run through the user's own shell alias.  
 _Avoid_: Slice, feature, template, plugin, built-in workflow
 
 **Hook**:  
-A user-declared shell command that Orb runs on the host at a Hook point, before the agent starts.  
+A user-declared shell command that Loop runs on the host at a Hook point, before the agent starts.  
 _Avoid_: Callback, script, setup step
 
 **Hook point**:  
-A named moment in the Capsule lifecycle at which Orb runs the Hooks declared for it, such as `worktree-ready`.  
+A named moment in the Sandbox lifecycle at which Loop runs the Hooks declared for it, such as `worktree-ready`.  
 _Avoid_: Event, trigger, stage
 
-**Capsule**:  
+**Sandbox**:  
 The place where a Headless AI Agent runs on a worktree: either isolated in a container, separated from the host and from other runs, or, with no isolation, directly on the host.  
-_Avoid_: Sandbox, container, environment
+_Avoid_: Capsule, container, environment
 
-**NoCapsule**:  
-The Capsule that skips isolation and runs the agent directly on the host with the user's own permissions.  
-_Avoid_: No sandbox, host mode
+**NoSandbox**:  
+The Sandbox that skips isolation and runs the agent directly on the host with the user's own permissions.  
+_Avoid_: NoCapsule, host mode
 
-**Capsule lifecycle**:  
-The ordered stages of one Workflow run on a worktree: worktree creation and `worktree-ready` Hooks, Capsule start, one or more agent runs, Capsule close, publication of the agent's work, and worktree removal.  
-_Avoid_: Run lifecycle, Sandbox lifecycle
+**Sandbox lifecycle**:  
+The ordered stages of one Workflow run on a worktree: worktree creation and `worktree-ready` Hooks, Sandbox start, one or more agent runs, Sandbox close, publication of the agent's work, and worktree removal.  
+_Avoid_: Run lifecycle, Capsule lifecycle

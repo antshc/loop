@@ -3,13 +3,13 @@
 
 ## Purpose
 
-Define how Orb can execute work with either one general-purpose Headless AI Agent or a Crew of specialized agents coordinated toward the same outcome.
+Define how Loop can execute work with either one general-purpose Headless AI Agent or a Crew of specialized agents coordinated toward the same outcome.
 
 ## Concept
 
 An AI Agent Team is multiple specialized agents with distinct responsibilities coordinated toward a shared outcome. In this project, such a team is called a **Crew**.
 
-Orb supports two agent configurations:
+Loop supports two agent configurations:
 
 - **General-purpose agent** — the default. One Headless AI Agent receives the task and owns the full execution.
 - **Crew** — optional. Multiple specialized Headless AI Agents divide responsibilities such as implementation, testing, review, or other roles.
@@ -19,7 +19,7 @@ A Crew does not require direct agent-to-agent communication. Coordination may ha
 ## Rules
 
 - MUST use one general-purpose Headless AI Agent when no Crew is configured.
-- MUST treat Crew as an explicit Orb configuration, not as the default execution mode.
+- MUST treat Crew as an explicit Loop configuration, not as the default execution mode.
 - MUST give each Crew agent a distinct responsibility or role.
 - MUST coordinate all Crew agents toward one shared task outcome.
 - MAY coordinate agents through direct interaction, Ralph orchestration, shared external state, or a combination of these.
@@ -64,4 +64,4 @@ The agents may never communicate directly; Git and test results can provide the 
 
 ## Validation
 
-A conforming Orb configuration runs one general-purpose agent when no Crew is configured. When a Crew is configured, it assigns distinct roles toward one shared outcome and can coordinate those roles without requiring direct cross-agent communication.
+A conforming Loop configuration runs one general-purpose agent when no Crew is configured. When a Crew is configured, it assigns distinct roles toward one shared outcome and can coordinate those roles without requiring direct cross-agent communication.

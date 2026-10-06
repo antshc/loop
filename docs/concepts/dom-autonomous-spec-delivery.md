@@ -1,10 +1,10 @@
 # Autonomous Spec Delivery
 
 ## Purpose
-Orb delivers the approved work of every open `spec` to a draft pull request without an operator in the session, bounding the attempts it spends on each spec.
+Loop delivers the approved work of every open `spec` to a draft pull request without an operator in the session, bounding the attempts it spends on each spec.
 
 ## Definition
-- **Actors:** Operator; Orb (the example `dev` Workflow); Ralph (Copilot agent running the `/ralph:dev` skill); Crew agents (Codey, Chorey, Testy); GitHub.
+- **Actors:** Operator; Loop (the example `dev` Workflow); Ralph (Copilot agent running the `/ralph:dev` skill); Crew agents (Codey, Chorey, Testy); GitHub.
 - **Business processes:** Run AFK Dev Service; Develop Spec; Ralph Loop.
 - **Starts:** Operator runs the `dev` Workflow script (through their own alias) for a repository board.
 - **Ends:** Every open spec was skipped or attempted and its attempt recorded; a Develop Spec run ends with its harness repo pushed and its worktree removed, or exits with a report.
@@ -12,21 +12,21 @@ Orb delivers the approved work of every open `spec` to a draft pull request with
 ## Business Processes
 
 ### Run AFK Dev Service
-Actor: Operator; Trigger: the `dev` Workflow script is run for a repository board; Action: Orb lists the open specs, skips those without actionable issues or at their attempt cap, and starts one fresh headless Copilot session per remaining spec with the prompt `/ralph:dev <spec number>`; Outcome: each attempted spec has its attempt recorded, and a spec with all issues resolved has its count cleared. Notes: dry run is on unless switched off, so no session starts but the attempt is still recorded.
+Actor: Operator; Trigger: the `dev` Workflow script is run for a repository board; Action: Loop lists the open specs, skips those without actionable issues or at their attempt cap, and starts one fresh headless Copilot session per remaining spec with the prompt `/ralph:dev <spec number>`; Outcome: each attempted spec has its attempt recorded, and a spec with all issues resolved has its count cleared. Notes: dry run is on unless switched off, so no session starts but the attempt is still recorded.
 
 ```mermaid
 %%{init: {'themeVariables': {'lineColor': '#8b949e'}}}%%
 %% diagram-id: afk-dev-run-swimlane
 swimlane-beta TB
   accTitle: AFK dev run responsibility
-  accDescr: Shows how the CLI, Orb, the Copilot agent and GitHub share the work of attempting each open spec.
+  accDescr: Shows how the CLI, Loop, the Copilot agent and GitHub share the work of attempting each open spec.
 
   subgraph cli [AFK CLI]
     start([Operator runs the dev Workflow])
     args[1 - Validate arguments and configure logging]
   end
 
-  subgraph orb [Orb - dev use case]
+  subgraph loop [Loop - dev use case]
     list[2 - List open specs]
     anySpecs{3 - Specs found?}
     fetch[4 - Fetch spec sub-issues]
@@ -261,8 +261,8 @@ A solid edge is automatic; a dotted edge is a separately initiated step, labelle
 | Concern | Stable anchor | Semantic locator |
 |---|---|---|
 | External contract | Operator-run service for one repository board | `workflows/dev.py`: runnable script `main(argv)`, options `--harness-root`, `--log-dir`, `--log-level` |
-| External contract | Agent skill driven by the spec number | `orb`: skill command `/ralph:dev` |
-| Spec and issue selection | Open specs; issues that may be worked | `orb`: `VCSClient`, `IssueFilter` |
-| Attempt bound | Per-spec attempt count persisted across runs, cleared when issues resolve | `orb`: `ExecutionLog` |
-| Execution | Fresh non-interactive Copilot session per spec | `orb`: `AgentClient`, `Capsule`; `DRY_RUN` setting in `workflows/dev.py` |
-| Tests | Spec skipping, cap and count reset behavior | `orb`: dev handler unit tests |
+| External contract | Agent skill driven by the spec number | `loop`: skill command `/ralph:dev` |
+| Spec and issue selection | Open specs; issues that may be worked | `loop`: `VCSClient`, `IssueFilter` |
+| Attempt bound | Per-spec attempt count persisted across runs, cleared when issues resolve | `loop`: `ExecutionLog` |
+| Execution | Fresh non-interactive Copilot session per spec | `loop`: `AgentClient`, `Sandbox`; `DRY_RUN` setting in `workflows/dev.py` |
+| Tests | Spec skipping, cap and count reset behavior | `loop`: dev handler unit tests |

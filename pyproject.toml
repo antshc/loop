@@ -3,9 +3,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "orb"
+name = "loop"
 version = "0.0.0"
-description = "Library for composing agent workflows on git worktree capsules."
+description = "Library for composing agent workflows on git worktree sandboxes."
 requires-python = ">=3.12"
 dependencies = [
     "python-json-logger>=2.0",
@@ -23,78 +23,78 @@ testpaths = ["tests"]
 norecursedirs = ["archive", ".*"]
 
 [tool.importlinter]
-root_packages = ["orb", "workflows"]
+root_packages = ["loop", "workflows"]
 
 [[tool.importlinter.contracts]]
 name = "Contracts and shared policy import no implementation"
 type = "forbidden"
 source_modules = [
-    "orb.contracts",
-    "orb.errors",
-    "orb.process",
-    "orb.prompt",
-    "orb.tags",
-    "orb.parallel",
-    "orb.attempts",
+    "loop.contracts",
+    "loop.errors",
+    "loop.process",
+    "loop.prompt",
+    "loop.tags",
+    "loop.parallel",
+    "loop.attempts",
 ]
 forbidden_modules = [
-    "orb.agents",
-    "orb.capsules",
-    "orb.platforms",
-    "orb.sandbox",
-    "orb.stores",
-    "orb.testing",
+    "loop.agents",
+    "loop.sandboxes",
+    "loop.platforms",
+    "loop.sandbox",
+    "loop.stores",
+    "loop.testing",
 ]
 
 [[tool.importlinter.contracts]]
 name = "Adapters import no sandbox code"
 type = "forbidden"
-source_modules = ["orb.agents", "orb.capsules", "orb.platforms", "orb.stores"]
-forbidden_modules = ["orb.sandbox"]
+source_modules = ["loop.agents", "loop.sandboxes", "loop.platforms", "loop.stores"]
+forbidden_modules = ["loop.sandbox"]
 
 [[tool.importlinter.contracts]]
 name = "The git platform module imports no GitHub or workflow code"
 type = "forbidden"
-source_modules = ["orb.platforms.git_client"]
-forbidden_modules = ["orb.platforms.gh_client", "workflows"]
+source_modules = ["loop.platforms.git_client"]
+forbidden_modules = ["loop.platforms.gh_client", "workflows"]
 
 [[tool.importlinter.contracts]]
-name = "Only orb.testing imports orb.testing"
+name = "Only loop.testing imports loop.testing"
 type = "forbidden"
 source_modules = [
-    "orb.agents",
-    "orb.capsules",
-    "orb.platforms",
-    "orb.sandbox",
-    "orb.stores",
-    "orb.contracts",
-    "orb.errors",
-    "orb.process",
-    "orb.prompt",
-    "orb.tags",
-    "orb.parallel",
-    "orb.attempts",
+    "loop.agents",
+    "loop.sandboxes",
+    "loop.platforms",
+    "loop.sandbox",
+    "loop.stores",
+    "loop.contracts",
+    "loop.errors",
+    "loop.process",
+    "loop.prompt",
+    "loop.tags",
+    "loop.parallel",
+    "loop.attempts",
     "workflows",
 ]
-forbidden_modules = ["orb.testing"]
+forbidden_modules = ["loop.testing"]
 
 [[tool.importlinter.contracts]]
-name = "The dev workflow imports only the public orb API"
+name = "The dev workflow imports only the public loop API"
 type = "forbidden"
 source_modules = ["workflows.dev"]
 forbidden_modules = [
-    "orb.contracts",
-    "orb.agents",
-    "orb.capsules",
-    "orb.platforms",
-    "orb.sandbox",
-    "orb.stores",
-    "orb.errors",
-    "orb.process",
-    "orb.prompt",
-    "orb.tags",
-    "orb.parallel",
-    "orb.attempts",
-    "orb.testing",
+    "loop.contracts",
+    "loop.agents",
+    "loop.sandboxes",
+    "loop.platforms",
+    "loop.sandbox",
+    "loop.stores",
+    "loop.errors",
+    "loop.process",
+    "loop.prompt",
+    "loop.tags",
+    "loop.parallel",
+    "loop.attempts",
+    "loop.testing",
 ]
 allow_indirect_imports = true

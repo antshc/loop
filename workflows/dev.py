@@ -1,7 +1,7 @@
-"""Autonomous dev loop: one branch, worktree, and capsule per open Spec, capped retries.
+"""Autonomous dev loop: one branch, worktree, and sandbox per open Spec, capped retries.
 
 Control flow, metadata parsing, the commit/branch-name rules, and the agent report parser are
-owned here, not by the orb library (see docs/concepts/str-orb-library-workflow-architecture.md).
+owned here, not by the loop library (see docs/concepts/str-loop-library-workflow-architecture.md).
 """
 
 from __future__ import annotations
@@ -16,21 +16,21 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from orb import (
+from loop import (
     AgentClientFactory,
     AgentOptions,
     Cancelled,
-    Capsule,
-    CapsuleFactory,
+    Sandbox,
+    SandboxFactory,
     ExecutionStore,
     FileExecutionStore,
     GitClient,
     GitHubClient,
     Hook,
     InMemorySessionStore,
-    NoCapsule,
-    OrbError,
-    Sandbox,
+    NoSandbox,
+    LoopError,
+    WorktreeSandbox,
     SandboxHooks,
     Spec,
     Ticket,
@@ -41,21 +41,21 @@ from orb import (
     origin_slug,
     same_slug,
 )
-from orb import dry_run as dry_run_agent
+from loop import dry_run as dry_run_agent
 
 # Settings as code; --harness-root, --log-dir, and --log-level are the only CLI overrides.
-LOG_DIR_NAME = ".orb"
+LOG_DIR_NAME = ".loop"
 LOG_LEVEL = "INFO"
 RETRIES = 1
 DRY_RUN = False
 HOOKS: tuple[Hook, ...] = ()
 
 
-def _no_capsule(workspace: Path, cancel: threading.Event) -> Capsule:
-    return NoCapsule(workspace, cancel=cancel)
+def _no_sandbox(workspace: Path, cancel: threading.Event) -> Sandbox:
+    return NoSandbox(workspace, cancel=cancel)
 
 
-CAPSULE_FACTORY = _no_capsule
+SANDBOX_FACTORY = _no_sandbox
 
 PROMPT = Path(__file__).parent / "prompts" / "dev.md"
 HITL_LABEL = "hitl"
@@ -236,14 +236,14 @@ def _ensure_pull_request(github: GitHubClient, head: str, base: str, initiative:
 
 
 def _run_report(
-    sandbox: Sandbox,
+    sandbox: WorktreeSandbox,
     agent_factory: AgentClientFactory,
     template: str,
     prompt_args: dict[str, str],
     options: AgentOptions,
     retries: int,
 ) -> AgentReport | None:
-    """Up to 1 + retries fresh Runs on the same Sandbox; stops at the first valid report."""
+    """Up to 1 + retries fresh Runs on the same WorktreeSandbox; stops at the first valid report."""
     for _ in range(1 + retries):
         result = sandbox.run(agent_factory, template, prompt_args, options).result
         if not result.success:
@@ -366,7 +366,7 @@ def _process_spec(
     github_factory: GithubFactory,
     git: GitClient,
     agent_factory: AgentClientFactory,
-    capsule_factory: CapsuleFactory,
+    sandbox_factory: SandboxFactory,
     store: ExecutionStore,
     hooks: Sequence[Hook],
     retries: int,
@@ -412,7 +412,7 @@ def _process_spec(
         feature_branch = feature_branch_name(base_branch, bare_title)
         sandbox = create_sandbox(
             git,
-            capsule_factory,
+            sandbox_factory,
             checkout=checkout,
             harness_root=harness_root,
             base=base_branch,
@@ -423,7 +423,7 @@ def _process_spec(
     except Cancelled as exception:
         _report_cancelled(spec, exception.worktree)
         return None
-    except OrbError as exception:
+    except LoopError as exception:
         _fail_attempt(harness_github, store, spec, harness_slug, actionable, exception, dry_run=dry_run)
         return False
 
@@ -471,7 +471,7 @@ def _process_spec(
         kept_on_cancel = git.has_changes(worktree)
         _report_cancelled(spec, worktree if kept_on_cancel else None)
         return None
-    except OrbError as exception:
+    except LoopError as exception:
         _fail_attempt(
             harness_github,
             store,
@@ -499,7 +499,7 @@ def main(
     git: GitClient | None = None,
     github_factory: GithubFactory | None = None,
     agent_factory: AgentClientFactory | None = None,
-    capsule_factory: CapsuleFactory | None = None,
+    sandbox_factory: SandboxFactory | None = None,
     store: ExecutionStore | None = None,
     hooks: Sequence[Hook] = HOOKS,
     retries: int = RETRIES,
@@ -527,7 +527,7 @@ def main(
     agent_factory = agent_factory or (
         dry_run_agent(InMemorySessionStore()) if dry_run else copilot(InMemorySessionStore())
     )
-    capsule_factory = capsule_factory or CAPSULE_FACTORY
+    sandbox_factory = sandbox_factory or SANDBOX_FACTORY
     store = store or FileExecutionStore(log_dir)
     template = PROMPT.read_text()
     cancel = cancel or threading.Event()
@@ -545,7 +545,7 @@ def main(
                 github_factory=github_factory,
                 git=git,
                 agent_factory=agent_factory,
-                capsule_factory=capsule_factory,
+                sandbox_factory=sandbox_factory,
                 store=store,
                 hooks=hooks,
                 retries=retries,

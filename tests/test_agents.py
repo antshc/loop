@@ -6,19 +6,19 @@ from pathlib import Path
 
 import pytest
 
-from orb import (
+from loop import (
     DEFAULT_COMPLETION_SIGNAL,
     AgentOptions,
     AgentResult,
     AgentSession,
-    CapsuleBinding,
+    SandboxBinding,
     CommandResult,
     FileSessionStore,
     InMemorySessionStore,
     copilot,
     dry_run,
 )
-from orb.testing import FakeCopilotCli
+from loop.testing import FakeCopilotCli
 
 WORKSPACE = "/harness"
 
@@ -27,8 +27,8 @@ def flags(argv: tuple[str, ...]) -> set[str]:
     return set(argv[3:])
 
 
-def binding(executor, *, isolated: bool = False, workspace: str = WORKSPACE) -> CapsuleBinding:
-    return CapsuleBinding(executor, isolated, workspace)
+def binding(executor, *, isolated: bool = False, workspace: str = WORKSPACE) -> SandboxBinding:
+    return SandboxBinding(executor, isolated, workspace)
 
 
 def _event(delta: str) -> str:
@@ -103,15 +103,15 @@ def test_session_is_created_with_prefix_saved_after_the_run_and_resumed_by_key()
     cli = FakeCopilotCli()
     sessions = InMemorySessionStore()
     client = copilot(sessions)(binding(cli))
-    options = AgentOptions(session_key="issue-42", session_name_prefix="orb-")
+    options = AgentOptions(session_key="issue-42", session_name_prefix="loop-")
 
     client.run("one", options=options)
     client.run("two", options=options)
 
     first, second = cli.calls
-    assert first[first.index("--name") + 1] == "orb-issue-42"
-    assert "--resume=orb-issue-42" in second and "--name" not in second
-    assert sessions.get("issue-42") == AgentSession("issue-42", "orb-issue-42")
+    assert first[first.index("--name") + 1] == "loop-issue-42"
+    assert "--resume=loop-issue-42" in second and "--name" not in second
+    assert sessions.get("issue-42") == AgentSession("issue-42", "loop-issue-42")
 
 
 def test_failed_run_keeps_stderr_and_exit_code_and_does_not_record_the_session() -> None:
@@ -181,7 +181,7 @@ def test_dry_run_agent_client_logs_the_rendered_prompt_and_never_starts_a_provid
     cli = FakeCopilotCli()
     sessions = InMemorySessionStore()
 
-    with caplog.at_level(logging.INFO, logger="orb.agents.dry_run"):
+    with caplog.at_level(logging.INFO, logger="loop.agents.dry_run"):
         result = dry_run(sessions)(binding(cli)).run("hi ${{A}}", {"A": "1"})
 
     assert result == AgentResult("", "", 0)
@@ -189,7 +189,7 @@ def test_dry_run_agent_client_logs_the_rendered_prompt_and_never_starts_a_provid
     assert cli.calls == [] and cli.shell_commands == []
 
 
-def test_template_commands_run_through_the_capsule_executor() -> None:
+def test_template_commands_run_through_the_sandbox_executor() -> None:
     cli = FakeCopilotCli(shell=lambda command: "main\n")
 
     copilot(InMemorySessionStore())(binding(cli)).run("on !`git branch --show-current`")
@@ -199,7 +199,7 @@ def test_template_commands_run_through_the_capsule_executor() -> None:
 
 
 def test_file_session_store_survives_a_new_instance(tmp_path: Path) -> None:
-    FileSessionStore(tmp_path).save(AgentSession("k", "orb-k"))
+    FileSessionStore(tmp_path).save(AgentSession("k", "loop-k"))
 
-    assert FileSessionStore(tmp_path).get("k") == AgentSession("k", "orb-k")
+    assert FileSessionStore(tmp_path).get("k") == AgentSession("k", "loop-k")
     assert FileSessionStore(tmp_path).get("other") is None

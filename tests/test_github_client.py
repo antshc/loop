@@ -6,9 +6,9 @@ from unittest.mock import Mock
 import pytest
 
 from conftest import commit_file, git
-from orb import GitHubClient
-from orb.errors import CommandError
-from orb.testing import FakeGhCli
+from loop import GitHubClient
+from loop.errors import CommandError
+from loop.testing import FakeGhCli
 
 
 def test_get_specs_returns_only_open_issues_labelled_spec() -> None:
@@ -117,7 +117,7 @@ def test_dry_run_suppresses_every_write_and_logs_it(caplog: pytest.LogCaptureFix
     gh = FakeGhCli()
     client = GitHubClient("owner", "repo", gh=gh, dry_run=True)
 
-    with caplog.at_level("INFO", logger="orb.platforms.github"):
+    with caplog.at_level("INFO", logger="loop.platforms.github"):
         client.comment(1, "x")
         client.add_label(1, "ready")
         client.close_with_comment(1, "done")

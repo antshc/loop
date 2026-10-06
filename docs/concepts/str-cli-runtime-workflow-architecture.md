@@ -13,13 +13,13 @@ A **plugin** is a unit the CLI discovers and loads dynamically. A **workflow** i
 
 The **runtime** is the shared kernel. It defines contracts (CLI command, agent client, work tracker, execution store), the platform-neutral models those contracts return (`Ticket`, `Spec`, `PullRequest`), and execution policy (attempt cap, run context, exit codes). It never knows which workflows exist.
 
-Built-in workflows ship inside the `orb` package and may use the shared `adapters/` package. Workflows loaded from user-supplied directories may import only `orb.runtime` and bring their own adapters ([ADR 0003](../adr/0003-ship-orb-as-a-workflow-library-with-no-built-in-workflows.md)).
+Built-in workflows ship inside the `loop` package and may use the shared `adapters/` package. Workflows loaded from user-supplied directories may import only `loop.runtime` and bring their own adapters ([ADR 0003](../adr/0003-ship-loop-as-a-workflow-library-with-no-built-in-workflows.md)).
 
 | | Built-in workflow | User-supplied workflow |
 |---|---|---|
-| Location | `orb/workflows/<name>/` | `<user dir>/<name>/`, directory supplied by the user |
-| Imported as | `orb.workflows.<name>.command` | `<user dir name>.<name>.command`, with the directory's parent added to `sys.path` |
-| May import from `orb` | `runtime` and shared `adapters` | `runtime` only |
+| Location | `loop/workflows/<name>/` | `<user dir>/<name>/`, directory supplied by the user |
+| Imported as | `loop.workflows.<name>.command` | `<user dir name>.<name>.command`, with the directory's parent added to `sys.path` |
+| May import from `loop` | `runtime` and shared `adapters` | `runtime` only |
 | Adapters | shared `adapters/`, or its own folder | its own folder |
 | Architecture checks | import-linter | AST import check at load time or in the author's own tests |
 | Trust | ships with the package | executes arbitrary code; trusted by configuring the directory |
@@ -43,7 +43,7 @@ Adapters used by more than one built-in workflow (for example GitHub, Copilot CL
 
 ## Rules
 
-- MUST organize workflows as one folder per workflow, under the package's `workflows/` or under a user-supplied directory; each workflow maps to exactly one `orb` subcommand.
+- MUST organize workflows as one folder per workflow, under the package's `workflows/` or under a user-supplied directory; each workflow maps to exactly one `loop` subcommand.
 - MUST define the CLI command contract, adapter contracts, and execution policy in `runtime`.
 - MUST define each platform-neutral model in the `runtime/contracts` module whose contract returns it; there is no separate domain layer.
 - MUST define each contract as an `abc.ABC` with `@abstractmethod` operations and make every implementation inherit it.
@@ -57,7 +57,7 @@ Adapters used by more than one built-in workflow (for example GitHub, Copilot CL
 - MUST keep the CLI limited to discovery, argument parsing, dispatch, and mapping the result to an exit code.
 - MUST place an adapter in the shared `adapters/` package when more than one built-in workflow uses it.
 - MUST keep process execution (`git`, `gh`, `copilot`) inside adapters; workflows see only contracts.
-- MUST limit user-supplied workflows to importing `orb.runtime`; they bring their own adapters.
+- MUST limit user-supplied workflows to importing `loop.runtime`; they bring their own adapters.
 - MUST NOT name a user-supplied directory after an installed top-level module; its name becomes a top-level import name.
 - MUST give built-in and user-supplied workflows the same `command.py` contract and the same discovery.
 - MUST place only logic whose business meaning is identical across workflows (for example the attempt cap) in `runtime`.
@@ -70,7 +70,7 @@ Adapters used by more than one built-in workflow (for example GitHub, Copilot CL
 ## Example
 
 ```text
-src/orb/
+src/loop/
 ├── runtime/
 │   ├── contracts/
 │   │   ├── command.py            # Command ABC
@@ -96,10 +96,10 @@ src/orb/
 A user-supplied directory holds workflows of the same shape. It may override a shared adapter inside a workflow's own folder:
 
 ```text
-~/orb-workflows/                 # passed to the CLI; name must not collide with an installed module
+~/loop-workflows/                 # passed to the CLI; name must not collide with an installed module
 ├── __init__.py
 └── review/
-    ├── command.py                # imports orb.runtime only
+    ├── command.py                # imports loop.runtime only
     ├── workflow.py
     ├── github_tracker.py         # own adapter implementing the runtime contract
     └── prompt.md
@@ -108,8 +108,8 @@ A user-supplied directory holds workflows of the same shape. It may override a s
 CLI commands map one-to-one to workflow folders:
 
 ```text
-orb dev           → orb/workflows/dev
-orb review        → ~/orb-workflows/review
+loop dev           → loop/workflows/dev
+loop review        → ~/loop-workflows/review
 ```
 
 The command contract:
@@ -208,7 +208,7 @@ Architecture review should verify that:
 - `workflow.py` imports no adapter; only `command.py` constructs adapters;
 - each workflow folder exposes one `command` with a unique name;
 - adding a workflow requires no edits outside its folder;
-- user-supplied workflows import nothing from `orb` except `orb.runtime`, checked by an AST import scan;
+- user-supplied workflows import nothing from `loop` except `loop.runtime`, checked by an AST import scan;
 - built-in and user-supplied workflows sharing a command name fail discovery;
 - code in `runtime` is shared because of business meaning, not code reuse alone.
 

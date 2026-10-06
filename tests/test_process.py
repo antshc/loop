@@ -6,8 +6,8 @@ import time
 
 import pytest
 
-from orb.errors import CommandError
-from orb.process import execute
+from loop.errors import CommandError
+from loop.process import execute
 
 
 def _script(*statements: str) -> list[str]:

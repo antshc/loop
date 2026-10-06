@@ -10,7 +10,7 @@ You are in the worktree at `${{WORKTREE_PATH}}`, on branch `${{FEATURE_BRANCH}}`
 Actionable Tickets for this Spec: ${{TICKET_NUMBERS}}
 
 Implement as many actionable Tickets as you can. Run the project's build and tests until they
-pass. Do not commit, and do not push: Orb commits, pushes, and updates every Ticket after this
+pass. Do not commit, and do not push: Loop commits, pushes, and updates every Ticket after this
 run ends.
 
 End your final message with one fenced JSON block, one entry per Ticket you worked on:

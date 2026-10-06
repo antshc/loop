@@ -10,24 +10,24 @@ from pathlib import Path
 import pytest
 
 from conftest import commit_file, git
-from orb import (
+from loop import (
     MAX_FAILED_ATTEMPTS,
     AgentClient,
     AgentResult,
-    Capsule,
+    Sandbox,
     CommandError,
     CopilotClient,
-    DockerCapsule,
+    DockerSandbox,
     FileExecutionStore,
     GitHubClient,
     Hook,
     InMemoryExecutionStore,
-    NoCapsule,
+    NoSandbox,
 )
-from orb.testing import FakeAgentClient, FakeCopilotCli, FakeGhCli, FakeGitClient
+from loop.testing import FakeAgentClient, FakeCopilotCli, FakeGhCli, FakeGitClient
 from workflows import dev
 
-SRC = Path(__file__).parents[1] / "src" / "orb"
+SRC = Path(__file__).parents[1] / "src" / "loop"
 WORKFLOWS = Path(__file__).parents[1] / "workflows"
 _PLACEHOLDER = re.compile(r"\$\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
 
@@ -266,7 +266,7 @@ class DevHarness:
         *,
         handler=None,
         agent_factory=None,
-        capsule_factory=None,
+        sandbox_factory=None,
         github_factory=None,
         git=None,
         store=None,
@@ -290,8 +290,8 @@ class DevHarness:
             git=git_client,
             github_factory=github_factory or (lambda checkout: self.github),
             agent_factory=agent_factory or (None if dry_run else default_agent_factory),
-            capsule_factory=capsule_factory
-            or (lambda workspace, cancel: NoCapsule(workspace, executor=FakeCopilotCli(), cancel=cancel)),
+            sandbox_factory=sandbox_factory
+            or (lambda workspace, cancel: NoSandbox(workspace, executor=FakeCopilotCli(), cancel=cancel)),
             store=store if store is not None else self.store,
             hooks=hooks,
             retries=retries,
@@ -308,20 +308,20 @@ def _writes(gh: FakeGhCli) -> list[tuple[str, ...]]:
     return [call for call in gh.calls if call[0] in ("issue", "pr")]
 
 
-def test_capsule_is_created_on_the_harness_root_while_the_prompt_carries_the_worktree(tmp_path: Path) -> None:
+def test_sandbox_is_created_on_the_harness_root_while_the_prompt_carries_the_worktree(tmp_path: Path) -> None:
     harness = DevHarness(tmp_path)
-    capsule_workspaces: list[Path] = []
+    sandbox_workspaces: list[Path] = []
 
-    def capsule_factory(workspace: Path, cancel: threading.Event):
-        capsule_workspaces.append(workspace)
-        return NoCapsule(workspace, executor=FakeCopilotCli(), cancel=cancel)
+    def sandbox_factory(workspace: Path, cancel: threading.Event):
+        sandbox_workspaces.append(workspace)
+        return NoSandbox(workspace, executor=FakeCopilotCli(), cancel=cancel)
 
     code = harness.run(
-        handler=lambda prompt, options: _commit_and_report(harness, 10), capsule_factory=capsule_factory
+        handler=lambda prompt, options: _commit_and_report(harness, 10), sandbox_factory=sandbox_factory
     )
 
     assert code == 0
-    assert capsule_workspaces == [harness.harness_root]
+    assert sandbox_workspaces == [harness.harness_root]
     worktree = harness.git.removed[-1]
     assert worktree != harness.harness_root
     assert str(worktree) in harness.agent_calls[0][0]
@@ -343,7 +343,7 @@ def test_no_arguments_use_the_current_folder_as_the_harness_root_and_its_exit_co
     )
 
     assert code == 0
-    assert (tmp_path / ".orb" / "dev.log").is_file()
+    assert (tmp_path / ".loop" / "dev.log").is_file()
 
 
 def test_log_dir_override_writes_logs_to_that_folder(tmp_path: Path) -> None:
@@ -354,7 +354,7 @@ def test_log_dir_override_writes_logs_to_that_folder(tmp_path: Path) -> None:
 
     assert code == 0
     assert (custom / "dev.log").is_file()
-    assert not (harness.harness_root / ".orb").exists()
+    assert not (harness.harness_root / ".loop").exists()
 
 
 @pytest.mark.parametrize("origin", [None, "git@gitlab.com:owner/repo.git"])
@@ -750,7 +750,7 @@ def test_a_prompt_placeholder_with_no_argument_fails_the_run(tmp_path: Path, mon
     assert harness.agent_calls == []
 
 
-def test_one_retry_runs_two_fresh_capsules_on_the_same_worktree_and_applies_the_second_report(
+def test_one_retry_runs_two_fresh_sandboxes_on_the_same_worktree_and_applies_the_second_report(
     tmp_path: Path,
 ) -> None:
     harness = DevHarness(tmp_path)
@@ -941,11 +941,11 @@ def test_a_failure_after_the_agent_started_with_changes_commits_and_pushes_befor
 
 def test_implementations_follow_the_contracts() -> None:
     assert issubclass(CopilotClient, AgentClient) and issubclass(FakeAgentClient, AgentClient)
-    assert issubclass(NoCapsule, Capsule) and issubclass(DockerCapsule, Capsule)
+    assert issubclass(NoSandbox, Sandbox) and issubclass(DockerSandbox, Sandbox)
 
 
 def test_core_never_imports_adapters() -> None:
-    adapter_packages = ("orb.agents", "orb.capsules", "orb.stores", "orb.platforms")
+    adapter_packages = ("loop.agents", "loop.sandboxes", "loop.stores", "loop.platforms")
     core = [p for p in SRC.glob("*.py") if p.name != "__init__.py"] + list((SRC / "contracts").glob("*.py"))
     for path in core:
         for module in imports_of(path):
@@ -955,4 +955,4 @@ def test_core_never_imports_adapters() -> None:
 def test_workflows_import_only_the_public_api() -> None:
     for path in WORKFLOWS.glob("*.py"):
         for module in imports_of(path):
-            assert not module.startswith("orb.") and not module.startswith("workflows"), (path, module)
+            assert not module.startswith("loop.") and not module.startswith("workflows"), (path, module)

@@ -47,16 +47,16 @@ Work is split by repository: spec, issue, and documentation operations (and the 
 Single repo — harness and codebase are one repository:
 
 ```text
-orb/                         # harness root = codebase checkout
+loop/                         # harness root = codebase checkout
 ├── .github/                      # instructions, skills
 ├── CONTEXT.md
 ├── ARCHITECTURE.md
 ├── docs/
-├── src/orb/
+├── src/loop/
 ├── workflows/
 ├── tests/
 └── workspace/                    # excluded from version control
-    └── orb.worktrees/
+    └── loop.worktrees/
         └── <feature-branch>/     # worktree; all code changes happen here
 ```
 

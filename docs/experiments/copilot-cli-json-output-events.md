@@ -9,7 +9,7 @@ Which flag makes `copilot -p` emit JSON events in non-interactive mode, and what
 ## Method
 
 - **CLI under test:** the `copilot` on `PATH` in this environment, version 1.0.92 (binary at `~/.vscode-server/data/User/globalStorage/github.copilot-chat/copilotCli/copilot`, not the research-note shim).
-- **Command:** `copilot -p "Reply with the single word OK" --output-format json --allow-all-tools --no-color`, run in a scratch directory (`/tmp/orb-copilot-json-exp`), stdout and stderr captured to files. No other tools, paths, or URLs granted. Nothing in the repo was touched.
+- **Command:** `copilot -p "Reply with the single word OK" --output-format json --allow-all-tools --no-color`, run in a scratch directory (`/tmp/loop-copilot-json-exp`), stdout and stderr captured to files. No other tools, paths, or URLs granted. Nothing in the repo was touched.
 
 ## Observations
 

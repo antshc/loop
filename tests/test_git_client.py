@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from conftest import commit_file, git
-from orb import Cancelled, CommandError, CommandResult, GitClient, Hook, HookError, origin_slug, same_slug
+from loop import Cancelled, CommandError, CommandResult, GitClient, Hook, HookError, origin_slug, same_slug
 
 
 class FakeRunner:

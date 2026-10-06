@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-import orb
-import orb.testing
-from orb import (
+import loop
+import loop.testing
+from loop import (
     ExtractionError,
     PromptError,
     PromptPreprocessor,
@@ -20,7 +20,7 @@ from orb import (
 )
 
 ROOT = Path(__file__).parents[1]
-SRC = ROOT / "src" / "orb"
+SRC = ROOT / "src" / "loop"
 WORKFLOWS = ROOT / "workflows"
 FAKES = {"FakeGhCli", "FakeGitClient", "FakeDocker", "FakeCopilotCli", "FakeAgentClient"}
 
@@ -49,7 +49,7 @@ def test_preprocessor_rejects_a_missing_argument_and_warns_on_an_unused_one(
 
     with pytest.raises(PromptError, match="missing prompt argument: X"):
         preprocessor.process("${{X}}", {})
-    with caplog.at_level(logging.WARNING, logger="orb"):
+    with caplog.at_level(logging.WARNING, logger="loop"):
         assert preprocessor.process("plain", {"EXTRA": "1"}) == "plain"
     assert "unused prompt argument: EXTRA" in caplog.text
 
@@ -79,8 +79,8 @@ def test_parallel_settled_isolates_failures_and_keeps_order() -> None:
 
 
 def test_public_api_exposes_no_fake_and_testing_exposes_every_fake() -> None:
-    assert not FAKES & set(orb.__all__)
-    assert FAKES <= set(orb.testing.__all__)
+    assert not FAKES & set(loop.__all__)
+    assert FAKES <= set(loop.testing.__all__)
 
 
 def test_packaging_declares_no_scripts_and_ships_no_workflow_file() -> None:

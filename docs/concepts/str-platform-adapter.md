@@ -13,7 +13,7 @@ A **Platform Adapter** exposes repository and work-management capabilities throu
 
 Application code depends only on the contract and normalized models such as `Ticket` and `PullRequest`. Each concrete adapter translates those operations to the native platform interface—for example, `gh` for GitHub or `az` for Azure DevOps—and maps native responses back to the normalized model.
 
-Scope: this applies where Orb's own code calls a platform. Clients only a user's workflow calls, such as the shipped `GitHubClient`, are concrete helpers with no contract ([ADR 0003](../adr/0003-ship-orb-as-a-workflow-library-with-no-built-in-workflows.md)).
+Scope: this applies where Loop's own code calls a platform. Clients only a user's workflow calls, such as the shipped `GitHubClient`, are concrete helpers with no contract ([ADR 0003](../adr/0003-ship-loop-as-a-workflow-library-with-no-built-in-workflows.md)).
 
 The concrete adapter is selected in the composition root, normally from explicit configuration or the repository remote. Platform detection and construction are outside application behavior.
 
