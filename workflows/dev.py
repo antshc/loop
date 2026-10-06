@@ -391,7 +391,7 @@ def _process_spec(
             _hitl(harness_github, spec, f"dev: target branch {base_branch!r} does not exist on {target}")
             return None
         feature_branch = feature_branch_name(base_branch, bare_title)
-        worktree = git.create_worktree(checkout, feature_branch, base_branch, on_ready=hooks)
+        worktree = git.create_worktree(checkout, feature_branch, base_branch, harness_root, on_ready=hooks)
     except OrbError as exception:
         _fail_attempt(harness_github, store, spec, harness_slug, actionable, exception, dry_run=dry_run)
         return False

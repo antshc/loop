@@ -64,11 +64,12 @@ class GitClient:
         checkout: Path,
         branch: str,
         base: str,
+        harness_root: Path,
         *,
         on_ready: Sequence[Hook] = (),
     ) -> Path:
         self._run(("git", "check-ref-format", "--branch", branch), cwd=checkout)
-        target = Path(f"{checkout}.worktrees") / branch
+        target = harness_root / "workspace" / f"{checkout.name}.worktrees" / branch
         with self._lock:
             worktrees = self._list_worktrees(checkout)
             other = next(
@@ -90,6 +91,7 @@ class GitClient:
             else:
                 self._run(("git", "worktree", "add", "-b", branch, str(target), start_ref), cwd=checkout)
             self._worktrees[target] = checkout
+            self._exclude_workspace(harness_root)
 
         try:
             for hook in on_ready:
@@ -98,6 +100,18 @@ class GitClient:
             self.remove_worktree(target)
             raise
         return target
+
+    def _exclude_workspace(self, harness_root: Path) -> None:
+        """Adds `workspace/` to the harness checkout's local exclude list, once."""
+        exclude_file = harness_root / ".git" / "info" / "exclude"
+        exclude_file.parent.mkdir(parents=True, exist_ok=True)
+        existing = exclude_file.read_text() if exclude_file.exists() else ""
+        if "workspace/" in existing.splitlines():
+            return
+        with exclude_file.open("a") as handle:
+            if existing and not existing.endswith("\n"):
+                handle.write("\n")
+            handle.write("workspace/\n")
 
     def has_changes(self, worktree: Path) -> bool:
         return bool(self._run(("git", "status", "--porcelain"), cwd=worktree).strip())

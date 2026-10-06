@@ -33,7 +33,7 @@ class FakeGitClient(GitClient):
         return branch in self.remote_branches
 
     def create_worktree(
-        self, checkout: Path, branch: str, base: str, *, on_ready: Sequence[Hook] = ()
+        self, checkout: Path, branch: str, base: str, harness_root: Path, *, on_ready: Sequence[Hook] = ()
     ) -> Path:
         if branch in self.branch_in_use:
             raise CommandError(
