@@ -9,13 +9,14 @@ Define Orb's smallest agent-execution unit so workflows can compose planner, imp
 
 A **Capsule Run** is one bounded invocation of one Headless AI Agent with one prompt inside one prepared Capsule.
 
-The runtime owns the Run boundary: it binds the prepared execution context, invokes the configured `AgentClient`, and returns one result. A Workflow owns topology by composing Runs with ordinary Python control flow such as sequence, branching, iteration, and concurrency. A Run does not encode workflow roles such as planner, implementer, or reviewer.
+The runtime owns the Run boundary: it binds the prepared execution context, runs the `AgentClient` the workflow passes for that Run through the Capsule's executor, and returns one result. A Workflow owns topology by composing Runs with ordinary Python control flow such as sequence, branching, iteration, and concurrency. A Run does not encode workflow roles such as planner, implementer, or reviewer.
 
 ## Rules
 
 - MUST treat one Capsule Run as the smallest executable runtime unit: one agent, one prompt, one Capsule, and one result.
 - MUST bind the Run to its prepared Capsule before invoking the agent.
 - MUST invoke the agent provider through the `AgentClient` contract.
+- MUST take the agent for each Run as an argument of the Run rather than from the Capsule, so Runs on one Capsule may use different agents ([ADR 0008](../adr/0008-pass-the-agent-to-each-capsule-run-instead-of-binding-it-to-the-capsule.md)).
 - MUST return a machine-readable result containing execution success and agent output.
 - MUST keep workflow topology in Workflow code rather than in the Run abstraction.
 - MUST let a Workflow decide subsequent Runs from prior Run results and external state.
@@ -28,6 +29,7 @@ The runtime owns the Run boundary: it binds the prepared execution context, invo
 
 - MUST reuse one Capsule across the dependent Runs.
 - MUST preserve each Run as a separate agent invocation with its own prompt and result.
+- MAY use a different agent for each Run.
 - SHOULD execute dependent Runs sequentially in workflow-defined order.
 
 ### Variant: Isolated Capsules

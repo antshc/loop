@@ -5,7 +5,7 @@ Repositories need to prepare a fresh worktree before the agent starts, and Sandc
 ## Considered Options
 
 - **Post-agent hooks** — rejected: Sandcastle shows pre-agent hooks suffice; post-iteration work is an explicit step of the workflow's use case.
-- **Capsule-side hooks** — rejected: Orb runs agents in host worktrees, so there is no Capsule to run them in.
+- **Capsule-side hooks** — rejected: the host already prepares the bind-mounted worktree the Capsule uses, and the Capsule image carries the toolchain, so an in-Capsule setup stage adds a second place to prepare the same worktree.
 - **In-language callbacks instead of shell commands** — rejected: ties hook authors to Python and widens the public API surface exposed to workflows (ADR 0003); shell commands stay language-neutral.
 - **Warn and continue on hook failure** — rejected: the agent would run against a half-prepared worktree and spend a session on a setup error.
 

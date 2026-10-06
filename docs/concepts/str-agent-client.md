@@ -9,7 +9,7 @@ The client accepts an agent prompt, the arguments that render it, and run option
 
 ## Concept
 
-An **AgentClient** wraps a provider-specific CLI adapter, uses a **Prompt Preprocessor** to render the prompt, and uses a **SessionStore** for resumable agent sessions. A **Capsule** owns the client and supplies the executor the CLI runs through.
+An **AgentClient** wraps a provider-specific CLI adapter, uses a **Prompt Preprocessor** to render the prompt, and uses a **SessionStore** for resumable agent sessions. The workflow passes the AgentClient to each Capsule run, and the **Capsule** supplies the executor the CLI runs through ([ADR 0008](../adr/0008-pass-the-agent-to-each-capsule-run-instead-of-binding-it-to-the-capsule.md)).
 
 ```text
 Orb / Ralph / Crew
@@ -48,6 +48,7 @@ The CLI adapter owns command construction, process execution, and provider-speci
 - MUST substitute only `${{KEY}}` placeholders; a placeholder without a matching argument MUST fail the run, and an argument no placeholder uses SHOULD log a warning.
 - MUST execute only `!`cmd`` commands written in the prompt template; text arriving through `prompt_args` MUST NOT be executed.
 - MUST run the provider CLI and template commands through the executor of the owning Capsule.
+- MUST pass the provider's allow-all permission flag (`--allow-all` for Copilot CLI) when the Capsule is isolated, and path-scoped permissions (`--allow-all-tools` with `--add-dir`) when it is not; the adapter owns these flags and the Capsule only states whether it is isolated ([ADR 0005](../adr/0005-run-copilot-cli-agents-from-the-harness-root-with-harness-and-workspace-isolation.md)).
 - MUST treat an omitted session key as a fresh provider invocation.
 - MUST resolve a supplied logical session key through `SessionStore`.
 - MUST persist a new session only after its first provider invocation succeeds.

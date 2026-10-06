@@ -21,7 +21,7 @@ Modelled on Sandcastle's host-side `onWorktreeReady` hooks ([research](../resear
 - MUST run the hooks of one Hook point sequentially in declared order.
 - MUST fail the run before the agent starts when a hook exits non-zero or times out, removing the worktree before raising.
 - MUST bound every hook with a default timeout that a hook can override.
-- MUST cancel in-flight hooks when the run is cancelled.
+- MUST cancel in-flight hooks when the workflow-supplied `threading.Event` is set; the run then reports cancelled, not failed.
 - MUST NOT let a hook change which agent, prompt, or Ticket the run uses.
 
 ## Benefits and Trade-offs

@@ -31,7 +31,7 @@ The clone of a Spec's target repository whose code changes through worktrees: th
 _Avoid_: Working copy, source clone
 
 **Workspace Folder**:  
-The folder of a Multi Repo harness that holds one clone per wrapped source repository.  
+The harness's `workspace` folder: it holds one clone per wrapped source repository in a Multi Repo and the worktrees of every Codebase Checkout in both layouts.  
 _Avoid_: Repos folder
 
 **Ticket**:  
@@ -51,9 +51,17 @@ A user-declared shell command that Orb runs on the host at a Hook point, before 
 _Avoid_: Callback, script, setup step
 
 **Hook point**:  
-A named moment in a run's lifecycle at which Orb runs the Hooks declared for it, such as `worktree-ready`.  
+A named moment in the Capsule lifecycle at which Orb runs the Hooks declared for it, such as `worktree-ready`.  
 _Avoid_: Event, trigger, stage
 
 **Capsule**:  
-An isolated sandbox/workspace in which a Headless AI Agent runs, separated from the host and from other runs.  
+The place where a Headless AI Agent runs on a worktree: either isolated in a container, separated from the host and from other runs, or, with no isolation, directly on the host.  
 _Avoid_: Sandbox, container, environment
+
+**NoCapsule**:  
+The Capsule that skips isolation and runs the agent directly on the host with the user's own permissions.  
+_Avoid_: No sandbox, host mode
+
+**Capsule lifecycle**:  
+The ordered stages of one Workflow run on a worktree: worktree creation and `worktree-ready` Hooks, Capsule start, one or more agent runs, Capsule close, publication of the agent's work, and worktree removal.  
+_Avoid_: Run lifecycle, Sandbox lifecycle

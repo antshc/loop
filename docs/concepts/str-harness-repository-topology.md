@@ -7,7 +7,7 @@ Ralph skills run against a **harness** (where docs, specs, instructions, and ski
 
 ## Concept
 
-The **harness repo** is the root from which the agent is executed; it supplies the agent's instructions and skills. The **codebase checkout** is the repository whose code is changed. Both are the same repository in the single-repo layout and different repositories in the multi-repo layout. Code is never changed in the checkout itself: every change happens in a **worktree** placed beside the checkout in a sibling folder named after it with a `.worktrees` suffix, one subfolder per feature branch.
+The **harness repo** is the root from which the agent is executed; it supplies the agent's instructions and skills. The **codebase checkout** is the repository whose code is changed. Both are the same repository in the single-repo layout and different repositories in the multi-repo layout. Code is never changed in the checkout itself: every change happens in a **worktree** placed in the harness's `workspace` folder, in a folder named after the checkout with a `.worktrees` suffix, one subfolder per feature branch.
 
 Workflows resolve the harness path first, then derive the codebase checkout by comparing the target repository's identity (`owner/name`) with the harness's own `origin` remote: equal → the harness is the checkout; different → the checkout is the repository folder of that name inside the harness's `workspace` folder, whose own `origin` must equal the target. The configured repository list never takes part in this decision. Identities are compared case-insensitively after normalizing ssh, https, and `.git` forms; only `github.com` remotes resolve.
 
@@ -22,7 +22,7 @@ Work is split by repository: spec, issue, and documentation operations (and the 
 - MUST take the target repository from the spec's `repo:target:<owner/name>` label; a missing, malformed, or duplicated label is handled like a missing checkout, with no default to the harness.
 - MUST send spec and ticket operations through a platform instance bound to the harness repository and pull request operations through a separate instance bound to the resolved target repository.
 - MUST NOT use the configured repository list to choose a checkout; it is only the input of the pull command.
-- MUST create each worktree beside its checkout as `<checkout>.worktrees/<feature-branch>`, never inside the checkout.
+- MUST create each worktree as `<harness>/workspace/<checkout folder name>.worktrees/<feature-branch>` in both layouts, never in the checkout's tracked tree, and add `workspace/` to the checkout's `.git/info/exclude` when creating one.
 - MUST run code, build, and pull request commands inside the worktree and spec, issue, and documentation commands against the harness repo.
 - MUST keep the harness's docs, `.github` instructions, and skills in the harness repo, whichever layout is in use.
 - MUST keep the list of workspace repositories in the per-developer, gitignored harness settings, not in version control.
@@ -30,8 +30,8 @@ Work is split by repository: spec, issue, and documentation operations (and the 
 ### Variant: Single repo
 **Selected when:** the harness and the only target repository are the same repository.
 
-- MUST treat the harness root as the codebase checkout; the workspace folder does not exist.
-- MUST place worktrees beside the harness root, outside the repository tree.
+- MUST treat the harness root as the codebase checkout; its `workspace` folder holds only worktrees.
+- MUST place worktrees in `<harness>/workspace/<harness folder name>.worktrees/`, excluded from version control through `.git/info/exclude`.
 
 ### Variant: Multi repo
 **Selected when:** the harness wraps one or more target repositories that are not the harness itself.
@@ -54,9 +54,10 @@ orb/                         # harness root = codebase checkout
 ├── docs/
 ├── src/orb/
 ├── workflows/
-└── tests/
-orb.worktrees/               # sibling of the checkout
-└── <feature-branch>/             # worktree; all code changes happen here
+├── tests/
+└── workspace/                    # excluded from version control
+    └── orb.worktrees/
+        └── <feature-branch>/     # worktree; all code changes happen here
 ```
 
 Multi repo — harness wraps the codebase repositories:
