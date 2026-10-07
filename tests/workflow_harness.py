@@ -110,9 +110,7 @@ class DevHarness:
 
         return dev.main(
             ["--harness-root", str(self.harness_root), "--log-dir", str(log_dir or self.log_dir)],
-            branches=self.git.branch_service,
-            commits=self.git.commits,
-            worktrees=self.git.worktree_service,
+            git=self.git,
             github_factory=github_factory or (lambda checkout: self.github),
             agent_factory=agent_factory or default_agent_factory,
             sandbox_factory=sandbox_factory
@@ -124,7 +122,7 @@ class DevHarness:
 
 
 def _only_worktree(git_client: FakeGit) -> Path:
-    return next(iter(git_client.worktrees))
+    return next(iter(git_client.worktree_branches))
 
 
 def _writes(gh: FakeGhCli) -> list[tuple[str, ...]]:

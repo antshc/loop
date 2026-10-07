@@ -86,7 +86,7 @@ def test_prompt_lists_only_this_initiatives_commits_when_the_branch_holds_two_in
     is delivered, then its prompt lists only this Initiative's commits since the base branch, and its split
     response is reassembled and treated as a success."""
     harness = DevHarness(tmp_path)
-    harness.git.branches["add-login-page"] = ["c1", "c2"]
+    harness.git.branch_commits["add-login-page"] = ["c1", "c2"]
     harness.git.subjects.update({"c1": "ccode(Checkout|9): earlier work", "c2": "ccode(Other|3): other initiative"})
     fake_cli = _scripted_agent(harness)
 

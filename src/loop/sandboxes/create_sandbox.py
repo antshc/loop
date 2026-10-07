@@ -9,7 +9,7 @@ from types import TracebackType
 from loop.contracts.agent_client import AgentOptions, AgentResult
 from loop.contracts.sandbox import AgentClientFactory, Sandbox
 from loop.errors import Cancelled
-from loop.platforms.git import Branch, BranchService, CommitService, Worktree, WorktreeService
+from loop.platforms.git import Branch, Git, Worktree
 from loop.sandboxes.sandbox_lifecycle import SandboxHooks, run_host_hooks, with_sandbox_lifecycle
 
 SandboxFactory = Callable[[Path, threading.Event], Sandbox]
@@ -44,9 +44,7 @@ class WorktreeSandbox:
 
     def __init__(
         self,
-        commits: CommitService,
-        worktrees: WorktreeService,
-        branches: BranchService,
+        git: Git,
         sandbox: Sandbox,
         checkout: Path,
         worktree: Worktree,
@@ -56,9 +54,7 @@ class WorktreeSandbox:
         apply_to_host: Callable[[], None] | None,
         cancel: threading.Event,
     ) -> None:
-        self._commits = commits
-        self._worktrees = worktrees
-        self._branches = branches
+        self._git = git
         self._sandbox = sandbox
         self._checkout = checkout
         self._worktree = worktree
@@ -84,9 +80,9 @@ class WorktreeSandbox:
         options: AgentOptions | None = None,
     ) -> SandboxRunResult:
         outcome = with_sandbox_lifecycle(
-            self._commits,
-            self._branches,
-            self._worktrees,
+            self._git.commits,
+            self._git.branches,
+            self._git.worktrees,
             self._sandbox,
             self._checkout,
             self._worktree,
@@ -106,7 +102,7 @@ class WorktreeSandbox:
             self._sandbox.close()
         finally:
             if not keep_worktree:
-                self._worktrees.remove(self._worktree, force=True)
+                self._git.worktrees.remove(self._worktree, force=True)
 
     def __enter__(self) -> WorktreeSandbox:
         return self
@@ -118,13 +114,11 @@ class WorktreeSandbox:
         traceback: TracebackType | None,
     ) -> None:
         # A cancelled run with uncommitted work keeps its worktree for the user.
-        self.close(keep_worktree=isinstance(exception, Cancelled) and self._worktrees.has_changes(self._worktree))
+        self.close(keep_worktree=isinstance(exception, Cancelled) and self._git.worktrees.has_changes(self._worktree))
 
 
 def create_sandbox(
-    commits: CommitService,
-    worktrees: WorktreeService,
-    branches: BranchService,
+    git: Git,
     sandbox_factory: SandboxFactory,
     *,
     checkout: Path,
@@ -143,31 +137,29 @@ def create_sandbox(
     """
     cancel = cancel or threading.Event()
     target = _default_worktree_path(checkout, harness_root, branch) if branch is not None else None
-    prepared = branches.prepare(Branch(checkout, branch) if branch else None, Branch(checkout, base), target)
+    prepared = git.branches.prepare(Branch(checkout, branch) if branch else None, Branch(checkout, base), target)
     if target is None:
         target = _default_worktree_path(checkout, harness_root, prepared.name)
-    worktree = worktrees.create(prepared, target)
+    worktree = git.worktrees.create(prepared, target)
     _exclude_workspace(harness_root)
     try:
-        run_host_hooks(worktrees, hooks.worktree_ready, worktree.path, cancel=cancel)
+        run_host_hooks(git.worktrees, hooks.worktree_ready, worktree.path, cancel=cancel)
         sandbox = sandbox_factory(harness_root, cancel)
         try:
-            run_host_hooks(worktrees, hooks.sandbox_ready, worktree.path, cancel=cancel)
+            run_host_hooks(git.worktrees, hooks.sandbox_ready, worktree.path, cancel=cancel)
         except Exception:
             sandbox.close()
             raise
     except Cancelled as exception:
-        if worktrees.has_changes(worktree):
+        if git.worktrees.has_changes(worktree):
             raise Cancelled(worktree.path) from exception
-        worktrees.remove(worktree, force=True)
+        git.worktrees.remove(worktree, force=True)
         raise
     except Exception:
-        worktrees.remove(worktree, force=True)
+        git.worktrees.remove(worktree, force=True)
         raise
     return WorktreeSandbox(
-        commits,
-        worktrees,
-        branches,
+        git,
         sandbox,
         checkout,
         worktree,
