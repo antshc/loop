@@ -54,9 +54,9 @@ class TicketsTracker:
         self.hitl(ticket_number, message)
         self.hitl(spec_number, message)
 
-    def block_spec(self, spec_number: int, actionable: Sequence[Ticket], message: str) -> None:
+    def block_spec(self, spec_number: int, tickets: Sequence[Ticket], message: str) -> None:
         """Hands the Spec to a human, but only when there is work it is blocking."""
-        if actionable:
+        if tickets:
             self.hitl(spec_number, message)
 
     def close_delivered(self, ticket: Ticket, dev_result: DevResult) -> None:
