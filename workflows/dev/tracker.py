@@ -22,7 +22,7 @@ class TicketsTracker:
         """Every open Spec on the harness tracker."""
         return self.github.get_specs()
 
-    def actionable_tickets(self, spec: Spec) -> tuple[Ticket, ...]:
+    def get_tickets(self, spec: Spec) -> tuple[Ticket, ...]:
         """The Spec's open Tickets ready for delivery, in order."""
         return tuple(self.github.get_actionable_issues(spec))
 

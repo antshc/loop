@@ -59,16 +59,16 @@ def prepare_run(
 ) -> SpecRun | None:
     """The SpecRun for `spec`, or None after blocking the Spec when its target cannot be resolved."""
     # Tickets live on the harness tracker, even when the Spec targets another repo.
-    actionable = tracker.actionable_tickets(spec)
+    tickets = tracker.get_tickets(spec)
 
     target = spec.target
     base_branch = spec.base_branch
     if target is None or base_branch is None:
-        tracker.block_spec(spec.number, actionable, f"dev: cannot resolve repo:target/repo:base labels on {spec.url}")
+        tracker.block_spec(spec.number, tickets, f"dev: cannot resolve repo:target/repo:base labels on {spec.url}")
         return None
 
     checkout = _resolve_checkout(
-        spec, target, actionable, harness_root=harness_root, harness_slug=harness_slug, tracker=tracker
+        spec, target, tickets, harness_root=harness_root, harness_slug=harness_slug, tracker=tracker
     )
     if checkout is None:
         return None
@@ -76,7 +76,7 @@ def prepare_run(
     target_github = tracker.github if checkout == harness_root else github_factory(checkout)
     return SpecRun(
         spec=spec,
-        actionable=actionable,
+        actionable=tickets,
         initiative=spec.initiative,
         bare_title=spec.bare_title,
         target=target,
