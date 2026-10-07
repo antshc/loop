@@ -6,7 +6,6 @@ from loop import AgentOptions, Cancelled, LoopError, SandboxHooks, Ticket, Workt
 
 from .acceptance import commit_violation
 from .deps import DevDeps
-from .naming import task_id
 from .planning import SpecRun
 from .prompting import initiative_commits, prompt_args
 from .result import DevResult, DevResultError, parse_response
@@ -80,6 +79,9 @@ def _deliver_ticket(run: SpecRun, ticket: Ticket, sandbox: WorktreeSandbox, deps
             escalate(deps.harness_github, run.spec.number, ticket.number, attempt)
             return False
 
+def task_id(initiative: str, ticket_number: int) -> str:
+    """The response envelope's `identifier`, and the commit subject's parenthesized tag."""
+    return f"{initiative}|{ticket_number}"
 
 def deliver_tickets(run: SpecRun, sandbox: WorktreeSandbox, deps: DevDeps) -> bool:
     """Deliver Ticket for each actionable Ticket in order; stops at the first failure."""

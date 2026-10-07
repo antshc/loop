@@ -23,12 +23,12 @@ from loop import (
     SandboxFactory,
     configure_logging,
     copilot,
+    feature_branch_name,
     origin_slug,
 )
 
 from .app import process_specs
 from .deps import DevDeps, GithubFactory
-from .naming import feature_branch_name
 from .prompting import prompt_args
 from .result import DevResult, DevResultError, parse_dev_result
 from .settings import HOOKS, LOG_DIR_NAME, LOG_LEVEL, PROMPT, SANDBOX_FACTORY

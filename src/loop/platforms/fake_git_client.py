@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from loop.errors import Cancelled, CommandError, HookError
-from loop.platforms.git_client import GitClient, Hook
+from loop.platforms.git.git_client import GitClient, Hook
 
 
 _BASE_COMMIT = "0" * 40

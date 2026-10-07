@@ -18,11 +18,6 @@ def feature_branch_name(base_branch: str, title: str) -> str:
     return slug if match is None else f"{match[1].replace('.', '_')}_{slug}"
 
 
-def task_id(initiative: str, ticket_number: int) -> str:
-    """The response envelope's `identifier`, and the commit subject's parenthesized tag."""
-    return f"{initiative}|{ticket_number}"
-
-
 def commit_subject_prefix(identifier: str) -> str:
     """The required prefix of a Ticket's delivering commit subject."""
     return f"ccode({identifier}): "

@@ -28,7 +28,7 @@ __init__.py     public API
 contracts/      ABCs: Sandbox, AgentClient, SessionStore, ExecutionStore
 sandboxes/       NoSandbox (host), DockerSandbox (container), FakeDocker double
 agents/         CopilotClient, AgentOutputParser per agent kind, fake agent and Copilot CLI doubles
-platforms/      GitClient (git CLI), GitHubClient (gh CLI), fake doubles
+platforms/      git/ (GitClient over the git CLI, branch and commit-subject naming rules), GitHubClient (gh CLI), fake doubles
 sandbox/        create_sandbox (WorktreeSandbox: worktree + Sandbox), with_sandbox_lifecycle, run_host_hooks
 stores/         file and in-memory execution/session stores
 process.py      CommandExecutor, streaming/cancellable subprocess execution

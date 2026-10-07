@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from loop import GitClient
+from loop import GitClient, commit_subject_prefix
 
-from .naming import commit_subject_prefix
 from .result import DevResult
 
 
