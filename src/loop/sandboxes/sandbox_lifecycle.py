@@ -9,7 +9,7 @@ from pathlib import Path
 
 from loop.contracts.sandbox import Sandbox
 from loop.errors import CommandError, LoopError
-from loop.platforms.git import Branch, BranchService, CommitService, GitClient, Hook
+from loop.platforms.git import Branch, BranchService, CommitService, GitClient, Hook, Worktree, WorktreeService
 from loop.process import TRANSIENT_EXIT_CODES, TRANSIENT_RETRIES, TRANSIENT_RETRY_DELAY_S
 
 
@@ -40,9 +40,10 @@ def with_sandbox_lifecycle[T](
     git: GitClient,
     commits: CommitService,
     branches: BranchService,
+    worktrees: WorktreeService,
     sandbox: Sandbox,
     checkout: Path,
-    worktree: Path,
+    worktree: Worktree,
     work: Callable[[str], T],
     *,
     branch: str | None = None,
@@ -57,19 +58,20 @@ def with_sandbox_lifecycle[T](
     With `branch=None` the worktree is on a temp branch that is merged into the host checkout's
     current branch afterwards; otherwise the commits stay on `branch`.
     """
-    host_branch = git.current_branch(checkout) if branch is None else None
+    host = worktrees.get(checkout) if branch is None else None
+    host_branch = host.branch.name if host is not None and host.branch is not None else None
     if branch is None and host_branch is None:
         raise LoopError(f"cannot merge into a detached HEAD in {checkout}")
     if sandbox.isolated:
         name, email = commits.identity(checkout)
         identity = {"user.name": name, "user.email": email}
-        _prepare_sandbox(sandbox, worktree, identity, sleep or time.sleep)
-    worktree_branch = git.current_branch(worktree)
-    if worktree_branch is None:
-        raise LoopError(f"worktree is on a detached HEAD: {worktree}")
-    run_host_hooks(git, on_sandbox_ready, worktree, cancel=cancel)
+        _prepare_sandbox(sandbox, worktree.path, identity, sleep or time.sleep)
+    if worktree.branch is None:
+        raise LoopError(f"worktree is on a detached HEAD: {worktree.path}")
+    worktree_branch = worktree.branch.name
+    run_host_hooks(git, on_sandbox_ready, worktree.path, cancel=cancel)
 
-    base_head = commits.head(worktree)
+    base_head = commits.head(worktree.path)
     result = work(base_head.sha)
     if apply_to_host is not None:
         apply_to_host()
@@ -78,7 +80,7 @@ def with_sandbox_lifecycle[T](
     if branch is None:
         branches.merge(checkout, Branch(checkout, worktree_branch))
         if not keep_source_branch:
-            git.detach(worktree)
+            worktrees.detach(worktree)
             branches.delete(Branch(checkout, worktree_branch))
     return LifecycleResult(result, worktree_branch, tuple(commit.sha for commit in new_commits))
 

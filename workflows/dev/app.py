@@ -56,13 +56,13 @@ def _deliver_in_sandbox(run: SpecRun, sandbox: WorktreeSandbox, deps: DevDeps) -
     kept_on_cancel = False
     try:
         delivered = deliver_tickets(run, sandbox, deps)
-        pull_request_url = publish(deps.branches, run, sandbox.worktree)
+        pull_request_url = publish(deps.branches, run, sandbox.worktree.path)
         if delivered and pull_request_url is not None:
             deps.tracker.announce_delivered(run.spec.number, pull_request_url)
         return Outcome.SUCCESS if delivered else Outcome.FAILED
     except Cancelled:
-        kept_on_cancel = deps.git.has_changes(sandbox.worktree)
-        _report_cancelled(run.spec, sandbox.worktree if kept_on_cancel else None)
+        kept_on_cancel = deps.worktrees.has_changes(sandbox.worktree)
+        _report_cancelled(run.spec, sandbox.worktree.path if kept_on_cancel else None)
         return Outcome.SKIPPED
     finally:
         sandbox.close(keep_worktree=kept_on_cancel)

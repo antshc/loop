@@ -1,75 +1,108 @@
 from __future__ import annotations
 
-import re
+from collections.abc import Sequence
 from pathlib import Path
-from uuid import uuid4
 
 from loop.errors import CommandError
-from loop.platforms.git.client import GitClient
-from loop.platforms.git.objects import Branch
+from loop.platforms.git.client import GitClient, GitRunner
+from loop.platforms.git.objects import Branch, Worktree
+from loop.process import checked_output, execute
 
-_VERSION = re.compile(r"(\d+(?:\.\d+)+)")
+_HEADS = "refs/heads/"
 
 
-def slugify(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-") or "spec"
+def _repository_root(path: Path) -> Path:
+    """The checkout `path` belongs to: `path` itself, or the checkout a linked worktree's `.git` file points at."""
+    git_entry = path / ".git"
+    if git_entry.is_dir():
+        return path
+    gitdir = Path(git_entry.read_text().removeprefix("gitdir:").strip())
+    return gitdir.parent.parent.parent
 
 
 class WorktreeService:
-    """Creates, tracks, and removes the worktrees of Codebase Checkouts, and names their branches and folders."""
+    """Attaches, inspects, and removes worktrees; placement and branch naming are the caller's job."""
 
-    def __init__(self, git: GitClient) -> None:
+    def __init__(self, git: GitClient, *, run: GitRunner = execute) -> None:
         self._git = git
-        # worktree -> the checkout it was created from, so `remove` needs only the worktree.
-        self._checkouts: dict[Path, Path] = {}
+        self._execute = run
 
-    @staticmethod
-    def new_branch_name() -> str:
-        return f"loop/sandbox-{uuid4().hex[:8]}"
+    def create(self, branch: Branch, target: Path) -> Worktree:
+        """Attaches `branch` at `target`.
 
-    @staticmethod
-    def feature_branch_name(base_branch: str, title: str) -> str:
-        """`<version_with_underscores>_<title slug>` when base_branch carries a version, else `<title slug>`."""
-        slug = slugify(title)
-        match = _VERSION.search(base_branch)
-        return slug if match is None else f"{match[1].replace('.', '_')}_{slug}"
-
-    @staticmethod
-    def worktree_path(checkout: Path, harness_root: Path, branch: str) -> Path:
-        return harness_root / "workspace" / f"{checkout.name}.worktrees" / branch
-
-    def create(self, checkout: Path, branch: str, base: str, harness_root: Path) -> Path:
-        """Checks out `branch` in a new worktree of `checkout`, replacing a clean leftover at the same path."""
-        self._git.check_branch_name(checkout, branch)
-        target = self.worktree_path(checkout, harness_root, branch)
-        wanted = Branch(checkout, branch)
+        Reuses `target` when it is already registered with `branch`, replaces a clean leftover there,
+        and refuses a dirty leftover or a `branch` checked out at another path.
+        """
+        checkout = branch.path
         with self._git.lock:
-            worktrees = self._git.list_worktrees(checkout)
+            worktrees = self.list(checkout)
+            existing = next((worktree for worktree in worktrees if worktree.path == target), None)
+            if existing is not None and existing.branch == branch:
+                return existing
             other = next(
-                (worktree.path for worktree in worktrees if worktree.branch == wanted and worktree.path != target),
+                (worktree.path for worktree in worktrees if worktree.branch == branch and worktree.path != target),
                 None,
             )
             if other is not None:
-                raise CommandError("git worktree add", None, f"branch {branch!r} is checked out in {other}")
-            if any(worktree.path == target for worktree in worktrees):
-                if self._git.has_changes(target):
+                raise CommandError("git worktree add", None, f"branch {branch.name!r} is checked out in {other}")
+            if existing is not None:
+                if self.has_changes(existing):
                     raise CommandError(
                         "git worktree add", None, f"leftover worktree has uncommitted changes: {target}"
                     )
-                self._git.remove_worktree(checkout, target)
+                self._run(("git", "worktree", "remove", "--force", str(target)), cwd=checkout)
+            self._run(("git", "worktree", "add", str(target), branch.name), cwd=checkout)
+        return Worktree(target, branch)
 
-            start_ref = (
-                wanted.upstream if self._git.remote_branch_exists(checkout, branch) else Branch(checkout, base).upstream
-            )
-            self._git.add_worktree(checkout, target, branch, start_ref)
-            self._checkouts[target] = checkout
-            self._git.exclude_workspace(harness_root)
-        return target
+    def list(self, checkout: Path) -> list[Worktree]:
+        """Every worktree of `checkout`'s repository, with its branch, or None when its HEAD is detached."""
+        output = self._run(("git", "worktree", "list", "--porcelain"), cwd=checkout)
+        entries: list[Worktree] = []
+        path: Path | None = None
+        branch: Branch | None = None
+        for line in output.splitlines():
+            if line.startswith("worktree "):
+                if path is not None:
+                    entries.append(Worktree(path, branch))
+                path = Path(line[len("worktree ") :])
+                branch = None
+            elif line.startswith(f"branch {_HEADS}"):
+                branch = Branch(path, line[len(f"branch {_HEADS}") :])
+        if path is not None:
+            entries.append(Worktree(path, branch))
+        return entries
 
-    def remove(self, worktree: Path) -> None:
-        try:
-            checkout = self._checkouts.pop(worktree)
-        except KeyError as exception:
-            raise CommandError("git worktree remove", None, f"unknown worktree: {worktree}") from exception
+    def get(self, path: Path) -> Worktree:
+        """The worktree at `path`, found through its own repository, whatever checkout it belongs to."""
+        checkout = _repository_root(path)
+        for worktree in self.list(checkout):
+            if worktree.path == path:
+                return worktree
+        raise CommandError("git worktree list", None, f"unknown worktree: {path}")
+
+    def remove(self, worktree: Worktree, *, force: bool = False) -> None:
+        """Removes `worktree`, found through its own repository; refuses a dirty one unless `force`."""
+        checkout = _repository_root(worktree.path)
+        args = (
+            ("git", "worktree", "remove", "--force", str(worktree.path))
+            if force
+            else ("git", "worktree", "remove", str(worktree.path))
+        )
         with self._git.lock:
-            self._git.remove_worktree(checkout, worktree)
+            self._run(args, cwd=checkout)
+
+    def detach(self, worktree: Worktree) -> Worktree:
+        """Detaches `worktree`'s HEAD; it carries no branch afterwards."""
+        self._run(("git", "checkout", "--detach"), cwd=worktree.path)
+        return Worktree(worktree.path, None)
+
+    def has_changes(self, worktree: Worktree) -> bool:
+        """Whether `worktree` has staged, unstaged, or untracked changes."""
+        return bool(self._run(("git", "status", "--porcelain"), cwd=worktree.path).strip())
+
+    def is_clean(self, worktree: Worktree) -> bool:
+        return not self.has_changes(worktree)
+
+    def _run(self, args: Sequence[str], *, cwd: Path) -> str:
+        result = self._execute(args, cwd=cwd)
+        return checked_output(" ".join(args), result)

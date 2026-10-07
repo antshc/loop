@@ -33,13 +33,13 @@ def _completed_frames(commit: str) -> list[str]:
 def _spy_on_worktree_creation(harness: DevHarness) -> list[bool]:
     """Records, at each worktree creation, whether a push had already happened."""
     created_after_push: list[bool] = []
-    original = harness.git.add_worktree
+    original = harness.git.worktree_service.create
 
     def spy(*args, **kwargs):
         created_after_push.append(bool(harness.git.pushed))
         return original(*args, **kwargs)
 
-    harness.git.add_worktree = spy
+    harness.git.worktree_service.create = spy
     return created_after_push
 
 
@@ -69,6 +69,31 @@ def test_a_branch_ahead_from_an_interrupted_run_is_pushed_before_the_worktree_an
     assert any(call[:2] == ("pr", "create") for call in harness.gh.calls)
     closes = [call for call in harness.gh.calls if call[:2] == ("issue", "close")]
     assert [call[2] for call in closes] == ["10"]
+
+
+def test_a_cancelled_run_that_left_an_unpublished_ticket_commit_checked_out_at_the_worktree_is_kept_and_published(
+    tmp_path: Path,
+) -> None:
+    """Given a previous run was cancelled after an unpublished Ticket commit (the feature branch has a local
+    `ccode(...)` commit not on origin and is checked out at the intended worktree path), when the Spec reruns,
+    then the commit is kept, the branch is pushed, and the draft pull request is ensured."""
+    harness = DevHarness(tmp_path)
+    target = harness.harness_root / "workspace" / f"{harness.harness_root.name}.worktrees" / _FEATURE_BRANCH
+    harness.git.worktrees[target] = _FEATURE_BRANCH
+    harness.git.branches[_FEATURE_BRANCH] = ["0000000000000000000000000000000000000009"]
+    harness.git.subjects["0000000000000000000000000000000000000009"] = "ccode(Checkout|9): earlier"
+
+    def handler(prompt: str) -> list[str]:
+        commit = harness.git.commit(_only_worktree(harness.git), f"ccode({_IDENTIFIER}): work")
+        return _completed_frames(commit)
+
+    code, recorder = _run_with_real_agent(harness, FakeCopilotCli(handler))
+
+    assert code == 0
+    assert recorder.lines and not recorder.terminated
+    assert harness.git.branches[_FEATURE_BRANCH][0] == "0000000000000000000000000000000000000009"
+    assert harness.git.pushed and harness.git.pushed[0] == (harness.harness_root, _FEATURE_BRANCH)
+    assert any(call[:2] == ("pr", "create") for call in harness.gh.calls)
 
 
 def test_a_spec_with_no_actionable_ticket_and_a_branch_ahead_is_pushed_with_its_draft_pull_request(

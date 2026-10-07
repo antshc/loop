@@ -36,9 +36,9 @@ from loop.platforms.git import (
     CommitService,
     GitClient,
     Hook,
+    Worktree,
     WorktreeService,
     origin_slug,
-    slugify,
 )
 from loop.process import CommandExecutor, CommandResult, cli_runner, run_command
 from loop.prompt import PromptPreprocessor
@@ -97,6 +97,7 @@ __all__ = [
     "SandboxRunResult",
     "SessionStore",
     "Settled",
+    "Worktree",
     "WorktreeSandbox",
     "WorktreeService",
     "cli_runner",
@@ -109,6 +110,5 @@ __all__ = [
     "parallel_settled",
     "run_command",
     "run_host_hooks",
-    "slugify",
     "with_sandbox_lifecycle",
 ]

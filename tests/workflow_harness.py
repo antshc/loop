@@ -116,6 +116,7 @@ class DevHarness:
             git=git_client,
             branches=git_client.branch_service,
             commits=git_client.commits,
+            worktrees=git_client.worktree_service,
             github_factory=github_factory or (lambda checkout: self.github),
             agent_factory=agent_factory or default_agent_factory,
             sandbox_factory=sandbox_factory

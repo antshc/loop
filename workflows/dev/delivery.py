@@ -54,13 +54,13 @@ def _run_and_validate(
     if not outcome.success:
         return "agent process did not exit successfully"
 
-    violation = commit_violation(deps.git, deps.commits, sandbox.worktree, head_before, identifier, dev_result)
+    violation = commit_violation(deps.worktrees, deps.commits, sandbox.worktree, head_before, identifier, dev_result)
     return dev_result if violation is None else violation
 
 
 def _deliver_ticket(run: SpecRun, ticket: Ticket, sandbox: WorktreeSandbox, deps: DevDeps) -> bool:
     """Fresh agent runs for `ticket` until one is accepted or its failure cap is reached; True on success."""
-    worktree = sandbox.worktree
+    worktree = sandbox.worktree.path
     identifier = task_id(run.initiative, ticket.number)
     while True:
         head_before = deps.commits.head(worktree)

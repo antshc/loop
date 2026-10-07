@@ -24,12 +24,18 @@ class BranchService:
         """Whether `base` has an `origin` counterpart a branch can be prepared from."""
         return self._git.remote_branch_exists(base.path, base.name)
 
-    def prepare(self, branch: Branch | None, base: Branch) -> Branch:
-        """Ensures a local branch exists at the right start ref; generates a name when `branch` is None."""
+    def prepare(self, branch: Branch | None, base: Branch, target: Path | None = None) -> Branch:
+        """Ensures a local branch exists at the right start ref; generates a name when `branch` is None.
+
+        Skips the forced move when the branch is already checked out at `target`, so its unpublished
+        commits survive.
+        """
         checkout = base.path
         name = branch.name if branch is not None else self._generate_name()
         self._git.check_branch_name(checkout, name)
         wanted = Branch(checkout, name)
+        if target is not None and self._checked_out_at(target, name):
+            return wanted
         start_ref = wanted.upstream if self._git.remote_branch_exists(checkout, name) else base.upstream
         with self._git.lock:
             if self._exists_local(checkout, name):
@@ -65,6 +71,12 @@ class BranchService:
 
     def _exists_local(self, checkout: Path, name: str) -> bool:
         return self._execute(("git", "show-ref", "--verify", "--quiet", Branch(checkout, name).ref), cwd=checkout).returncode == 0
+
+    def _checked_out_at(self, target: Path, name: str) -> bool:
+        if not target.is_dir():
+            return False
+        result = self._execute(("git", "rev-parse", "--abbrev-ref", "HEAD"), cwd=target)
+        return result.returncode == 0 and result.stdout.strip() == name
 
     def _run(self, args: Sequence[str], *, cwd: Path) -> str:
         result = self._execute(args, cwd=cwd)

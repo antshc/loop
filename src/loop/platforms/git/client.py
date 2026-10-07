@@ -8,13 +8,12 @@ from pathlib import Path
 from typing import Protocol
 
 from loop.errors import Cancelled, CommandError, HookError
-from loop.platforms.git.objects import Branch, Worktree
+from loop.platforms.git.objects import Branch
 from loop.process import CommandResult, checked_output, execute
 
 DEFAULT_HOOK_TIMEOUT_S = 120.0
 
 _REMOTE = re.compile(r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?/?$", re.IGNORECASE)
-_HEADS = "refs/heads/"
 
 
 class GitRunner(Protocol):
@@ -65,64 +64,9 @@ class GitClient:
     def check_branch_name(self, checkout: Path, branch: str) -> None:
         self._run(("git", "check-ref-format", "--branch", branch), cwd=checkout)
 
-    def add_worktree(self, checkout: Path, target: Path, branch: str, start_ref: str) -> None:
-        """Checks out `branch` at `target`, creating it at `start_ref` or resetting an existing one to it."""
-        if self._show_ref(checkout, Branch(checkout, branch).ref):
-            self._run(("git", "branch", "-f", branch, start_ref), cwd=checkout)
-            self._run(("git", "worktree", "add", str(target), branch), cwd=checkout)
-        else:
-            self._run(("git", "worktree", "add", "-b", branch, str(target), start_ref), cwd=checkout)
-
-    def remove_worktree(self, checkout: Path, worktree: Path) -> None:
-        self._run(("git", "worktree", "remove", "--force", str(worktree)), cwd=checkout)
-
-    def list_worktrees(self, checkout: Path) -> list[Worktree]:
-        output = self._run(("git", "worktree", "list", "--porcelain"), cwd=checkout)
-        entries: list[Worktree] = []
-        path: Path | None = None
-        branch: Branch | None = None
-        for line in output.splitlines():
-            if line.startswith("worktree "):
-                if path is not None:
-                    entries.append(Worktree(path, branch))
-                path = Path(line[len("worktree ") :])
-                branch = None
-            elif line.startswith(f"branch {_HEADS}"):
-                branch = Branch(path, line[len(f"branch {_HEADS}") :])
-        if path is not None:
-            entries.append(Worktree(path, branch))
-        return entries
-
-    def exclude_workspace(self, harness_root: Path) -> None:
-        """Adds `workspace/` to the harness checkout's local exclude list, once."""
-        exclude_file = harness_root / ".git" / "info" / "exclude"
-        exclude_file.parent.mkdir(parents=True, exist_ok=True)
-        existing = exclude_file.read_text() if exclude_file.exists() else ""
-        if "workspace/" in existing.splitlines():
-            return
-        with exclude_file.open("a") as handle:
-            if existing and not existing.endswith("\n"):
-                handle.write("\n")
-            handle.write("workspace/\n")
-
-    def has_changes(self, worktree: Path) -> bool:
-        return bool(self._run(("git", "status", "--porcelain"), cwd=worktree).strip())
-
-    def current_branch(self, path: Path) -> str | None:
-        """The checked-out branch of `path`, or None on a detached HEAD."""
-        name = self._run(("git", "rev-parse", "--abbrev-ref", "HEAD"), cwd=path).strip()
-        return None if name == "HEAD" else name
-
     def config_get(self, path: Path, key: str) -> str | None:
         result = self._execute(("git", "config", "--get", key), cwd=path)
         return result.stdout.strip() or None if result.returncode == 0 else None
-
-    def is_clean(self, worktree: Path) -> bool:
-        """Whether `worktree` has no staged, unstaged, or untracked changes."""
-        return not self.has_changes(worktree)
-
-    def detach(self, worktree: Path) -> None:
-        self._run(("git", "checkout", "--detach"), cwd=worktree)
 
     def commit(self, worktree: Path, subject: str, body: str = "") -> None:
         self._run(("git", "add", "-A"), cwd=worktree)

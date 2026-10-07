@@ -8,6 +8,7 @@ from loop.platforms.git.branch_service import BranchService
 from loop.platforms.git.client import GitClient, Hook
 from loop.platforms.git.commit_service import CommitService
 from loop.platforms.git.objects import Branch, Commit, Worktree
+from loop.platforms.git.worktree_service import WorktreeService
 
 
 _BASE_COMMIT = "0" * 40
@@ -39,28 +40,13 @@ class FakeGitClient(GitClient):
         self.remote_heads: dict[str, str] = {}
         self.commits = FakeCommitService(self)
         self.branch_service = FakeBranchService(self)
+        self.worktree_service = FakeWorktreeService(self)
 
     def remote_branch_exists(self, checkout: Path, branch: str) -> bool:
         return branch in self.remote_branches
 
     def check_branch_name(self, checkout: Path, branch: str) -> None:
         pass
-
-    def exclude_workspace(self, harness_root: Path) -> None:
-        pass
-
-    def list_worktrees(self, checkout: Path) -> list[Worktree]:
-        return [Worktree(path, Branch(path, branch)) for path, branch in self.worktrees.items()] + [
-            Worktree(path) for path in self.dirty_leftovers
-        ]
-
-    def add_worktree(self, checkout: Path, target: Path, branch: str, start_ref: str) -> None:
-        self.worktrees[target] = branch
-        self.branches.setdefault(branch, [])
-
-    def remove_worktree(self, checkout: Path, worktree: Path) -> None:
-        self.worktrees.pop(worktree)
-        self.removed.append(worktree)
 
     def run_hook(self, hook: Hook, worktree: Path, cancel: threading.Event | None = None) -> None:
         self.hook_calls.append(hook.command)
@@ -69,22 +55,8 @@ class FakeGitClient(GitClient):
         if hook.command in self.cancelled_hooks:
             raise Cancelled()
 
-    def current_branch(self, path: Path) -> str | None:
-        if path in self.worktrees:
-            return None if path in self.detached else self.worktrees[path]
-        return self.host_branch
-
     def config_get(self, path: Path, key: str) -> str | None:
         return self.config.get(key)
-
-    def detach(self, worktree: Path) -> None:
-        self.detached.add(worktree)
-
-    def has_changes(self, worktree: Path) -> bool:
-        # fake: "changed" means the branch picked up a commit, not real working-tree dirt.
-        if worktree in self.dirty_leftovers:
-            return True
-        return bool(self.branches[self.worktrees[worktree]])
 
     def commit(self, worktree: Path, subject: str, body: str = "") -> str:
         commits = self.branches[self.worktrees[worktree]]
@@ -93,8 +65,68 @@ class FakeGitClient(GitClient):
         self.subjects[commit] = subject
         return commit
 
-    def is_clean(self, worktree: Path) -> bool:
-        return worktree not in self.dirty_worktrees
+
+class FakeWorktreeService(WorktreeService):
+    """A worktree view over `FakeGitClient`'s shared state, so create/list/remove need no git."""
+
+    def __init__(self, fake: FakeGitClient) -> None:
+        self._fake = fake
+
+    def create(self, branch: Branch, target: Path) -> Worktree:
+        existing_branch = self._fake.worktrees.get(target)
+        if existing_branch == branch.name:
+            return Worktree(target, branch)
+        other = next(
+            (path for path, name in self._fake.worktrees.items() if name == branch.name and path != target), None
+        )
+        if other is not None:
+            raise CommandError("git worktree add", None, f"branch {branch.name!r} is checked out in {other}")
+        if target in self._fake.worktrees or target in self._fake.dirty_leftovers:
+            if self.has_changes(Worktree(target)):
+                raise CommandError("git worktree add", None, f"leftover worktree has uncommitted changes: {target}")
+            self._fake.worktrees.pop(target, None)
+            self._fake.dirty_leftovers.discard(target)
+            self._fake.removed.append(target)
+        self._fake.worktrees[target] = branch.name
+        self._fake.branches.setdefault(branch.name, [])
+        return Worktree(target, branch)
+
+    def list(self, checkout: Path) -> list[Worktree]:
+        return [
+            Worktree(path, None if path in self._fake.detached else Branch(path, branch))
+            for path, branch in self._fake.worktrees.items()
+        ] + [Worktree(path) for path in self._fake.dirty_leftovers]
+
+    def get(self, path: Path) -> Worktree:
+        if path in self._fake.worktrees:
+            branch = None if path in self._fake.detached else Branch(path, self._fake.worktrees[path])
+            return Worktree(path, branch)
+        if path in self._fake.dirty_leftovers:
+            return Worktree(path)
+        host_branch = self._fake.host_branch
+        branch = None if path in self._fake.detached or host_branch is None else Branch(path, host_branch)
+        return Worktree(path, branch)
+
+    def remove(self, worktree: Worktree, *, force: bool = False) -> None:
+        if not force and self.has_changes(worktree):
+            raise CommandError("git worktree remove", None, f"worktree has uncommitted changes: {worktree.path}")
+        self._fake.worktrees.pop(worktree.path, None)
+        self._fake.dirty_leftovers.discard(worktree.path)
+        self._fake.removed.append(worktree.path)
+
+    def detach(self, worktree: Worktree) -> Worktree:
+        self._fake.detached.add(worktree.path)
+        return Worktree(worktree.path, None)
+
+    def has_changes(self, worktree: Worktree) -> bool:
+        # fake: "changed" means the branch picked up a commit, not real working-tree dirt.
+        if worktree.path in self._fake.dirty_leftovers:
+            return True
+        branch = self._fake.worktrees.get(worktree.path)
+        return bool(self._fake.branches[branch]) if branch is not None else False
+
+    def is_clean(self, worktree: Worktree) -> bool:
+        return worktree.path not in self._fake.dirty_worktrees
 
 
 class FakeBranchService(BranchService):
@@ -111,7 +143,7 @@ class FakeBranchService(BranchService):
     def can_prepare(self, base: Branch) -> bool:
         return base.name in self._fake.remote_branches
 
-    def prepare(self, branch: Branch | None, base: Branch) -> Branch:
+    def prepare(self, branch: Branch | None, base: Branch, target: Path | None = None) -> Branch:
         checkout = base.path
         name = branch.name if branch is not None else self._generate_name()
         self._fake.branches.setdefault(name, [])

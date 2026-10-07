@@ -75,19 +75,11 @@ def test_commit_without_a_body_uses_a_single_message() -> None:
     assert runner.calls[-1] == ("git commit -m subject", TARGET, None)
 
 
-def test_is_clean_is_true_only_when_the_tree_has_no_changes(repo: Path) -> None:
+def test_config_get_reads_a_set_key_and_reports_none_for_an_unset_one(repo: Path) -> None:
     client = GitClient()
-    assert client.is_clean(repo) is True
 
-    (repo / "README.md").write_text("changed\n")
-    assert client.is_clean(repo) is False
-    git(repo, "checkout", "--", "README.md")
-
-    (repo / "new.txt").write_text("new\n")
-    assert client.is_clean(repo) is False
-
-    git(repo, "add", "new.txt")
-    assert client.is_clean(repo) is False
+    assert client.config_get(repo, "user.name") == "Test"
+    assert client.config_get(repo, "no.such") is None
 
 
 def test_a_failing_git_command_raises_a_typed_error_with_the_command_and_stderr() -> None:
@@ -118,21 +110,4 @@ def test_origin_slug_reports_unresolvable_when_origin_is_missing_or_not_github()
 
     assert missing is None
     assert other_host is None
-
-
-def test_branch_primitives_report_head_commits_and_detach_against_a_real_repository(
-    repo: Path, tmp_path: Path
-) -> None:
-    client = GitClient()
-    worktree = tmp_path / "wt"
-    git(repo, "worktree", "add", "-b", "tmp", str(worktree))
-
-    commit_file(worktree, "a.txt", "a\n", "first")
-
-    assert client.current_branch(repo) == "main" and client.current_branch(worktree) == "tmp"
-    assert client.config_get(repo, "user.name") == "Test" and client.config_get(repo, "no.such") is None
-
-    client.detach(worktree)
-
-    assert client.current_branch(worktree) is None
 

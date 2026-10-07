@@ -5,228 +5,180 @@ from pathlib import Path
 
 import pytest
 
-from conftest import FakeRunner, commit_file, git
+from conftest import commit_file, git
 from conftest import init_pushed_repo as _init_pushed_repo
-from loop import Branch, BranchService, CommandError, GitClient, Hook, WorktreeService
-
-CHECKOUT = Path("/repo")
+from loop import Branch, CommandError, GitClient, Worktree, WorktreeService
 
 
-def _target(harness_root: Path) -> Path:
-    return harness_root / "workspace" / "repo.worktrees" / "feature-x"
+def _service() -> WorktreeService:
+    return WorktreeService(GitClient())
 
 
-def _service(runner: FakeRunner) -> WorktreeService:
-    return WorktreeService(GitClient(run=runner))
+def _local_branch(checkout: Path, name: str, start: str = "main") -> Branch:
+    """Creates a local branch ref at `start` with real git, without checking it out."""
+    git(checkout, "branch", name, start)
+    return Branch(checkout, name)
 
 
-def _no_leftovers_no_remote_branches(runner: FakeRunner) -> None:
-    runner.stdout_for["git worktree list --porcelain"] = ""
-    runner.returncode_for[("git show-ref --verify --quiet refs/remotes/origin/feature-x", CHECKOUT)] = 1
-    runner.returncode_for[("git show-ref --verify --quiet refs/heads/feature-x", CHECKOUT)] = 1
+def test_create_attaches_a_worktree_at_an_arbitrary_target_outside_the_checkout(tmp_path: Path) -> None:
+    checkout = _init_pushed_repo(tmp_path / "checkout")
+    branch = _local_branch(checkout, "feature-x")
+    target = tmp_path / "elsewhere" / "feature-x"
+
+    worktree = _service().create(branch, target)
+
+    assert worktree == Worktree(target, branch)
+    assert target.is_dir()
+    assert git(target, "rev-parse", "--abbrev-ref", "HEAD") == "feature-x"
 
 
-def test_new_branch_names_are_prefixed_and_unique() -> None:
-    first, second = WorktreeService.new_branch_name(), WorktreeService.new_branch_name()
+def test_create_reuses_the_worktree_already_registered_with_the_same_branch_at_the_target(tmp_path: Path) -> None:
+    checkout = _init_pushed_repo(tmp_path / "checkout")
+    branch = _local_branch(checkout, "feature-x")
+    target = tmp_path / "feature-x"
+    service = _service()
+    first = service.create(branch, target)
 
-    assert re.fullmatch(r"loop/sandbox-[0-9a-f]{8}", first)
-    assert first != second
+    second = service.create(branch, target)
 
-
-def test_worktree_path_sits_under_the_harness_workspace_folder_named_after_the_checkout() -> None:
-    path = WorktreeService.worktree_path(Path("/clones/widgets"), Path("/harness"), "feature/x")
-
-    assert path == Path("/harness/workspace/widgets.worktrees/feature/x")
-
-
-def test_feature_branch_name_prefixes_the_slug_with_an_underscored_version() -> None:
-    assert WorktreeService.feature_branch_name("release/2.4", "Add Login Page!") == "2_4_add-login-page"
+    assert second == first
+    assert [w.path for w in service.list(checkout)].count(target) == 1
 
 
-def test_feature_branch_name_is_just_the_slug_without_a_version() -> None:
-    assert WorktreeService.feature_branch_name("main", "Add Login Page!") == "add-login-page"
+def test_create_replaces_a_clean_leftover_worktree_registered_with_a_different_branch(tmp_path: Path) -> None:
+    checkout = _init_pushed_repo(tmp_path / "checkout")
+    old = _local_branch(checkout, "old")
+    new = _local_branch(checkout, "feature-x")
+    target = tmp_path / "feature-x"
+    service = _service()
+    service.create(old, target)
 
+    worktree = service.create(new, target)
 
-def test_create_bases_on_the_remote_feature_branch_when_it_exists(tmp_path: Path) -> None:
-    target = _target(tmp_path)
-    runner = FakeRunner()
-    runner.stdout_for["git worktree list --porcelain"] = ""
-    runner.returncode_for[("git show-ref --verify --quiet refs/remotes/origin/feature-x", CHECKOUT)] = 0
-    runner.returncode_for[("git show-ref --verify --quiet refs/heads/feature-x", CHECKOUT)] = 1
-
-    result = _service(runner).create(CHECKOUT, "feature-x", "main", tmp_path)
-
-    assert result == target
-    labels = [label for label, _, _ in runner.calls]
-    assert f"git worktree add -b feature-x {target} origin/feature-x" in labels
-    assert not any(label.startswith("git branch -f") for label in labels)
-
-
-def test_create_bases_on_the_remote_target_branch_and_resets_an_existing_local_branch(tmp_path: Path) -> None:
-    target = _target(tmp_path)
-    runner = FakeRunner()
-    runner.stdout_for["git worktree list --porcelain"] = ""
-    runner.returncode_for[("git show-ref --verify --quiet refs/remotes/origin/feature-x", CHECKOUT)] = 1
-    runner.returncode_for[("git show-ref --verify --quiet refs/heads/feature-x", CHECKOUT)] = 0
-
-    _service(runner).create(CHECKOUT, "feature-x", "main", tmp_path)
-
-    labels = [label for label, _, _ in runner.calls]
-    assert "git branch -f feature-x origin/main" in labels
-    assert f"git worktree add {target} feature-x" in labels
-
-
-def test_create_rejects_a_branch_checked_out_in_another_worktree(tmp_path: Path) -> None:
-    runner = FakeRunner()
-    other = Path("/repo.worktrees/old-feature-x")
-    runner.stdout_for["git worktree list --porcelain"] = (
-        f"worktree {other}\nHEAD 1111111111111111111111111111111111111111\nbranch refs/heads/feature-x\n"
-    )
-
-    with pytest.raises(CommandError, match=r"/repo\.worktrees/old-feature-x"):
-        _service(runner).create(CHECKOUT, "feature-x", "main", tmp_path)
-
-    assert not any("worktree add" in label for label, _, _ in runner.calls)
-
-
-def test_create_replaces_a_clean_leftover_worktree(tmp_path: Path) -> None:
-    target = _target(tmp_path)
-    runner = FakeRunner()
-    runner.stdout_for["git worktree list --porcelain"] = (
-        f"worktree {target}\nHEAD 1111111111111111111111111111111111111111\nbranch refs/heads/feature-x\n"
-    )
-    runner.stdout_for[("git status --porcelain", target)] = ""
-    runner.returncode_for[("git show-ref --verify --quiet refs/remotes/origin/feature-x", CHECKOUT)] = 1
-    runner.returncode_for[("git show-ref --verify --quiet refs/heads/feature-x", CHECKOUT)] = 1
-
-    result = _service(runner).create(CHECKOUT, "feature-x", "main", tmp_path)
-
-    assert result == target
-    labels = [label for label, _, _ in runner.calls]
-    assert f"git worktree remove --force {target}" in labels
-    assert f"git worktree add -b feature-x {target} origin/main" in labels
+    assert worktree == Worktree(target, new)
+    assert git(target, "rev-parse", "--abbrev-ref", "HEAD") == "feature-x"
 
 
 def test_create_rejects_a_dirty_leftover_worktree_and_leaves_it_in_place(tmp_path: Path) -> None:
-    target = _target(tmp_path)
-    runner = FakeRunner()
-    runner.stdout_for["git worktree list --porcelain"] = (
-        f"worktree {target}\nHEAD 1111111111111111111111111111111111111111\nbranch refs/heads/feature-x\n"
-    )
-    runner.stdout_for[("git status --porcelain", target)] = " M dirty.txt\n"
+    checkout = _init_pushed_repo(tmp_path / "checkout")
+    old = _local_branch(checkout, "old")
+    new = _local_branch(checkout, "feature-x")
+    target = tmp_path / "feature-x"
+    service = _service()
+    service.create(old, target)
+    (target / "dirty.txt").write_text("oops\n")
 
     with pytest.raises(CommandError, match=re.escape(str(target))):
-        _service(runner).create(CHECKOUT, "feature-x", "main", tmp_path)
+        service.create(new, target)
 
-    assert not any("worktree remove" in label for label, _, _ in runner.calls)
-
-
-def test_remove_keeps_the_local_branch_and_issues_no_remote_command(tmp_path: Path) -> None:
-    target = _target(tmp_path)
-    runner = FakeRunner()
-    _no_leftovers_no_remote_branches(runner)
-    service = _service(runner)
-    service.create(CHECKOUT, "feature-x", "main", tmp_path)
-
-    service.remove(target)
-
-    labels = [label for label, _, _ in runner.calls]
-    assert labels[-1] == f"git worktree remove --force {target}"
-    assert not any("push" in label or "branch -d" in label or "branch -D" in label for label in labels)
+    assert target.is_dir()
+    assert git(target, "rev-parse", "--abbrev-ref", "HEAD") == "old"
 
 
-def test_remove_rejects_an_unknown_worktree() -> None:
-    runner = FakeRunner()
+def test_create_rejects_a_branch_checked_out_in_another_worktree(tmp_path: Path) -> None:
+    checkout = _init_pushed_repo(tmp_path / "checkout")
+    branch = _local_branch(checkout, "feature-x")
+    service = _service()
+    elsewhere = service.create(branch, tmp_path / "elsewhere")
 
-    with pytest.raises(CommandError, match="unknown worktree"):
-        _service(runner).remove(Path("/not/tracked"))
+    with pytest.raises(CommandError, match=re.escape(str(elsewhere.path))):
+        service.create(branch, tmp_path / "another-target")
 
-    assert runner.calls == []
+    assert not (tmp_path / "another-target").exists()
 
 
-def test_create_commit_push_and_remove_against_a_real_repository(tmp_path: Path) -> None:
-    remote = tmp_path / "remote.git"
-    remote.mkdir()
-    git(remote, "init", "--bare", "-b", "main")
+def test_list_reports_every_worktree_with_its_branch_or_none_when_its_head_is_detached(tmp_path: Path) -> None:
+    checkout = _init_pushed_repo(tmp_path / "checkout")
+    branch = _local_branch(checkout, "feature-x")
+    service = _service()
+    worktree = service.create(branch, tmp_path / "feature-x")
+    git(worktree.path, "checkout", "--detach")
 
-    checkout = tmp_path / "checkout"
-    checkout.mkdir()
-    git(checkout, "init", "-b", "main")
-    git(checkout, "config", "user.email", "test@example.com")
-    git(checkout, "config", "user.name", "Test")
-    commit_file(checkout, "README.md", "hello\n", "initial")
-    git(checkout, "remote", "add", "origin", str(remote))
-    git(checkout, "push", "origin", "main")
+    by_path = {w.path: w.branch for w in service.list(checkout)}
 
-    client = GitClient()
-    branches = BranchService(client)
-    service = WorktreeService(client)
-    branches.fetch(checkout)
+    assert by_path[checkout] == Branch(checkout, "main")
+    assert by_path[worktree.path] is None
 
-    worktree = service.create(checkout, "feature/x", "main", checkout)
-    client.run_hook(Hook("touch .ready"), worktree)
 
-    assert worktree == checkout / "workspace" / "checkout.worktrees" / "feature/x"
-    assert (worktree / ".ready").exists()
-    assert client.has_changes(worktree)
+def test_get_finds_a_worktree_through_its_own_repository(tmp_path: Path) -> None:
+    checkout = _init_pushed_repo(tmp_path / "checkout")
+    branch = _local_branch(checkout, "feature-x")
+    service = _service()
+    worktree = service.create(branch, tmp_path / "feature-x")
 
-    client.commit(worktree, "worktree ready")
-    assert not client.has_changes(worktree)
+    assert service.get(worktree.path) == worktree
 
-    (worktree / "new.txt").write_text("content\n")
-    assert client.has_changes(worktree)
 
-    client.commit(worktree, "add new file", "body text")
-    assert not client.has_changes(worktree)
+def test_detach_detaches_the_worktree_head_and_returns_it_with_no_branch(tmp_path: Path) -> None:
+    checkout = _init_pushed_repo(tmp_path / "checkout")
+    branch = _local_branch(checkout, "feature-x")
+    service = _service()
+    worktree = service.create(branch, tmp_path / "feature-x")
 
-    branches.push(Branch(worktree, "feature/x"))
-    assert git(worktree, "rev-parse", "HEAD") == git(remote, "rev-parse", "feature/x")
+    detached = service.detach(worktree)
+
+    assert detached == Worktree(worktree.path, None)
+    assert service.get(worktree.path).branch is None
+
+
+def test_has_changes_and_is_clean_reflect_the_worktree_working_tree(tmp_path: Path) -> None:
+    checkout = _init_pushed_repo(tmp_path / "checkout")
+    branch = _local_branch(checkout, "feature-x")
+    service = _service()
+    worktree = service.create(branch, tmp_path / "feature-x")
+
+    assert service.has_changes(worktree) is False
+    assert service.is_clean(worktree) is True
+
+    (worktree.path / "new.txt").write_text("content\n")
+
+    assert service.has_changes(worktree) is True
+    assert service.is_clean(worktree) is False
+
+
+def test_remove_deletes_a_clean_worktree_without_force(tmp_path: Path) -> None:
+    checkout = _init_pushed_repo(tmp_path / "checkout")
+    branch = _local_branch(checkout, "feature-x")
+    service = _service()
+    worktree = service.create(branch, tmp_path / "feature-x")
 
     service.remove(worktree)
 
-    assert not worktree.exists()
-    assert git(checkout, "branch", "--list", "feature/x").strip() == "feature/x"
+    assert not worktree.path.exists()
+    assert git(checkout, "branch", "--list", "feature-x").strip() == "feature-x"
 
 
-def test_create_places_a_single_repo_worktree_under_the_harness_workspace_folder_and_excludes_it(
-    tmp_path: Path,
-) -> None:
-    checkout = _init_pushed_repo(tmp_path / "harness")
+def test_remove_requires_force_to_delete_a_dirty_worktree(tmp_path: Path) -> None:
+    checkout = _init_pushed_repo(tmp_path / "checkout")
+    branch = _local_branch(checkout, "feature-x")
+    service = _service()
+    worktree = service.create(branch, tmp_path / "feature-x")
+    (worktree.path / "dirty.txt").write_text("oops\n")
 
-    worktree = WorktreeService(GitClient()).create(checkout, "feature-x", "main", checkout)
+    with pytest.raises(CommandError):
+        service.remove(worktree)
+    assert worktree.path.exists()
 
-    assert worktree == checkout / "workspace" / "harness.worktrees" / "feature-x"
-    assert worktree.is_dir()
-    exclude = (checkout / ".git" / "info" / "exclude").read_text().splitlines()
-    assert "workspace/" in exclude
+    service.remove(worktree, force=True)
 
-
-def test_create_places_a_multi_repo_worktree_beside_the_clone_inside_the_workspace_folder(tmp_path: Path) -> None:
-    harness_root = tmp_path / "harness"
-    harness_root.mkdir()
-    git(harness_root, "init", "-b", "main")
-    clone = _init_pushed_repo(harness_root / "workspace" / "widgets")
-
-    worktree = WorktreeService(GitClient()).create(clone, "feature-x", "main", harness_root)
-
-    assert worktree == harness_root / "workspace" / "widgets.worktrees" / "feature-x"
-    assert worktree.is_dir()
+    assert not worktree.path.exists()
 
 
-def test_create_excludes_the_workspace_folder_exactly_once_across_repeated_creations(tmp_path: Path) -> None:
-    checkout = _init_pushed_repo(tmp_path / "harness")
-    service = WorktreeService(GitClient())
+def test_create_commit_push_and_remove_against_a_real_repository(tmp_path: Path) -> None:
+    checkout = _init_pushed_repo(tmp_path / "checkout")
+    branch = _local_branch(checkout, "feature-x")
+    service = _service()
+    target = tmp_path / "feature-x"
 
-    service.create(checkout, "feature-x", "main", checkout)
-    service.create(checkout, "feature-y", "main", checkout)
+    worktree = service.create(branch, target)
+    commit_file(worktree.path, "new.txt", "content\n", "worktree commit")
+    git(checkout, "fetch", "origin")
 
-    exclude = (checkout / ".git" / "info" / "exclude").read_text().splitlines()
-    assert exclude.count("workspace/") == 1
+    assert worktree == Worktree(target, branch)
+    assert git(worktree.path, "rev-parse", "HEAD") != git(checkout, "rev-parse", "main")
 
+    service.remove(worktree)
 
-def test_create_modifies_no_tracked_file_of_the_checkout(tmp_path: Path) -> None:
-    checkout = _init_pushed_repo(tmp_path / "harness")
+    assert not worktree.path.exists()
+    assert git(checkout, "branch", "--list", "feature-x").strip() == "feature-x"
 
-    WorktreeService(GitClient()).create(checkout, "feature-x", "main", checkout)
-
-    assert git(checkout, "status", "--porcelain") == ""

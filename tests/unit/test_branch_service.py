@@ -66,6 +66,23 @@ def test_prepare_generates_a_unique_sandbox_name_when_no_branch_is_given(tmp_pat
     assert git(checkout, "rev-parse", prepared.name) == git(checkout, "rev-parse", "origin/main")
 
 
+def test_prepare_keeps_an_unpublished_commit_when_the_branch_is_already_checked_out_at_the_target(
+    tmp_path: Path,
+) -> None:
+    checkout = _init_pushed_repo(tmp_path / "harness")
+    target = tmp_path / "worktree"
+    git(checkout, "branch", "feature-x")
+    git(checkout, "worktree", "add", str(target), "feature-x")
+    commit_file(target, "unpublished.txt", "wip\n", "unpublished work")
+    before = git(target, "rev-parse", "feature-x")
+    service = BranchService(GitClient())
+
+    prepared = service.prepare(Branch(checkout, "feature-x"), Branch(checkout, "main"), target)
+
+    assert prepared == Branch(checkout, "feature-x")
+    assert git(checkout, "rev-parse", "feature-x") == before
+
+
 def test_prepare_rejects_an_invalid_branch_name_and_changes_nothing(tmp_path: Path) -> None:
     checkout = _init_pushed_repo(tmp_path / "harness")
     service = BranchService(GitClient())
