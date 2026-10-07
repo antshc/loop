@@ -173,7 +173,7 @@ def _first_ticket():
 
 
 def test_prompt_template_placeholders_match_the_supplied_arguments_exactly() -> None:
-    args = dev._prompt_args(_first_ticket(), "Checkout|10", ["abc1234 first"], Path("/w"), "main", "feature")
+    args = dev.prompt_args(_first_ticket(), "Checkout|10", ["abc1234 first"], Path("/w"), "main", "feature")
 
     placeholders = set(_PLACEHOLDER.findall(dev.PROMPT.read_text()))
 
@@ -181,7 +181,7 @@ def test_prompt_template_placeholders_match_the_supplied_arguments_exactly() -> 
 
 
 def test_prompt_args_carry_only_the_ticket_its_task_id_and_the_initiative_commits() -> None:
-    args = dev._prompt_args(_first_ticket(), "Checkout|10", [], Path("/w"), "main", "feature")
+    args = dev.prompt_args(_first_ticket(), "Checkout|10", [], Path("/w"), "main", "feature")
 
     ticket_json = json.loads(args["TICKET_JSON"])
     assert (ticket_json["number"], ticket_json["body"]) == (10, "Body of #10")
@@ -882,6 +882,6 @@ def test_core_never_imports_adapters() -> None:
 
 
 def test_workflows_import_only_the_public_api() -> None:
-    for path in WORKFLOWS.glob("*.py"):
+    for path in WORKFLOWS.rglob("*.py"):
         for module in imports_of(path):
             assert not module.startswith("loop.") and not module.startswith("workflows"), (path, module)

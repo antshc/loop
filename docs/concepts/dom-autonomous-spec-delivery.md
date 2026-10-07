@@ -132,7 +132,7 @@ Decisions: [ADR 0009](../adr/0009-run-one-fresh-agent-per-ticket-from-python-and
 ## Implementation Map
 | Concern | Stable anchor | Semantic locator |
 |---|---|---|
-| External contract | Operator-run service for one repository board | `workflows/dev.py`: runnable script `main(argv)`, options `--harness-root`, `--log-dir`, `--log-level` |
+| External contract | Operator-run service for one repository board | `workflows/dev/`: runnable package (`python -m workflows.dev`) `main(argv)`, options `--harness-root`, `--log-dir`, `--log-level` |
 | Spec and Ticket selection | Open Specs; actionable Tickets | `loop`: `GitHubClient.get_specs`, `GitHubClient.get_actionable_issues` |
 | Execution | Fresh non-interactive Copilot run per Ticket | `loop`: `AgentClient`, `Sandbox` |
 | Failure bound | Per-Ticket failure count across runs | `loop`: `ExecutionStore` |

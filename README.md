@@ -6,7 +6,7 @@
 
 Python library for composing autonomous agent Workflows on Git worktrees and Sandboxes.
 
-Loop ships no command and no built-in Workflows. You write each Workflow as a plain Python script on the public `loop` API and run it through your own shell alias. The repository's [`workflows/dev.py`](workflows/dev.py) is an example only.
+Loop ships no command and no built-in Workflows. You write each Workflow as a plain Python script on the public `loop` API and run it through your own shell alias. The repository's [`workflows/dev/`](workflows/dev/) package is an example only.
 
 ## Features
 
@@ -58,11 +58,11 @@ result = sandbox.run(agent, "Fix the failing tests and report what changed.")
 Run it through your own alias:
 
 ```sh
-alias dev='python /path/to/harness/workflows/dev.py'
+alias dev='PYTHONPATH=/path/to/harness python -m workflows.dev'
 dev --harness-root . --log-level DEBUG
 ```
 
-See [`workflows/dev.py`](workflows/dev.py) for a complete Workflow and [`workflows/prompts/dev.md`](workflows/prompts/dev.md) for its prompt template.
+See [`workflows/dev/`](workflows/dev/) for a complete Workflow and [`workflows/prompts/dev.md`](workflows/prompts/dev.md) for its prompt template.
 
 ## Repository layout
 
