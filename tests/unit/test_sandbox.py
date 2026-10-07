@@ -67,6 +67,48 @@ def test_create_sandbox_runs_worktree_ready_then_sandbox_ready_hooks_on_a_genera
     assert git.worktrees == {sandbox.worktree: sandbox.branch}
 
 
+def test_create_sandbox_removes_the_worktree_and_does_not_start_the_sandbox_when_a_worktree_ready_hook_fails() -> None:
+    git = FakeGitClient()
+    git.failing_hooks.add("a")
+    started: list[bool] = []
+
+    with pytest.raises(HookError):
+        create_sandbox(
+            git,
+            lambda workspace, cancel: started.append(True) or _Sandbox(),
+            checkout=CHECKOUT,
+            harness_root=HARNESS,
+            base="main",
+            branch="feature-x",
+            hooks=SandboxHooks(worktree_ready=(Hook("a"),)),
+        )
+
+    assert git.worktrees == {}
+    assert not started
+
+
+def test_create_sandbox_removes_a_clean_worktree_when_cancelled_during_a_worktree_ready_hook() -> None:
+    git = FakeGitClient()
+    git.cancelled_hooks.add("a")
+
+    with pytest.raises(Cancelled) as raised:
+        _sandbox(git, _Sandbox(), branch="feature-x", hooks=SandboxHooks(worktree_ready=(Hook("a"),)))
+
+    assert raised.value.worktree is None
+    assert git.worktrees == {}
+
+
+def test_create_sandbox_keeps_a_dirty_worktree_when_cancelled_during_a_worktree_ready_hook() -> None:
+    git = FakeGitClient()
+    git.cancelled_hooks.add("a")
+    git.branches["feature-x"] = ["c1"]
+
+    with pytest.raises(Cancelled) as raised:
+        _sandbox(git, _Sandbox(), branch="feature-x", hooks=SandboxHooks(worktree_ready=(Hook("a"),)))
+
+    assert raised.value.worktree is not None and raised.value.worktree in git.worktrees
+
+
 def test_create_sandbox_uses_the_given_branch() -> None:
     git = FakeGitClient()
 

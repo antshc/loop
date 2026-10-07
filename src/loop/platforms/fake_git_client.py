@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import threading
-from collections.abc import Sequence
 from pathlib import Path
 
 from loop.errors import Cancelled, CommandError, HookError
@@ -51,9 +50,6 @@ class FakeGitClient(GitClient):
         branch: str,
         base: str,
         harness_root: Path,
-        *,
-        on_ready: Sequence[Hook] = (),
-        cancel: threading.Event | None = None,
     ) -> Path:
         if branch in self.branch_in_use:
             raise CommandError(
@@ -65,17 +61,6 @@ class FakeGitClient(GitClient):
         self.dirty_leftovers.discard(path)
         self.worktrees[path] = branch
         self.branches.setdefault(branch, [])
-        try:
-            for hook in on_ready:
-                self.run_hook(hook, path, cancel)
-        except HookError:
-            self.remove_worktree(path)
-            raise
-        except Cancelled:
-            if self.has_changes(path):
-                raise Cancelled(path)
-            self.remove_worktree(path)
-            raise
         return path
 
     def run_hook(self, hook: Hook, worktree: Path, cancel: threading.Event | None = None) -> None:

@@ -119,10 +119,9 @@ def create_sandbox(
     """
     cancel = cancel or threading.Event()
     branch = branch or f"loop/sandbox-{uuid4().hex[:8]}"
-    worktree = git.create_worktree(
-        checkout, branch, base, harness_root, on_ready=hooks.worktree_ready, cancel=cancel
-    )
+    worktree = git.create_worktree(checkout, branch, base, harness_root)
     try:
+        run_host_hooks(git, hooks.worktree_ready, worktree, cancel=cancel)
         sandbox = sandbox_factory(harness_root, cancel)
         try:
             run_host_hooks(git, hooks.sandbox_ready, worktree, cancel=cancel)

@@ -155,98 +155,39 @@ def test_create_worktree_rejects_a_dirty_leftover_worktree_and_leaves_it_in_plac
     assert not any("worktree remove" in label for label, _, _ in runner.calls)
 
 
-def test_create_worktree_runs_hooks_on_the_host_in_the_worktree_in_declared_order(tmp_path: Path) -> None:
-    target = _target(tmp_path)
+def test_run_hook_runs_the_command_on_the_host_in_the_worktree_with_its_timeout() -> None:
     runner = FakeRunner()
-    _no_leftovers_no_remote_branches(runner)
-    client = GitClient(run=runner)
 
-    client.create_worktree(CHECKOUT, "feature-x", "main", tmp_path, on_ready=(Hook("echo a"), Hook("echo b")))
+    GitClient(run=runner).run_hook(Hook("echo a", timeout_s=5.0), TARGET)
 
-    hook_calls = [(label, cwd) for label, cwd, _ in runner.calls if label in ("echo a", "echo b")]
-    assert hook_calls == [("echo a", target), ("echo b", target)]
+    assert runner.calls == [("echo a", TARGET, 5.0)]
 
 
-def test_create_worktree_removes_the_worktree_and_raises_hook_error_on_a_non_zero_exit(tmp_path: Path) -> None:
-    target = _target(tmp_path)
+def test_run_hook_raises_hook_error_on_a_non_zero_exit() -> None:
     runner = FakeRunner()
-    _no_leftovers_no_remote_branches(runner)
-    runner.returncode_for[("setup.sh", target)] = 1
-    runner.stderr_for[("setup.sh", target)] = "boom"
-    client = GitClient(run=runner)
+    runner.returncode_for[("setup.sh", TARGET)] = 1
+    runner.stderr_for[("setup.sh", TARGET)] = "boom"
 
     with pytest.raises(HookError, match="setup.sh") as excinfo:
-        client.create_worktree(CHECKOUT, "feature-x", "main", tmp_path, on_ready=(Hook("setup.sh"),))
+        GitClient(run=runner).run_hook(Hook("setup.sh"), TARGET)
 
     assert excinfo.value.command == "setup.sh"
-    labels = [label for label, _, _ in runner.calls]
-    assert labels[-1] == f"git worktree remove --force {target}"
 
 
-def test_create_worktree_cancelled_on_a_clean_worktree_removes_it_and_reports_cancelled(tmp_path: Path) -> None:
-    target = _target(tmp_path)
+def test_run_hook_raises_hook_error_on_timeout() -> None:
     runner = FakeRunner()
-    _no_leftovers_no_remote_branches(runner)
-    runner.stdout_for[("git status --porcelain", target)] = ""
-    client = GitClient(run=runner)
-    cancel = threading.Event()
-    cancel.set()
-
-    with pytest.raises(Cancelled) as excinfo:
-        client.create_worktree(CHECKOUT, "feature-x", "main", tmp_path, on_ready=(Hook("setup.sh"),), cancel=cancel)
-
-    assert excinfo.value.worktree is None
-    labels = [label for label, _, _ in runner.calls]
-    assert labels[-1] == f"git worktree remove --force {target}"
-
-
-def test_create_worktree_cancelled_on_a_dirty_worktree_keeps_it_and_reports_its_location(tmp_path: Path) -> None:
-    target = _target(tmp_path)
-    runner = FakeRunner()
-    _no_leftovers_no_remote_branches(runner)
-    runner.stdout_for[("git status --porcelain", target)] = " M dirty.txt\n"
-    client = GitClient(run=runner)
-    cancel = threading.Event()
-    cancel.set()
-
-    with pytest.raises(Cancelled) as excinfo:
-        client.create_worktree(CHECKOUT, "feature-x", "main", tmp_path, on_ready=(Hook("setup.sh"),), cancel=cancel)
-
-    assert excinfo.value.worktree == target
-    assert not any("worktree remove" in label for label, _, _ in runner.calls)
-
-
-def test_create_worktree_removes_the_worktree_and_raises_hook_error_on_timeout(tmp_path: Path) -> None:
-    target = _target(tmp_path)
-    runner = FakeRunner()
-    _no_leftovers_no_remote_branches(runner)
-    runner.raise_for[("slow.sh", target)] = CommandError("slow.sh", None, "timed out after 1.0s")
-    client = GitClient(run=runner)
+    runner.raise_for[("slow.sh", TARGET)] = CommandError("slow.sh", None, "timed out after 1.0s")
 
     with pytest.raises(HookError, match="timed out"):
-        client.create_worktree(CHECKOUT, "feature-x", "main", tmp_path, on_ready=(Hook("slow.sh", timeout_s=1.0),))
-
-    labels = [label for label, _, _ in runner.calls]
-    assert labels[-1] == f"git worktree remove --force {target}"
+        GitClient(run=runner).run_hook(Hook("slow.sh", timeout_s=1.0), TARGET)
 
 
-def test_preparing_the_same_branch_twice_runs_the_hooks_both_times(tmp_path: Path) -> None:
-    target = _target(tmp_path)
-    runner = FakeRunner()
-    runner.returncode_for[("git show-ref --verify --quiet refs/remotes/origin/feature-x", CHECKOUT)] = 1
-    runner.returncode_for[("git show-ref --verify --quiet refs/heads/feature-x", CHECKOUT)] = 1
-    client = GitClient(run=runner)
+def test_run_hook_reports_cancelled_when_the_cancel_event_is_set() -> None:
+    cancel = threading.Event()
+    cancel.set()
 
-    runner.stdout_for["git worktree list --porcelain"] = ""
-    client.create_worktree(CHECKOUT, "feature-x", "main", tmp_path, on_ready=(Hook("setup.sh"),))
-
-    runner.stdout_for["git worktree list --porcelain"] = (
-        f"worktree {target}\nHEAD 1111111111111111111111111111111111111111\nbranch refs/heads/feature-x\n"
-    )
-    runner.stdout_for[("git status --porcelain", target)] = ""
-    client.create_worktree(CHECKOUT, "feature-x", "main", tmp_path, on_ready=(Hook("setup.sh"),))
-
-    assert [label for label, _, _ in runner.calls if label == "setup.sh"] == ["setup.sh", "setup.sh"]
+    with pytest.raises(Cancelled):
+        GitClient(run=FakeRunner()).run_hook(Hook("setup.sh"), TARGET, cancel)
 
 
 def test_commit_adds_everything_with_a_subject_and_body() -> None:
@@ -480,7 +421,8 @@ def test_create_commit_push_and_remove_against_a_real_repository(tmp_path: Path)
     client = GitClient()
     client.fetch(checkout)
 
-    worktree = client.create_worktree(checkout, "feature/x", "main", checkout, on_ready=(Hook("touch .ready"),))
+    worktree = client.create_worktree(checkout, "feature/x", "main", checkout)
+    client.run_hook(Hook("touch .ready"), worktree)
 
     assert worktree == checkout / "workspace" / "checkout.worktrees" / "feature/x"
     assert (worktree / ".ready").exists()

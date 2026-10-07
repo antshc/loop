@@ -123,9 +123,6 @@ class GitClient:
         branch: str,
         base: str,
         harness_root: Path,
-        *,
-        on_ready: Sequence[Hook] = (),
-        cancel: threading.Event | None = None,
     ) -> Path:
         self._run(("git", "check-ref-format", "--branch", branch), cwd=checkout)
         target = harness_root / "workspace" / f"{checkout.name}.worktrees" / branch
@@ -153,18 +150,6 @@ class GitClient:
                 self._run(("git", "worktree", "add", "-b", branch, str(target), start_ref), cwd=checkout)
             self._worktrees[target] = checkout
             self._exclude_workspace(harness_root)
-
-        try:
-            for hook in on_ready:
-                self.run_hook(hook, target, cancel)
-        except HookError:
-            self.remove_worktree(target)
-            raise
-        except Cancelled:
-            if self.has_changes(target):
-                raise Cancelled(target)
-            self.remove_worktree(target)
-            raise
         return target
 
     def _exclude_workspace(self, harness_root: Path) -> None:
