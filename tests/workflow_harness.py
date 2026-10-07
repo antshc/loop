@@ -180,6 +180,44 @@ def copilot_event_frames(identifier: str, status: str, result: dict | None = Non
     ]
 
 
+def copilot_event_frames_with_leading_noise(
+    identifier: str, status: str, result: dict | None = None, *, noise_identifier: str = "Other|1"
+) -> list[str]:
+    """`copilot_event_frames`, preceded by an unrelated completed envelope the parser must look past."""
+    noise = json.dumps({"identifier": noise_identifier, "status": "completed", "result": {}})
+    return [
+        _event("assistant.message_delta", {"messageId": "noise", "deltaContent": noise}),
+        *copilot_event_frames(identifier, status, result),
+    ]
+
+
+def copilot_event_frames_without_response() -> list[str]:
+    """Assistant prose with no `{identifier, status}` object anywhere in the output."""
+    return [
+        _event("session.mcp_server_status_changed"),
+        _event("user.message"),
+        _event("assistant.turn_start"),
+        _event("assistant.message_delta", {"messageId": "m1", "deltaContent": "Still working through this, "}),
+        _event("assistant.message_delta", {"messageId": "m1", "deltaContent": "no final answer yet."}),
+        _event("assistant.message", {"content": "Still working through this, no final answer yet."}),
+        _event("assistant.turn_end"),
+        '{"type": "result", "sessionId": "fake-session", "exitCode": 0}',
+    ]
+
+
+def copilot_event_frames_with_malformed_response(identifier: str, status: str, result: dict | None = None) -> list[str]:
+    """The response JSON cut off mid-object, so no balanced top-level object can be parsed from it."""
+    envelope = json.dumps({"identifier": identifier, "status": status, "result": result if result is not None else {}})
+    truncated = envelope[: len(envelope) // 2]
+    return [
+        _event("assistant.turn_start"),
+        _event("assistant.message_delta", {"messageId": "m1", "deltaContent": truncated}),
+        _event("assistant.message", {"content": truncated}),
+        _event("assistant.turn_end"),
+        '{"type": "result", "sessionId": "fake-session", "exitCode": 0}',
+    ]
+
+
 @dataclass
 class RecordingExecutor:
     """Wraps a CommandExecutor, recording every line delivered to on_line and whether the run ended early."""
