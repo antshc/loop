@@ -51,7 +51,7 @@ assert len(harness.git.pushed) == 1                   # one publish for the Spec
 |---|---|---|
 | Workflow wiring for tests | One harness binds the Workflow entry point to stand-ins at every process boundary | `loop`: `DevHarness`, `RecordingExecutor` |
 | Provider-shaped output | Event streams modeled on the recorded Copilot CLI output experiment | `loop`: `copilot_event_frames`, `FakeCopilotCli` |
-| Process-boundary doubles | One public double per process boundary | `loop`: `FakeGitClient`, `FakeDocker`, `FakeCopilotCli`, `FakeAgentClient`, `InMemoryExecutionStore`; `workflows/platforms/work_tracking`: `FakeGhCli` |
+| Process-boundary doubles | One public double per process boundary | `loop`: `FakeGit`, `FakeDocker`, `FakeCopilotCli`, `FakeAgentClient`, `InMemoryExecutionStore`; `workflows/platforms/work_tracking`: `FakeGhCli` |
 | Unit group | Component behavior and Workflow rules against doubles | `loop`: Workflow, agent, Sandbox, Git client, GitHub client, store, process, and preprocessor unit tests |
 | Functional slice group | Workflow scenarios through the real agent client, parser, preprocessor, and host Sandbox | `loop`: dev Workflow happy path, response extraction, Git validation and escalation, publication when branch ahead |
 | Architecture checks | Import rules and public-API surface enforced as tests | `loop`: import-linter contracts, public API exposes no fake, Workflows import only the public API |

@@ -16,7 +16,6 @@ from .settings import MAX_TICKET_FAILURES
 def open_sandbox(run: SpecRun, deps: DevDeps) -> WorktreeSandbox:
     """Creates the feature-branch worktree sandbox for `run`."""
     return create_sandbox(
-        deps.git,
         deps.commits,
         deps.worktrees,
         deps.branches,

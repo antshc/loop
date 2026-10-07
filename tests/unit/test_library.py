@@ -22,7 +22,7 @@ from loop import (
 ROOT = Path(__file__).parents[2]
 SRC = ROOT / "src" / "loop"
 WORKFLOWS = ROOT / "workflows"
-FAKES = {"FakeGitClient", "FakeDocker", "FakeCopilotCli", "FakeAgentClient"}
+FAKES = {"FakeGit", "FakeDocker", "FakeCopilotCli", "FakeAgentClient"}
 
 
 def test_preprocessor_substitutes_placeholders_and_runs_template_commands() -> None:
@@ -81,6 +81,10 @@ def test_parallel_settled_isolates_failures_and_keeps_order() -> None:
 def test_public_api_exposes_no_fake_and_testing_exposes_every_fake() -> None:
     assert not FAKES & set(loop.__all__)
     assert FAKES <= set(loop.testing.__all__)
+
+
+def test_public_api_exposes_no_git_client() -> None:
+    assert "GitClient" not in loop.__all__
 
 
 def test_packaging_declares_no_scripts_and_ships_no_workflow_file() -> None:

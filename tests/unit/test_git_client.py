@@ -6,7 +6,8 @@ from pathlib import Path
 import pytest
 
 from conftest import FakeRunner, commit_file, git
-from loop import Cancelled, CommandError, CommandResult, GitClient, Hook, HookError, origin_slug
+from loop import Cancelled, CommandError, CommandResult, Hook, HookError, origin_slug
+from loop.platforms.git.client import GitClient
 
 CHECKOUT = Path("/repo")
 TARGET = Path("/repo.worktrees/feature-x")

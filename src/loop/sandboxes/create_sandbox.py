@@ -9,7 +9,7 @@ from types import TracebackType
 from loop.contracts.agent_client import AgentOptions, AgentResult
 from loop.contracts.sandbox import AgentClientFactory, Sandbox
 from loop.errors import Cancelled
-from loop.platforms.git import Branch, BranchService, CommitService, GitClient, Worktree, WorktreeService
+from loop.platforms.git import Branch, BranchService, CommitService, Worktree, WorktreeService
 from loop.sandboxes.sandbox_lifecycle import SandboxHooks, run_host_hooks, with_sandbox_lifecycle
 
 SandboxFactory = Callable[[Path, threading.Event], Sandbox]
@@ -44,7 +44,6 @@ class WorktreeSandbox:
 
     def __init__(
         self,
-        git: GitClient,
         commits: CommitService,
         worktrees: WorktreeService,
         branches: BranchService,
@@ -57,7 +56,6 @@ class WorktreeSandbox:
         apply_to_host: Callable[[], None] | None,
         cancel: threading.Event,
     ) -> None:
-        self._git = git
         self._commits = commits
         self._worktrees = worktrees
         self._branches = branches
@@ -86,7 +84,6 @@ class WorktreeSandbox:
         options: AgentOptions | None = None,
     ) -> SandboxRunResult:
         outcome = with_sandbox_lifecycle(
-            self._git,
             self._commits,
             self._branches,
             self._worktrees,
@@ -125,7 +122,6 @@ class WorktreeSandbox:
 
 
 def create_sandbox(
-    git: GitClient,
     commits: CommitService,
     worktrees: WorktreeService,
     branches: BranchService,
@@ -153,10 +149,10 @@ def create_sandbox(
     worktree = worktrees.create(prepared, target)
     _exclude_workspace(harness_root)
     try:
-        run_host_hooks(git, hooks.worktree_ready, worktree.path, cancel=cancel)
+        run_host_hooks(worktrees, hooks.worktree_ready, worktree.path, cancel=cancel)
         sandbox = sandbox_factory(harness_root, cancel)
         try:
-            run_host_hooks(git, hooks.sandbox_ready, worktree.path, cancel=cancel)
+            run_host_hooks(worktrees, hooks.sandbox_ready, worktree.path, cancel=cancel)
         except Exception:
             sandbox.close()
             raise
@@ -169,7 +165,6 @@ def create_sandbox(
         worktrees.remove(worktree, force=True)
         raise
     return WorktreeSandbox(
-        git,
         commits,
         worktrees,
         branches,

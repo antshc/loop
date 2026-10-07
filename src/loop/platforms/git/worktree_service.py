@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import threading
 from collections.abc import Sequence
 from pathlib import Path
 
 from loop.errors import CommandError
-from loop.platforms.git.client import GitClient, GitRunner
+from loop.platforms.git.client import GitClient, GitRunner, Hook
 from loop.platforms.git.objects import Branch, Worktree
 from loop.process import checked_output, execute
 
@@ -23,8 +24,8 @@ def _repository_root(path: Path) -> Path:
 class WorktreeService:
     """Attaches, inspects, and removes worktrees; placement and branch naming are the caller's job."""
 
-    def __init__(self, git: GitClient, *, run: GitRunner = execute) -> None:
-        self._git = git
+    def __init__(self, git: GitClient | None = None, *, run: GitRunner = execute) -> None:
+        self._git = git or GitClient(run=run)
         self._execute = run
 
     def create(self, branch: Branch, target: Path) -> Worktree:
@@ -102,6 +103,10 @@ class WorktreeService:
 
     def is_clean(self, worktree: Worktree) -> bool:
         return not self.has_changes(worktree)
+
+    def run_hook(self, hook: Hook, worktree: Path, cancel: threading.Event | None = None) -> None:
+        """Runs a worktree-ready/sandbox-ready Hook on the host, inside `worktree`."""
+        self._git.run_hook(hook, worktree, cancel)
 
     def _run(self, args: Sequence[str], *, cwd: Path) -> str:
         result = self._execute(args, cwd=cwd)

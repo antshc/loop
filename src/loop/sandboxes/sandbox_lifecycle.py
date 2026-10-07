@@ -9,7 +9,7 @@ from pathlib import Path
 
 from loop.contracts.sandbox import Sandbox
 from loop.errors import CommandError, LoopError
-from loop.platforms.git import Branch, BranchService, CommitService, GitClient, Hook, Worktree, WorktreeService
+from loop.platforms.git import Branch, BranchService, CommitService, Hook, Worktree, WorktreeService
 from loop.process import TRANSIENT_EXIT_CODES, TRANSIENT_RETRIES, TRANSIENT_RETRY_DELAY_S
 
 
@@ -29,15 +29,14 @@ class LifecycleResult[T]:
 
 
 def run_host_hooks(
-    git: GitClient, hooks: Sequence[Hook], worktree: Path, *, cancel: threading.Event | None = None
+    worktrees: WorktreeService, hooks: Sequence[Hook], worktree: Path, *, cancel: threading.Event | None = None
 ) -> None:
     """Run each Hook on the host in the worktree, in order; the first failure stops the rest."""
     for hook in hooks:
-        git.run_hook(hook, worktree, cancel)
+        worktrees.run_hook(hook, worktree, cancel)
 
 
 def with_sandbox_lifecycle[T](
-    git: GitClient,
     commits: CommitService,
     branches: BranchService,
     worktrees: WorktreeService,
@@ -69,7 +68,7 @@ def with_sandbox_lifecycle[T](
     if worktree.branch is None:
         raise LoopError(f"worktree is on a detached HEAD: {worktree.path}")
     worktree_branch = worktree.branch.name
-    run_host_hooks(git, on_sandbox_ready, worktree.path, cancel=cancel)
+    run_host_hooks(worktrees, on_sandbox_ready, worktree.path, cancel=cancel)
 
     base_head = commits.head(worktree.path)
     result = work(base_head.sha)

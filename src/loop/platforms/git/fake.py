@@ -5,7 +5,7 @@ from pathlib import Path
 
 from loop.errors import Cancelled, CommandError, HookError
 from loop.platforms.git.branch_service import BranchService
-from loop.platforms.git.client import GitClient, Hook
+from loop.platforms.git.client import Hook
 from loop.platforms.git.commit_service import CommitService
 from loop.platforms.git.objects import Branch, Commit, Worktree
 from loop.platforms.git.worktree_service import WorktreeService
@@ -14,11 +14,14 @@ from loop.platforms.git.worktree_service import WorktreeService
 _BASE_COMMIT = "0" * 40
 
 
-class FakeGitClient(GitClient):
-    """In-memory git: simulates fetches, remote branches, worktrees, leftovers, and Hook outcomes."""
+class FakeGit:
+    """Shared in-memory git state: fetches, remote branches, worktrees, leftovers, and Hook outcomes.
+
+    `commits`, `branch_service`, and `worktree_service` are fake views over this one state, so a commit
+    made through one is visible to the others.
+    """
 
     def __init__(self) -> None:
-        self._lock = threading.Lock()
         self.fetched: list[Path] = []
         self.remote_branches: set[str] = set()
         self.hook_calls: list[str] = []
@@ -42,22 +45,6 @@ class FakeGitClient(GitClient):
         self.branch_service = FakeBranchService(self)
         self.worktree_service = FakeWorktreeService(self)
 
-    def remote_branch_exists(self, checkout: Path, branch: str) -> bool:
-        return branch in self.remote_branches
-
-    def check_branch_name(self, checkout: Path, branch: str) -> None:
-        pass
-
-    def run_hook(self, hook: Hook, worktree: Path, cancel: threading.Event | None = None) -> None:
-        self.hook_calls.append(hook.command)
-        if hook.command in self.failing_hooks:
-            raise HookError(hook.command, "fake hook failure")
-        if hook.command in self.cancelled_hooks:
-            raise Cancelled()
-
-    def config_get(self, path: Path, key: str) -> str | None:
-        return self.config.get(key)
-
     def commit(self, worktree: Path, subject: str, body: str = "") -> str:
         commits = self.branches[self.worktrees[worktree]]
         commit = f"{len(commits) + 1:040d}"
@@ -67,10 +54,17 @@ class FakeGitClient(GitClient):
 
 
 class FakeWorktreeService(WorktreeService):
-    """A worktree view over `FakeGitClient`'s shared state, so create/list/remove need no git."""
+    """A worktree view over `FakeGit`'s shared state, so create/list/remove need no git."""
 
-    def __init__(self, fake: FakeGitClient) -> None:
+    def __init__(self, fake: FakeGit) -> None:
         self._fake = fake
+
+    def run_hook(self, hook: Hook, worktree: Path, cancel: threading.Event | None = None) -> None:
+        self._fake.hook_calls.append(hook.command)
+        if hook.command in self._fake.failing_hooks:
+            raise HookError(hook.command, "fake hook failure")
+        if hook.command in self._fake.cancelled_hooks:
+            raise Cancelled()
 
     def create(self, branch: Branch, target: Path) -> Worktree:
         existing_branch = self._fake.worktrees.get(target)
@@ -130,9 +124,9 @@ class FakeWorktreeService(WorktreeService):
 
 
 class FakeBranchService(BranchService):
-    """A branch view over `FakeGitClient`'s shared commit/branch state, so prepare/publish/merge/delete need no git."""
+    """A branch view over `FakeGit`'s shared commit/branch state, so prepare/publish/merge/delete need no git."""
 
-    def __init__(self, fake: FakeGitClient) -> None:
+    def __init__(self, fake: FakeGit) -> None:
         self._fake = fake
 
     def fetch(self, checkout: Path) -> None:
@@ -175,9 +169,9 @@ class FakeBranchService(BranchService):
 
 
 class FakeCommitService(CommitService):
-    """A commit view over `FakeGitClient`'s shared in-memory state, so an agent stand-in's commit is visible here."""
+    """A commit view over `FakeGit`'s shared in-memory state, so an agent stand-in's commit is visible here."""
 
-    def __init__(self, fake: FakeGitClient) -> None:
+    def __init__(self, fake: FakeGit) -> None:
         self._fake = fake
 
     def head(self, path: Path) -> Commit:

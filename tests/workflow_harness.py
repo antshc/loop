@@ -13,7 +13,7 @@ from pathlib import Path
 
 from conftest import commit_file, git
 from loop import CommandExecutor, CommandResult, InMemoryExecutionStore, NoSandbox
-from loop.testing import FakeAgentClient, FakeCopilotCli, FakeGitClient
+from loop.testing import FakeAgentClient, FakeCopilotCli, FakeGit
 from workflows import dev
 from workflows.platforms.work_tracking import GitHubClient
 from workflows.platforms.work_tracking.fake_gh_cli import FakeGhCli
@@ -76,7 +76,7 @@ class DevHarness:
         self.tmp_path = tmp_path
         self.harness_root = _make_repo(tmp_path / "harness", "git@github.com:owner/repo.git")
         self.log_dir = tmp_path / "logs"
-        self.git = FakeGitClient()
+        self.git = FakeGit()
         self.git.remote_branches.add("main")
         self.gh = FakeGhCli(
             specs=specs
@@ -96,14 +96,11 @@ class DevHarness:
         agent_factory=None,
         sandbox_factory=None,
         github_factory=None,
-        git=None,
         store=None,
         hooks=(),
         log_dir: Path | None = None,
         cancel: threading.Event | None = None,
     ) -> int:
-        git_client = git if git is not None else self.git
-
         def tracking_handler(prompt, options):
             self.agent_calls.append((prompt, options))
             return (handler or (lambda prompt, options: ""))(prompt, options)
@@ -113,10 +110,9 @@ class DevHarness:
 
         return dev.main(
             ["--harness-root", str(self.harness_root), "--log-dir", str(log_dir or self.log_dir)],
-            git=git_client,
-            branches=git_client.branch_service,
-            commits=git_client.commits,
-            worktrees=git_client.worktree_service,
+            branches=self.git.branch_service,
+            commits=self.git.commits,
+            worktrees=self.git.worktree_service,
             github_factory=github_factory or (lambda checkout: self.github),
             agent_factory=agent_factory or default_agent_factory,
             sandbox_factory=sandbox_factory
@@ -127,7 +123,7 @@ class DevHarness:
         )
 
 
-def _only_worktree(git_client: FakeGitClient) -> Path:
+def _only_worktree(git_client: FakeGit) -> Path:
     return next(iter(git_client.worktrees))
 
 

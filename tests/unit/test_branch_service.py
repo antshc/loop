@@ -6,7 +6,7 @@ import pytest
 
 from conftest import commit_file, git
 from conftest import init_pushed_repo as _init_pushed_repo
-from loop import Branch, BranchService, CommandError, GitClient
+from loop import Branch, BranchService, CommandError
 
 
 def _origin_branch(checkout: Path, name: str, *, base: str = "main") -> None:
@@ -21,7 +21,7 @@ def _origin_branch(checkout: Path, name: str, *, base: str = "main") -> None:
 def test_prepare_points_the_local_branch_at_the_branch_origin_counterpart_when_it_exists(tmp_path: Path) -> None:
     checkout = _init_pushed_repo(tmp_path / "harness")
     _origin_branch(checkout, "feature-x")
-    service = BranchService(GitClient())
+    service = BranchService()
 
     prepared = service.prepare(Branch(checkout, "feature-x"), Branch(checkout, "main"))
 
@@ -33,7 +33,7 @@ def test_prepare_points_the_local_branch_at_the_base_origin_counterpart_when_mis
     tmp_path: Path,
 ) -> None:
     checkout = _init_pushed_repo(tmp_path / "harness")
-    service = BranchService(GitClient())
+    service = BranchService()
 
     prepared = service.prepare(Branch(checkout, "feature-y"), Branch(checkout, "main"))
 
@@ -48,7 +48,7 @@ def test_prepare_moves_an_existing_unchecked_out_local_branch_to_the_base_origin
     git(checkout, "branch", "feature-z")
     commit_file(checkout, "more.txt", "more\n", "more work")
     git(checkout, "push", "origin", "main")
-    service = BranchService(GitClient())
+    service = BranchService()
 
     prepared = service.prepare(Branch(checkout, "feature-z"), Branch(checkout, "main"))
 
@@ -58,7 +58,7 @@ def test_prepare_moves_an_existing_unchecked_out_local_branch_to_the_base_origin
 
 def test_prepare_generates_a_unique_sandbox_name_when_no_branch_is_given(tmp_path: Path) -> None:
     checkout = _init_pushed_repo(tmp_path / "harness")
-    service = BranchService(GitClient())
+    service = BranchService()
 
     prepared = service.prepare(None, Branch(checkout, "main"))
 
@@ -75,7 +75,7 @@ def test_prepare_keeps_an_unpublished_commit_when_the_branch_is_already_checked_
     git(checkout, "worktree", "add", str(target), "feature-x")
     commit_file(target, "unpublished.txt", "wip\n", "unpublished work")
     before = git(target, "rev-parse", "feature-x")
-    service = BranchService(GitClient())
+    service = BranchService()
 
     prepared = service.prepare(Branch(checkout, "feature-x"), Branch(checkout, "main"), target)
 
@@ -85,7 +85,7 @@ def test_prepare_keeps_an_unpublished_commit_when_the_branch_is_already_checked_
 
 def test_prepare_rejects_an_invalid_branch_name_and_changes_nothing(tmp_path: Path) -> None:
     checkout = _init_pushed_repo(tmp_path / "harness")
-    service = BranchService(GitClient())
+    service = BranchService()
 
     with pytest.raises(CommandError):
         service.prepare(Branch(checkout, ".. bad name"), Branch(checkout, "main"))
@@ -98,7 +98,7 @@ def test_ahead_of_remote_is_true_when_the_branch_has_commits_its_origin_counterp
     git(checkout, "checkout", "-b", "feature-x")
     git(checkout, "push", "origin", "feature-x")
     commit_file(checkout, "a.txt", "1\n", "work")
-    service = BranchService(GitClient())
+    service = BranchService()
 
     assert service.ahead_of_remote(Branch(checkout, "feature-x"), Branch(checkout, "main")) is True
 
@@ -109,14 +109,14 @@ def test_ahead_of_remote_is_true_beyond_the_base_counterpart_when_the_branch_has
     checkout = _init_pushed_repo(tmp_path / "harness")
     git(checkout, "checkout", "-b", "feature-x")
     commit_file(checkout, "a.txt", "1\n", "work")
-    service = BranchService(GitClient())
+    service = BranchService()
 
     assert service.ahead_of_remote(Branch(checkout, "feature-x"), Branch(checkout, "main")) is True
 
 
 def test_ahead_of_remote_is_false_when_no_local_branch_exists(tmp_path: Path) -> None:
     checkout = _init_pushed_repo(tmp_path / "harness")
-    service = BranchService(GitClient())
+    service = BranchService()
 
     assert service.ahead_of_remote(Branch(checkout, "no-such-branch"), Branch(checkout, "main")) is False
 
@@ -125,7 +125,7 @@ def test_push_publishes_the_local_branch_commit_to_origin(tmp_path: Path) -> Non
     checkout = _init_pushed_repo(tmp_path / "harness")
     git(checkout, "checkout", "-b", "feature-x")
     commit_file(checkout, "a.txt", "1\n", "work")
-    service = BranchService(GitClient())
+    service = BranchService()
 
     service.push(Branch(checkout, "feature-x"))
 
@@ -139,7 +139,7 @@ def test_merge_brings_the_branch_commits_into_the_target_checkout_without_an_edi
     commit_file(checkout, "a.txt", "1\n", "feature work")
     git(checkout, "checkout", "main")
     commit_file(checkout, "b.txt", "2\n", "main work")
-    service = BranchService(GitClient())
+    service = BranchService()
 
     service.merge(checkout, Branch(checkout, "feature-x"))
 
@@ -149,7 +149,7 @@ def test_merge_brings_the_branch_commits_into_the_target_checkout_without_an_edi
 def test_delete_removes_the_local_branch(tmp_path: Path) -> None:
     checkout = _init_pushed_repo(tmp_path / "harness")
     git(checkout, "branch", "feature-x")
-    service = BranchService(GitClient())
+    service = BranchService()
 
     service.delete(Branch(checkout, "feature-x"))
 
@@ -166,7 +166,7 @@ def test_fetch_prunes_remote_branches_deleted_on_origin(tmp_path: Path) -> None:
 
     remote = checkout.parent / f"{checkout.name}-remote.git"
     git(remote, "branch", "-D", "feature-x")
-    service = BranchService(GitClient())
+    service = BranchService()
 
     service.fetch(checkout)
 

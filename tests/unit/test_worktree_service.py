@@ -7,11 +7,11 @@ import pytest
 
 from conftest import commit_file, git
 from conftest import init_pushed_repo as _init_pushed_repo
-from loop import Branch, CommandError, GitClient, Worktree, WorktreeService
+from loop import Branch, CommandError, Worktree, WorktreeService
 
 
 def _service() -> WorktreeService:
-    return WorktreeService(GitClient())
+    return WorktreeService()
 
 
 def _local_branch(checkout: Path, name: str, start: str = "main") -> Branch:

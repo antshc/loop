@@ -12,8 +12,8 @@ from loop.process import checked_output, execute
 class BranchService:
     """Prepares, publishes, and retires branches; hides local/remote ref presence and start-ref selection."""
 
-    def __init__(self, git: GitClient, *, run: GitRunner = execute) -> None:
-        self._git = git
+    def __init__(self, git: GitClient | None = None, *, run: GitRunner = execute) -> None:
+        self._git = git or GitClient(run=run)
         self._execute = run
 
     def fetch(self, checkout: Path) -> None:

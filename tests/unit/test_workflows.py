@@ -21,7 +21,7 @@ from loop import (
     InMemoryExecutionStore,
     NoSandbox,
 )
-from loop.testing import FakeAgentClient, FakeCopilotCli, FakeGitClient
+from loop.testing import FakeAgentClient, FakeCopilotCli, FakeGit
 from workflows import dev
 from workflows.dev.planning import feature_branch_name
 from workflows.platforms.work_tracking import GitHubClient, TicketsTracker
@@ -149,7 +149,6 @@ def test_no_arguments_use_the_current_folder_as_the_harness_root_and_its_exit_co
 
     code = dev.main(
         [],
-        git=FakeGitClient(),
         github_factory=lambda checkout: github,
         store=InMemoryExecutionStore(),
     )
@@ -182,7 +181,6 @@ def test_exits_before_reading_specs_when_the_harness_origin_is_missing_or_not_on
 
     code = dev.main(
         ["--harness-root", str(root), "--log-dir", str(tmp_path / "logs")],
-        git=FakeGitClient(),
         github_factory=lambda checkout: GitHubClient("owner", "repo", gh=gh),
         store=InMemoryExecutionStore(),
     )
@@ -198,7 +196,6 @@ def test_exits_non_zero_when_the_harness_root_is_not_a_git_repository(tmp_path: 
 
     code = dev.main(
         ["--harness-root", str(root), "--log-dir", str(tmp_path / "logs")],
-        git=FakeGitClient(),
         github_factory=lambda checkout: GitHubClient("owner", "repo", gh=gh),
         store=InMemoryExecutionStore(),
     )
