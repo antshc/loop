@@ -136,4 +136,4 @@ Decisions: [ADR 0009](../adr/0009-run-one-fresh-agent-per-ticket-from-python-and
 | Spec and Ticket selection | Open Specs; actionable Tickets | `loop`: `GitHubClient.get_specs`, `GitHubClient.get_actionable_issues` |
 | Execution | Fresh non-interactive Copilot run per Ticket | `loop`: `AgentClient`, `Sandbox` |
 | Failure bound | Per-Ticket failure count across runs | `loop`: `ExecutionStore` |
-| Tests | Workflow scenarios against fakes | `tests/test_workflows.py` |
+| Tests | Workflow scenarios against fakes | `tests/unit/test_workflows.py` (unit group, fast fakes seam); shared harness in `tests/workflow_harness.py`; `tests/integration/` (integration group) |
