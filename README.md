@@ -71,7 +71,7 @@ See [`workflows/dev.py`](workflows/dev.py) for a complete Workflow and [`workflo
 | `src/loop/` | The `loop` library |
 | `src/loop/testing/` | Test doubles for every process boundary |
 | `workflows/` | Example `dev` Workflow and prompt template |
-| `tests/` | Test suite, including import-linter architecture checks |
+| `tests/` | Test suite: `tests/unit/` (unit group), `tests/integration/` (integration group), `tests/workflow_harness.py` (shared Workflow harness), and import-linter architecture checks |
 | `docs/` | ADRs, Crosscutting Concepts, and research notes |
 | `archive/` | Retired prototypes; parts source only |
 

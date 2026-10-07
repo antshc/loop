@@ -27,7 +27,7 @@ Loop is a single Deployable; Workflow scripts are user-owned and outside it.
 | `src/loop/` | The `loop` library package: public top-level API, contracts, and shipped implementations (Sandboxes, agent client, git and GitHub clients, sandbox setup and lifecycle, stores). |
 | `src/loop/testing/` | Test doubles for every process boundary (`gh`, `git`, Docker, the Copilot CLI, the agent client). |
 | `workflows/` | The example `dev` Workflow (`dev.py`, a runnable script) and its prompt template (`prompts/dev.md`); not part of the `loop` package. |
-| `tests/` | The test suite, including import-linter architecture checks. |
+| `tests/` | The test suite: `tests/unit/` (unit group, including Workflow tests against fakes), `tests/integration/` (integration group, selectable independently), `tests/workflow_harness.py` (shared Workflow harness and builders), and import-linter architecture checks. |
 | `archive/` | Retired prototypes kept as a parts source only; excluded from search and navigation, never edited or imported. |
 | `docs/` | ADRs (`adr/`), Crosscutting Concepts (`concepts/`), and research notes. |
 

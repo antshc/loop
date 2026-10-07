@@ -19,7 +19,7 @@ from loop import (
     parallel_settled,
 )
 
-ROOT = Path(__file__).parents[1]
+ROOT = Path(__file__).parents[2]
 SRC = ROOT / "src" / "loop"
 WORKFLOWS = ROOT / "workflows"
 FAKES = {"FakeGhCli", "FakeGitClient", "FakeDocker", "FakeCopilotCli", "FakeAgentClient"}
