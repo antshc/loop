@@ -18,6 +18,7 @@ Confirm each rule below against neighboring files in the same package before tru
 - MUST use `snake_case` for functions/variables, `PascalCase` for classes.
 - MUST use `@dataclass(frozen=True)` for simple immutable value objects.
 - MUST use f-strings for interpolation.
+- MUST keep all statements inside a function at the same level of abstraction; extract lower-level detail into named helpers.
 - SHOULD prefer `pathlib.Path` over `os.path`.
 - SHOULD accept injectable dependencies (`now`, `sleep`, a client) as optional keyword-only params for testability.
 
