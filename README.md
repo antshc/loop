@@ -71,7 +71,7 @@ alias dev='PYTHONPATH=/path/to/harness python -m workflows.dev'
 dev --harness-root . --log-level DEBUG
 ```
 
-See [`workflows/dev/`](workflows/dev/) for a complete Workflow and [`workflows/prompts/dev.md`](workflows/prompts/dev.md) for its prompt template.
+See [`workflows/dev/`](workflows/dev/) for a complete Workflow and [`workflows/dev/prompts/dev.md`](workflows/dev/prompts/dev.md) for its prompt template.
 
 ## Repository layout
 

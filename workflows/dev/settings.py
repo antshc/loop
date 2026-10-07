@@ -11,7 +11,7 @@ LOG_DIR_NAME = ".loop"
 LOG_LEVEL = "INFO"
 HOOKS: tuple[Hook, ...] = ()
 MAX_TICKET_FAILURES = 2
-PROMPT = Path(__file__).parents[1] / "prompts" / "dev.md"
+PROMPT = Path(__file__).parent / "prompts" / "dev.md"
 HITL_LABEL = "hitl"
 
 
