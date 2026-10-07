@@ -53,7 +53,7 @@ forbidden_modules = ["loop.sandboxes"]
 [[tool.importlinter.contracts]]
 name = "The git platform module imports no workflow code"
 type = "forbidden"
-source_modules = ["loop.platforms.git_client", "loop.platforms.worktree_service"]
+source_modules = ["loop.platforms.git"]
 forbidden_modules = ["workflows"]
 
 [[tool.importlinter.contracts]]

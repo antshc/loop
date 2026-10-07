@@ -4,7 +4,8 @@ import threading
 from pathlib import Path
 
 from loop.errors import Cancelled, CommandError, HookError
-from loop.platforms.git_client import Branch, GitClient, Hook, Worktree
+from loop.platforms.git.client import GitClient, Hook
+from loop.platforms.git.objects import Branch, Worktree
 
 
 _BASE_COMMIT = "0" * 40
@@ -50,7 +51,7 @@ class FakeGitClient(GitClient):
         pass
 
     def list_worktrees(self, checkout: Path) -> list[Worktree]:
-        return [Worktree(path, Branch(branch)) for path, branch in self.worktrees.items()] + [
+        return [Worktree(path, Branch(path, branch)) for path, branch in self.worktrees.items()] + [
             Worktree(path) for path in self.dirty_leftovers
         ]
 

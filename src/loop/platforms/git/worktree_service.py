@@ -5,7 +5,8 @@ from pathlib import Path
 from uuid import uuid4
 
 from loop.errors import CommandError
-from loop.platforms.git_client import Branch, GitClient
+from loop.platforms.git.client import GitClient
+from loop.platforms.git.objects import Branch
 
 _VERSION = re.compile(r"(\d+(?:\.\d+)+)")
 
@@ -41,7 +42,7 @@ class WorktreeService:
         """Checks out `branch` in a new worktree of `checkout`, replacing a clean leftover at the same path."""
         self._git.check_branch_name(checkout, branch)
         target = self.worktree_path(checkout, harness_root, branch)
-        wanted = Branch(branch)
+        wanted = Branch(checkout, branch)
         with self._git.lock:
             worktrees = self._git.list_worktrees(checkout)
             other = next(
@@ -57,7 +58,9 @@ class WorktreeService:
                     )
                 self._git.remove_worktree(checkout, target)
 
-            start_ref = wanted.upstream if self._git.remote_branch_exists(checkout, branch) else Branch(base).upstream
+            start_ref = (
+                wanted.upstream if self._git.remote_branch_exists(checkout, branch) else Branch(checkout, base).upstream
+            )
             self._git.add_worktree(checkout, target, branch, start_ref)
             self._checkouts[target] = checkout
             self._git.exclude_workspace(harness_root)

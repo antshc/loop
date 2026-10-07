@@ -8,58 +8,13 @@ from pathlib import Path
 from typing import Protocol
 
 from loop.errors import Cancelled, CommandError, HookError
+from loop.platforms.git.objects import Branch, Commit, Worktree
 from loop.process import CommandResult, checked_output, execute
 
 DEFAULT_HOOK_TIMEOUT_S = 120.0
 
 _REMOTE = re.compile(r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?/?$", re.IGNORECASE)
 _HEADS = "refs/heads/"
-
-
-@dataclass(frozen=True)
-class Branch:
-    """A local branch and its `origin` counterpart."""
-
-    name: str
-
-    @property
-    def ref(self) -> str:
-        return f"{_HEADS}{self.name}"
-
-    @property
-    def remote_ref(self) -> str:
-        return f"refs/remotes/origin/{self.name}"
-
-    @property
-    def upstream(self) -> str:
-        return f"origin/{self.name}"
-
-
-@dataclass(frozen=True)
-class Commit:
-    """A commit identified by its (possibly short) hash and its subject line."""
-
-    sha: str
-    subject: str = ""
-
-    @classmethod
-    def parse(cls, line: str) -> Commit:
-        """A Commit from a `%h %s` log line."""
-        sha, _, subject = line.partition(" ")
-        return cls(sha, subject)
-
-    @staticmethod
-    def subject_prefix(identifier: str) -> str:
-        """The required prefix of a Ticket's delivering commit subject."""
-        return f"ccode({identifier}): "
-
-
-@dataclass(frozen=True)
-class Worktree:
-    """A worktree of a Codebase Checkout; `branch` is None on a detached HEAD."""
-
-    path: Path
-    branch: Branch | None = None
 
 
 class GitRunner(Protocol):
@@ -91,8 +46,9 @@ def origin_slug(path: Path, *, run: GitRunner = execute) -> str | None:
     match = _REMOTE.search(result.stdout.strip())
     return f"{match['owner']}/{match['repo']}" if match else None
 
+
 class GitClient:
-    """Git operations an attempt needs: fetch, branch, Hooks, commit, push; worktree policy lives in WorktreeService."""
+    """Internal git command runner: fetch, branch, Hooks, commit, push; worktree policy lives in WorktreeService."""
 
     def __init__(self, *, run: GitRunner = execute) -> None:
         self._execute = run
@@ -107,14 +63,14 @@ class GitClient:
         self._run(("git", "fetch", "--all", "--prune"), cwd=checkout)
 
     def remote_branch_exists(self, checkout: Path, branch: str) -> bool:
-        return self._show_ref(checkout, Branch(branch).remote_ref)
+        return self._show_ref(checkout, Branch(checkout, branch).remote_ref)
 
     def check_branch_name(self, checkout: Path, branch: str) -> None:
         self._run(("git", "check-ref-format", "--branch", branch), cwd=checkout)
 
     def add_worktree(self, checkout: Path, target: Path, branch: str, start_ref: str) -> None:
         """Checks out `branch` at `target`, creating it at `start_ref` or resetting an existing one to it."""
-        if self._show_ref(checkout, Branch(branch).ref):
+        if self._show_ref(checkout, Branch(checkout, branch).ref):
             self._run(("git", "branch", "-f", branch, start_ref), cwd=checkout)
             self._run(("git", "worktree", "add", str(target), branch), cwd=checkout)
         else:
@@ -135,7 +91,7 @@ class GitClient:
                 path = Path(line[len("worktree ") :])
                 branch = None
             elif line.startswith(f"branch {_HEADS}"):
-                branch = Branch(line[len(f"branch {_HEADS}") :])
+                branch = Branch(path, line[len(f"branch {_HEADS}") :])
         if path is not None:
             entries.append(Worktree(path, branch))
         return entries
@@ -178,7 +134,7 @@ class GitClient:
             ("git", "log", "-n", str(limit), "--fixed-strings", f"--grep={prefix}", "--format=%h %s"), cwd=worktree
         )
         # `--grep` also matches body lines, so keep only subjects that carry the prefix.
-        return [line for line in output.splitlines() if Commit.parse(line).subject.startswith(prefix)]
+        return [line for line in output.splitlines() if Commit.parse(worktree, line).subject.startswith(prefix)]
 
     def head_subject(self, worktree: Path) -> str:
         """The subject line of the commit at HEAD, without its body."""
@@ -200,11 +156,11 @@ class GitClient:
             cwd=worktree,
         )
         # `--grep` also matches body lines, so keep only subjects that carry the prefix.
-        return [line for line in output.splitlines() if Commit.parse(line).subject.startswith(prefix)]
+        return [line for line in output.splitlines() if Commit.parse(worktree, line).subject.startswith(prefix)]
 
     def branch_ahead_of_remote(self, checkout: Path, branch: str, base: str) -> bool:
         """Whether local `branch` holds commits beyond its `origin` counterpart, or beyond `base` when it has none."""
-        local = Branch(branch)
+        local = Branch(checkout, branch)
         if not self._show_ref(checkout, local.ref):
             return False
         upstream = local.upstream if self.remote_branch_exists(checkout, branch) else base
