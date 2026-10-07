@@ -15,92 +15,110 @@ Loop delivers the approved Tickets of every open Spec to a draft pull request wi
 Actor: Operator; Trigger: the `dev` Workflow script is run for a repository board; Action: Loop lists the open Specs, skips those labelled `hitl`, and runs Develop Spec for each remaining one; Outcome: every remaining Spec was attempted. Notes: there is no dry run and no Spec-level attempt cap; failures are counted per Ticket.
 
 ### Develop Spec
-Actor: Loop; Trigger: a Spec not labelled `hitl`; Action: resolve the Initiative id from the Spec title prefix and the target repository and base branch, push the local feature branch and ensure the draft pull request when it is ahead of `origin`, create the worktree, then run Deliver Ticket for the first actionable Ticket until none remains or the Spec is labelled `hitl`; finally push and ensure the draft pull request; Outcome: all Tickets delivered — the pull request link is commented on the Spec, which stays open for the human merge — or the Spec stopped on `hitl` with its validated work pushed.
+Actor: Loop; Trigger: a Spec not labelled `hitl`; Action: resolve the Initiative id from the Spec title prefix and the target repository and base branch, fetch the target repository, and when no Ticket is actionable push and ensure the draft pull request and stop; when the base branch is missing on `origin` label the Spec `hitl` and stop; otherwise push earlier commits and ensure the draft pull request when ahead, create the worktree, and for each actionable Ticket record `previous_head`, render the prompt, run Deliver Ticket, then validate the response and Git; success closes the Ticket with the commit SHA, summary, and verification and resets its failure count; any failure resets the worktree to `previous_head` and counts once, retries the same Ticket until the failure cap, and at the cap labels the Ticket and the Spec `hitl` with the reason commented on both and stops; finally push and ensure the draft pull request; Outcome: all Tickets delivered — the pull request link is commented on the Spec, which stays open for the human merge — or the Spec stopped on `hitl` with its validated work pushed.
 
 ```mermaid
 %%{init: {'themeVariables': {'lineColor': '#8b949e'}}}%%
 %% diagram-id: develop-spec-swimlane
 swimlane-beta TB
   accTitle: Develop Spec responsibility
-  accDescr: Shows how Loop, the Copilot agent and GitHub share the work of delivering one Spec one Ticket at a time.
+  accDescr: Shows the whole flow of one Spec run, with Loop validating each Ticket the Copilot agent delivers and publishing results to GitHub.
 
   subgraph loop [Loop - dev Workflow]
     start([Spec not labelled hitl])
     meta[1 - Resolve Initiative id, target repo, base branch]
-    ahead{2 - Local feature branch ahead of origin?}
-    pre[2a - Push and ensure draft PR]
-    wt[3 - Create worktree]
-    pick{4 - Actionable Ticket left?}
-    deliver[[5 - Deliver Ticket]]
-    stopped{6 - Spec labelled hitl?}
-    publish[7 - Push and ensure draft PR]
-    link[8 - Comment PR link on Spec]
+    fetch[2 - Fetch target repo]
+    actionable{3 - Actionable Tickets?}
+    idle[3a.1 - Push branch and ensure draft PR when ahead]
+    baseOk{4 - Base branch on origin?}
+    noBase[4a.1 - Label Spec hitl, comment reason]
+    pre[5 - Push earlier commits and ensure draft PR when ahead]
+    wt[6 - Create worktree]
+    head[7 - Record previous HEAD]
+    prompt[8 - Render prompt with Ticket, Initiative commits, task id, contract]
+    parse[10 - Parse response envelope]
+    gitCheck[11 - Check commit: HEAD moved, one commit, tagged subject, clean tree, reported SHA is HEAD]
+    valid{12 - Response and commit valid?}
+    close[12a.1 - Close Ticket with SHA, summary, verification]
+    clear[12a.2 - Reset Ticket failure count]
+    more{12a.3 - More actionable Tickets?}
+    nextTicket([Next Ticket - back to step 7])
+    reset[12b.1 - Reset worktree to previous HEAD]
+    count[12b.2 - Count failure]
+    cap{12b.3 - Failure cap reached?}
+    hitl[12b.3a.1 - Label Ticket and Spec hitl, comment reason]
+    retry([Retry same Ticket - back to step 7])
+    publish[13 - Push branch and ensure draft PR when ahead]
+    done{14 - All Tickets delivered?}
+    link[14a.1 - Comment PR link on Spec]
     endNode([Spec run ended])
   end
 
-  subgraph ext [External systems - GitHub]
-    tickets[(Spec sub-issues)]
-    remote[(Target repo remote and PR)]
-    spec[(Spec issue)]
+  subgraph agent [Copilot agent - fresh run]
+    run[[9 - Deliver Ticket]]
   end
 
-  start --> meta --> ahead
-  ahead -->|yes| pre --> wt
-  ahead -->|no| wt
+  subgraph ext [External systems - GitHub]
+    remote[(Target repo remote and PR)]
+    issues[(Spec and Ticket issues)]
+  end
+
+  start --> meta --> fetch --> actionable
+  actionable -->|none| idle --> endNode
+  actionable -->|yes| baseOk
+  baseOk -->|no| noBase --> endNode
+  baseOk -->|yes| pre --> wt --> head --> prompt
+  prompt -->|prompt| run
+  run -->|response, one commit| parse --> gitCheck --> valid
+  valid -->|yes| close --> clear --> more
+  more -->|yes| nextTicket
+  more -->|no| publish
+  valid -->|no| reset --> count --> cap
+  cap -->|yes| hitl --> publish
+  cap -->|no| retry
+  publish --> done
+  done -->|yes| link --> endNode
+  done -->|no| endNode
+  idle -->|push, PR| remote
   pre -->|push, PR| remote
-  wt --> pick
-  pick -->|query actionable| tickets
-  pick -->|yes, first| deliver --> stopped
-  stopped -->|no| pick
-  stopped -->|yes| publish
-  pick -->|none| publish
   publish -->|push, PR| remote
-  publish --> link -->|all delivered| spec
-  link --> endNode
+  noBase -->|labels, comments| issues
+  close -->|close| issues
+  hitl -->|labels, comments| issues
+  link -->|PR link| issues
 
   classDef default fill:#242424,stroke:#8b949e,color:#c9d1d9,stroke-width:1px
 ```
 
 ### Deliver Ticket
-Actor: Loop and one fresh Copilot agent run; Trigger: Develop Spec selects the first actionable Ticket; Action: Python records `previous_head`, renders the prompt with the Ticket, the Initiative's `ccode(<initiative-id>|` commits on the branch, the task id `<initiative-id>|<ticket-number>`, and the contract; the agent implements, verifies, makes one `ccode(<initiative-id>|<ticket-number>): <message>` commit, and returns the response envelope; Python validates the response and Git; Outcome: success closes the Ticket with the commit SHA, summary, and verification and resets its failure count; any failure resets the worktree to `previous_head` and counts once, and the second failure labels the Ticket and the Spec `hitl` with the reason commented on both. Notes: a failure is an agent-reported `failed`, a missing or invalid response, an `identifier` other than this Ticket's, HEAD unchanged, a non-matching subject, a dirty tree, a reported SHA other than HEAD, or a crashed or timed-out run.
+Actor: Copilot agent (one fresh headless run per attempt, following the `dev` prompt); Trigger: Develop Spec renders the prompt with the Ticket, the Initiative's `ccode(<initiative-id>|` commits on the branch, the task id `<initiative-id>|<ticket-number>`, and the contract; Action: the agent works only inside the worktree, explores, implements the functional slice, verifies it with the fastest relevant checks, makes exactly one `ccode(<initiative-id>|<ticket-number>): <message>` commit, and ends with the response envelope; Outcome: a `completed` envelope carrying the commit SHA, summary, and verification, or a `failed` envelope carrying the reason with nothing committed. Notes: the agent never pushes, opens a pull request, or comments, labels, or closes a Ticket or Spec; Loop validates the envelope and Git and owns the Ticket state in Develop Spec. A Develop Spec failure is an agent-reported `failed`, a missing or invalid response, an `identifier` other than this Ticket's, HEAD unchanged, a non-matching subject, a dirty tree, a reported SHA other than HEAD, or a crashed or timed-out run.
 
 ```mermaid
 %%{init: {'themeVariables': {'lineColor': '#8b949e'}}}%%
-%% diagram-id: deliver-ticket-swimlane
-swimlane-beta TB
-  accTitle: Deliver Ticket responsibility
-  accDescr: Shows how Loop and one fresh Copilot agent run share the work of delivering and validating one Ticket.
+%% diagram-id: deliver-ticket-flowchart
+flowchart TD
+    start(["Agent run starts in harness root"])
+    input[/"1 - Prompt: Ticket, Initiative commits, task id, contract"/]
+    cd["2 - cd to worktree, work only inside it"]
+    explore["3 - Explore: read Ticket, trace behavior, find build boundary and test counterparts"]
+    implement["4 - Implement smallest coherent change with tests at observable seams"]
+    verify["5 - Run fastest relevant checks, then minimal integration tests and build"]
+    pass{"6 - Checks pass?"}
+    stuck{"6a.1 - Third correction cycle on the same error, or blocked by missing SDK, dependency, credential, or network?"}
+    fix["6a.1b.1 - Fix error"]
+    rerun(["Rerun checks - back to step 5"])
+    failed[/"6a.1a.1 - Respond failed with reason, commit nothing"/]
+    commit["7 - Make exactly one commit with decisions, files, notes"]
+    completed[/"8 - Respond completed with commit SHA, summary, verification"/]
+    endNode(["Response returned to Develop Spec"])
 
-  subgraph loop [Loop - dev Workflow]
-    start([First actionable Ticket])
-    head[1 - Record previous HEAD]
-    prompt[2 - Render prompt with Ticket, Initiative commits, task id, contract]
-    parse[4 - Parse response envelope]
-    valid{5 - Response and Git valid?}
-    close[6 - Close Ticket with SHA, summary, verification]
-    reset[7 - Reset worktree to previous HEAD]
-    cap{8 - Second failure?}
-    hitl[9 - Label Ticket and Spec hitl, comment reason]
-    endNode([Back to Develop Spec])
-  end
+    start --> input --> cd --> explore --> implement --> verify --> pass
+    pass -- yes --> commit --> completed --> endNode
+    pass -- no --> stuck
+    stuck -- yes --> failed --> endNode
+    stuck -- no --> fix --> rerun
 
-  subgraph agent [Copilot agent - fresh run]
-    work[3 - Implement, verify, commit once, return response]
-  end
-
-  subgraph ext [External systems - GitHub]
-    issues[(Ticket and Spec issues)]
-  end
-
-  start --> head --> prompt --> work --> parse --> valid
-  valid -->|yes| close -->|close| issues
-  valid -->|no| reset --> cap
-  cap -->|no, retry same Ticket| endNode
-  cap -->|yes| hitl -->|labels, comments| issues
-  close --> endNode
-  hitl --> endNode
-
-  classDef default fill:#242424,stroke:#8b949e,color:#c9d1d9,stroke-width:1px
+    classDef default fill:#242424,stroke:#8b949e,color:#c9d1d9,stroke-width:1px
 ```
 
 ## Relationships
