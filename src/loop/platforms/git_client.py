@@ -103,12 +103,6 @@ def origin_slug(path: Path, *, run: GitRunner = execute) -> str | None:
     match = _REMOTE.search(result.stdout.strip())
     return f"{match['owner']}/{match['repo']}" if match else None
 
-
-def same_slug(a: str | None, b: str | None) -> bool:
-    """Case-insensitive equality for two `origin_slug` results."""
-    return a is not None and b is not None and a.casefold() == b.casefold()
-
-
 class GitClient:
     """The worktree lifecycle an attempt needs: fetch, branch, Hooks, commit, push, remove."""
 

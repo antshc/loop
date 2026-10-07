@@ -24,6 +24,9 @@ class SpecRun:
     checkout: Path
     target_github: GitHubClient
 
+def _same_slug(a: str | None, b: str | None) -> bool:
+    """Case-insensitive equality for two `origin_slug` results."""
+    return a is not None and b is not None and a.casefold() == b.casefold()
 
 def _resolve_checkout(
     spec: Spec,
@@ -35,11 +38,11 @@ def _resolve_checkout(
     tracker: TicketsTracker,
 ) -> Path | None:
     """The local checkout of `target`, or None after blocking the Spec when there is none."""
-    if same_slug(harness_slug, target):
+    if _same_slug(harness_slug, target):
         return harness_root
     checkout = harness_root / "workspace" / target.split("/", 1)[1]
     checkout_slug = origin_slug(checkout) if checkout.is_dir() else None
-    if not same_slug(checkout_slug, target):
+    if not _same_slug(checkout_slug, target):
         tracker.block_spec(
             spec.number,
             actionable,
