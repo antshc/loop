@@ -7,14 +7,14 @@ from collections.abc import Callable, Mapping
 from loop.errors import PromptError
 
 _MARK = "\x01"
-_PLACEHOLDER = re.compile(r"\$\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
+_PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
 _COMMAND = re.compile(rf"{_MARK}!`([^`\n]+)`")
 
 _logger = logging.getLogger("loop")
 
 
 class PromptPreprocessor:
-    """Replaces `${{KEY}}` placeholders, then expands template-authored !`cmd` through `execute`."""
+    """Replaces `{{KEY}}` placeholders, then expands template-authored !`cmd` through `execute`."""
 
     def __init__(self, execute: Callable[[str], str]) -> None:
         self._execute = execute

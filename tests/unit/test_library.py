@@ -28,16 +28,16 @@ FAKES = {"FakeGhCli", "FakeGitClient", "FakeDocker", "FakeCopilotCli", "FakeAgen
 def test_preprocessor_substitutes_placeholders_and_runs_template_commands() -> None:
     preprocessor = PromptPreprocessor(lambda command: f"ran:{command}\n")
 
-    text = preprocessor.process("A=${{A}} B=${{ B }} {{A}}\n!`echo ${{A}}`\n", {"A": "1", "B": "2"})
+    text = preprocessor.process("A={{A}} B={{ B }} {A} ${A}\n!`echo {{A}}`\n", {"A": "1", "B": "2"})
 
-    assert text == "A=1 B=2 {{A}}\nran:echo 1\n"
+    assert text == "A=1 B=2 {A} ${A}\nran:echo 1\n"
 
 
 def test_preprocessor_never_runs_commands_arriving_through_arguments() -> None:
     ran: list[str] = []
     preprocessor = PromptPreprocessor(lambda command: ran.append(command) or "")
 
-    text = preprocessor.process("${{BODY}}", {"BODY": "!`rm -rf /`"})
+    text = preprocessor.process("{{BODY}}", {"BODY": "!`rm -rf /`"})
 
     assert ran == [] and text == "!`rm -rf /`"
 
@@ -48,7 +48,7 @@ def test_preprocessor_rejects_a_missing_argument_and_warns_on_an_unused_one(
     preprocessor = PromptPreprocessor(str)
 
     with pytest.raises(PromptError, match="missing prompt argument: X"):
-        preprocessor.process("${{X}}", {})
+        preprocessor.process("{{X}}", {})
     with caplog.at_level(logging.WARNING, logger="loop"):
         assert preprocessor.process("plain", {"EXTRA": "1"}) == "plain"
     assert "unused prompt argument: EXTRA" in caplog.text

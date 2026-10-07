@@ -28,7 +28,7 @@ Preprocessor              |
                     e.g. Copilot CLI
 ```
 
-`AgentClient` exposes a provider-neutral `run(prompt, prompt_args, options)` operation. The Prompt Preprocessor first replaces `${{KEY}}` placeholders in the prompt with `prompt_args` and expands `!`cmd`` commands the template author wrote. A run without `options.session_key` starts a fresh provider invocation. A run with a session key resolves the logical session through `SessionStore`; the provider adapter then creates or resumes the corresponding provider session.
+`AgentClient` exposes a provider-neutral `run(prompt, prompt_args, options)` operation. The Prompt Preprocessor first replaces `{{KEY}}` placeholders in the prompt with `prompt_args` and expands `!`cmd`` commands the template author wrote. A run without `options.session_key` starts a fresh provider invocation. A run with a session key resolves the logical session through `SessionStore`; the provider adapter then creates or resumes the corresponding provider session.
 
 The Sandbox decides where the provider CLI runs. `NoSandbox` runs it directly in the workspace without a sandbox. `DockerSandbox` starts a container and runs the CLI, and the template commands, inside it. The client never knows which; it runs commands through the executor its Sandbox gave it.
 
@@ -45,7 +45,7 @@ The CLI adapter owns command construction, process execution, and provider-speci
 - MUST make orchestration code depend on `AgentClient` rather than a concrete provider CLI.
 - MUST expose prompt execution through a stable `run(prompt, prompt_args, options)` operation, with the session key carried in `options`.
 - MUST render the prompt through the Prompt Preprocessor before invoking the provider CLI.
-- MUST substitute only `${{KEY}}` placeholders; a placeholder without a matching argument MUST fail the run, and an argument no placeholder uses SHOULD log a warning.
+- MUST substitute only `{{KEY}}` placeholders; a placeholder without a matching argument MUST fail the run, and an argument no placeholder uses SHOULD log a warning.
 - MUST execute only `!`cmd`` commands written in the prompt template; text arriving through `prompt_args` MUST NOT be executed.
 - MUST run the provider CLI and template commands through the executor of the owning Sandbox.
 - MUST pass the provider's allow-all permission flag (`--allow-all` for Copilot CLI) when the Sandbox is isolated, and path-scoped permissions (`--allow-all-tools` with `--add-dir`) when it is not; the adapter owns these flags and the Sandbox only states whether it is isolated ([ADR 0005](../adr/0005-run-copilot-cli-agents-from-the-harness-root-with-harness-and-workspace-isolation.md)).

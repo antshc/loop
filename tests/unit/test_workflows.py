@@ -41,7 +41,7 @@ from workflow_harness import (
 
 SRC = Path(__file__).parents[2] / "src" / "loop"
 WORKFLOWS = Path(__file__).parents[2] / "workflows"
-_PLACEHOLDER = re.compile(r"\$\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
+_PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
 
 
 def imports_of(path: Path) -> set[str]:
@@ -588,7 +588,7 @@ def test_any_attempt_ending_removes_the_worktree_but_keeps_the_local_branch(tmp_
 
 def test_a_prompt_placeholder_with_no_argument_fails_the_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     bad_template = tmp_path / "bad.md"
-    bad_template.write_text("Spec ${{NOT_A_REAL_KEY}}")
+    bad_template.write_text("Spec {{NOT_A_REAL_KEY}}")
     monkeypatch.setattr(dev, "PROMPT", bad_template)
     harness = DevHarness(tmp_path)
 

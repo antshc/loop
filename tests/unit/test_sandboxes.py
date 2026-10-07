@@ -36,7 +36,7 @@ def test_no_sandbox_delegates_prompt_args_and_options_to_its_agent(tmp_path: Pat
     agent = FakeAgentClient(lambda prompt, options: f"{prompt}:{options.model}")
 
     with NoSandbox(tmp_path) as sandbox:
-        result = sandbox.run(lambda executor: agent, "p=${{A}}", {"A": "1"}, AgentOptions(model="m"))
+        result = sandbox.run(lambda executor: agent, "p={{A}}", {"A": "1"}, AgentOptions(model="m"))
 
     assert isinstance(sandbox, Sandbox)
     assert sandbox.workspace == str(tmp_path)

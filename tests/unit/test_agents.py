@@ -42,7 +42,7 @@ def test_run_without_session_key_is_a_fresh_invocation() -> None:
     sessions = InMemorySessionStore()
 
     result = copilot(sessions)(binding(cli)).run(
-        "hi ${{A}}", {"A": "1"}, AgentOptions(model="m", add_dirs=(Path("/d"),))
+        "hi {{A}}", {"A": "1"}, AgentOptions(model="m", add_dirs=(Path("/d"),))
     )
 
     assert result == AgentResult("echo:hi 1", "", 0)
