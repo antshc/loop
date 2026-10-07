@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from conftest import commit_file, git
-from loop import Cancelled, CommandError, CommandResult, GitClient, Hook, HookError, origin_slug, same_slug
+from loop import Cancelled, CommandError, CommandResult, GitClient, Hook, HookError, origin_slug
 from loop.testing import FakeGitClient
 
 
@@ -438,7 +438,6 @@ def test_origin_slug_normalises_ssh_and_https_forms_and_a_trailing_git_suffix() 
 
     assert ssh == "Owner/Repo"
     assert https == "owner/repo"
-    assert same_slug(ssh, https)
 
 
 def test_origin_slug_reports_unresolvable_when_origin_is_missing_or_not_github() -> None:
@@ -447,11 +446,6 @@ def test_origin_slug_reports_unresolvable_when_origin_is_missing_or_not_github()
 
     assert missing is None
     assert other_host is None
-
-
-def test_same_slug_is_false_when_either_side_is_unresolvable() -> None:
-    assert same_slug(None, "owner/repo") is False
-    assert same_slug("owner/repo", None) is False
 
 
 def _init_pushed_repo(path: Path) -> Path:

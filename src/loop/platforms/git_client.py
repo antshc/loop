@@ -202,7 +202,7 @@ class GitClient:
     def recent_commits(self, worktree: Path, prefix: str, limit: int) -> list[str]:
         """`<short hash> <subject>` of the newest `limit` commits whose subject starts with `prefix`, newest first."""
         output = self._run(
-            ("git", "log", "-n", str(limit), f"--grep=^{re.escape(prefix)}", "--format=%h %s"), cwd=worktree
+            ("git", "log", "-n", str(limit), "--fixed-strings", f"--grep={prefix}", "--format=%h %s"), cwd=worktree
         )
         # `--grep` also matches body lines, so keep only subjects that carry the prefix.
         return [line for line in output.splitlines() if Commit.parse(line).subject.startswith(prefix)]
@@ -223,7 +223,8 @@ class GitClient:
     def commits_with_prefix(self, worktree: Path, range_spec: str, prefix: str) -> list[str]:
         """`<short hash> <subject>` of every commit in `range_spec` whose subject starts with `prefix`, oldest first."""
         output = self._run(
-            ("git", "log", "--reverse", f"--grep=^{re.escape(prefix)}", "--format=%h %s", range_spec), cwd=worktree
+            ("git", "log", "--reverse", "--fixed-strings", f"--grep={prefix}", "--format=%h %s", range_spec),
+            cwd=worktree,
         )
         # `--grep` also matches body lines, so keep only subjects that carry the prefix.
         return [line for line in output.splitlines() if Commit.parse(line).subject.startswith(prefix)]

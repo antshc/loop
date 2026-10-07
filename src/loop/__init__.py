@@ -30,7 +30,7 @@ from loop.errors import (
 from loop.logging_config import configure_logging
 from loop.parallel import Settled, parallel_settled
 from loop.platforms.gh_client import Comment, GitHubClient, PullRequest, ReviewThread, Spec, Ticket
-from loop.platforms.git_client import Branch, Commit, GitClient, Hook, origin_slug, same_slug, slugify
+from loop.platforms.git_client import Branch, Commit, GitClient, Hook, origin_slug, slugify
 from loop.process import CommandExecutor, CommandResult
 from loop.prompt import PromptPreprocessor
 from loop.sandbox.create_sandbox import SandboxFactory, SandboxRunResult, WorktreeSandbox, create_sandbox
@@ -101,7 +101,6 @@ __all__ = [
     "origin_slug",
     "parallel_settled",
     "run_host_hooks",
-    "same_slug",
     "slugify",
     "with_sandbox_lifecycle",
 ]

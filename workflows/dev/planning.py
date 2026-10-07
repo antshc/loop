@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from loop import Branch, GitHubClient, Spec, Ticket, origin_slug, same_slug
+from loop import Branch, GitHubClient, Spec, Ticket, origin_slug
 
 from .deps import GithubFactory
 from .tracker import TicketsTracker
