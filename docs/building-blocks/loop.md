@@ -26,10 +26,9 @@ Paths relative to `src/loop/`.
 ```text
 __init__.py     public API
 contracts/      ABCs: Sandbox, AgentClient, SessionStore, ExecutionStore
-sandboxes/       NoSandbox (host), DockerSandbox (container), FakeDocker double
+sandboxes/      NoSandbox (host), DockerSandbox (container), FakeDocker double; create_sandbox (WorktreeSandbox: worktree + Sandbox), with_sandbox_lifecycle, run_host_hooks
 agents/         CopilotClient, AgentOutputParser per agent kind, fake agent and Copilot CLI doubles
 platforms/      git/ (GitClient over the git CLI, branch and commit-subject naming rules), fake doubles
-sandbox/        create_sandbox (WorktreeSandbox: worktree + Sandbox), with_sandbox_lifecycle, run_host_hooks
 stores/         file and in-memory execution/session stores
 process.py      CommandExecutor, streaming/cancellable subprocess execution
 prompt.py       PromptPreprocessor (prompt placeholders and args)

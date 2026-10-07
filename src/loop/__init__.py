@@ -32,8 +32,8 @@ from loop.parallel import Settled, parallel_settled
 from loop.platforms.git_client import Branch, Commit, GitClient, Hook, origin_slug, slugify
 from loop.process import CommandExecutor, CommandResult, cli_runner, run_command
 from loop.prompt import PromptPreprocessor
-from loop.sandbox.create_sandbox import SandboxFactory, SandboxRunResult, WorktreeSandbox, create_sandbox
-from loop.sandbox.sandbox_lifecycle import (
+from loop.sandboxes.create_sandbox import SandboxFactory, SandboxRunResult, WorktreeSandbox, create_sandbox
+from loop.sandboxes.sandbox_lifecycle import (
     LifecycleResult,
     SandboxHooks,
     run_host_hooks,

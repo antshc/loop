@@ -40,7 +40,6 @@ forbidden_modules = [
     "loop.agents",
     "loop.sandboxes",
     "loop.platforms",
-    "loop.sandbox",
     "loop.stores",
     "loop.testing",
 ]
@@ -48,8 +47,8 @@ forbidden_modules = [
 [[tool.importlinter.contracts]]
 name = "Adapters import no sandbox code"
 type = "forbidden"
-source_modules = ["loop.agents", "loop.sandboxes", "loop.platforms", "loop.stores"]
-forbidden_modules = ["loop.sandbox"]
+source_modules = ["loop.agents", "loop.platforms", "loop.stores"]
+forbidden_modules = ["loop.sandboxes"]
 
 [[tool.importlinter.contracts]]
 name = "The git platform module imports no workflow code"
@@ -64,7 +63,6 @@ source_modules = [
     "loop.agents",
     "loop.sandboxes",
     "loop.platforms",
-    "loop.sandbox",
     "loop.stores",
     "loop.contracts",
     "loop.errors",
@@ -85,7 +83,6 @@ forbidden_modules = [
     "loop.agents",
     "loop.sandboxes",
     "loop.platforms",
-    "loop.sandbox",
     "loop.stores",
     "loop.errors",
     "loop.process",
