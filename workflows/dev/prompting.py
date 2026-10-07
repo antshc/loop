@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from dataclasses import asdict
 from pathlib import Path
 
-from loop import GitClient, Ticket
+from loop import Commit, GitClient, Ticket
 
 
 def prompt_args(
@@ -23,6 +23,7 @@ def prompt_args(
         "TICKET_JSON": json.dumps(asdict(ticket), indent=2),
         "INITIATIVE_COMMITS": "\n".join(initiative_commits) or "No task commits for this Initiative exist on the feature branch yet.",
         "TASK_ID": identifier,
+        "COMMIT_SUBJECT_PREFIX": Commit.subject_prefix(identifier),
         "WORKTREE_PATH": str(worktree),
         "TARGET_BRANCH": base_branch,
         "FEATURE_BRANCH": feature_branch,
