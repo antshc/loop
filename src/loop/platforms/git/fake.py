@@ -4,6 +4,7 @@ import threading
 from pathlib import Path
 
 from loop.errors import Cancelled, CommandError, HookError
+from loop.platforms.git.branch_service import BranchService
 from loop.platforms.git.client import GitClient, Hook
 from loop.platforms.git.commit_service import CommitService
 from loop.platforms.git.objects import Branch, Commit, Worktree
@@ -37,11 +38,7 @@ class FakeGitClient(GitClient):
         self.dirty_worktrees: set[Path] = set()
         self.remote_heads: dict[str, str] = {}
         self.commits = FakeCommitService(self)
-
-    def fetch(self, checkout: Path) -> None:
-        if checkout in self.failing_fetch:
-            raise CommandError("git fetch", None, f"fetch failed: {checkout}")
-        self.fetched.append(checkout)
+        self.branch_service = FakeBranchService(self)
 
     def remote_branch_exists(self, checkout: Path, branch: str) -> bool:
         return branch in self.remote_branches
@@ -80,15 +77,8 @@ class FakeGitClient(GitClient):
     def config_get(self, path: Path, key: str) -> str | None:
         return self.config.get(key)
 
-    def merge(self, checkout: Path, branch: str) -> None:
-        self.merged.append((checkout, branch))
-
     def detach(self, worktree: Path) -> None:
         self.detached.add(worktree)
-
-    def delete_branch(self, checkout: Path, branch: str) -> None:
-        self.deleted_branches.append(branch)
-        self.branches.pop(branch, None)
 
     def has_changes(self, worktree: Path) -> bool:
         # fake: "changed" means the branch picked up a commit, not real working-tree dirt.
@@ -106,19 +96,50 @@ class FakeGitClient(GitClient):
     def is_clean(self, worktree: Path) -> bool:
         return worktree not in self.dirty_worktrees
 
-    def branch_ahead_of_remote(self, checkout: Path, branch: str, base: str) -> bool:
-        if branch not in self.branches:
+
+class FakeBranchService(BranchService):
+    """A branch view over `FakeGitClient`'s shared commit/branch state, so prepare/publish/merge/delete need no git."""
+
+    def __init__(self, fake: FakeGitClient) -> None:
+        self._fake = fake
+
+    def fetch(self, checkout: Path) -> None:
+        if checkout in self._fake.failing_fetch:
+            raise CommandError("git fetch", None, f"fetch failed: {checkout}")
+        self._fake.fetched.append(checkout)
+
+    def can_prepare(self, base: Branch) -> bool:
+        return base.name in self._fake.remote_branches
+
+    def prepare(self, branch: Branch | None, base: Branch) -> Branch:
+        checkout = base.path
+        name = branch.name if branch is not None else self._generate_name()
+        self._fake.branches.setdefault(name, [])
+        return Branch(checkout, name)
+
+    def ahead_of_remote(self, branch: Branch, base: Branch) -> bool:
+        if branch.name not in self._fake.branches:
             return False
-        commits = self.branches[branch]
-        upstream = self.remote_heads.get(branch) if branch in self.remote_branches else base
+        commits = self._fake.branches[branch.name]
+        if branch.name in self._fake.remote_branches:
+            upstream = self._fake.remote_heads.get(branch.name, _BASE_COMMIT)
+        else:
+            upstream = self._fake.remote_heads.get(base.name, _BASE_COMMIT)
         start = commits.index(upstream) + 1 if upstream in commits else 0
         return len(commits) > start
 
-    def push(self, worktree: Path, branch: str) -> None:
-        self.pushed.append((worktree, branch))
-        commits = self.branches.get(branch, [])
-        self.remote_branches.add(branch)
-        self.remote_heads[branch] = commits[-1] if commits else _BASE_COMMIT
+    def push(self, branch: Branch) -> None:
+        commits = self._fake.branches.get(branch.name, [])
+        self._fake.pushed.append((branch.path, branch.name))
+        self._fake.remote_branches.add(branch.name)
+        self._fake.remote_heads[branch.name] = commits[-1] if commits else _BASE_COMMIT
+
+    def merge(self, target: Path, branch: Branch) -> None:
+        self._fake.merged.append((target, branch.name))
+
+    def delete(self, branch: Branch) -> None:
+        self._fake.deleted_branches.append(branch.name)
+        self._fake.branches.pop(branch.name, None)
 
 
 class FakeCommitService(CommitService):

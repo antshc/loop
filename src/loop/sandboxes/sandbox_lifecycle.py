@@ -9,7 +9,7 @@ from pathlib import Path
 
 from loop.contracts.sandbox import Sandbox
 from loop.errors import CommandError, LoopError
-from loop.platforms.git import CommitService, GitClient, Hook
+from loop.platforms.git import Branch, BranchService, CommitService, GitClient, Hook
 from loop.process import TRANSIENT_EXIT_CODES, TRANSIENT_RETRIES, TRANSIENT_RETRY_DELAY_S
 
 
@@ -39,6 +39,7 @@ def run_host_hooks(
 def with_sandbox_lifecycle[T](
     git: GitClient,
     commits: CommitService,
+    branches: BranchService,
     sandbox: Sandbox,
     checkout: Path,
     worktree: Path,
@@ -75,10 +76,10 @@ def with_sandbox_lifecycle[T](
 
     new_commits = commits.since(base_head)
     if branch is None:
-        git.merge(checkout, worktree_branch)
+        branches.merge(checkout, Branch(checkout, worktree_branch))
         if not keep_source_branch:
             git.detach(worktree)
-            git.delete_branch(checkout, worktree_branch)
+            branches.delete(Branch(checkout, worktree_branch))
     return LifecycleResult(result, worktree_branch, tuple(commit.sha for commit in new_commits))
 
 

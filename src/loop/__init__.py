@@ -29,7 +29,17 @@ from loop.errors import (
 )
 from loop.logging_config import configure_logging
 from loop.parallel import Settled, parallel_settled
-from loop.platforms.git import Branch, Commit, CommitService, GitClient, Hook, WorktreeService, origin_slug, slugify
+from loop.platforms.git import (
+    Branch,
+    BranchService,
+    Commit,
+    CommitService,
+    GitClient,
+    Hook,
+    WorktreeService,
+    origin_slug,
+    slugify,
+)
 from loop.process import CommandExecutor, CommandResult, cli_runner, run_command
 from loop.prompt import PromptPreprocessor
 from loop.sandboxes.create_sandbox import SandboxFactory, SandboxRunResult, WorktreeSandbox, create_sandbox
@@ -54,6 +64,7 @@ __all__ = [
     "AgentResult",
     "AgentSession",
     "Branch",
+    "BranchService",
     "Cancelled",
     "CommandError",
     "CommandExecutor",

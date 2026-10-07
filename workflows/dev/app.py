@@ -6,7 +6,7 @@ import logging
 from enum import Enum, auto
 from pathlib import Path
 
-from loop import Cancelled, LoopError, WorktreeSandbox
+from loop import Branch, Cancelled, LoopError, WorktreeSandbox
 from workflows.platforms.work_tracking import HITL_LABEL, Spec
 
 from .delivery import deliver_tickets, open_sandbox
@@ -32,7 +32,7 @@ def _report_cancelled(spec: Spec, worktree: Path | None) -> None:
 
 def _base_branch_exists(run: SpecRun, deps: DevDeps) -> bool:
     """True when the base branch is on the target's origin; otherwise hands the Spec to a human."""
-    if deps.git.remote_branch_exists(run.checkout, run.base_branch):
+    if deps.branches.can_prepare(Branch(run.checkout, run.base_branch)):
         return True
     deps.tracker.hitl(run.spec.number, f"dev: target branch {run.base_branch!r} does not exist on {run.target}")
     return False
@@ -40,14 +40,14 @@ def _base_branch_exists(run: SpecRun, deps: DevDeps) -> bool:
 
 def _prepare(run: SpecRun, deps: DevDeps) -> WorktreeSandbox | None:
     """Publishes earlier runs' commits; returns a sandbox only when there are Tickets to deliver."""
-    deps.git.fetch(run.checkout)
+    deps.branches.fetch(run.checkout)
     if not run.actionable:
-        publish(deps.git, run, run.checkout)
+        publish(deps.branches, run, run.checkout)
         return None
     if not _base_branch_exists(run, deps):
         return None
     # Worktree creation force-resets the local feature branch, so publish earlier runs' commits first.
-    publish(deps.git, run, run.checkout)
+    publish(deps.branches, run, run.checkout)
     return open_sandbox(run, deps)
 
 
@@ -56,7 +56,7 @@ def _deliver_in_sandbox(run: SpecRun, sandbox: WorktreeSandbox, deps: DevDeps) -
     kept_on_cancel = False
     try:
         delivered = deliver_tickets(run, sandbox, deps)
-        pull_request_url = publish(deps.git, run, sandbox.worktree)
+        pull_request_url = publish(deps.branches, run, sandbox.worktree)
         if delivered and pull_request_url is not None:
             deps.tracker.announce_delivered(run.spec.number, pull_request_url)
         return Outcome.SUCCESS if delivered else Outcome.FAILED

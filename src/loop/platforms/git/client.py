@@ -59,9 +59,6 @@ class GitClient:
         """Serializes operations that mutate a checkout's refs and worktree list."""
         return self._lock
 
-    def fetch(self, checkout: Path) -> None:
-        self._run(("git", "fetch", "--all", "--prune"), cwd=checkout)
-
     def remote_branch_exists(self, checkout: Path, branch: str) -> bool:
         return self._show_ref(checkout, Branch(checkout, branch).remote_ref)
 
@@ -124,32 +121,13 @@ class GitClient:
         """Whether `worktree` has no staged, unstaged, or untracked changes."""
         return not self.has_changes(worktree)
 
-    def branch_ahead_of_remote(self, checkout: Path, branch: str, base: str) -> bool:
-        """Whether local `branch` holds commits beyond its `origin` counterpart, or beyond `base` when it has none."""
-        local = Branch(checkout, branch)
-        if not self._show_ref(checkout, local.ref):
-            return False
-        upstream = local.upstream if self.remote_branch_exists(checkout, branch) else base
-        return bool(self._run(("git", "rev-list", f"{upstream}..{branch}"), cwd=checkout).strip())
-
-    def merge(self, checkout: Path, branch: str) -> None:
-        with self._lock:
-            self._run(("git", "merge", "--no-edit", branch), cwd=checkout)
-
     def detach(self, worktree: Path) -> None:
         self._run(("git", "checkout", "--detach"), cwd=worktree)
-
-    def delete_branch(self, checkout: Path, branch: str) -> None:
-        with self._lock:
-            self._run(("git", "branch", "-D", branch), cwd=checkout)
 
     def commit(self, worktree: Path, subject: str, body: str = "") -> None:
         self._run(("git", "add", "-A"), cwd=worktree)
         args = ("git", "commit", "-m", subject, "-m", body) if body else ("git", "commit", "-m", subject)
         self._run(args, cwd=worktree)
-
-    def push(self, worktree: Path, branch: str) -> None:
-        self._run(("git", "push", "origin", branch), cwd=worktree)
 
     def _show_ref(self, checkout: Path, ref: str) -> bool:
         return self._execute(("git", "show-ref", "--verify", "--quiet", ref), cwd=checkout).returncode == 0

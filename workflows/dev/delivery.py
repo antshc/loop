@@ -19,6 +19,7 @@ def open_sandbox(run: SpecRun, deps: DevDeps) -> WorktreeSandbox:
         deps.git,
         deps.commits,
         deps.worktrees,
+        deps.branches,
         deps.sandbox_factory,
         checkout=run.checkout,
         harness_root=deps.harness_root,

@@ -9,7 +9,7 @@ from types import TracebackType
 from loop.contracts.agent_client import AgentOptions, AgentResult
 from loop.contracts.sandbox import AgentClientFactory, Sandbox
 from loop.errors import Cancelled
-from loop.platforms.git import CommitService, GitClient, WorktreeService
+from loop.platforms.git import Branch, BranchService, CommitService, GitClient, WorktreeService
 from loop.sandboxes.sandbox_lifecycle import SandboxHooks, run_host_hooks, with_sandbox_lifecycle
 
 SandboxFactory = Callable[[Path, threading.Event], Sandbox]
@@ -30,6 +30,7 @@ class WorktreeSandbox:
         git: GitClient,
         commits: CommitService,
         worktrees: WorktreeService,
+        branches: BranchService,
         sandbox: Sandbox,
         checkout: Path,
         worktree: Path,
@@ -42,6 +43,7 @@ class WorktreeSandbox:
         self._git = git
         self._commits = commits
         self._worktrees = worktrees
+        self._branches = branches
         self._sandbox = sandbox
         self._checkout = checkout
         self._worktree = worktree
@@ -69,6 +71,7 @@ class WorktreeSandbox:
         outcome = with_sandbox_lifecycle(
             self._git,
             self._commits,
+            self._branches,
             self._sandbox,
             self._checkout,
             self._worktree,
@@ -107,6 +110,7 @@ def create_sandbox(
     git: GitClient,
     commits: CommitService,
     worktrees: WorktreeService,
+    branches: BranchService,
     sandbox_factory: SandboxFactory,
     *,
     checkout: Path,
@@ -124,8 +128,8 @@ def create_sandbox(
     worktree on its branch. A branch named `loop/sandbox-<id>` is generated when none is given.
     """
     cancel = cancel or threading.Event()
-    branch = branch or worktrees.new_branch_name()
-    worktree = worktrees.create(checkout, branch, base, harness_root)
+    prepared = branches.prepare(Branch(checkout, branch) if branch else None, Branch(checkout, base))
+    worktree = worktrees.create(checkout, prepared.name, base, harness_root)
     try:
         run_host_hooks(git, hooks.worktree_ready, worktree, cancel=cancel)
         sandbox = sandbox_factory(harness_root, cancel)
@@ -146,10 +150,11 @@ def create_sandbox(
         git,
         commits,
         worktrees,
+        branches,
         sandbox,
         checkout,
         worktree,
-        branch,
+        prepared.name,
         merge_to_head=merge_to_head,
         apply_to_host=apply_to_host,
         cancel=cancel,

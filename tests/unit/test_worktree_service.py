@@ -7,7 +7,7 @@ import pytest
 
 from conftest import FakeRunner, commit_file, git
 from conftest import init_pushed_repo as _init_pushed_repo
-from loop import CommandError, GitClient, Hook, WorktreeService
+from loop import Branch, BranchService, CommandError, GitClient, Hook, WorktreeService
 
 CHECKOUT = Path("/repo")
 
@@ -159,8 +159,9 @@ def test_create_commit_push_and_remove_against_a_real_repository(tmp_path: Path)
     git(checkout, "push", "origin", "main")
 
     client = GitClient()
+    branches = BranchService(client)
     service = WorktreeService(client)
-    client.fetch(checkout)
+    branches.fetch(checkout)
 
     worktree = service.create(checkout, "feature/x", "main", checkout)
     client.run_hook(Hook("touch .ready"), worktree)
@@ -178,7 +179,7 @@ def test_create_commit_push_and_remove_against_a_real_repository(tmp_path: Path)
     client.commit(worktree, "add new file", "body text")
     assert not client.has_changes(worktree)
 
-    client.push(worktree, "feature/x")
+    branches.push(Branch(worktree, "feature/x"))
     assert git(worktree, "rev-parse", "HEAD") == git(remote, "rev-parse", "feature/x")
 
     service.remove(worktree)
