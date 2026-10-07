@@ -114,6 +114,7 @@ class DevHarness:
         return dev.main(
             ["--harness-root", str(self.harness_root), "--log-dir", str(log_dir or self.log_dir)],
             git=git_client,
+            commits=git_client.commits,
             github_factory=github_factory or (lambda checkout: self.github),
             agent_factory=agent_factory or default_agent_factory,
             sandbox_factory=sandbox_factory

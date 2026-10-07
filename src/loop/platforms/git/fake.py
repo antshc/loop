@@ -5,7 +5,8 @@ from pathlib import Path
 
 from loop.errors import Cancelled, CommandError, HookError
 from loop.platforms.git.client import GitClient, Hook
-from loop.platforms.git.objects import Branch, Worktree
+from loop.platforms.git.commit_service import CommitService
+from loop.platforms.git.objects import Branch, Commit, Worktree
 
 
 _BASE_COMMIT = "0" * 40
@@ -35,6 +36,7 @@ class FakeGitClient(GitClient):
         self.subjects: dict[str, str] = {}
         self.dirty_worktrees: set[Path] = set()
         self.remote_heads: dict[str, str] = {}
+        self.commits = FakeCommitService(self)
 
     def fetch(self, checkout: Path) -> None:
         if checkout in self.failing_fetch:
@@ -70,10 +72,6 @@ class FakeGitClient(GitClient):
         if hook.command in self.cancelled_hooks:
             raise Cancelled()
 
-    def head(self, worktree: Path) -> str:
-        commits = self.branches[self.worktrees[worktree]]
-        return commits[-1] if commits else _BASE_COMMIT
-
     def current_branch(self, path: Path) -> str | None:
         if path in self.worktrees:
             return None if path in self.detached else self.worktrees[path]
@@ -81,12 +79,6 @@ class FakeGitClient(GitClient):
 
     def config_get(self, path: Path, key: str) -> str | None:
         return self.config.get(key)
-
-    def commits_between(self, worktree: Path, base: str, tip: str = "HEAD") -> list[str]:
-        commits = self.branches[self.worktrees[worktree]]
-        start = commits.index(base) + 1 if base in commits else 0
-        end = commits.index(tip) + 1 if tip in commits else len(commits)
-        return commits[start:end]
 
     def merge(self, checkout: Path, branch: str) -> None:
         self.merged.append((checkout, branch))
@@ -111,40 +103,8 @@ class FakeGitClient(GitClient):
         self.subjects[commit] = subject
         return commit
 
-    def recent_commits(self, worktree: Path, prefix: str, limit: int) -> list[str]:
-        commits = self.branches[self.worktrees[worktree]]
-        matching = [
-            f"{commit[-7:]} {self.subjects[commit]}"
-            for commit in reversed(commits)
-            if self.subjects.get(commit, "").startswith(prefix)
-        ]
-        return matching[:limit]
-
-    def head_subject(self, worktree: Path) -> str:
-        return self.subjects.get(self.head(worktree), "")
-
     def is_clean(self, worktree: Path) -> bool:
         return worktree not in self.dirty_worktrees
-
-    def reset_to(self, worktree: Path, commit: str) -> None:
-        branch = self.worktrees[worktree]
-        commits = self.branches[branch]
-        if commit in commits:
-            del commits[commits.index(commit) + 1 :]
-        else:
-            commits.clear()
-        self.dirty_worktrees.discard(worktree)
-
-    def commits_with_prefix(self, worktree: Path, range_spec: str, prefix: str) -> list[str]:
-        commits = self.branches[self.worktrees[worktree]]
-        base, _, tip = range_spec.partition("..")
-        start = commits.index(base) + 1 if base in commits else 0
-        end = commits.index(tip) + 1 if tip in commits else len(commits)
-        return [
-            f"{commit[-7:]} {self.subjects[commit]}"
-            for commit in commits[start:end]
-            if self.subjects.get(commit, "").startswith(prefix)
-        ]
 
     def branch_ahead_of_remote(self, checkout: Path, branch: str, base: str) -> bool:
         if branch not in self.branches:
@@ -159,3 +119,41 @@ class FakeGitClient(GitClient):
         commits = self.branches.get(branch, [])
         self.remote_branches.add(branch)
         self.remote_heads[branch] = commits[-1] if commits else _BASE_COMMIT
+
+
+class FakeCommitService(CommitService):
+    """A commit view over `FakeGitClient`'s shared in-memory state, so an agent stand-in's commit is visible here."""
+
+    def __init__(self, fake: FakeGitClient) -> None:
+        self._fake = fake
+
+    def head(self, path: Path) -> Commit:
+        commits = self._fake.branches[self._fake.worktrees[path]]
+        sha = commits[-1] if commits else _BASE_COMMIT
+        return Commit(path, sha, self._fake.subjects.get(sha, ""))
+
+    def since(self, commit: Commit) -> list[Commit]:
+        commits = self._fake.branches[self._fake.worktrees[commit.path]]
+        start = commits.index(commit.sha) + 1 if commit.sha in commits else 0
+        return [Commit(commit.path, sha, self._fake.subjects.get(sha, "")) for sha in commits[start:]]
+
+    def find_since(self, base: Branch, *, subject_prefix: str) -> list[Commit]:
+        commits = self._fake.branches[self._fake.worktrees[base.path]]
+        upstream = self._fake.remote_heads.get(base.name) if base.name in self._fake.remote_branches else None
+        start = commits.index(upstream) + 1 if upstream in commits else 0
+        return [
+            Commit(base.path, sha, self._fake.subjects[sha])
+            for sha in commits[start:]
+            if self._fake.subjects.get(sha, "").startswith(subject_prefix)
+        ]
+
+    def restore(self, commit: Commit) -> None:
+        commits = self._fake.branches[self._fake.worktrees[commit.path]]
+        if commit.sha in commits:
+            del commits[commits.index(commit.sha) + 1 :]
+        else:
+            commits.clear()
+        self._fake.dirty_worktrees.discard(commit.path)
+
+    def identity(self, path: Path) -> tuple[str, str]:
+        return self._fake.config.get("user.name", ""), self._fake.config.get("user.email", "")

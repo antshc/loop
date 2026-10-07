@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Protocol
 
 from loop.errors import Cancelled, CommandError, HookError
-from loop.platforms.git.objects import Branch, Commit, Worktree
+from loop.platforms.git.objects import Branch, Worktree
 from loop.process import CommandResult, checked_output, execute
 
 DEFAULT_HOOK_TIMEOUT_S = 120.0
@@ -111,9 +111,6 @@ class GitClient:
     def has_changes(self, worktree: Path) -> bool:
         return bool(self._run(("git", "status", "--porcelain"), cwd=worktree).strip())
 
-    def head(self, worktree: Path) -> str:
-        return self._run(("git", "rev-parse", "HEAD"), cwd=worktree).strip()
-
     def current_branch(self, path: Path) -> str | None:
         """The checked-out branch of `path`, or None on a detached HEAD."""
         name = self._run(("git", "rev-parse", "--abbrev-ref", "HEAD"), cwd=path).strip()
@@ -123,40 +120,9 @@ class GitClient:
         result = self._execute(("git", "config", "--get", key), cwd=path)
         return result.stdout.strip() or None if result.returncode == 0 else None
 
-    def commits_between(self, worktree: Path, base: str, tip: str = "HEAD") -> list[str]:
-        """Commits reachable from `tip` but not `base`, oldest first."""
-        output = self._run(("git", "rev-list", f"{base}..{tip}"), cwd=worktree)
-        return list(reversed(output.split()))
-
-    def recent_commits(self, worktree: Path, prefix: str, limit: int) -> list[str]:
-        """`<short hash> <subject>` of the newest `limit` commits whose subject starts with `prefix`, newest first."""
-        output = self._run(
-            ("git", "log", "-n", str(limit), "--fixed-strings", f"--grep={prefix}", "--format=%h %s"), cwd=worktree
-        )
-        # `--grep` also matches body lines, so keep only subjects that carry the prefix.
-        return [line for line in output.splitlines() if Commit.parse(worktree, line).subject.startswith(prefix)]
-
-    def head_subject(self, worktree: Path) -> str:
-        """The subject line of the commit at HEAD, without its body."""
-        return self._run(("git", "log", "-1", "--format=%s"), cwd=worktree).strip()
-
     def is_clean(self, worktree: Path) -> bool:
         """Whether `worktree` has no staged, unstaged, or untracked changes."""
         return not self.has_changes(worktree)
-
-    def reset_to(self, worktree: Path, commit: str) -> None:
-        """Hard-resets `worktree` to `commit` and removes untracked files and directories."""
-        self._run(("git", "reset", "--hard", commit), cwd=worktree)
-        self._run(("git", "clean", "-fd"), cwd=worktree)
-
-    def commits_with_prefix(self, worktree: Path, range_spec: str, prefix: str) -> list[str]:
-        """`<short hash> <subject>` of every commit in `range_spec` whose subject starts with `prefix`, oldest first."""
-        output = self._run(
-            ("git", "log", "--reverse", "--fixed-strings", f"--grep={prefix}", "--format=%h %s", range_spec),
-            cwd=worktree,
-        )
-        # `--grep` also matches body lines, so keep only subjects that carry the prefix.
-        return [line for line in output.splitlines() if Commit.parse(worktree, line).subject.startswith(prefix)]
 
     def branch_ahead_of_remote(self, checkout: Path, branch: str, base: str) -> bool:
         """Whether local `branch` holds commits beyond its `origin` counterpart, or beyond `base` when it has none."""

@@ -46,14 +46,3 @@ class Commit:
     @property
     def message(self) -> str:
         return self.subject if not self.body else f"{self.subject}\n\n{self.body}"
-
-    @classmethod
-    def parse(cls, path: Path, line: str) -> Commit:
-        """A Commit from a `%h %s` log line."""
-        sha, _, subject = line.partition(" ")
-        return cls(path, sha, subject)
-
-    @staticmethod
-    def subject_prefix(identifier: str) -> str:
-        """The required prefix of a Ticket's delivering commit subject."""
-        return f"ccode({identifier}): "

@@ -49,6 +49,7 @@ class _Sandbox(NoSandbox):
 def _sandbox(git: FakeGitClient, sandbox: _Sandbox, **kwargs):
     return create_sandbox(
         git,
+        git.commits,
         WorktreeService(git),
         lambda workspace, cancel: sandbox,
         checkout=CHECKOUT,
@@ -77,6 +78,7 @@ def test_create_sandbox_removes_the_worktree_and_does_not_start_the_sandbox_when
     with pytest.raises(HookError):
         create_sandbox(
             git,
+            git.commits,
             WorktreeService(git),
             lambda workspace, cancel: started.append(True) or _Sandbox(),
             checkout=CHECKOUT,
@@ -164,7 +166,7 @@ def test_create_sandbox_removes_the_worktree_when_the_sandbox_cannot_start() -> 
 
     with pytest.raises(LoopError, match="no docker"):
         create_sandbox(
-            git, WorktreeService(git), factory, checkout=CHECKOUT, harness_root=HARNESS, base="main", branch="feature-x"
+            git, git.commits, WorktreeService(git), factory, checkout=CHECKOUT, harness_root=HARNESS, base="main", branch="feature-x"
         )
 
     assert git.worktrees == {}
@@ -256,7 +258,7 @@ def test_lifecycle_in_temp_branch_mode_merges_into_the_host_branch_then_detaches
     worktree = _worktree(git)
 
     outcome = with_sandbox_lifecycle(
-        git, _Sandbox(), CHECKOUT, worktree, lambda base_head: git.commit(worktree, "x"), branch=None
+        git, git.commits, _Sandbox(), CHECKOUT, worktree, lambda base_head: git.commit(worktree, "x"), branch=None
     )
 
     assert outcome.branch == "tmp" and outcome.commits == (f"{1:040d}",)
@@ -268,7 +270,7 @@ def test_lifecycle_with_keep_source_branch_skips_the_detach_and_delete() -> None
     git = FakeGitClient()
     worktree = _worktree(git)
 
-    with_sandbox_lifecycle(git, _Sandbox(), CHECKOUT, worktree, lambda base_head: None, branch=None, keep_source_branch=True)
+    with_sandbox_lifecycle(git, git.commits, _Sandbox(), CHECKOUT, worktree, lambda base_head: None, branch=None, keep_source_branch=True)
 
     assert git.merged == [(CHECKOUT, "tmp")]
     assert git.detached == set() and git.deleted_branches == []
@@ -278,7 +280,7 @@ def test_lifecycle_with_an_explicit_branch_neither_merges_nor_deletes() -> None:
     git = FakeGitClient()
     worktree = _worktree(git)
 
-    with_sandbox_lifecycle(git, _Sandbox(), CHECKOUT, worktree, lambda base_head: None, branch="tmp")
+    with_sandbox_lifecycle(git, git.commits, _Sandbox(), CHECKOUT, worktree, lambda base_head: None, branch="tmp")
 
     assert git.merged == [] and git.deleted_branches == []
 
@@ -290,7 +292,7 @@ def test_lifecycle_passes_the_head_before_the_work_to_the_work() -> None:
     seen: list[str] = []
 
     outcome = with_sandbox_lifecycle(
-        git, _Sandbox(), CHECKOUT, worktree, lambda base_head: seen.append(base_head) or git.commit(worktree, "x"), branch="tmp"
+        git, git.commits, _Sandbox(), CHECKOUT, worktree, lambda base_head: seen.append(base_head) or git.commit(worktree, "x"), branch="tmp"
     )
 
     assert seen == [f"{1:040d}"] and outcome.commits == (f"{2:040d}",)
@@ -302,7 +304,7 @@ def test_lifecycle_rejects_a_temp_branch_merge_into_a_detached_host_checkout() -
     worktree = _worktree(git)
 
     with pytest.raises(LoopError, match="detached HEAD"):
-        with_sandbox_lifecycle(git, _Sandbox(), CHECKOUT, worktree, lambda base_head: None, branch=None)
+        with_sandbox_lifecycle(git, git.commits, _Sandbox(), CHECKOUT, worktree, lambda base_head: None, branch=None)
 
 
 def test_lifecycle_runs_sandbox_ready_hooks_before_the_work() -> None:
@@ -312,6 +314,7 @@ def test_lifecycle_runs_sandbox_ready_hooks_before_the_work() -> None:
 
     with_sandbox_lifecycle(
         git,
+        git.commits,
         _Sandbox(),
         CHECKOUT,
         worktree,
@@ -329,7 +332,7 @@ def test_lifecycle_trusts_the_worktree_and_copies_the_host_identity_into_an_isol
     sandbox = _Sandbox(isolated=True)
     worktree = _worktree(git)
 
-    with_sandbox_lifecycle(git, sandbox, CHECKOUT, worktree, lambda base_head: None, branch="tmp")
+    with_sandbox_lifecycle(git, git.commits, sandbox, CHECKOUT, worktree, lambda base_head: None, branch="tmp")
 
     assert sandbox.commands == [
         f"git config --global --get-all safe.directory | grep -qxF {worktree}"
@@ -344,7 +347,7 @@ def test_lifecycle_leaves_a_host_sandbox_untouched() -> None:
     git.config = {"user.name": "Ada"}
     sandbox = _Sandbox()
 
-    with_sandbox_lifecycle(git, sandbox, CHECKOUT, _worktree(git), lambda base_head: None, branch="tmp")
+    with_sandbox_lifecycle(git, git.commits, sandbox, CHECKOUT, _worktree(git), lambda base_head: None, branch="tmp")
 
     assert sandbox.commands == []
 
@@ -355,7 +358,7 @@ def test_lifecycle_retries_a_transient_sandbox_setup_exit_then_continues() -> No
     sleeps: list[float] = []
 
     with_sandbox_lifecycle(
-        git, sandbox, CHECKOUT, _worktree(git), lambda base_head: None, branch="tmp", sleep=sleeps.append
+        git, git.commits, sandbox, CHECKOUT, _worktree(git), lambda base_head: None, branch="tmp", sleep=sleeps.append
     )
 
     assert len(sandbox.commands) == 2 and sleeps == [0.25]
@@ -368,7 +371,7 @@ def test_lifecycle_fails_after_exhausting_retries_on_a_transient_sandbox_setup_e
 
     with pytest.raises(LoopError, match="137"):
         with_sandbox_lifecycle(
-            git, sandbox, CHECKOUT, _worktree(git), lambda base_head: None, branch="tmp", sleep=sleeps.append
+            git, git.commits, sandbox, CHECKOUT, _worktree(git), lambda base_head: None, branch="tmp", sleep=sleeps.append
         )
 
     assert sleeps == [0.25, 0.25]
@@ -381,7 +384,7 @@ def test_lifecycle_fails_at_once_on_a_non_transient_sandbox_setup_exit() -> None
 
     with pytest.raises(LoopError):
         with_sandbox_lifecycle(
-            git, sandbox, CHECKOUT, _worktree(git), lambda base_head: None, branch="tmp", sleep=sleeps.append
+            git, git.commits, sandbox, CHECKOUT, _worktree(git), lambda base_head: None, branch="tmp", sleep=sleeps.append
         )
 
     assert sleeps == [] and len(sandbox.commands) == 1

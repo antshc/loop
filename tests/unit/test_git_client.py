@@ -85,24 +85,6 @@ def test_commit_without_a_body_uses_a_single_message() -> None:
     assert runner.calls[-1] == ("git commit -m subject", TARGET, None)
 
 
-def test_recent_commits_keeps_newest_prefixed_subjects_only(repo: Path) -> None:
-    commit_file(repo, "a.txt", "1", "ccode: first")
-    commit_file(repo, "b.txt", "2", "unrelated")
-    commit_file(repo, "c.txt", "3", "subject\n\nccode: only in the body")
-    commit_file(repo, "d.txt", "4", "ccode: second")
-
-    commits = GitClient().recent_commits(repo, "ccode:", 5)
-
-    assert [line.partition(" ")[2] for line in commits] == ["ccode: second", "ccode: first"]
-    assert [line.partition(" ")[2] for line in GitClient().recent_commits(repo, "ccode:", 1)] == ["ccode: second"]
-
-
-def test_head_subject_returns_the_subject_line_without_the_body(repo: Path) -> None:
-    commit_file(repo, "a.txt", "1", "subject line\n\nbody text")
-
-    assert GitClient().head_subject(repo) == "subject line"
-
-
 def test_is_clean_is_true_only_when_the_tree_has_no_changes(repo: Path) -> None:
     client = GitClient()
     assert client.is_clean(repo) is True
@@ -118,46 +100,10 @@ def test_is_clean_is_true_only_when_the_tree_has_no_changes(repo: Path) -> None:
     assert client.is_clean(repo) is False
 
 
-def test_reset_to_discards_new_commits_and_uncommitted_changes(repo: Path) -> None:
-    client = GitClient()
-    recorded = client.head(repo)
-    commit_file(repo, "a.txt", "a\n", "extra commit")
-    (repo / "b.txt").write_text("dirty\n")
-    git(repo, "add", "b.txt")
-
-    client.reset_to(repo, recorded)
-
-    assert client.head(repo) == recorded
-    assert client.is_clean(repo) is True
-    assert not (repo / "a.txt").exists()
-    assert not (repo / "b.txt").exists()
-
-
-def test_commits_with_prefix_returns_matching_subjects_oldest_first_within_the_range(repo: Path) -> None:
-    client = GitClient()
-    base = client.head(repo)
-    commit_file(repo, "a.txt", "1", "ccode: first")
-    commit_file(repo, "b.txt", "2", "unrelated")
-    commit_file(repo, "c.txt", "3", "subject\n\nccode: only in the body")
-    commit_file(repo, "d.txt", "4", "ccode: second")
-
-    commits = client.commits_with_prefix(repo, f"{base}..HEAD", "ccode:")
-
-    assert [line.partition(" ")[2] for line in commits] == ["ccode: first", "ccode: second"]
-
-
-def test_commits_with_prefix_returns_an_empty_list_when_nothing_matches(repo: Path) -> None:
-    client = GitClient()
-    base = client.head(repo)
-    commit_file(repo, "a.txt", "1", "unrelated")
-
-    assert client.commits_with_prefix(repo, f"{base}..HEAD", "ccode:") == []
-
-
 def test_branch_ahead_of_remote_true_with_no_remote_counterpart_but_commits_beyond_base(tmp_path: Path) -> None:
     checkout = _init_pushed_repo(tmp_path / "harness")
     client = GitClient()
-    base = client.head(checkout)
+    base = git(checkout, "rev-parse", "HEAD")
     git(checkout, "checkout", "-b", "feature-x")
     commit_file(checkout, "a.txt", "1", "work")
 
@@ -167,7 +113,7 @@ def test_branch_ahead_of_remote_true_with_no_remote_counterpart_but_commits_beyo
 def test_branch_ahead_of_remote_true_when_the_remote_counterpart_is_behind(tmp_path: Path) -> None:
     checkout = _init_pushed_repo(tmp_path / "harness")
     client = GitClient()
-    base = client.head(checkout)
+    base = git(checkout, "rev-parse", "HEAD")
     git(checkout, "checkout", "-b", "feature-x")
     commit_file(checkout, "a.txt", "1", "work")
     git(checkout, "push", "origin", "feature-x")
@@ -180,7 +126,7 @@ def test_branch_ahead_of_remote_true_when_the_remote_counterpart_is_behind(tmp_p
 def test_branch_ahead_of_remote_false_when_the_remote_holds_every_local_commit(tmp_path: Path) -> None:
     checkout = _init_pushed_repo(tmp_path / "harness")
     client = GitClient()
-    base = client.head(checkout)
+    base = git(checkout, "rev-parse", "HEAD")
     git(checkout, "checkout", "-b", "feature-x")
     commit_file(checkout, "a.txt", "1", "work")
     git(checkout, "push", "origin", "feature-x")
@@ -193,18 +139,7 @@ def test_branch_ahead_of_remote_false_when_the_branch_does_not_exist_locally(tmp
     checkout = _init_pushed_repo(tmp_path / "harness")
     client = GitClient()
 
-    assert client.branch_ahead_of_remote(checkout, "no-such-branch", client.head(checkout)) is False
-
-
-def test_a_failing_git_command_raises_a_typed_error_for_a_new_query() -> None:
-    runner = FakeRunner()
-    runner.returncode_for["git log -1 --format=%s"] = 1
-    runner.stderr_for["git log -1 --format=%s"] = "fatal: bad revision 'HEAD'"
-
-    with pytest.raises(CommandError, match="bad revision") as excinfo:
-        GitClient(run=runner).head_subject(CHECKOUT)
-
-    assert excinfo.value.command == "git log -1 --format=%s"
+    assert client.branch_ahead_of_remote(checkout, "no-such-branch", git(checkout, "rev-parse", "HEAD")) is False
 
 
 def test_push_is_a_plain_push_with_no_force_flag() -> None:
@@ -251,14 +186,11 @@ def test_branch_primitives_report_head_commits_merge_and_cleanup_against_a_real_
     client = GitClient()
     worktree = tmp_path / "wt"
     git(repo, "worktree", "add", "-b", "tmp", str(worktree))
-    base = client.head(worktree)
 
     commit_file(worktree, "a.txt", "a\n", "first")
     commit_file(worktree, "b.txt", "b\n", "second")
-    first, second = git(worktree, "rev-list", "--reverse", f"{base}..HEAD").split()
 
     assert client.current_branch(repo) == "main" and client.current_branch(worktree) == "tmp"
-    assert client.commits_between(worktree, base, client.head(worktree)) == [first, second]
     assert client.config_get(repo, "user.name") == "Test" and client.config_get(repo, "no.such") is None
 
     client.merge(repo, "tmp")
@@ -270,45 +202,16 @@ def test_branch_primitives_report_head_commits_merge_and_cleanup_against_a_real_
     assert git(repo, "branch", "--list", "tmp") == ""
 
 
-def test_fake_head_subject_is_clean_and_reset_to() -> None:
-    fake = FakeGitClient()
-    worktree = WorktreeService(fake).create(CHECKOUT, "feature-x", "main", Path("/harness"))
-    first = fake.commit(worktree, "first")
-    fake.dirty_worktrees.add(worktree)
-
-    assert fake.head_subject(worktree) == "first"
-    assert fake.is_clean(worktree) is False
-
-    fake.commit(worktree, "second")
-    fake.reset_to(worktree, first)
-
-    assert fake.head(worktree) == first
-    assert fake.is_clean(worktree) is True
-
-
-def test_fake_commits_with_prefix_filters_by_subject_and_range() -> None:
-    fake = FakeGitClient()
-    worktree = WorktreeService(fake).create(CHECKOUT, "feature-x", "main", Path("/harness"))
-    base = fake.head(worktree)
-    fake.commit(worktree, "ccode: first")
-    fake.commit(worktree, "unrelated")
-    fake.commit(worktree, "ccode: second")
-
-    commits = fake.commits_with_prefix(worktree, f"{base}..{fake.head(worktree)}", "ccode:")
-
-    assert [line.partition(" ")[2] for line in commits] == ["ccode: first", "ccode: second"]
-
-
 def test_fake_branch_ahead_of_remote() -> None:
     fake = FakeGitClient()
     worktree = WorktreeService(fake).create(CHECKOUT, "feature-x", "main", Path("/harness"))
-    base = fake.head(worktree)
+    base = fake.commits.head(worktree).sha
     fake.commit(worktree, "work")
 
     assert fake.branch_ahead_of_remote(CHECKOUT, "feature-x", base) is True
     assert fake.branch_ahead_of_remote(CHECKOUT, "no-such-branch", base) is False
 
     fake.remote_branches.add("feature-x")
-    fake.remote_heads["feature-x"] = fake.head(worktree)
+    fake.remote_heads["feature-x"] = fake.commits.head(worktree).sha
     assert fake.branch_ahead_of_remote(CHECKOUT, "feature-x", base) is False
 

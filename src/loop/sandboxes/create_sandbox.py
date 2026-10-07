@@ -9,7 +9,7 @@ from types import TracebackType
 from loop.contracts.agent_client import AgentOptions, AgentResult
 from loop.contracts.sandbox import AgentClientFactory, Sandbox
 from loop.errors import Cancelled
-from loop.platforms.git import GitClient, WorktreeService
+from loop.platforms.git import CommitService, GitClient, WorktreeService
 from loop.sandboxes.sandbox_lifecycle import SandboxHooks, run_host_hooks, with_sandbox_lifecycle
 
 SandboxFactory = Callable[[Path, threading.Event], Sandbox]
@@ -28,6 +28,7 @@ class WorktreeSandbox:
     def __init__(
         self,
         git: GitClient,
+        commits: CommitService,
         worktrees: WorktreeService,
         sandbox: Sandbox,
         checkout: Path,
@@ -39,6 +40,7 @@ class WorktreeSandbox:
         cancel: threading.Event,
     ) -> None:
         self._git = git
+        self._commits = commits
         self._worktrees = worktrees
         self._sandbox = sandbox
         self._checkout = checkout
@@ -66,6 +68,7 @@ class WorktreeSandbox:
     ) -> SandboxRunResult:
         outcome = with_sandbox_lifecycle(
             self._git,
+            self._commits,
             self._sandbox,
             self._checkout,
             self._worktree,
@@ -102,6 +105,7 @@ class WorktreeSandbox:
 
 def create_sandbox(
     git: GitClient,
+    commits: CommitService,
     worktrees: WorktreeService,
     sandbox_factory: SandboxFactory,
     *,
@@ -140,6 +144,7 @@ def create_sandbox(
         raise
     return WorktreeSandbox(
         git,
+        commits,
         worktrees,
         sandbox,
         checkout,

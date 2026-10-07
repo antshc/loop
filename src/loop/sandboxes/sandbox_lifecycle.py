@@ -9,7 +9,7 @@ from pathlib import Path
 
 from loop.contracts.sandbox import Sandbox
 from loop.errors import CommandError, LoopError
-from loop.platforms.git import GitClient, Hook
+from loop.platforms.git import CommitService, GitClient, Hook
 from loop.process import TRANSIENT_EXIT_CODES, TRANSIENT_RETRIES, TRANSIENT_RETRY_DELAY_S
 
 
@@ -38,6 +38,7 @@ def run_host_hooks(
 
 def with_sandbox_lifecycle[T](
     git: GitClient,
+    commits: CommitService,
     sandbox: Sandbox,
     checkout: Path,
     worktree: Path,
@@ -59,29 +60,30 @@ def with_sandbox_lifecycle[T](
     if branch is None and host_branch is None:
         raise LoopError(f"cannot merge into a detached HEAD in {checkout}")
     if sandbox.isolated:
-        identity = {key: git.config_get(checkout, key) for key in ("user.name", "user.email")}
+        name, email = commits.identity(checkout)
+        identity = {"user.name": name, "user.email": email}
         _prepare_sandbox(sandbox, worktree, identity, sleep or time.sleep)
     worktree_branch = git.current_branch(worktree)
     if worktree_branch is None:
         raise LoopError(f"worktree is on a detached HEAD: {worktree}")
     run_host_hooks(git, on_sandbox_ready, worktree, cancel=cancel)
 
-    base_head = git.head(worktree)
-    result = work(base_head)
+    base_head = commits.head(worktree)
+    result = work(base_head.sha)
     if apply_to_host is not None:
         apply_to_host()
 
-    commits = git.commits_between(worktree, base_head, git.head(worktree))
+    new_commits = commits.since(base_head)
     if branch is None:
         git.merge(checkout, worktree_branch)
         if not keep_source_branch:
             git.detach(worktree)
             git.delete_branch(checkout, worktree_branch)
-    return LifecycleResult(result, worktree_branch, tuple(commits))
+    return LifecycleResult(result, worktree_branch, tuple(commit.sha for commit in new_commits))
 
 
 def _prepare_sandbox(
-    sandbox: Sandbox, worktree: Path, identity: dict[str, str | None], sleep: Callable[[float], None]
+    sandbox: Sandbox, worktree: Path, identity: dict[str, str], sleep: Callable[[float], None]
 ) -> None:
     """Trust the worktree and commit as the host user inside an isolated Sandbox."""
     path = shlex.quote(str(worktree))
