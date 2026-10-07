@@ -10,7 +10,6 @@ from .planning import SpecRun
 from .prompting import initiative_commits, prompt_args
 from .result import DevResult, DevResultError, parse_response
 from .settings import MAX_TICKET_FAILURES
-from .tracker import close_delivered, escalate, record_ticket_failure
 
 
 def open_sandbox(run: SpecRun, deps: DevDeps) -> WorktreeSandbox:
@@ -71,12 +70,11 @@ def _deliver_ticket(run: SpecRun, ticket: Ticket, sandbox: WorktreeSandbox, deps
         )
         attempt = _run_and_validate(sandbox, deps, identifier, head_before, args)
         if isinstance(attempt, DevResult):
-            close_delivered(deps.harness_github, ticket.number, attempt)
-            deps.store.reset(ticket.url)
+            deps.tracker.close_delivered(ticket, attempt)
             return True
         deps.git.reset_to(worktree, head_before)
-        if record_ticket_failure(deps.store, deps.harness_slug, ticket) >= MAX_TICKET_FAILURES:
-            escalate(deps.harness_github, run.spec.number, ticket.number, attempt)
+        if deps.tracker.record_failure(ticket) >= MAX_TICKET_FAILURES:
+            deps.tracker.escalate(run.spec.number, ticket.number, attempt)
             return False
 
 def task_id(initiative: str, ticket_number: int) -> str:

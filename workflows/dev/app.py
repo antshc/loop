@@ -13,7 +13,6 @@ from .deps import DevDeps
 from .planning import SpecRun, prepare_run
 from .publish import publish
 from .settings import HITL_LABEL
-from .tracker import announce_delivered, hitl
 
 logger = logging.getLogger("workflow.dev")
 
@@ -35,7 +34,7 @@ def _base_branch_exists(run: SpecRun, deps: DevDeps) -> bool:
     """True when the base branch is on the target's origin; otherwise hands the Spec to a human."""
     if deps.git.remote_branch_exists(run.checkout, run.base_branch):
         return True
-    hitl(deps.harness_github, run.spec.number, f"dev: target branch {run.base_branch!r} does not exist on {run.target}")
+    deps.tracker.hitl(run.spec.number, f"dev: target branch {run.base_branch!r} does not exist on {run.target}")
     return False
 
 
@@ -59,7 +58,7 @@ def _deliver_in_sandbox(run: SpecRun, sandbox: WorktreeSandbox, deps: DevDeps) -
         delivered = deliver_tickets(run, sandbox, deps)
         pull_request_url = publish(deps.git, run, sandbox.worktree)
         if delivered and pull_request_url is not None:
-            announce_delivered(deps.harness_github, run.spec.number, pull_request_url)
+            deps.tracker.announce_delivered(run.spec.number, pull_request_url)
         return Outcome.SUCCESS if delivered else Outcome.FAILED
     except Cancelled:
         kept_on_cancel = deps.git.has_changes(sandbox.worktree)
@@ -75,7 +74,7 @@ def _process_spec(spec: Spec, deps: DevDeps) -> Outcome:
         spec,
         harness_root=deps.harness_root,
         harness_slug=deps.harness_slug,
-        harness_github=deps.harness_github,
+        tracker=deps.tracker,
         github_factory=deps.github_factory,
     )
     if run is None:
@@ -87,7 +86,7 @@ def _process_spec(spec: Spec, deps: DevDeps) -> Outcome:
         _report_cancelled(spec, exception.worktree)
         return Outcome.SKIPPED
     except LoopError as exception:
-        deps.harness_github.comment(run.spec.number, f"dev: {exception}")
+        deps.tracker.comment(run.spec.number, f"dev: {exception}")
         return Outcome.FAILED
 
     if sandbox is None:
@@ -98,7 +97,7 @@ def _process_spec(spec: Spec, deps: DevDeps) -> Outcome:
 def process_specs(deps: DevDeps) -> int:
     """Processes every Spec not waiting for a human; returns the process exit code."""
     failed = False
-    for spec in deps.harness_github.get_specs():
+    for spec in deps.tracker.specs():
         if HITL_LABEL in spec.labels:
             continue
         failed = (_process_spec(spec, deps) is Outcome.FAILED) or failed

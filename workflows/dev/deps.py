@@ -7,7 +7,9 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from loop import AgentClientFactory, ExecutionStore, GitClient, GitHubClient, Hook, SandboxFactory
+from loop import AgentClientFactory, GitClient, GitHubClient, Hook, SandboxFactory
+
+from .tracker import TicketsTracker
 
 GithubFactory = Callable[[Path], GitHubClient]
 
@@ -16,12 +18,11 @@ GithubFactory = Callable[[Path], GitHubClient]
 class DevDeps:
     harness_root: Path
     harness_slug: str
-    harness_github: GitHubClient
+    tracker: TicketsTracker
     github_factory: GithubFactory
     git: GitClient
     agent_factory: AgentClientFactory
     sandbox_factory: SandboxFactory
-    store: ExecutionStore
     hooks: Sequence[Hook]
     template: str
     cancel: threading.Event

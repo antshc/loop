@@ -31,6 +31,7 @@ from .deps import DevDeps, GithubFactory
 from .prompting import prompt_args
 from .result import DevResult, DevResultError, parse_dev_result
 from .settings import HOOKS, LOG_DIR_NAME, LOG_LEVEL, PROMPT, SANDBOX_FACTORY
+from .tracker import TicketsTracker
 
 __all__ = [
     "PROMPT",
@@ -69,12 +70,11 @@ def _build_deps(
     return DevDeps(
         harness_root=harness_root,
         harness_slug=harness_slug,
-        harness_github=github_factory(harness_root),
+        tracker=TicketsTracker(github_factory(harness_root), store or FileExecutionStore(log_dir), harness_slug),
         github_factory=github_factory,
         git=git or GitClient(),
         agent_factory=agent_factory or copilot(InMemorySessionStore()),
         sandbox_factory=sandbox_factory or SANDBOX_FACTORY,
-        store=store or FileExecutionStore(log_dir),
         hooks=hooks,
         template=PROMPT.read_text(),
         cancel=cancel or threading.Event(),
