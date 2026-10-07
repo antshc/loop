@@ -10,7 +10,7 @@ Let each autonomous procedure (`dev`, a review loop, a custom flow) be written a
 Loop is a library of contracts and default implementations; a **workflow** is one ordinary Python file that wires them and runs its own loop (the unit Sandcastle calls a template).
 
 - The core of Loop is the **Sandbox** and git. A Sandbox binds a workspace (the harness root), runs the agent the workflow passes on each run, either on the host or inside Docker, and is closed when the run ends; git creates the branch and worktree under the harness's `workspace` folder.
-- Loop ships default implementations for git, the Copilot CLI agent client, and the stores. Parts Loop's own code calls (Sandbox, agent client, stores) sit behind a contract; clients only a workflow calls (`GitClient`) are concrete helpers a user replaces by calling their own client ([ADR 0003](../adr/0003-ship-loop-as-a-workflow-library-with-no-built-in-workflows.md)). The GitHub client and Spec/Ticket tracker are workflow-side code in `workflows/platforms/work_tracking`.
+- Loop ships default implementations for git, the Copilot CLI agent client, and the stores. Parts Loop's own code calls (Sandbox, agent client, stores) sit behind a contract; the git services (`BranchService`, `WorktreeService`, `CommitService`) are concrete deep modules with no contract, replaced in tests by fakes that subclass them ([ADR 0003](../adr/0003-ship-loop-as-a-workflow-library-with-no-built-in-workflows.md), [ADR 0010](../adr/0010-split-git-access-into-concrete-branch-worktree-and-commit-services.md)). The GitHub client and Spec/Ticket tracker are workflow-side code in `workflows/platforms/work_tracking`.
 - Loop ships no workflows: the user writes every workflow, `dev` included; this repository's `workflows/dev.py` is only an example and test subject.
 - A workflow imports only the public `loop` API and is a runnable script: its entry point takes an argument list and returns an exit code, and a `__main__` guard passes that code to the process exit. Dependencies enter that entry point as optional parameters that default to the shipped implementations, so tests substitute fakes ([ADR 0003](../adr/0003-ship-loop-as-a-workflow-library-with-no-built-in-workflows.md)).
 - Loop ships no command: the user runs a workflow script through their own shell alias (for example `alias loop-dev='python workflows/dev.py'`), with the harness as the current folder ([ADR 0003](../adr/0003-ship-loop-as-a-workflow-library-with-no-built-in-workflows.md); [ADR 0002](../adr/0002-ship-loop-as-the-loop-package-with-an-loop-command.md) is superseded).
@@ -21,11 +21,11 @@ Loop is a library of contracts and default implementations; a **workflow** is on
 
 - MUST ship contracts and default implementations through one public top-level `loop` API; a workflow MUST import only from it, and workflow tests MAY also import the shipped test doubles from `loop.testing`.
 - MUST define a contract as an `abc.ABC` only where Loop's own code calls a replaceable part (Sandbox, agent client, stores), and make every implementation of it inherit it.
-- MUST ship clients only a workflow calls (`GitClient`) as concrete helpers with no contract; the GitHub client in `workflows/platforms/work_tracking` stays a pure `gh` wrapper returning raw issue nodes, while the Spec/Ticket entities and actionable-Ticket selection live in that package's tracker, not in the loop library or the workflow file.
+- MUST ship the git services (`BranchService`, `WorktreeService`, `CommitService`) as concrete classes with no contract, taking and returning `Branch`, `Worktree`, and `Commit` entities so callers state intent and never choose refs or git commands; the GitHub client in `workflows/platforms/work_tracking` stays a pure `gh` wrapper returning raw issue nodes, while the Spec/Ticket entities and actionable-Ticket selection live in that package's tracker, not in the loop library or the workflow file.
 - MUST NOT ship workflows or a command in the `loop` package.
 - MUST let a user replace any shipped implementation (git, GitHub tracker, agent client, stores) with their own through the workflow's injected dependencies.
 - MUST run every agent invocation through a Sandbox; a workflow MUST NOT call the agent client or provider CLI directly.
-- MUST create the branch and worktree through the git client under the harness's `workspace` folder, and bind the Sandbox to the harness root so it contains the worktree.
+- MUST create the branch and worktree through the git services, by default under the harness's `workspace` folder, and bind the Sandbox to the harness root so it contains the worktree.
 - MUST define each platform-neutral model next to the contract that returns it; there is no separate domain layer.
 - MUST write each workflow as one Python file that owns its settings, control flow, and wiring and exposes one entry point returning the exit code, run by a `__main__` guard.
 - MUST accept every external dependency of that entry point as an optional parameter defaulting to the shipped implementation.
@@ -47,7 +47,7 @@ loop/                              # public API: contracts + default implementat
 ├── Sandbox, NoSandbox, DockerSandbox     # contracts + implementations
 ├── AgentClient, CopilotClient
 ├── ExecutionStore, SessionStore, file stores
-├── GitClient                             # concrete helper, no contract
+├── BranchService, WorktreeService, CommitService  # concrete, no contract
 └── policy (attempt cap)
 <harness root>/workflows/         # user-written; imports only `loop`; main(argv) -> int
 ├── platforms/work_tracking/      # GitHubClient (gh wrapper), Spec/Ticket entities, TicketsTracker
@@ -56,8 +56,8 @@ loop/                              # public API: contracts + default implementat
 ```
 
 ```python
-def main(argv=None, *, git=None, github_factory=None, store=None, sandbox_factory=None) -> int:
-    git = git or GitClient()
+def main(argv=None, *, branches=None, commits=None, github_factory=None, store=None, sandbox_factory=None) -> int:
+    branches = branches or BranchService()
     github_factory = github_factory or (lambda checkout: GitHubClient.for_repo(checkout)[0])
     ...
     with sandbox_factory(harness_root) as sandbox:

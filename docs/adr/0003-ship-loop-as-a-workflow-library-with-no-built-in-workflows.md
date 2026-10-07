@@ -2,7 +2,7 @@
 
 Loop is a library for composing agent workflows: a workflow is an ordinary Python script that wires a Sandbox, an agent client, and git and GitHub clients, and owns its control flow. The `loop` package ships no workflows; the user writes every workflow, `dev` included, in the harness-root workflows folder on the public `loop` API, which exports the contracts and the shipped implementations so a workflow never reimplements them. This repository keeps a `dev` workflow only as an example and test subject.
 
-Contracts (`abc.ABC`) exist only where Loop's own code calls a replaceable part: `Sandbox`, `AgentClient`, `ExecutionStore`, `SessionStore`. Clients only a workflow calls (`GitClient`, `GitHubClient`) ship as concrete helpers with no contract; a user replaces one by calling their own client from their own workflow, with no dependency on `loop`.
+Contracts (`abc.ABC`) exist only where Loop's own code calls a replaceable part: `Sandbox`, `AgentClient`, `ExecutionStore`, `SessionStore`. Clients only a workflow calls (`GitHubClient`) ship as concrete helpers with no contract; a user replaces one by calling their own client from their own workflow, with no dependency on `loop`. The git services (`BranchService`, `WorktreeService`, `CommitService`, [ADR 0010](0010-split-git-access-into-concrete-branch-worktree-and-commit-services.md)) are also concrete even though Loop's own Sandbox lifecycle calls them: only tests replace git, and fakes subclass the concrete services.
 
 ## Considered Options
 
