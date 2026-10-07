@@ -9,7 +9,7 @@ from pathlib import Path
 
 from loop.contracts.sandbox import Sandbox
 from loop.errors import CommandError, LoopError
-from loop.platforms.git.git_client import GitClient, Hook
+from loop.platforms.git_client import GitClient, Hook
 from loop.process import TRANSIENT_EXIT_CODES, TRANSIENT_RETRIES, TRANSIENT_RETRY_DELAY_S
 
 

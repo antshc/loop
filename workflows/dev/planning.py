@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from loop import GitHubClient, Spec, Ticket, feature_branch_name, origin_slug, same_slug
+from loop import Branch, GitHubClient, Spec, Ticket, origin_slug, same_slug
 
 from .deps import GithubFactory
 from .tracker import block_spec
@@ -82,7 +82,7 @@ def prepare_run(
         bare_title=spec.bare_title,
         target=target,
         base_branch=base_branch,
-        feature_branch=feature_branch_name(base_branch, spec.bare_title),
+        feature_branch=Branch.feature(base_branch, spec.bare_title).name,
         checkout=checkout,
         target_github=target_github,
     )

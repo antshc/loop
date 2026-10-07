@@ -12,6 +12,7 @@ import pytest
 from conftest import git
 from loop import (
     AgentClient,
+    Branch,
     Sandbox,
     CommandError,
     CopilotClient,
@@ -118,11 +119,11 @@ def test_parse_dev_result_rejects_a_malformed_response(response: str) -> None:
 
 
 def test_feature_branch_name_prefixes_the_slug_with_an_underscored_version() -> None:
-    assert dev.feature_branch_name("release/2.4", "Add Login Page!") == "2_4_add-login-page"
+    assert Branch.feature("release/2.4", "Add Login Page!").name == "2_4_add-login-page"
 
 
 def test_feature_branch_name_is_just_the_slug_without_a_version() -> None:
-    assert dev.feature_branch_name("main", "Add Login Page!") == "add-login-page"
+    assert Branch.feature("main", "Add Login Page!").name == "add-login-page"
 
 
 def _spec(title: str = "Add login page", labels: tuple[str, ...] = ()) -> Spec:

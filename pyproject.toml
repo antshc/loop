@@ -52,9 +52,9 @@ source_modules = ["loop.agents", "loop.sandboxes", "loop.platforms", "loop.store
 forbidden_modules = ["loop.sandbox"]
 
 [[tool.importlinter.contracts]]
-name = "The git platform package imports no GitHub or workflow code"
+name = "The git platform module imports no GitHub or workflow code"
 type = "forbidden"
-source_modules = ["loop.platforms.git"]
+source_modules = ["loop.platforms.git_client"]
 forbidden_modules = ["loop.platforms.gh_client", "workflows"]
 
 [[tool.importlinter.contracts]]

@@ -13,6 +13,65 @@ from loop.process import CommandResult, checked_output, execute
 DEFAULT_HOOK_TIMEOUT_S = 120.0
 
 _REMOTE = re.compile(r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?/?$", re.IGNORECASE)
+_HEADS = "refs/heads/"
+_VERSION = re.compile(r"(\d+(?:\.\d+)+)")
+
+
+def slugify(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-") or "spec"
+
+
+@dataclass(frozen=True)
+class Branch:
+    """A local branch and its `origin` counterpart."""
+
+    name: str
+
+    @classmethod
+    def feature(cls, base_branch: str, title: str) -> Branch:
+        """`<version_with_underscores>_<title slug>` when base_branch carries a version, else `<title slug>`."""
+        slug = slugify(title)
+        match = _VERSION.search(base_branch)
+        return cls(slug if match is None else f"{match[1].replace('.', '_')}_{slug}")
+
+    @property
+    def ref(self) -> str:
+        return f"{_HEADS}{self.name}"
+
+    @property
+    def remote_ref(self) -> str:
+        return f"refs/remotes/origin/{self.name}"
+
+    @property
+    def upstream(self) -> str:
+        return f"origin/{self.name}"
+
+
+@dataclass(frozen=True)
+class Commit:
+    """A commit identified by its (possibly short) hash and its subject line."""
+
+    sha: str
+    subject: str = ""
+
+    @classmethod
+    def parse(cls, line: str) -> Commit:
+        """A Commit from a `%h %s` log line."""
+        sha, _, subject = line.partition(" ")
+        return cls(sha, subject)
+
+    @staticmethod
+    def subject_prefix(identifier: str) -> str:
+        """The required prefix of a Ticket's delivering commit subject."""
+        return f"ccode({identifier}): "
+
+
+@dataclass(frozen=True)
+class Worktree:
+    """A worktree of a Codebase Checkout; `branch` is None on a detached HEAD."""
+
+    path: Path
+    branch: Branch | None = None
 
 
 class GitRunner(Protocol):
@@ -62,7 +121,7 @@ class GitClient:
         self._run(("git", "fetch", "--all", "--prune"), cwd=checkout)
 
     def remote_branch_exists(self, checkout: Path, branch: str) -> bool:
-        return self._show_ref(checkout, f"refs/remotes/origin/{branch}")
+        return self._show_ref(checkout, Branch(branch).remote_ref)
 
     def create_worktree(
         self,
@@ -76,22 +135,24 @@ class GitClient:
     ) -> Path:
         self._run(("git", "check-ref-format", "--branch", branch), cwd=checkout)
         target = harness_root / "workspace" / f"{checkout.name}.worktrees" / branch
+        wanted = Branch(branch)
         with self._lock:
             worktrees = self._list_worktrees(checkout)
             other = next(
-                (path for path, ref in worktrees if ref == f"refs/heads/{branch}" and path != target), None
+                (worktree.path for worktree in worktrees if worktree.branch == wanted and worktree.path != target),
+                None,
             )
             if other is not None:
                 raise CommandError("git worktree add", None, f"branch {branch!r} is checked out in {other}")
-            if any(path == target for path, _ in worktrees):
+            if any(worktree.path == target for worktree in worktrees):
                 if self.has_changes(target):
                     raise CommandError(
                         "git worktree add", None, f"leftover worktree has uncommitted changes: {target}"
                     )
                 self._run(("git", "worktree", "remove", "--force", str(target)), cwd=checkout)
 
-            start_ref = f"origin/{branch}" if self.remote_branch_exists(checkout, branch) else f"origin/{base}"
-            if self._show_ref(checkout, f"refs/heads/{branch}"):
+            start_ref = wanted.upstream if self.remote_branch_exists(checkout, branch) else Branch(base).upstream
+            if self._show_ref(checkout, wanted.ref):
                 self._run(("git", "branch", "-f", branch, start_ref), cwd=checkout)
                 self._run(("git", "worktree", "add", str(target), branch), cwd=checkout)
             else:
@@ -150,7 +211,7 @@ class GitClient:
             ("git", "log", "-n", str(limit), f"--grep=^{re.escape(prefix)}", "--format=%h %s"), cwd=worktree
         )
         # `--grep` also matches body lines, so keep only subjects that carry the prefix.
-        return [line for line in output.splitlines() if line.partition(" ")[2].startswith(prefix)]
+        return [line for line in output.splitlines() if Commit.parse(line).subject.startswith(prefix)]
 
     def head_subject(self, worktree: Path) -> str:
         """The subject line of the commit at HEAD, without its body."""
@@ -171,13 +232,14 @@ class GitClient:
             ("git", "log", "--reverse", f"--grep=^{re.escape(prefix)}", "--format=%h %s", range_spec), cwd=worktree
         )
         # `--grep` also matches body lines, so keep only subjects that carry the prefix.
-        return [line for line in output.splitlines() if line.partition(" ")[2].startswith(prefix)]
+        return [line for line in output.splitlines() if Commit.parse(line).subject.startswith(prefix)]
 
     def branch_ahead_of_remote(self, checkout: Path, branch: str, base: str) -> bool:
         """Whether local `branch` holds commits beyond its `origin` counterpart, or beyond `base` when it has none."""
-        if not self._show_ref(checkout, f"refs/heads/{branch}"):
+        local = Branch(branch)
+        if not self._show_ref(checkout, local.ref):
             return False
-        upstream = f"origin/{branch}" if self.remote_branch_exists(checkout, branch) else base
+        upstream = local.upstream if self.remote_branch_exists(checkout, branch) else base
         return bool(self._run(("git", "rev-list", f"{upstream}..{branch}"), cwd=checkout).strip())
 
     def merge(self, checkout: Path, branch: str) -> None:
@@ -210,21 +272,21 @@ class GitClient:
     def _show_ref(self, checkout: Path, ref: str) -> bool:
         return self._execute(("git", "show-ref", "--verify", "--quiet", ref), cwd=checkout).returncode == 0
 
-    def _list_worktrees(self, checkout: Path) -> list[tuple[Path, str | None]]:
+    def _list_worktrees(self, checkout: Path) -> list[Worktree]:
         output = self._run(("git", "worktree", "list", "--porcelain"), cwd=checkout)
-        entries: list[tuple[Path, str | None]] = []
+        entries: list[Worktree] = []
         path: Path | None = None
-        branch: str | None = None
+        branch: Branch | None = None
         for line in output.splitlines():
             if line.startswith("worktree "):
                 if path is not None:
-                    entries.append((path, branch))
+                    entries.append(Worktree(path, branch))
                 path = Path(line[len("worktree ") :])
                 branch = None
-            elif line.startswith("branch "):
-                branch = line[len("branch ") :]
+            elif line.startswith(f"branch {_HEADS}"):
+                branch = Branch(line[len(f"branch {_HEADS}") :])
         if path is not None:
-            entries.append((path, branch))
+            entries.append(Worktree(path, branch))
         return entries
 
     def run_hook(self, hook: Hook, worktree: Path, cancel: threading.Event | None = None) -> None:

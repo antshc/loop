@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from loop import GitClient, commit_subject_prefix
+from loop import Commit, GitClient
 
 from .result import DevResult
 
@@ -17,7 +17,7 @@ def commit_violation(git: GitClient, worktree: Path, head_before: str, identifie
     new_commits = git.commits_between(worktree, head_before, head)
     if len(new_commits) != 1:
         return f"expected exactly one commit since {head_before}, found {len(new_commits)}"
-    prefix = commit_subject_prefix(identifier)
+    prefix = Commit.subject_prefix(identifier)
     subject = git.head_subject(worktree)
     if not subject.startswith(prefix):
         return f"HEAD subject {subject!r} does not start with {prefix!r}"

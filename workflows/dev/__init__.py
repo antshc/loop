@@ -23,7 +23,6 @@ from loop import (
     SandboxFactory,
     configure_logging,
     copilot,
-    feature_branch_name,
     origin_slug,
 )
 
@@ -37,7 +36,6 @@ __all__ = [
     "PROMPT",
     "DevResult",
     "DevResultError",
-    "feature_branch_name",
     "main",
     "parse_dev_result",
     "prompt_args",

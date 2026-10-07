@@ -10,7 +10,7 @@ from uuid import uuid4
 from loop.contracts.agent_client import AgentOptions, AgentResult
 from loop.contracts.sandbox import AgentClientFactory, Sandbox
 from loop.errors import Cancelled
-from loop.platforms.git.git_client import GitClient
+from loop.platforms.git_client import GitClient
 from loop.sandbox.sandbox_lifecycle import SandboxHooks, run_host_hooks, with_sandbox_lifecycle
 
 SandboxFactory = Callable[[Path, threading.Event], Sandbox]
