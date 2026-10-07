@@ -7,71 +7,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from loop.process import cli_runner, run_command
+from loop import cli_runner, run_command
 
-_BLOCKING_LABELS = frozenset({"hitl", "spec"})
-_INITIATIVE = re.compile(r"^(?P<initiative>[^:]+):\s*(?P<title>.+)$")
-_TARGET_PREFIX = "repo:target:"
-_BASE_PREFIX = "repo:base:"
-_SLUG = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
+_SLUG_REMOTE = re.compile(r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?/?$")
 _ISSUE_FIELDS = (
     "number title url state body labels(first: 20) { nodes { name } }"
     " comments(first: 50) { nodes { author { login } body createdAt } }"
 )
-
-
-@dataclass(frozen=True)
-class Comment:
-    author: str
-    body: str
-    created_at: str
-
-
-@dataclass(frozen=True)
-class Spec:
-    number: int
-    title: str
-    url: str
-    labels: tuple[str, ...]
-    body: str = ""
-    comments: tuple[Comment, ...] = ()
-
-    @property
-    def initiative(self) -> str:
-        """The `<initiative>: <title>` title prefix, or the Spec number when absent."""
-        match = _INITIATIVE.match(self.title)
-        return str(self.number) if match is None else match["initiative"].strip()
-
-    @property
-    def bare_title(self) -> str:
-        """The title without its Initiative prefix."""
-        match = _INITIATIVE.match(self.title)
-        return self.title if match is None else match["title"].strip()
-
-    @property
-    def target(self) -> str | None:
-        """The single `repo:target:<owner/name>` label's value, or None when missing/malformed/duplicated."""
-        values = [label[len(_TARGET_PREFIX) :] for label in self.labels if label.startswith(_TARGET_PREFIX)]
-        if len(values) != 1 or not _SLUG.match(values[0]):
-            return None
-        return values[0]
-
-    @property
-    def base_branch(self) -> str | None:
-        """The single `repo:base:<branch>` label's value, or None when missing/empty/duplicated."""
-        values = [label[len(_BASE_PREFIX) :] for label in self.labels if label.startswith(_BASE_PREFIX)]
-        return values[0] if len(values) == 1 and values[0] else None
-
-
-@dataclass(frozen=True)
-class Ticket:
-    number: int
-    title: str
-    state: str
-    labels: tuple[str, ...]
-    url: str
-    body: str = ""
-    comments: tuple[Comment, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -88,14 +30,6 @@ class ReviewThread:
     path: str
     body: str
     resolved: bool
-
-
-def _comments(node: dict[str, Any]) -> tuple[Comment, ...]:
-    return tuple(
-        # `author` is null for deleted accounts.
-        Comment((comment["author"] or {}).get("login", "ghost"), comment["body"], comment["createdAt"])
-        for comment in node["comments"]["nodes"]
-    )
 
 
 class GhCli:
@@ -122,7 +56,6 @@ _SUB_ISSUES_QUERY = (
     f"  issue(number: $number) {{ subIssues(first: 100) {{ nodes {{ {_ISSUE_FIELDS} }} }} }}"
     " } }"
 )
-_REMOTE = re.compile(r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?/?$")
 _THREADS_QUERY = (
     "query($owner: String!, $repo: String!, $number: Int!) {"
     " repository(owner: $owner, name: $repo) {"
@@ -138,7 +71,7 @@ _REPLY_MUTATION = (
 
 
 class GitHubClient:
-    """Specs, Tickets, and pull requests through `gh`; no GitHub shape leaves this class."""
+    """Issues and pull requests through `gh`; no GitHub shape leaves this class except raw issue nodes."""
 
     def __init__(self, owner: str, repo: str, *, gh: GhRunner) -> None:
         self._owner = owner
@@ -156,49 +89,20 @@ class GitHubClient:
     @classmethod
     def _from_origin(cls, repo: Path) -> GitHubClient:
         url = run_command(("git", "remote", "get-url", "origin"), cwd=repo).strip()
-        match = _REMOTE.search(url)
+        match = _SLUG_REMOTE.search(url)
         if match is None:
             raise ValueError(f"unsupported remote: {url}")
         return cls(match["owner"], match["repo"], gh=GhCli(cwd=repo))
 
-    def get_specs(self) -> list[Spec]:
+    def spec_issues(self) -> list[dict[str, Any]]:
+        """Raw GraphQL nodes of every open issue labelled `spec`."""
         pages = json.loads(self._graphql(_SPECS_QUERY, paginate=True))
-        return [
-            Spec(
-                number=node["number"],
-                title=node["title"],
-                url=node["url"],
-                labels=tuple(label["name"] for label in node["labels"]["nodes"]),
-                body=node["body"],
-                comments=_comments(node),
-            )
-            for page in pages
-            for node in page["data"]["repository"]["issues"]["nodes"]
-        ]
+        return [node for page in pages for node in page["data"]["repository"]["issues"]["nodes"]]
 
-    def get_tickets(self, spec: Spec) -> list[Ticket]:
-        pages = json.loads(self._graphql(_SUB_ISSUES_QUERY, paginate=True, number=spec.number))
-        return [
-            Ticket(
-                number=node["number"],
-                title=node["title"],
-                state=node["state"].lower(),
-                labels=tuple(label["name"] for label in node["labels"]["nodes"]),
-                url=node["url"],
-                body=node["body"],
-                comments=_comments(node),
-            )
-            for page in pages
-            for node in page["data"]["repository"]["issue"]["subIssues"]["nodes"]
-        ]
-
-    def get_actionable_issues(self, spec: Spec) -> list[Ticket]:
-        """A Spec's open sub-issues that carry neither the `hitl` nor the `spec` label."""
-        return [
-            ticket
-            for ticket in self.get_tickets(spec)
-            if ticket.state == "open" and not ({label.casefold() for label in ticket.labels} & _BLOCKING_LABELS)
-        ]
+    def sub_issues(self, number: int) -> list[dict[str, Any]]:
+        """Raw GraphQL nodes of issue `number`'s sub-issues."""
+        pages = json.loads(self._graphql(_SUB_ISSUES_QUERY, paginate=True, number=number))
+        return [node for page in pages for node in page["data"]["repository"]["issue"]["subIssues"]["nodes"]]
 
     def find_pull_request(self, head_branch: str) -> PullRequest | None:
         output = self._gh(

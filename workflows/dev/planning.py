@@ -6,10 +6,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from loop import Branch, GitHubClient, Spec, Ticket, origin_slug
+from loop import Branch, origin_slug
+from workflows.platforms.work_tracking import GitHubClient, Spec, Ticket, TicketsTracker
 
 from .deps import GithubFactory
-from .tracker import TicketsTracker
 
 
 @dataclass(frozen=True)

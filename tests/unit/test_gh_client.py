@@ -6,37 +6,30 @@ from unittest.mock import Mock
 import pytest
 
 from conftest import commit_file, git
-from loop import GitHubClient
 from loop.errors import CommandError
-from loop.testing import FakeGhCli
+from workflows.platforms.work_tracking import GitHubClient
+from workflows.platforms.work_tracking.fake_gh_cli import FakeGhCli
 
 
-def test_get_specs_returns_only_open_issues_labelled_spec() -> None:
+def test_spec_issues_returns_the_raw_nodes_of_open_spec_issues() -> None:
     client = GitHubClient("owner", "repo", gh=FakeGhCli())
 
-    specs = client.get_specs()
+    nodes = client.spec_issues()
 
-    assert [(spec.number, spec.title, spec.url, spec.labels) for spec in specs] == [
-        (1, "Add login page", "https://github.com/owner/repo/issues/1", ("spec",)),
-        (2, "Add logout button", "https://github.com/owner/repo/issues/2", ("spec",)),
+    assert [(node["number"], node["title"]) for node in nodes] == [(1, "Add login page"), (2, "Add logout button")]
+
+
+def test_sub_issues_returns_the_raw_nodes_of_every_sub_issue() -> None:
+    client = GitHubClient("owner", "repo", gh=FakeGhCli())
+
+    nodes = client.sub_issues(1)
+
+    assert [(node["number"], node["state"]) for node in nodes] == [
+        (10, "OPEN"),
+        (11, "OPEN"),
+        (12, "OPEN"),
+        (13, "CLOSED"),
     ]
-
-
-def test_get_actionable_issues_drops_closed_hitl_and_spec_labelled_sub_issues() -> None:
-    client = GitHubClient("owner", "repo", gh=FakeGhCli())
-    spec = client.get_specs()[0]
-
-    result = client.get_actionable_issues(spec)
-
-    assert [ticket.number for ticket in result] == [10]
-
-
-def test_get_actionable_issues_returns_empty_when_every_sub_issue_is_blocked() -> None:
-    gh = FakeGhCli(tickets={1: []})
-    client = GitHubClient("owner", "repo", gh=gh)
-    spec = client.get_specs()[0]
-
-    assert client.get_actionable_issues(spec) == []
 
 
 def test_for_repo_binds_specs_and_tickets_to_the_harness_and_pull_requests_to_the_target(
@@ -65,6 +58,19 @@ def test_for_repo_binds_specs_and_tickets_to_the_harness_and_pull_requests_to_th
     assert (target._owner, target._repo) == ("acme", "target")
 
 
+def test_for_repo_reads_the_origin_remote(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git(repo, "init", "-b", "main")
+    git(repo, "remote", "add", "origin", "https://example.com/owner/repo.git")
+    with pytest.raises(ValueError, match="unsupported remote"):
+        GitHubClient.for_repo(repo)
+
+    git(repo, "remote", "set-url", "origin", "git@github.com:owner/repo.git")
+    harness, target = GitHubClient.for_repo(repo)
+    assert isinstance(harness, GitHubClient) and target is harness
+
+
 def test_find_pull_request_does_not_issue_a_create_call() -> None:
     gh = FakeGhCli()
     client = GitHubClient("owner", "repo", gh=gh)
@@ -79,6 +85,14 @@ def test_find_pull_request_returns_none_for_an_unknown_branch() -> None:
     client = GitHubClient("owner", "repo", gh=FakeGhCli())
 
     assert client.find_pull_request("no-such-branch") is None
+
+
+def test_review_threads_reads_each_thread_with_its_resolution() -> None:
+    client = GitHubClient("owner", "repo", gh=FakeGhCli())
+
+    threads = client.review_threads("10")
+
+    assert [(thread.id, thread.resolved) for thread in threads] == [("t1", False), ("t2", True)]
 
 
 def test_create_draft_pull_request_asks_gh_for_a_draft_from_head_to_base() -> None:

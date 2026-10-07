@@ -6,13 +6,13 @@ import logging
 from enum import Enum, auto
 from pathlib import Path
 
-from loop import Cancelled, LoopError, Spec, WorktreeSandbox
+from loop import Cancelled, LoopError, WorktreeSandbox
+from workflows.platforms.work_tracking import HITL_LABEL, Spec
 
 from .delivery import deliver_tickets, open_sandbox
 from .deps import DevDeps
 from .planning import SpecRun, prepare_run
 from .publish import publish
-from .settings import HITL_LABEL
 
 logger = logging.getLogger("workflow.dev")
 

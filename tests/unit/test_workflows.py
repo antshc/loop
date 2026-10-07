@@ -18,14 +18,14 @@ from loop import (
     CopilotClient,
     DockerSandbox,
     FileExecutionStore,
-    GitHubClient,
     Hook,
     InMemoryExecutionStore,
     NoSandbox,
-    Spec,
 )
-from loop.testing import FakeAgentClient, FakeCopilotCli, FakeGhCli, FakeGitClient
+from loop.testing import FakeAgentClient, FakeCopilotCli, FakeGitClient
 from workflows import dev
+from workflows.platforms.work_tracking import GitHubClient, TicketsTracker
+from workflows.platforms.work_tracking.fake_gh_cli import FakeGhCli
 
 from workflow_harness import (
     DevHarness,
@@ -53,39 +53,6 @@ def imports_of(path: Path) -> set[str]:
         elif isinstance(node, ast.ImportFrom) and node.module:
             found.add(node.module)
     return found
-
-
-def test_github_client_reads_specs_tickets_and_pull_requests() -> None:
-    client = GitHubClient("owner", "repo", gh=FakeGhCli())
-
-    specs = client.get_specs()
-    tickets = client.get_tickets(specs[0])
-    pull_request = client.find_pull_request("feature/login")
-    threads = client.review_threads("10")
-
-    assert [(item.number, item.title, item.labels) for item in specs] == [
-        (1, "Add login page", ("spec",)),
-        (2, "Add logout button", ("spec",)),
-    ]
-    assert [(ticket.number, ticket.state, ticket.labels) for ticket in tickets] == [
-        (10, "open", ()),
-        (11, "open", ("hitl",)),
-        (12, "open", ("spec",)),
-        (13, "closed", ()),
-    ]
-    assert pull_request is not None and (pull_request.number, pull_request.branch) == (10, "feature/login")
-    assert client.find_pull_request("missing-branch") is None
-    assert [(thread.id, thread.resolved) for thread in threads] == [("t1", False), ("t2", True)]
-
-
-def test_github_client_for_repo_reads_the_origin_remote(repo: Path) -> None:
-    git(repo, "remote", "add", "origin", "https://example.com/owner/repo.git")
-    with pytest.raises(ValueError, match="unsupported remote"):
-        GitHubClient.for_repo(repo)
-
-    git(repo, "remote", "set-url", "origin", "git@github.com:owner/repo.git")
-    harness, target = GitHubClient.for_repo(repo)
-    assert isinstance(harness, GitHubClient) and target is harness
 
 
 # --- Unit tests: dev result model, branch-name rule, metadata parsing ---------------
@@ -126,51 +93,9 @@ def test_feature_branch_name_is_just_the_slug_without_a_version() -> None:
     assert Branch.feature("main", "Add Login Page!").name == "add-login-page"
 
 
-def _spec(title: str = "Add login page", labels: tuple[str, ...] = ()) -> Spec:
-    return Spec(number=7, title=title, url="https://github.com/o/r/issues/7", labels=labels)
-
-
-def test_spec_initiative_and_bare_title_split_on_the_first_colon() -> None:
-    spec = _spec("Checkout: Add login page")
-
-    assert (spec.initiative, spec.bare_title) == ("Checkout", "Add login page")
-
-
-def test_spec_initiative_falls_back_to_its_number_without_a_colon_prefix() -> None:
-    spec = _spec("Add login page")
-
-    assert (spec.initiative, spec.bare_title) == ("7", "Add login page")
-
-
-def test_spec_target_reads_the_single_repo_target_value() -> None:
-    assert _spec(labels=("spec", "repo:target:owner/name")).target == "owner/name"
-
-
-@pytest.mark.parametrize(
-    "labels",
-    [
-        (),
-        ("repo:target:not-a-slug",),
-        ("repo:target:owner/name", "repo:target:owner/other"),
-        ("repo:target:github.com/owner/name",),
-    ],
-)
-def test_spec_target_is_none_when_missing_malformed_or_duplicated(labels: tuple[str, ...]) -> None:
-    assert _spec(labels=labels).target is None
-
-
-def test_spec_base_branch_reads_the_single_repo_base_value() -> None:
-    assert _spec(labels=("repo:base:main",)).base_branch == "main"
-
-
-@pytest.mark.parametrize("labels", [(), ("repo:base:",), ("repo:base:a", "repo:base:b")])
-def test_spec_base_branch_is_none_when_missing_empty_or_duplicated(labels: tuple[str, ...]) -> None:
-    assert _spec(labels=labels).base_branch is None
-
-
 def _first_ticket():
-    github = GitHubClient("o", "r", gh=FakeGhCli())
-    return github.get_actionable_issues(github.get_specs()[0])[0]
+    tracker = TicketsTracker(GitHubClient("o", "r", gh=FakeGhCli()), InMemoryExecutionStore(), "o/r")
+    return tracker.get_tickets(next(iter(tracker.specs())))[0]
 
 
 def test_prompt_template_placeholders_match_the_supplied_arguments_exactly() -> None:
@@ -286,7 +211,7 @@ def test_an_unexpected_error_is_logged_and_the_process_exits_non_zero(tmp_path: 
     harness = DevHarness(tmp_path)
 
     class RaisingGithub:
-        def get_specs(self):
+        def spec_issues(self):
             raise RuntimeError("boom")
 
     code = harness.run(github_factory=lambda checkout: RaisingGithub())
@@ -885,4 +810,6 @@ def test_core_never_imports_adapters() -> None:
 def test_workflows_import_only_the_public_api() -> None:
     for path in WORKFLOWS.rglob("*.py"):
         for module in imports_of(path):
-            assert not module.startswith("loop.") and not module.startswith("workflows"), (path, module)
+            assert not module.startswith("loop.") and (
+                not module.startswith("workflows") or module.startswith("workflows.platforms")
+            ), (path, module)

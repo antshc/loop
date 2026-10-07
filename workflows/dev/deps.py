@@ -7,9 +7,8 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from loop import AgentClientFactory, GitClient, GitHubClient, Hook, SandboxFactory
-
-from .tracker import TicketsTracker
+from loop import AgentClientFactory, GitClient, Hook, SandboxFactory
+from workflows.platforms.work_tracking import GitHubClient, TicketsTracker
 
 GithubFactory = Callable[[Path], GitHubClient]
 

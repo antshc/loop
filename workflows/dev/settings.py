@@ -12,7 +12,6 @@ LOG_LEVEL = "INFO"
 HOOKS: tuple[Hook, ...] = ()
 MAX_TICKET_FAILURES = 2
 PROMPT = Path(__file__).parent / "prompts" / "dev.md"
-HITL_LABEL = "hitl"
 
 
 def _no_sandbox(workspace: Path, cancel: threading.Event) -> Sandbox:

@@ -52,10 +52,10 @@ source_modules = ["loop.agents", "loop.sandboxes", "loop.platforms", "loop.store
 forbidden_modules = ["loop.sandbox"]
 
 [[tool.importlinter.contracts]]
-name = "The git platform module imports no GitHub or workflow code"
+name = "The git platform module imports no workflow code"
 type = "forbidden"
 source_modules = ["loop.platforms.git_client"]
-forbidden_modules = ["loop.platforms.gh_client", "workflows"]
+forbidden_modules = ["workflows"]
 
 [[tool.importlinter.contracts]]
 name = "Only loop.testing imports loop.testing"
@@ -77,9 +77,9 @@ source_modules = [
 forbidden_modules = ["loop.testing"]
 
 [[tool.importlinter.contracts]]
-name = "The dev workflow imports only the public loop API"
+name = "The dev workflow and shared workflow platforms import only the public loop API"
 type = "forbidden"
-source_modules = ["workflows.dev"]
+source_modules = ["workflows.dev", "workflows.platforms"]
 forbidden_modules = [
     "loop.contracts",
     "loop.agents",
@@ -95,3 +95,9 @@ forbidden_modules = [
     "loop.testing",
 ]
 allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Shared workflow platforms import no workflow"
+type = "forbidden"
+source_modules = ["workflows.platforms"]
+forbidden_modules = ["workflows.dev"]

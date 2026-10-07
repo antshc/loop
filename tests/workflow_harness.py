@@ -12,9 +12,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from conftest import commit_file, git
-from loop import CommandExecutor, CommandResult, GitHubClient, InMemoryExecutionStore, NoSandbox
-from loop.testing import FakeAgentClient, FakeCopilotCli, FakeGhCli, FakeGitClient
+from loop import CommandExecutor, CommandResult, InMemoryExecutionStore, NoSandbox
+from loop.testing import FakeAgentClient, FakeCopilotCli, FakeGitClient
 from workflows import dev
+from workflows.platforms.work_tracking import GitHubClient
+from workflows.platforms.work_tracking.fake_gh_cli import FakeGhCli
 
 
 def _envelope(identifier: str = "Checkout|10", status: str = "completed", result: dict | None = None) -> str:

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from loop import AgentOptions, Cancelled, LoopError, SandboxHooks, Ticket, WorktreeSandbox, create_sandbox
+from loop import AgentOptions, Cancelled, LoopError, SandboxHooks, WorktreeSandbox, create_sandbox
+from workflows.platforms.work_tracking import Ticket
 
 from .acceptance import commit_violation
 from .deps import DevDeps
@@ -70,7 +71,9 @@ def _deliver_ticket(run: SpecRun, ticket: Ticket, sandbox: WorktreeSandbox, deps
         )
         attempt = _run_and_validate(sandbox, deps, identifier, head_before, args)
         if isinstance(attempt, DevResult):
-            deps.tracker.close_delivered(ticket, attempt)
+            deps.tracker.close_delivered(
+                ticket, f"Delivered in {attempt.commit}.\n\n{attempt.summary}\n\n{attempt.verification}"
+            )
             return True
         deps.git.reset_to(worktree, head_before)
         if deps.tracker.record_failure(ticket) >= MAX_TICKET_FAILURES:

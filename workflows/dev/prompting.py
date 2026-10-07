@@ -7,7 +7,8 @@ from collections.abc import Sequence
 from dataclasses import asdict
 from pathlib import Path
 
-from loop import Commit, GitClient, Ticket
+from loop import Commit, GitClient
+from workflows.platforms.work_tracking import Ticket
 
 
 def prompt_args(

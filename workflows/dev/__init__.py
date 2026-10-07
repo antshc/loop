@@ -17,7 +17,6 @@ from loop import (
     ExecutionStore,
     FileExecutionStore,
     GitClient,
-    GitHubClient,
     Hook,
     InMemorySessionStore,
     SandboxFactory,
@@ -26,12 +25,13 @@ from loop import (
     origin_slug,
 )
 
+from workflows.platforms.work_tracking import GitHubClient, TicketsTracker
+
 from .app import process_specs
 from .deps import DevDeps, GithubFactory
 from .prompting import prompt_args
 from .result import DevResult, DevResultError, parse_dev_result
 from .settings import HOOKS, LOG_DIR_NAME, LOG_LEVEL, PROMPT, SANDBOX_FACTORY
-from .tracker import TicketsTracker
 
 __all__ = [
     "PROMPT",

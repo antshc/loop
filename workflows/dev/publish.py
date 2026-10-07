@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from loop import GitClient, GitHubClient
+from loop import GitClient
+from workflows.platforms.work_tracking import GitHubClient
 
 from .planning import SpecRun
 

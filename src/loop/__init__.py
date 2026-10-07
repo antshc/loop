@@ -29,9 +29,8 @@ from loop.errors import (
 )
 from loop.logging_config import configure_logging
 from loop.parallel import Settled, parallel_settled
-from loop.platforms.gh_client import Comment, GitHubClient, PullRequest, ReviewThread, Spec, Ticket
 from loop.platforms.git_client import Branch, Commit, GitClient, Hook, origin_slug, slugify
-from loop.process import CommandExecutor, CommandResult
+from loop.process import CommandExecutor, CommandResult, cli_runner, run_command
 from loop.prompt import PromptPreprocessor
 from loop.sandbox.create_sandbox import SandboxFactory, SandboxRunResult, WorktreeSandbox, create_sandbox
 from loop.sandbox.sandbox_lifecycle import (
@@ -59,7 +58,6 @@ __all__ = [
     "CommandError",
     "CommandExecutor",
     "CommandResult",
-    "Comment",
     "Commit",
     "CopilotClient",
     "CopilotOutputParser",
@@ -70,7 +68,6 @@ __all__ = [
     "FileExecutionStore",
     "FileSessionStore",
     "GitClient",
-    "GitHubClient",
     "Hook",
     "HookError",
     "InMemoryExecutionStore",
@@ -81,8 +78,6 @@ __all__ = [
     "NoSandbox",
     "PromptError",
     "PromptPreprocessor",
-    "PullRequest",
-    "ReviewThread",
     "Sandbox",
     "SandboxBinding",
     "SandboxFactory",
@@ -90,9 +85,8 @@ __all__ = [
     "SandboxRunResult",
     "SessionStore",
     "Settled",
-    "Spec",
-    "Ticket",
     "WorktreeSandbox",
+    "cli_runner",
     "configure_logging",
     "copilot",
     "create_sandbox",
@@ -100,6 +94,7 @@ __all__ = [
     "extract_tag",
     "origin_slug",
     "parallel_settled",
+    "run_command",
     "run_host_hooks",
     "slugify",
     "with_sandbox_lifecycle",

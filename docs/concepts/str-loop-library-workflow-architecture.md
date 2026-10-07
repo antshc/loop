@@ -10,7 +10,7 @@ Let each autonomous procedure (`dev`, a review loop, a custom flow) be written a
 Loop is a library of contracts and default implementations; a **workflow** is one ordinary Python file that wires them and runs its own loop (the unit Sandcastle calls a template).
 
 - The core of Loop is the **Sandbox** and git. A Sandbox binds a workspace (the harness root), runs the agent the workflow passes on each run, either on the host or inside Docker, and is closed when the run ends; git creates the branch and worktree under the harness's `workspace` folder.
-- Loop ships default implementations for git, GitHub, the Copilot CLI agent client, and the stores. Parts Loop's own code calls (Sandbox, agent client, stores) sit behind a contract; clients only a workflow calls (`GitClient`, `GitHubClient`) are concrete helpers a user replaces by calling their own client ([ADR 0003](../adr/0003-ship-loop-as-a-workflow-library-with-no-built-in-workflows.md)).
+- Loop ships default implementations for git, the Copilot CLI agent client, and the stores. Parts Loop's own code calls (Sandbox, agent client, stores) sit behind a contract; clients only a workflow calls (`GitClient`) are concrete helpers a user replaces by calling their own client ([ADR 0003](../adr/0003-ship-loop-as-a-workflow-library-with-no-built-in-workflows.md)). The GitHub client and Spec/Ticket tracker are workflow-side code in `workflows/platforms/work_tracking`.
 - Loop ships no workflows: the user writes every workflow, `dev` included; this repository's `workflows/dev.py` is only an example and test subject.
 - A workflow imports only the public `loop` API and is a runnable script: its entry point takes an argument list and returns an exit code, and a `__main__` guard passes that code to the process exit. Dependencies enter that entry point as optional parameters that default to the shipped implementations, so tests substitute fakes ([ADR 0003](../adr/0003-ship-loop-as-a-workflow-library-with-no-built-in-workflows.md)).
 - Loop ships no command: the user runs a workflow script through their own shell alias (for example `alias loop-dev='python workflows/dev.py'`), with the harness as the current folder ([ADR 0003](../adr/0003-ship-loop-as-a-workflow-library-with-no-built-in-workflows.md); [ADR 0002](../adr/0002-ship-loop-as-the-loop-package-with-an-loop-command.md) is superseded).
@@ -21,7 +21,7 @@ Loop is a library of contracts and default implementations; a **workflow** is on
 
 - MUST ship contracts and default implementations through one public top-level `loop` API; a workflow MUST import only from it, and workflow tests MAY also import the shipped test doubles from `loop.testing`.
 - MUST define a contract as an `abc.ABC` only where Loop's own code calls a replaceable part (Sandbox, agent client, stores), and make every implementation of it inherit it.
-- MUST ship clients only a workflow calls (`GitClient`, `GitHubClient`) as concrete helpers with no contract; selection of actionable Tickets (`GitHubClient.get_actionable_issues`) lives in `GitHubClient`, not in the workflow file.
+- MUST ship clients only a workflow calls (`GitClient`) as concrete helpers with no contract; the GitHub client in `workflows/platforms/work_tracking` stays a pure `gh` wrapper returning raw issue nodes, while the Spec/Ticket entities and actionable-Ticket selection live in that package's tracker, not in the loop library or the workflow file.
 - MUST NOT ship workflows or a command in the `loop` package.
 - MUST let a user replace any shipped implementation (git, GitHub tracker, agent client, stores) with their own through the workflow's injected dependencies.
 - MUST run every agent invocation through a Sandbox; a workflow MUST NOT call the agent client or provider CLI directly.
@@ -47,9 +47,10 @@ loop/                              # public API: contracts + default implementat
 ├── Sandbox, NoSandbox, DockerSandbox     # contracts + implementations
 ├── AgentClient, CopilotClient
 ├── ExecutionStore, SessionStore, file stores
-├── GitClient, GitHubClient               # concrete helpers, no contract
+├── GitClient                             # concrete helper, no contract
 └── policy (attempt cap)
 <harness root>/workflows/         # user-written; imports only `loop`; main(argv) -> int
+├── platforms/work_tracking/      # GitHubClient (gh wrapper), Spec/Ticket entities, TicketsTracker
 ├── dev.py                        # runs via the user's alias
 └── review.py                     # may call its own tracker client
 ```
