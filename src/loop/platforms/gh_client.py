@@ -10,6 +10,10 @@ from typing import Any
 from loop.process import cli_runner, run_command
 
 _BLOCKING_LABELS = frozenset({"hitl", "spec"})
+_INITIATIVE = re.compile(r"^(?P<initiative>[^:]+):\s*(?P<title>.+)$")
+_TARGET_PREFIX = "repo:target:"
+_BASE_PREFIX = "repo:base:"
+_SLUG = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
 _ISSUE_FIELDS = (
     "number title url state body labels(first: 20) { nodes { name } }"
     " comments(first: 50) { nodes { author { login } body createdAt } }"
@@ -31,6 +35,32 @@ class Spec:
     labels: tuple[str, ...]
     body: str = ""
     comments: tuple[Comment, ...] = ()
+
+    @property
+    def initiative(self) -> str:
+        """The `<initiative>: <title>` title prefix, or the Spec number when absent."""
+        match = _INITIATIVE.match(self.title)
+        return str(self.number) if match is None else match["initiative"].strip()
+
+    @property
+    def bare_title(self) -> str:
+        """The title without its Initiative prefix."""
+        match = _INITIATIVE.match(self.title)
+        return self.title if match is None else match["title"].strip()
+
+    @property
+    def target(self) -> str | None:
+        """The single `repo:target:<owner/name>` label's value, or None when missing/malformed/duplicated."""
+        values = [label[len(_TARGET_PREFIX) :] for label in self.labels if label.startswith(_TARGET_PREFIX)]
+        if len(values) != 1 or not _SLUG.match(values[0]):
+            return None
+        return values[0]
+
+    @property
+    def base_branch(self) -> str | None:
+        """The single `repo:base:<branch>` label's value, or None when missing/empty/duplicated."""
+        values = [label[len(_BASE_PREFIX) :] for label in self.labels if label.startswith(_BASE_PREFIX)]
+        return values[0] if len(values) == 1 and values[0] else None
 
 
 @dataclass(frozen=True)

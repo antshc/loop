@@ -21,6 +21,7 @@ from loop import (
     Hook,
     InMemoryExecutionStore,
     NoSandbox,
+    Spec,
 )
 from loop.testing import FakeAgentClient, FakeCopilotCli, FakeGhCli, FakeGitClient
 from workflows import dev
@@ -124,16 +125,24 @@ def test_feature_branch_name_is_just_the_slug_without_a_version() -> None:
     assert dev.feature_branch_name("main", "Add Login Page!") == "add-login-page"
 
 
-def test_parse_initiative_splits_on_the_first_colon() -> None:
-    assert dev.parse_initiative("Checkout: Add login page") == ("Checkout", "Add login page")
+def _spec(title: str = "Add login page", labels: tuple[str, ...] = ()) -> Spec:
+    return Spec(number=7, title=title, url="https://github.com/o/r/issues/7", labels=labels)
 
 
-def test_parse_initiative_returns_none_without_a_colon_prefix() -> None:
-    assert dev.parse_initiative("Add login page") == (None, "Add login page")
+def test_spec_initiative_and_bare_title_split_on_the_first_colon() -> None:
+    spec = _spec("Checkout: Add login page")
+
+    assert (spec.initiative, spec.bare_title) == ("Checkout", "Add login page")
 
 
-def test_parse_target_label_reads_the_single_repo_target_value() -> None:
-    assert dev.parse_target_label(("spec", "repo:target:owner/name")) == "owner/name"
+def test_spec_initiative_falls_back_to_its_number_without_a_colon_prefix() -> None:
+    spec = _spec("Add login page")
+
+    assert (spec.initiative, spec.bare_title) == ("7", "Add login page")
+
+
+def test_spec_target_reads_the_single_repo_target_value() -> None:
+    assert _spec(labels=("spec", "repo:target:owner/name")).target == "owner/name"
 
 
 @pytest.mark.parametrize(
@@ -145,17 +154,17 @@ def test_parse_target_label_reads_the_single_repo_target_value() -> None:
         ("repo:target:github.com/owner/name",),
     ],
 )
-def test_parse_target_label_returns_none_when_missing_malformed_or_duplicated(labels: tuple[str, ...]) -> None:
-    assert dev.parse_target_label(labels) is None
+def test_spec_target_is_none_when_missing_malformed_or_duplicated(labels: tuple[str, ...]) -> None:
+    assert _spec(labels=labels).target is None
 
 
-def test_parse_base_label_reads_the_single_repo_base_value() -> None:
-    assert dev.parse_base_label(("repo:base:main",)) == "main"
+def test_spec_base_branch_reads_the_single_repo_base_value() -> None:
+    assert _spec(labels=("repo:base:main",)).base_branch == "main"
 
 
 @pytest.mark.parametrize("labels", [(), ("repo:base:",), ("repo:base:a", "repo:base:b")])
-def test_parse_base_label_returns_none_when_missing_empty_or_duplicated(labels: tuple[str, ...]) -> None:
-    assert dev.parse_base_label(labels) is None
+def test_spec_base_branch_is_none_when_missing_empty_or_duplicated(labels: tuple[str, ...]) -> None:
+    assert _spec(labels=labels).base_branch is None
 
 
 def _first_ticket():

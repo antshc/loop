@@ -61,10 +61,6 @@ logger = logging.getLogger("workflow.dev")
 
 GithubFactory = Callable[[Path], GitHubClient]
 
-_INITIATIVE = re.compile(r"^(?P<initiative>[^:]+):\s*(?P<title>.+)$")
-_TARGET_PREFIX = "repo:target:"
-_BASE_PREFIX = "repo:base:"
-_SLUG = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
 _VERSION = re.compile(r"(\d+(?:\.\d+)+)")
 
 
@@ -138,26 +134,6 @@ def parse_dev_result(response: str) -> DevResult:
     if not isinstance(commit, str) or not isinstance(summary, str) or not isinstance(verification, str):
         raise DevResultError(f"completed response is missing a required result field: {result!r}")
     return DevResult(identifier, status, commit=commit, summary=summary, verification=verification)
-
-
-def parse_initiative(title: str) -> tuple[str | None, str]:
-    """Initiative from the `<initiative>: <title>` prefix, or (None, title) when absent."""
-    match = _INITIATIVE.match(title)
-    return (None, title) if match is None else (match["initiative"].strip(), match["title"].strip())
-
-
-def parse_target_label(labels: Sequence[str]) -> str | None:
-    """The single `repo:target:<owner/name>` label's value, or None when missing/malformed/duplicated."""
-    values = [label[len(_TARGET_PREFIX) :] for label in labels if label.startswith(_TARGET_PREFIX)]
-    if len(values) != 1 or not _SLUG.match(values[0]):
-        return None
-    return values[0]
-
-
-def parse_base_label(labels: Sequence[str]) -> str | None:
-    """The single `repo:base:<branch>` label's value, or None when missing/malformed/duplicated."""
-    values = [label[len(_BASE_PREFIX) :] for label in labels if label.startswith(_BASE_PREFIX)]
-    return values[0] if len(values) == 1 and values[0] else None
 
 
 def slugify(text: str) -> str:
@@ -337,10 +313,8 @@ def _prepare_run(spec: Spec, deps: DevDeps) -> SpecRun | None:
     # Tickets live on the harness tracker, even when the Spec targets another repo.
     actionable = tuple(deps.harness_github.get_actionable_issues(spec))
 
-    initiative, bare_title = parse_initiative(spec.title)
-    initiative = initiative or str(spec.number)
-    target = parse_target_label(spec.labels)
-    base_branch = parse_base_label(spec.labels)
+    target = spec.target
+    base_branch = spec.base_branch
     if target is None or base_branch is None:
         if actionable:
             _hitl(deps.harness_github, spec.number, f"dev: cannot resolve repo:target/repo:base labels on {spec.url}")
@@ -364,11 +338,11 @@ def _prepare_run(spec: Spec, deps: DevDeps) -> SpecRun | None:
     return SpecRun(
         spec=spec,
         actionable=actionable,
-        initiative=initiative,
-        bare_title=bare_title,
+        initiative=spec.initiative,
+        bare_title=spec.bare_title,
         target=target,
         base_branch=base_branch,
-        feature_branch=feature_branch_name(base_branch, bare_title),
+        feature_branch=feature_branch_name(base_branch, spec.bare_title),
         checkout=checkout,
         target_github=target_github,
     )
