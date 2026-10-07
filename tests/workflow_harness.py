@@ -7,10 +7,12 @@ from __future__ import annotations
 
 import json
 import threading
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from conftest import commit_file, git
-from loop import GitHubClient, InMemoryExecutionStore, NoSandbox
+from loop import CommandExecutor, CommandResult, GitHubClient, InMemoryExecutionStore, NoSandbox
 from loop.testing import FakeAgentClient, FakeCopilotCli, FakeGhCli, FakeGitClient
 from workflows import dev
 
@@ -138,3 +140,67 @@ def _commit_then(harness: "DevHarness", response) -> object:
 
 def _completed(commit: str, **result: str) -> str:
     return _envelope(result={"commit": commit, "summary": "done", "verification": "ran tests", **result})
+
+
+def _event(event_type: str, data: dict | None = None) -> str:
+    frame: dict = {"type": event_type}
+    if data is not None:
+        frame["data"] = data
+    return json.dumps(frame)
+
+
+def copilot_event_frames(identifier: str, status: str, result: dict | None = None) -> list[str]:
+    """JSON event lines shaped like a real `copilot -p --output-format json` run.
+
+    Modeled on docs/experiments/copilot-cli-json-output-events.md (a design source, never imported): unrelated
+    session/turn events, the response envelope split across many assistant.message_delta events, the closing
+    assistant.message, and the final result event.
+    """
+    envelope = json.dumps({"identifier": identifier, "status": status, "result": result if result is not None else {}})
+    chunk = 6
+    deltas = [envelope[index : index + chunk] for index in range(0, len(envelope), chunk)]
+    return [
+        _event("session.mcp_server_status_changed"),
+        _event("session.mcp_server_status_changed"),
+        _event("session.extensions_loaded"),
+        _event("session.tools_updated"),
+        _event("session.mcp_servers_loaded"),
+        _event("user.message"),
+        _event("assistant.turn_start"),
+        _event("model.call_start"),
+        _event("assistant.message_start"),
+        *[_event("assistant.message_delta", {"messageId": "m1", "deltaContent": part}) for part in deltas],
+        _event("model.call_finished"),
+        _event("assistant.message", {"content": envelope}),
+        _event("model.call_final_result"),
+        _event("assistant.turn_end"),
+        _event("session.usage_checkpoint"),
+        _event("assistant.idle"),
+        '{"type": "result", "sessionId": "fake-session", "exitCode": 0}',
+    ]
+
+
+@dataclass
+class RecordingExecutor:
+    """Wraps a CommandExecutor, recording every line delivered to on_line and whether the run ended early."""
+
+    inner: CommandExecutor
+    lines: list[str] = field(default_factory=list)
+    terminated: bool = False
+
+    def __call__(
+        self,
+        command: Sequence[str] | str,
+        *,
+        timeout_s: float | None = None,
+        on_line: Callable[[str], "bool | None"] | None = None,
+        cancel: threading.Event | None = None,
+    ) -> CommandResult:
+        def record(line: str) -> bool | None:
+            self.lines.append(line)
+            stop = on_line(line) if on_line is not None else None
+            if stop or (cancel is not None and cancel.is_set()):
+                self.terminated = True
+            return stop
+
+        return self.inner(command, timeout_s=timeout_s, on_line=record, cancel=cancel)
