@@ -1,59 +1,18 @@
 from __future__ import annotations
 
-import re
 import threading
 from pathlib import Path
 
 import pytest
 
-from conftest import commit_file, git
-from loop import Cancelled, CommandError, CommandResult, GitClient, Hook, HookError, origin_slug
+from conftest import FakeRunner, commit_file, git
+from conftest import init_pushed_repo as _init_pushed_repo
+from loop import Cancelled, CommandError, CommandResult, GitClient, Hook, HookError, WorktreeService, origin_slug
 from loop.testing import FakeGitClient
-
-
-class FakeRunner:
-    """Records every command GitClient issues and returns a scripted result for it."""
-
-    def __init__(self) -> None:
-        self.calls: list[tuple[str, Path | None, float | None]] = []
-        self.returncode_for: dict[object, int] = {}
-        self.stdout_for: dict[object, str] = {}
-        self.stderr_for: dict[object, str] = {}
-        self.raise_for: dict[object, Exception] = {}
-
-    def __call__(
-        self,
-        args: tuple[str, ...] | str,
-        *,
-        cwd: Path | None = None,
-        timeout_s: float | None = None,
-        cancel: threading.Event | None = None,
-    ) -> CommandResult:
-        label = args if isinstance(args, str) else " ".join(args)
-        self.calls.append((label, cwd, timeout_s))
-        key = (label, cwd)
-        if key in self.raise_for:
-            raise self.raise_for[key]
-        if label in self.raise_for:
-            raise self.raise_for[label]
-        returncode = self.returncode_for.get(key, self.returncode_for.get(label, 0))
-        stdout = self.stdout_for.get(key, self.stdout_for.get(label, ""))
-        stderr = self.stderr_for.get(key, self.stderr_for.get(label, ""))
-        return CommandResult(returncode, stdout, stderr)
 
 
 CHECKOUT = Path("/repo")
 TARGET = Path("/repo.worktrees/feature-x")
-
-
-def _target(harness_root: Path) -> Path:
-    return harness_root / "workspace" / "repo.worktrees" / "feature-x"
-
-
-def _no_leftovers_no_remote_branches(runner: FakeRunner) -> None:
-    runner.stdout_for["git worktree list --porcelain"] = ""
-    runner.returncode_for[("git show-ref --verify --quiet refs/remotes/origin/feature-x", CHECKOUT)] = 1
-    runner.returncode_for[("git show-ref --verify --quiet refs/heads/feature-x", CHECKOUT)] = 1
 
 
 def test_fetch_fetches_and_prunes_all_remotes() -> None:
@@ -72,87 +31,6 @@ def test_remote_branch_exists_reflects_the_show_ref_outcome() -> None:
 
     runner.returncode_for[("git show-ref --verify --quiet refs/remotes/origin/feature-x", CHECKOUT)] = 0
     assert client.remote_branch_exists(CHECKOUT, "feature-x") is True
-
-
-def test_create_worktree_bases_on_the_remote_feature_branch_when_it_exists(tmp_path: Path) -> None:
-    target = _target(tmp_path)
-    runner = FakeRunner()
-    runner.stdout_for["git worktree list --porcelain"] = ""
-    runner.returncode_for[("git show-ref --verify --quiet refs/remotes/origin/feature-x", CHECKOUT)] = 0
-    runner.returncode_for[("git show-ref --verify --quiet refs/heads/feature-x", CHECKOUT)] = 1
-    client = GitClient(run=runner)
-
-    result = client.create_worktree(CHECKOUT, "feature-x", "main", tmp_path)
-
-    assert result == target
-    labels = [label for label, _, _ in runner.calls]
-    assert f"git worktree add -b feature-x {target} origin/feature-x" in labels
-    assert not any(label.startswith("git branch -f") for label in labels)
-
-
-def test_create_worktree_bases_on_the_remote_target_branch_and_resets_an_existing_local_branch(
-    tmp_path: Path,
-) -> None:
-    target = _target(tmp_path)
-    runner = FakeRunner()
-    runner.stdout_for["git worktree list --porcelain"] = ""
-    runner.returncode_for[("git show-ref --verify --quiet refs/remotes/origin/feature-x", CHECKOUT)] = 1
-    runner.returncode_for[("git show-ref --verify --quiet refs/heads/feature-x", CHECKOUT)] = 0
-    client = GitClient(run=runner)
-
-    client.create_worktree(CHECKOUT, "feature-x", "main", tmp_path)
-
-    labels = [label for label, _, _ in runner.calls]
-    assert "git branch -f feature-x origin/main" in labels
-    assert f"git worktree add {target} feature-x" in labels
-
-
-def test_create_worktree_rejects_a_branch_checked_out_in_another_worktree(tmp_path: Path) -> None:
-    runner = FakeRunner()
-    other = Path("/repo.worktrees/old-feature-x")
-    runner.stdout_for["git worktree list --porcelain"] = (
-        f"worktree {other}\nHEAD 1111111111111111111111111111111111111111\nbranch refs/heads/feature-x\n"
-    )
-    client = GitClient(run=runner)
-
-    with pytest.raises(CommandError, match=r"/repo\.worktrees/old-feature-x"):
-        client.create_worktree(CHECKOUT, "feature-x", "main", tmp_path)
-
-    assert not any("worktree add" in label for label, _, _ in runner.calls)
-
-
-def test_create_worktree_replaces_a_clean_leftover_worktree(tmp_path: Path) -> None:
-    target = _target(tmp_path)
-    runner = FakeRunner()
-    runner.stdout_for["git worktree list --porcelain"] = (
-        f"worktree {target}\nHEAD 1111111111111111111111111111111111111111\nbranch refs/heads/feature-x\n"
-    )
-    runner.stdout_for[("git status --porcelain", target)] = ""
-    runner.returncode_for[("git show-ref --verify --quiet refs/remotes/origin/feature-x", CHECKOUT)] = 1
-    runner.returncode_for[("git show-ref --verify --quiet refs/heads/feature-x", CHECKOUT)] = 1
-    client = GitClient(run=runner)
-
-    result = client.create_worktree(CHECKOUT, "feature-x", "main", tmp_path)
-
-    assert result == target
-    labels = [label for label, _, _ in runner.calls]
-    assert f"git worktree remove --force {target}" in labels
-    assert f"git worktree add -b feature-x {target} origin/main" in labels
-
-
-def test_create_worktree_rejects_a_dirty_leftover_worktree_and_leaves_it_in_place(tmp_path: Path) -> None:
-    target = _target(tmp_path)
-    runner = FakeRunner()
-    runner.stdout_for["git worktree list --porcelain"] = (
-        f"worktree {target}\nHEAD 1111111111111111111111111111111111111111\nbranch refs/heads/feature-x\n"
-    )
-    runner.stdout_for[("git status --porcelain", target)] = " M dirty.txt\n"
-    client = GitClient(run=runner)
-
-    with pytest.raises(CommandError, match=re.escape(str(target))):
-        client.create_worktree(CHECKOUT, "feature-x", "main", tmp_path)
-
-    assert not any("worktree remove" in label for label, _, _ in runner.calls)
 
 
 def test_run_hook_runs_the_command_on_the_host_in_the_worktree_with_its_timeout() -> None:
@@ -337,28 +215,6 @@ def test_push_is_a_plain_push_with_no_force_flag() -> None:
     assert not any(flag in runner.calls[0][0] for flag in ("--force", " -f"))
 
 
-def test_remove_worktree_keeps_the_local_branch_and_issues_no_remote_command(tmp_path: Path) -> None:
-    target = _target(tmp_path)
-    runner = FakeRunner()
-    _no_leftovers_no_remote_branches(runner)
-    client = GitClient(run=runner)
-    client.create_worktree(CHECKOUT, "feature-x", "main", tmp_path)
-
-    client.remove_worktree(target)
-
-    labels = [label for label, _, _ in runner.calls]
-    assert labels[-1] == f"git worktree remove --force {target}"
-    assert not any("push" in label or "branch -d" in label or "branch -D" in label for label in labels)
-
-
-def test_remove_worktree_rejects_an_unknown_worktree() -> None:
-    runner = FakeRunner()
-    with pytest.raises(CommandError, match="unknown worktree"):
-        GitClient(run=runner).remove_worktree(Path("/not/tracked"))
-
-    assert runner.calls == []
-
-
 def test_a_failing_git_command_raises_a_typed_error_with_the_command_and_stderr() -> None:
     runner = FakeRunner()
     runner.returncode_for["git fetch --all --prune"] = 1
@@ -389,114 +245,6 @@ def test_origin_slug_reports_unresolvable_when_origin_is_missing_or_not_github()
     assert other_host is None
 
 
-def _init_pushed_repo(path: Path) -> Path:
-    """Real git repo at `path` with a committed `main` pushed to a bare `origin`."""
-    remote = path.parent / f"{path.name}-remote.git"
-    remote.mkdir(parents=True)
-    git(remote, "init", "--bare", "-b", "main")
-    path.mkdir(parents=True, exist_ok=True)
-    git(path, "init", "-b", "main")
-    git(path, "config", "user.email", "test@example.com")
-    git(path, "config", "user.name", "Test")
-    commit_file(path, "README.md", "hello\n", "initial")
-    git(path, "remote", "add", "origin", str(remote))
-    git(path, "push", "origin", "main")
-    return path
-
-
-def test_create_commit_push_and_remove_against_a_real_repository(tmp_path: Path) -> None:
-    remote = tmp_path / "remote.git"
-    remote.mkdir()
-    git(remote, "init", "--bare", "-b", "main")
-
-    checkout = tmp_path / "checkout"
-    checkout.mkdir()
-    git(checkout, "init", "-b", "main")
-    git(checkout, "config", "user.email", "test@example.com")
-    git(checkout, "config", "user.name", "Test")
-    commit_file(checkout, "README.md", "hello\n", "initial")
-    git(checkout, "remote", "add", "origin", str(remote))
-    git(checkout, "push", "origin", "main")
-
-    client = GitClient()
-    client.fetch(checkout)
-
-    worktree = client.create_worktree(checkout, "feature/x", "main", checkout)
-    client.run_hook(Hook("touch .ready"), worktree)
-
-    assert worktree == checkout / "workspace" / "checkout.worktrees" / "feature/x"
-    assert (worktree / ".ready").exists()
-    assert client.has_changes(worktree)
-
-    client.commit(worktree, "worktree ready")
-    assert not client.has_changes(worktree)
-
-    (worktree / "new.txt").write_text("content\n")
-    assert client.has_changes(worktree)
-
-    client.commit(worktree, "add new file", "body text")
-    assert not client.has_changes(worktree)
-
-    client.push(worktree, "feature/x")
-    assert git(worktree, "rev-parse", "HEAD") == git(remote, "rev-parse", "feature/x")
-
-    client.remove_worktree(worktree)
-
-    assert not worktree.exists()
-    assert git(checkout, "branch", "--list", "feature/x").strip() == "feature/x"
-
-
-def test_create_worktree_places_a_single_repo_worktree_under_the_harness_workspace_folder_and_excludes_it(
-    tmp_path: Path,
-) -> None:
-    checkout = _init_pushed_repo(tmp_path / "harness")
-    client = GitClient()
-
-    worktree = client.create_worktree(checkout, "feature-x", "main", checkout)
-
-    assert worktree == checkout / "workspace" / "harness.worktrees" / "feature-x"
-    assert worktree.is_dir()
-    exclude = (checkout / ".git" / "info" / "exclude").read_text().splitlines()
-    assert "workspace/" in exclude
-
-
-def test_create_worktree_places_a_multi_repo_worktree_beside_the_clone_inside_the_workspace_folder(
-    tmp_path: Path,
-) -> None:
-    harness_root = tmp_path / "harness"
-    harness_root.mkdir()
-    git(harness_root, "init", "-b", "main")
-    clone = _init_pushed_repo(harness_root / "workspace" / "widgets")
-    client = GitClient()
-
-    worktree = client.create_worktree(clone, "feature-x", "main", harness_root)
-
-    assert worktree == harness_root / "workspace" / "widgets.worktrees" / "feature-x"
-    assert worktree.is_dir()
-
-
-def test_create_worktree_excludes_the_workspace_folder_exactly_once_across_repeated_creations(
-    tmp_path: Path,
-) -> None:
-    checkout = _init_pushed_repo(tmp_path / "harness")
-    client = GitClient()
-
-    client.create_worktree(checkout, "feature-x", "main", checkout)
-    client.create_worktree(checkout, "feature-y", "main", checkout)
-
-    exclude = (checkout / ".git" / "info" / "exclude").read_text().splitlines()
-    assert exclude.count("workspace/") == 1
-
-
-def test_create_worktree_modifies_no_tracked_file_of_the_checkout(tmp_path: Path) -> None:
-    checkout = _init_pushed_repo(tmp_path / "harness")
-    client = GitClient()
-
-    client.create_worktree(checkout, "feature-x", "main", checkout)
-
-    assert git(checkout, "status", "--porcelain") == ""
-
-
 def test_branch_primitives_report_head_commits_merge_and_cleanup_against_a_real_repository(
     repo: Path, tmp_path: Path
 ) -> None:
@@ -524,7 +272,7 @@ def test_branch_primitives_report_head_commits_merge_and_cleanup_against_a_real_
 
 def test_fake_head_subject_is_clean_and_reset_to() -> None:
     fake = FakeGitClient()
-    worktree = fake.create_worktree(CHECKOUT, "feature-x", "main", Path("/harness"))
+    worktree = WorktreeService(fake).create(CHECKOUT, "feature-x", "main", Path("/harness"))
     first = fake.commit(worktree, "first")
     fake.dirty_worktrees.add(worktree)
 
@@ -540,7 +288,7 @@ def test_fake_head_subject_is_clean_and_reset_to() -> None:
 
 def test_fake_commits_with_prefix_filters_by_subject_and_range() -> None:
     fake = FakeGitClient()
-    worktree = fake.create_worktree(CHECKOUT, "feature-x", "main", Path("/harness"))
+    worktree = WorktreeService(fake).create(CHECKOUT, "feature-x", "main", Path("/harness"))
     base = fake.head(worktree)
     fake.commit(worktree, "ccode: first")
     fake.commit(worktree, "unrelated")
@@ -553,7 +301,7 @@ def test_fake_commits_with_prefix_filters_by_subject_and_range() -> None:
 
 def test_fake_branch_ahead_of_remote() -> None:
     fake = FakeGitClient()
-    worktree = fake.create_worktree(CHECKOUT, "feature-x", "main", Path("/harness"))
+    worktree = WorktreeService(fake).create(CHECKOUT, "feature-x", "main", Path("/harness"))
     base = fake.head(worktree)
     fake.commit(worktree, "work")
 

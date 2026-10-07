@@ -1,6 +1,6 @@
 """Autonomous dev loop: one branch, worktree, and sandbox per open Spec, one Ticket per fresh agent run.
 
-Control flow, metadata parsing, the branch-name rule, and the dev result model are owned here,
+Control flow, metadata parsing, and the dev result model are owned here,
 not by the loop library (see docs/concepts/str-loop-library-workflow-architecture.md).
 """
 
@@ -20,6 +20,7 @@ from loop import (
     Hook,
     InMemorySessionStore,
     SandboxFactory,
+    WorktreeService,
     configure_logging,
     copilot,
     origin_slug,
@@ -59,6 +60,7 @@ def _build_deps(
     log_dir: Path,
     *,
     git: GitClient | None,
+    worktrees: WorktreeService | None,
     github_factory: GithubFactory | None,
     agent_factory: AgentClientFactory | None,
     sandbox_factory: SandboxFactory | None,
@@ -67,12 +69,14 @@ def _build_deps(
     cancel: threading.Event | None,
 ) -> DevDeps:
     github_factory = github_factory or (lambda checkout: GitHubClient.for_repo(checkout)[0])
+    git = git or GitClient()
     return DevDeps(
         harness_root=harness_root,
         harness_slug=harness_slug,
         tracker=TicketsTracker(github_factory(harness_root), store or FileExecutionStore(log_dir), harness_slug),
         github_factory=github_factory,
-        git=git or GitClient(),
+        git=git,
+        worktrees=worktrees or WorktreeService(git),
         agent_factory=agent_factory or copilot(InMemorySessionStore()),
         sandbox_factory=sandbox_factory or SANDBOX_FACTORY,
         hooks=hooks,
@@ -85,6 +89,7 @@ def main(
     argv: list[str] | None = None,
     *,
     git: GitClient | None = None,
+    worktrees: WorktreeService | None = None,
     github_factory: GithubFactory | None = None,
     agent_factory: AgentClientFactory | None = None,
     sandbox_factory: SandboxFactory | None = None,
@@ -109,6 +114,7 @@ def main(
         harness_slug,
         log_dir,
         git=git,
+        worktrees=worktrees,
         github_factory=github_factory,
         agent_factory=agent_factory,
         sandbox_factory=sandbox_factory,

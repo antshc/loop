@@ -14,6 +14,7 @@ from loop import (
     NoSandbox,
     LoopError,
     SandboxHooks,
+    WorktreeService,
     create_sandbox,
     with_sandbox_lifecycle,
 )
@@ -48,6 +49,7 @@ class _Sandbox(NoSandbox):
 def _sandbox(git: FakeGitClient, sandbox: _Sandbox, **kwargs):
     return create_sandbox(
         git,
+        WorktreeService(git),
         lambda workspace, cancel: sandbox,
         checkout=CHECKOUT,
         harness_root=HARNESS,
@@ -75,6 +77,7 @@ def test_create_sandbox_removes_the_worktree_and_does_not_start_the_sandbox_when
     with pytest.raises(HookError):
         create_sandbox(
             git,
+            WorktreeService(git),
             lambda workspace, cancel: started.append(True) or _Sandbox(),
             checkout=CHECKOUT,
             harness_root=HARNESS,
@@ -160,7 +163,9 @@ def test_create_sandbox_removes_the_worktree_when_the_sandbox_cannot_start() -> 
         raise LoopError("no docker")
 
     with pytest.raises(LoopError, match="no docker"):
-        create_sandbox(git, factory, checkout=CHECKOUT, harness_root=HARNESS, base="main", branch="feature-x")
+        create_sandbox(
+            git, WorktreeService(git), factory, checkout=CHECKOUT, harness_root=HARNESS, base="main", branch="feature-x"
+        )
 
     assert git.worktrees == {}
 
@@ -243,7 +248,7 @@ def test_leaving_the_context_without_an_error_removes_the_worktree() -> None:
 
 
 def _worktree(git: FakeGitClient, branch: str = "tmp") -> Path:
-    return git.create_worktree(CHECKOUT, branch, "main", HARNESS)
+    return WorktreeService(git).create(CHECKOUT, branch, "main", HARNESS)
 
 
 def test_lifecycle_in_temp_branch_mode_merges_into_the_host_branch_then_detaches_and_deletes_the_temp_branch() -> None:

@@ -17,6 +17,7 @@ def open_sandbox(run: SpecRun, deps: DevDeps) -> WorktreeSandbox:
     """Creates the feature-branch worktree sandbox for `run`."""
     return create_sandbox(
         deps.git,
+        deps.worktrees,
         deps.sandbox_factory,
         checkout=run.checkout,
         harness_root=deps.harness_root,

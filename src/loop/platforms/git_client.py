@@ -14,11 +14,6 @@ DEFAULT_HOOK_TIMEOUT_S = 120.0
 
 _REMOTE = re.compile(r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?/?$", re.IGNORECASE)
 _HEADS = "refs/heads/"
-_VERSION = re.compile(r"(\d+(?:\.\d+)+)")
-
-
-def slugify(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-") or "spec"
 
 
 @dataclass(frozen=True)
@@ -26,13 +21,6 @@ class Branch:
     """A local branch and its `origin` counterpart."""
 
     name: str
-
-    @classmethod
-    def feature(cls, base_branch: str, title: str) -> Branch:
-        """`<version_with_underscores>_<title slug>` when base_branch carries a version, else `<title slug>`."""
-        slug = slugify(title)
-        match = _VERSION.search(base_branch)
-        return cls(slug if match is None else f"{match[1].replace('.', '_')}_{slug}")
 
     @property
     def ref(self) -> str:
@@ -104,12 +92,16 @@ def origin_slug(path: Path, *, run: GitRunner = execute) -> str | None:
     return f"{match['owner']}/{match['repo']}" if match else None
 
 class GitClient:
-    """The worktree lifecycle an attempt needs: fetch, branch, Hooks, commit, push, remove."""
+    """Git operations an attempt needs: fetch, branch, Hooks, commit, push; worktree policy lives in WorktreeService."""
 
     def __init__(self, *, run: GitRunner = execute) -> None:
         self._execute = run
         self._lock = threading.Lock()
-        self._worktrees: dict[Path, Path] = {}
+
+    @property
+    def lock(self) -> threading.Lock:
+        """Serializes operations that mutate a checkout's refs and worktree list."""
+        return self._lock
 
     def fetch(self, checkout: Path) -> None:
         self._run(("git", "fetch", "--all", "--prune"), cwd=checkout)
@@ -117,42 +109,38 @@ class GitClient:
     def remote_branch_exists(self, checkout: Path, branch: str) -> bool:
         return self._show_ref(checkout, Branch(branch).remote_ref)
 
-    def create_worktree(
-        self,
-        checkout: Path,
-        branch: str,
-        base: str,
-        harness_root: Path,
-    ) -> Path:
+    def check_branch_name(self, checkout: Path, branch: str) -> None:
         self._run(("git", "check-ref-format", "--branch", branch), cwd=checkout)
-        target = harness_root / "workspace" / f"{checkout.name}.worktrees" / branch
-        wanted = Branch(branch)
-        with self._lock:
-            worktrees = self._list_worktrees(checkout)
-            other = next(
-                (worktree.path for worktree in worktrees if worktree.branch == wanted and worktree.path != target),
-                None,
-            )
-            if other is not None:
-                raise CommandError("git worktree add", None, f"branch {branch!r} is checked out in {other}")
-            if any(worktree.path == target for worktree in worktrees):
-                if self.has_changes(target):
-                    raise CommandError(
-                        "git worktree add", None, f"leftover worktree has uncommitted changes: {target}"
-                    )
-                self._run(("git", "worktree", "remove", "--force", str(target)), cwd=checkout)
 
-            start_ref = wanted.upstream if self.remote_branch_exists(checkout, branch) else Branch(base).upstream
-            if self._show_ref(checkout, wanted.ref):
-                self._run(("git", "branch", "-f", branch, start_ref), cwd=checkout)
-                self._run(("git", "worktree", "add", str(target), branch), cwd=checkout)
-            else:
-                self._run(("git", "worktree", "add", "-b", branch, str(target), start_ref), cwd=checkout)
-            self._worktrees[target] = checkout
-            self._exclude_workspace(harness_root)
-        return target
+    def add_worktree(self, checkout: Path, target: Path, branch: str, start_ref: str) -> None:
+        """Checks out `branch` at `target`, creating it at `start_ref` or resetting an existing one to it."""
+        if self._show_ref(checkout, Branch(branch).ref):
+            self._run(("git", "branch", "-f", branch, start_ref), cwd=checkout)
+            self._run(("git", "worktree", "add", str(target), branch), cwd=checkout)
+        else:
+            self._run(("git", "worktree", "add", "-b", branch, str(target), start_ref), cwd=checkout)
 
-    def _exclude_workspace(self, harness_root: Path) -> None:
+    def remove_worktree(self, checkout: Path, worktree: Path) -> None:
+        self._run(("git", "worktree", "remove", "--force", str(worktree)), cwd=checkout)
+
+    def list_worktrees(self, checkout: Path) -> list[Worktree]:
+        output = self._run(("git", "worktree", "list", "--porcelain"), cwd=checkout)
+        entries: list[Worktree] = []
+        path: Path | None = None
+        branch: Branch | None = None
+        for line in output.splitlines():
+            if line.startswith("worktree "):
+                if path is not None:
+                    entries.append(Worktree(path, branch))
+                path = Path(line[len("worktree ") :])
+                branch = None
+            elif line.startswith(f"branch {_HEADS}"):
+                branch = Branch(line[len(f"branch {_HEADS}") :])
+        if path is not None:
+            entries.append(Worktree(path, branch))
+        return entries
+
+    def exclude_workspace(self, harness_root: Path) -> None:
         """Adds `workspace/` to the harness checkout's local exclude list, once."""
         exclude_file = harness_root / ".git" / "info" / "exclude"
         exclude_file.parent.mkdir(parents=True, exist_ok=True)
@@ -241,33 +229,8 @@ class GitClient:
     def push(self, worktree: Path, branch: str) -> None:
         self._run(("git", "push", "origin", branch), cwd=worktree)
 
-    def remove_worktree(self, worktree: Path) -> None:
-        try:
-            checkout = self._worktrees.pop(worktree)
-        except KeyError as exception:
-            raise CommandError("git worktree remove", None, f"unknown worktree: {worktree}") from exception
-        with self._lock:
-            self._run(("git", "worktree", "remove", "--force", str(worktree)), cwd=checkout)
-
     def _show_ref(self, checkout: Path, ref: str) -> bool:
         return self._execute(("git", "show-ref", "--verify", "--quiet", ref), cwd=checkout).returncode == 0
-
-    def _list_worktrees(self, checkout: Path) -> list[Worktree]:
-        output = self._run(("git", "worktree", "list", "--porcelain"), cwd=checkout)
-        entries: list[Worktree] = []
-        path: Path | None = None
-        branch: Branch | None = None
-        for line in output.splitlines():
-            if line.startswith("worktree "):
-                if path is not None:
-                    entries.append(Worktree(path, branch))
-                path = Path(line[len("worktree ") :])
-                branch = None
-            elif line.startswith(f"branch {_HEADS}"):
-                branch = Branch(line[len(f"branch {_HEADS}") :])
-        if path is not None:
-            entries.append(Worktree(path, branch))
-        return entries
 
     def run_hook(self, hook: Hook, worktree: Path, cancel: threading.Event | None = None) -> None:
         try:

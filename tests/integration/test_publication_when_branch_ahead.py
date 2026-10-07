@@ -33,13 +33,13 @@ def _completed_frames(commit: str) -> list[str]:
 def _spy_on_worktree_creation(harness: DevHarness) -> list[bool]:
     """Records, at each worktree creation, whether a push had already happened."""
     created_after_push: list[bool] = []
-    original = harness.git.create_worktree
+    original = harness.git.add_worktree
 
     def spy(*args, **kwargs):
         created_after_push.append(bool(harness.git.pushed))
         return original(*args, **kwargs)
 
-    harness.git.create_worktree = spy
+    harness.git.add_worktree = spy
     return created_after_push
 
 

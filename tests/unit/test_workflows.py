@@ -12,7 +12,6 @@ import pytest
 from conftest import git
 from loop import (
     AgentClient,
-    Branch,
     Sandbox,
     CommandError,
     CopilotClient,
@@ -21,6 +20,7 @@ from loop import (
     Hook,
     InMemoryExecutionStore,
     NoSandbox,
+    WorktreeService,
 )
 from loop.testing import FakeAgentClient, FakeCopilotCli, FakeGitClient
 from workflows import dev
@@ -86,11 +86,11 @@ def test_parse_dev_result_rejects_a_malformed_response(response: str) -> None:
 
 
 def test_feature_branch_name_prefixes_the_slug_with_an_underscored_version() -> None:
-    assert Branch.feature("release/2.4", "Add Login Page!").name == "2_4_add-login-page"
+    assert WorktreeService.feature_branch_name("release/2.4", "Add Login Page!") == "2_4_add-login-page"
 
 
 def test_feature_branch_name_is_just_the_slug_without_a_version() -> None:
-    assert Branch.feature("main", "Add Login Page!").name == "add-login-page"
+    assert WorktreeService.feature_branch_name("main", "Add Login Page!") == "add-login-page"
 
 
 def _first_ticket():
@@ -409,7 +409,7 @@ def test_worktree_branch_name_follows_the_versioned_or_plain_slug_rule(tmp_path:
 
 def test_a_dirty_leftover_worktree_fails_the_attempt_and_is_left_in_place(tmp_path: Path) -> None:
     harness = DevHarness(tmp_path)
-    leftover = Path("/fake/worktrees") / "add-login-page"
+    leftover = harness.harness_root / "workspace" / "harness.worktrees" / "add-login-page"
     harness.git.dirty_leftovers.add(leftover)
 
     code = harness.run()
@@ -635,13 +635,13 @@ def test_a_branch_ahead_at_spec_start_is_pushed_from_the_checkout_before_the_wor
     harness.git.branches["add-login-page"] = ["c1"]
     harness.git.subjects["c1"] = "ccode(Checkout|9): earlier"
     created_after_push: list[bool] = []
-    original = harness.git.create_worktree
+    original = harness.git.add_worktree
 
     def spy(*args, **kwargs):
         created_after_push.append(bool(harness.git.pushed))
         return original(*args, **kwargs)
 
-    harness.git.create_worktree = spy
+    harness.git.add_worktree = spy
 
     harness.run(handler=lambda prompt, options: "")
 

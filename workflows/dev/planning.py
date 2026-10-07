@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from loop import Branch, origin_slug
+from loop import WorktreeService, origin_slug
 from workflows.platforms.work_tracking import GitHubClient, Spec, Ticket, TicketsTracker
 
 from .deps import GithubFactory
@@ -84,7 +84,7 @@ def prepare_run(
         bare_title=spec.bare_title,
         target=target,
         base_branch=base_branch,
-        feature_branch=Branch.feature(base_branch, spec.bare_title).name,
+        feature_branch=WorktreeService.feature_branch_name(base_branch, spec.bare_title),
         checkout=checkout,
         target_github=target_github,
     )
