@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from loop import AgentOptions, Cancelled, LoopError, SandboxHooks, WorktreeSandbox, create_sandbox
+from loop import AgentOptions, Cancelled, Commit, LoopError, SandboxHooks, WorktreeSandbox, create_sandbox
 from workflows.platforms.work_tracking import Ticket
 
 from .acceptance import commit_violation
@@ -16,8 +16,9 @@ from .settings import MAX_TICKET_FAILURES
 def open_sandbox(run: SpecRun, deps: DevDeps) -> WorktreeSandbox:
     """Creates the feature-branch worktree sandbox for `run`."""
     return create_sandbox(
-        deps.git,
+        deps.commits,
         deps.worktrees,
+        deps.branches,
         deps.sandbox_factory,
         checkout=run.checkout,
         harness_root=deps.harness_root,
@@ -32,7 +33,7 @@ def _run_and_validate(
     sandbox: WorktreeSandbox,
     deps: DevDeps,
     identifier: str,
-    head_before: str,
+    head_before: Commit,
     args: dict[str, str],
 ) -> DevResult | str:
     """Runs the agent and validates its response and Git; returns the accepted result, or the failure reason."""
@@ -52,20 +53,20 @@ def _run_and_validate(
     if not outcome.success:
         return "agent process did not exit successfully"
 
-    violation = commit_violation(deps.git, sandbox.worktree, head_before, identifier, dev_result)
+    violation = commit_violation(deps.worktrees, deps.commits, sandbox.worktree, head_before, identifier, dev_result)
     return dev_result if violation is None else violation
 
 
 def _deliver_ticket(run: SpecRun, ticket: Ticket, sandbox: WorktreeSandbox, deps: DevDeps) -> bool:
     """Fresh agent runs for `ticket` until one is accepted or its failure cap is reached; True on success."""
-    worktree = sandbox.worktree
+    worktree = sandbox.worktree.path
     identifier = task_id(run.initiative, ticket.number)
     while True:
-        head_before = deps.git.head(worktree)
+        head_before = deps.commits.head(worktree)
         args = prompt_args(
             ticket,
             identifier,
-            initiative_commits(deps.git, worktree, run.base_branch, run.initiative),
+            initiative_commits(deps.commits, worktree, run.base_branch, run.initiative),
             worktree,
             run.base_branch,
             run.feature_branch,
@@ -76,7 +77,7 @@ def _deliver_ticket(run: SpecRun, ticket: Ticket, sandbox: WorktreeSandbox, deps
                 ticket, f"Delivered in {attempt.commit}.\n\n{attempt.summary}\n\n{attempt.verification}"
             )
             return True
-        deps.git.reset_to(worktree, head_before)
+        deps.commits.restore(head_before)
         if deps.tracker.record_failure(ticket) >= MAX_TICKET_FAILURES:
             deps.tracker.escalate(run.spec.number, ticket.number, attempt)
             return False

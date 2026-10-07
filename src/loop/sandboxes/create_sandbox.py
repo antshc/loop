@@ -9,11 +9,27 @@ from types import TracebackType
 from loop.contracts.agent_client import AgentOptions, AgentResult
 from loop.contracts.sandbox import AgentClientFactory, Sandbox
 from loop.errors import Cancelled
-from loop.platforms.git_client import GitClient
-from loop.platforms.worktree_service import WorktreeService
+from loop.platforms.git import Branch, BranchService, CommitService, Worktree, WorktreeService
 from loop.sandboxes.sandbox_lifecycle import SandboxHooks, run_host_hooks, with_sandbox_lifecycle
 
 SandboxFactory = Callable[[Path, threading.Event], Sandbox]
+
+
+def _default_worktree_path(checkout: Path, harness_root: Path, branch: str) -> Path:
+    return harness_root / "workspace" / f"{checkout.name}.worktrees" / branch
+
+
+def _exclude_workspace(harness_root: Path) -> None:
+    """Adds `workspace/` to the harness checkout's local exclude list, once."""
+    exclude_file = harness_root / ".git" / "info" / "exclude"
+    exclude_file.parent.mkdir(parents=True, exist_ok=True)
+    existing = exclude_file.read_text() if exclude_file.exists() else ""
+    if "workspace/" in existing.splitlines():
+        return
+    with exclude_file.open("a") as handle:
+        if existing and not existing.endswith("\n"):
+            handle.write("\n")
+        handle.write("workspace/\n")
 
 
 @dataclass(frozen=True)
@@ -28,19 +44,21 @@ class WorktreeSandbox:
 
     def __init__(
         self,
-        git: GitClient,
+        commits: CommitService,
         worktrees: WorktreeService,
+        branches: BranchService,
         sandbox: Sandbox,
         checkout: Path,
-        worktree: Path,
+        worktree: Worktree,
         branch: str,
         *,
         merge_to_head: bool,
         apply_to_host: Callable[[], None] | None,
         cancel: threading.Event,
     ) -> None:
-        self._git = git
+        self._commits = commits
         self._worktrees = worktrees
+        self._branches = branches
         self._sandbox = sandbox
         self._checkout = checkout
         self._worktree = worktree
@@ -51,7 +69,7 @@ class WorktreeSandbox:
         self._closed = False
 
     @property
-    def worktree(self) -> Path:
+    def worktree(self) -> Worktree:
         return self._worktree
 
     @property
@@ -66,7 +84,9 @@ class WorktreeSandbox:
         options: AgentOptions | None = None,
     ) -> SandboxRunResult:
         outcome = with_sandbox_lifecycle(
-            self._git,
+            self._commits,
+            self._branches,
+            self._worktrees,
             self._sandbox,
             self._checkout,
             self._worktree,
@@ -86,7 +106,7 @@ class WorktreeSandbox:
             self._sandbox.close()
         finally:
             if not keep_worktree:
-                self._worktrees.remove(self._worktree)
+                self._worktrees.remove(self._worktree, force=True)
 
     def __enter__(self) -> WorktreeSandbox:
         return self
@@ -98,12 +118,13 @@ class WorktreeSandbox:
         traceback: TracebackType | None,
     ) -> None:
         # A cancelled run with uncommitted work keeps its worktree for the user.
-        self.close(keep_worktree=isinstance(exception, Cancelled) and self._git.has_changes(self._worktree))
+        self.close(keep_worktree=isinstance(exception, Cancelled) and self._worktrees.has_changes(self._worktree))
 
 
 def create_sandbox(
-    git: GitClient,
+    commits: CommitService,
     worktrees: WorktreeService,
+    branches: BranchService,
     sandbox_factory: SandboxFactory,
     *,
     checkout: Path,
@@ -121,31 +142,36 @@ def create_sandbox(
     worktree on its branch. A branch named `loop/sandbox-<id>` is generated when none is given.
     """
     cancel = cancel or threading.Event()
-    branch = branch or worktrees.new_branch_name()
-    worktree = worktrees.create(checkout, branch, base, harness_root)
+    target = _default_worktree_path(checkout, harness_root, branch) if branch is not None else None
+    prepared = branches.prepare(Branch(checkout, branch) if branch else None, Branch(checkout, base), target)
+    if target is None:
+        target = _default_worktree_path(checkout, harness_root, prepared.name)
+    worktree = worktrees.create(prepared, target)
+    _exclude_workspace(harness_root)
     try:
-        run_host_hooks(git, hooks.worktree_ready, worktree, cancel=cancel)
+        run_host_hooks(worktrees, hooks.worktree_ready, worktree.path, cancel=cancel)
         sandbox = sandbox_factory(harness_root, cancel)
         try:
-            run_host_hooks(git, hooks.sandbox_ready, worktree, cancel=cancel)
+            run_host_hooks(worktrees, hooks.sandbox_ready, worktree.path, cancel=cancel)
         except Exception:
             sandbox.close()
             raise
     except Cancelled as exception:
-        if git.has_changes(worktree):
-            raise Cancelled(worktree) from exception
-        worktrees.remove(worktree)
+        if worktrees.has_changes(worktree):
+            raise Cancelled(worktree.path) from exception
+        worktrees.remove(worktree, force=True)
         raise
     except Exception:
-        worktrees.remove(worktree)
+        worktrees.remove(worktree, force=True)
         raise
     return WorktreeSandbox(
-        git,
+        commits,
         worktrees,
+        branches,
         sandbox,
         checkout,
         worktree,
-        branch,
+        prepared.name,
         merge_to_head=merge_to_head,
         apply_to_host=apply_to_host,
         cancel=cancel,

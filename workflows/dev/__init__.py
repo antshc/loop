@@ -14,9 +14,10 @@ from pathlib import Path
 
 from loop import (
     AgentClientFactory,
+    BranchService,
+    CommitService,
     ExecutionStore,
     FileExecutionStore,
-    GitClient,
     Hook,
     InMemorySessionStore,
     SandboxFactory,
@@ -59,7 +60,8 @@ def _build_deps(
     harness_slug: str,
     log_dir: Path,
     *,
-    git: GitClient | None,
+    branches: BranchService | None,
+    commits: CommitService | None,
     worktrees: WorktreeService | None,
     github_factory: GithubFactory | None,
     agent_factory: AgentClientFactory | None,
@@ -69,14 +71,14 @@ def _build_deps(
     cancel: threading.Event | None,
 ) -> DevDeps:
     github_factory = github_factory or (lambda checkout: GitHubClient.for_repo(checkout)[0])
-    git = git or GitClient()
     return DevDeps(
         harness_root=harness_root,
         harness_slug=harness_slug,
         tracker=TicketsTracker(github_factory(harness_root), store or FileExecutionStore(log_dir), harness_slug),
         github_factory=github_factory,
-        git=git,
-        worktrees=worktrees or WorktreeService(git),
+        branches=branches or BranchService(),
+        commits=commits or CommitService(),
+        worktrees=worktrees or WorktreeService(),
         agent_factory=agent_factory or copilot(InMemorySessionStore()),
         sandbox_factory=sandbox_factory or SANDBOX_FACTORY,
         hooks=hooks,
@@ -88,7 +90,8 @@ def _build_deps(
 def main(
     argv: list[str] | None = None,
     *,
-    git: GitClient | None = None,
+    branches: BranchService | None = None,
+    commits: CommitService | None = None,
     worktrees: WorktreeService | None = None,
     github_factory: GithubFactory | None = None,
     agent_factory: AgentClientFactory | None = None,
@@ -113,7 +116,8 @@ def main(
         harness_root,
         harness_slug,
         log_dir,
-        git=git,
+        branches=branches,
+        commits=commits,
         worktrees=worktrees,
         github_factory=github_factory,
         agent_factory=agent_factory,

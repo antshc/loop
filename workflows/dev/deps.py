@@ -7,7 +7,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from loop import AgentClientFactory, GitClient, Hook, SandboxFactory, WorktreeService
+from loop import AgentClientFactory, BranchService, CommitService, Hook, SandboxFactory, WorktreeService
 from workflows.platforms.work_tracking import GitHubClient, TicketsTracker
 
 GithubFactory = Callable[[Path], GitHubClient]
@@ -19,7 +19,8 @@ class DevDeps:
     harness_slug: str
     tracker: TicketsTracker
     github_factory: GithubFactory
-    git: GitClient
+    branches: BranchService
+    commits: CommitService
     worktrees: WorktreeService
     agent_factory: AgentClientFactory
     sandbox_factory: SandboxFactory

@@ -9,7 +9,7 @@ from pathlib import Path
 
 from loop.contracts.sandbox import Sandbox
 from loop.errors import CommandError, LoopError
-from loop.platforms.git_client import GitClient, Hook
+from loop.platforms.git import Branch, BranchService, CommitService, Hook, Worktree, WorktreeService
 from loop.process import TRANSIENT_EXIT_CODES, TRANSIENT_RETRIES, TRANSIENT_RETRY_DELAY_S
 
 
@@ -29,18 +29,20 @@ class LifecycleResult[T]:
 
 
 def run_host_hooks(
-    git: GitClient, hooks: Sequence[Hook], worktree: Path, *, cancel: threading.Event | None = None
+    worktrees: WorktreeService, hooks: Sequence[Hook], worktree: Path, *, cancel: threading.Event | None = None
 ) -> None:
     """Run each Hook on the host in the worktree, in order; the first failure stops the rest."""
     for hook in hooks:
-        git.run_hook(hook, worktree, cancel)
+        worktrees.run_hook(hook, worktree, cancel)
 
 
 def with_sandbox_lifecycle[T](
-    git: GitClient,
+    commits: CommitService,
+    branches: BranchService,
+    worktrees: WorktreeService,
     sandbox: Sandbox,
     checkout: Path,
-    worktree: Path,
+    worktree: Worktree,
     work: Callable[[str], T],
     *,
     branch: str | None = None,
@@ -55,33 +57,35 @@ def with_sandbox_lifecycle[T](
     With `branch=None` the worktree is on a temp branch that is merged into the host checkout's
     current branch afterwards; otherwise the commits stay on `branch`.
     """
-    host_branch = git.current_branch(checkout) if branch is None else None
+    host = worktrees.get(checkout) if branch is None else None
+    host_branch = host.branch.name if host is not None and host.branch is not None else None
     if branch is None and host_branch is None:
         raise LoopError(f"cannot merge into a detached HEAD in {checkout}")
     if sandbox.isolated:
-        identity = {key: git.config_get(checkout, key) for key in ("user.name", "user.email")}
-        _prepare_sandbox(sandbox, worktree, identity, sleep or time.sleep)
-    worktree_branch = git.current_branch(worktree)
-    if worktree_branch is None:
-        raise LoopError(f"worktree is on a detached HEAD: {worktree}")
-    run_host_hooks(git, on_sandbox_ready, worktree, cancel=cancel)
+        name, email = commits.identity(checkout)
+        identity = {"user.name": name, "user.email": email}
+        _prepare_sandbox(sandbox, worktree.path, identity, sleep or time.sleep)
+    if worktree.branch is None:
+        raise LoopError(f"worktree is on a detached HEAD: {worktree.path}")
+    worktree_branch = worktree.branch.name
+    run_host_hooks(worktrees, on_sandbox_ready, worktree.path, cancel=cancel)
 
-    base_head = git.head(worktree)
-    result = work(base_head)
+    base_head = commits.head(worktree.path)
+    result = work(base_head.sha)
     if apply_to_host is not None:
         apply_to_host()
 
-    commits = git.commits_between(worktree, base_head, git.head(worktree))
+    new_commits = commits.since(base_head)
     if branch is None:
-        git.merge(checkout, worktree_branch)
+        branches.merge(checkout, Branch(checkout, worktree_branch))
         if not keep_source_branch:
-            git.detach(worktree)
-            git.delete_branch(checkout, worktree_branch)
-    return LifecycleResult(result, worktree_branch, tuple(commits))
+            worktrees.detach(worktree)
+            branches.delete(Branch(checkout, worktree_branch))
+    return LifecycleResult(result, worktree_branch, tuple(commit.sha for commit in new_commits))
 
 
 def _prepare_sandbox(
-    sandbox: Sandbox, worktree: Path, identity: dict[str, str | None], sleep: Callable[[float], None]
+    sandbox: Sandbox, worktree: Path, identity: dict[str, str], sleep: Callable[[float], None]
 ) -> None:
     """Trust the worktree and commit as the host user inside an isolated Sandbox."""
     path = shlex.quote(str(worktree))

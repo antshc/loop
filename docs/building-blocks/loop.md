@@ -9,7 +9,7 @@ The `loop` Python library: a single installable package (`pip install` from this
 
 ## Interfaces
 
-Public API re-exported from [`src/loop/__init__.py`](../../src/loop/__init__.py). ABC contracts exist only where Loop calls replaceable parts: `Sandbox`, `AgentClient`, `SessionStore`, `ExecutionStore`. `GitClient` and `WorktreeService` are concrete helpers. The GitHub client and the Spec/Ticket tracker are not part of the public API: they live in `workflows/platforms/work_tracking` beside the example workflows.
+Public API re-exported from [`src/loop/__init__.py`](../../src/loop/__init__.py). ABC contracts exist only where Loop calls replaceable parts: `Sandbox`, `AgentClient`, `SessionStore`, `ExecutionStore`. `BranchService`, `WorktreeService`, and `CommitService` are concrete helpers; the git client is an internal command runner, not part of the public API. The GitHub client and the Spec/Ticket tracker are not part of the public API either: they live in `workflows/platforms/work_tracking` beside the example workflows.
 
 ## Tweaks/Configuration
 
@@ -28,7 +28,7 @@ __init__.py     public API
 contracts/      ABCs: Sandbox, AgentClient, SessionStore, ExecutionStore
 sandboxes/      NoSandbox (host), DockerSandbox (container), FakeDocker double; create_sandbox (WorktreeSandbox: worktree + Sandbox), with_sandbox_lifecycle, run_host_hooks
 agents/         CopilotClient, AgentOutputParser per agent kind, fake agent and Copilot CLI doubles
-platforms/      git/ (GitClient over the git CLI, commit-subject rules; WorktreeService: worktree create/remove and branch, feature-branch, and worktree-path naming), fake doubles
+platforms/      git/ (BranchService, WorktreeService, CommitService over an internal git client; branch, feature-branch, and worktree-path naming), fake doubles
 stores/         file and in-memory execution/session stores
 process.py      CommandExecutor, streaming/cancellable subprocess execution
 prompt.py       PromptPreprocessor (prompt placeholders and args)
@@ -62,7 +62,7 @@ C4Component
     Container_Boundary(loop, "loop library") {
         Component(sandboxes, "Sandboxes", "NoSandbox, DockerSandbox", "Environment for one or more agent runs: workspace, exec, close, and the executor handed to the agent.")
         Component(agents, "Agent clients", "CopilotClient, AgentOutputParser", "Render the prompt, run the provider CLI through the Sandbox's executor, stream its output for logging, and after exit parse the response envelope with the agent kind's output parser.")
-        Component(platforms, "Git client", "GitClient", "Commit, push, and Hooks through the git CLI.")
+        Component(platforms, "Branch & commit services", "BranchService, CommitService", "Branch prepare/push/merge and commit log/rollback via the internal git client, also used by the worktree service.")
         Component(worktrees, "Worktree service", "WorktreeService", "Creates, tracks, and removes worktrees through the git client, and names their branches and folders.")
         Component(sandbox, "Worktree sandbox", "create_sandbox, with_sandbox_lifecycle", "Builds a long-lived worktree plus Sandbox, and wraps each run with setup hooks, base head, and commit collection.")
         ComponentDb(stores, "Stores", "File and in-memory", "Persist session keys and attempt counts.")
