@@ -434,3 +434,4 @@ build/
 
 # Atlassian preflight config (per-developer, may hold an API token) — see Concept 0008
 .atlassian
+.venv

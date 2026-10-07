@@ -36,8 +36,17 @@ pip install -e .
 For development:
 
 ```sh
-pip install -e ".[dev]"
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"      # once
 pytest
+```
+
+To run the example `dev` Workflow on this repository:
+
+```sh
+gh auth status               # needs an authenticated gh with access to antshc/loop
+copilot --version            # the default agent client is Copilot CLI
+python -m workflows.dev
 ```
 
 ## Usage
