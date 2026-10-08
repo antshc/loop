@@ -42,8 +42,14 @@ from loop.platforms.git import (
 )
 from loop.process import CommandExecutor, CommandResult, cli_runner, run_command
 from loop.prompt import PromptPreprocessor
-from loop.runs.lifecycle import LifecycleResult, run_host_hooks, run_lifecycle
-from loop.runs.worktree_runner import WorktreeRunResult, WorktreeRunner, create_worktree_runner
+from loop.runs.lifecycle import (
+    LifecycleResult,
+    WorktreeRunner,
+    WorktreeRunResult,
+    create_worktree_runner,
+    run_host_hooks,
+    run_lifecycle,
+)
 from loop.stores.file import FileExecutionStore, FileSessionStore
 from loop.stores.memory import InMemoryExecutionStore, InMemorySessionStore
 from loop.tags import extract_json, extract_tag
