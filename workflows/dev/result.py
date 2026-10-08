@@ -6,6 +6,8 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+from workflows.platforms.work_tracking import WorkIdentifier
+
 
 class DevResultError(Exception):
     """The agent's response is missing, not valid JSON, or missing a required `result` field."""
@@ -59,11 +61,11 @@ def parse_dev_result(response: str) -> DevResult:
     return _completed_result(identifier, result)
 
 
-def parse_response(response: str | None, identifier: str) -> DevResult:
+def parse_response(response: str | None, identifier: WorkIdentifier) -> DevResult:
     """Decodes the agent's response and checks it answers task `identifier`."""
     if not response:
         raise DevResultError("no response object in agent output")
     dev_result = parse_dev_result(response)
-    if dev_result.identifier != identifier:
+    if dev_result.identifier != str(identifier):
         raise DevResultError(f"response identifier {dev_result.identifier!r} does not match task {identifier!r}")
     return dev_result

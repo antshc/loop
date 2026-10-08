@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from loop import AgentOptions, Cancelled, Commit, LoopError, SandboxHooks, WorktreeSandbox, create_sandbox
-from workflows.platforms.work_tracking import Ticket
+from workflows.platforms.work_tracking import Ticket, WorkIdentifier
 
 from .acceptance import commit_violation
 from .deps import DevDeps
@@ -31,7 +31,7 @@ def open_sandbox(run: SpecRun, deps: DevDeps) -> WorktreeSandbox:
 def _run_and_validate(
     sandbox: WorktreeSandbox,
     deps: DevDeps,
-    identifier: str,
+    identifier: WorkIdentifier,
     head_before: Commit,
     args: dict[str, str],
 ) -> DevResult | str:
@@ -59,7 +59,7 @@ def _run_and_validate(
 def _deliver_ticket(run: SpecRun, ticket: Ticket, sandbox: WorktreeSandbox, deps: DevDeps) -> bool:
     """Fresh agent runs for `ticket` until one is accepted or its failure cap is reached; True on success."""
     worktree = sandbox.worktree.path
-    identifier = task_id(run.spec.initiative, ticket.number)
+    identifier = WorkIdentifier(run.spec.initiative, ticket.number)
     while True:
         head_before = deps.git.commits.head(worktree)
         args = prompt_args(
@@ -80,10 +80,6 @@ def _deliver_ticket(run: SpecRun, ticket: Ticket, sandbox: WorktreeSandbox, deps
         if deps.tracker.record_failure(ticket) >= MAX_TICKET_FAILURES:
             deps.tracker.escalate(run.spec.number, ticket.number, attempt)
             return False
-
-def task_id(initiative: str, ticket_number: int) -> str:
-    """The response envelope's `identifier`, and the commit subject's parenthesized tag."""
-    return f"{initiative}|{ticket_number}"
 
 def deliver_tickets(run: SpecRun, sandbox: WorktreeSandbox, deps: DevDeps) -> bool:
     """Deliver Ticket for each actionable Ticket in order; stops at the first failure."""

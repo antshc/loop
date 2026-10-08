@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 from loop import Commit, CommitService, Worktree, WorktreeService
+from workflows.platforms.work_tracking import WorkIdentifier
 
-from .commit_tag import subject_prefix
 from .result import DevResult
 
 
 def commit_violation(
-    worktrees: WorktreeService, commits: CommitService, worktree: Worktree, head_before: Commit, identifier: str, dev_result: DevResult
+    worktrees: WorktreeService,
+    commits: CommitService,
+    worktree: Worktree,
+    head_before: Commit,
+    identifier: WorkIdentifier,
+    dev_result: DevResult,
 ) -> str | None:
     """Why the worktree does not hold exactly the one clean, correctly tagged commit the result claims, or None."""
     head = commits.head(worktree.path)
@@ -18,7 +23,7 @@ def commit_violation(
     new_commits = commits.since(head_before)
     if len(new_commits) != 1:
         return f"expected exactly one commit since {head_before.sha}, found {len(new_commits)}"
-    prefix = subject_prefix(identifier)
+    prefix = identifier.to_subject()
     if not head.subject.startswith(prefix):
         return f"HEAD subject {head.subject!r} does not start with {prefix!r}"
     if not worktrees.is_clean(worktree):

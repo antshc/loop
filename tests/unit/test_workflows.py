@@ -101,7 +101,7 @@ def _first_ticket():
 
 
 def test_prompt_template_placeholders_match_the_supplied_arguments_exactly() -> None:
-    args = dev.prompt_args(_first_ticket(), "Checkout|10", ["abc1234 first"], Path("/w"), "main", "feature")
+    args = dev.prompt_args(_first_ticket(), dev.WorkIdentifier("Checkout", 10), ["abc1234 first"], Path("/w"), "main", "feature")
 
     placeholders = set(_PLACEHOLDER.findall(dev.PROMPT.read_text()))
 
@@ -109,7 +109,7 @@ def test_prompt_template_placeholders_match_the_supplied_arguments_exactly() -> 
 
 
 def test_prompt_args_carry_only_the_ticket_its_task_id_and_the_initiative_commits() -> None:
-    args = dev.prompt_args(_first_ticket(), "Checkout|10", [], Path("/w"), "main", "feature")
+    args = dev.prompt_args(_first_ticket(), dev.WorkIdentifier("Checkout", 10), [], Path("/w"), "main", "feature")
 
     ticket_json = json.loads(args["TICKET_JSON"])
     assert (ticket_json["number"], ticket_json["body"]) == (10, "Body of #10")

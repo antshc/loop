@@ -32,6 +32,8 @@ from workflows.platforms.work_tracking import (
     TicketsTracker,
 )
 
+from workflows.platforms.work_tracking import WorkIdentifier
+
 from .app import process_specs
 from .deps import DevDeps, GithubFactory
 from .prompting import prompt_args
@@ -42,6 +44,7 @@ __all__ = [
     "PROMPT",
     "DevResult",
     "DevResultError",
+    "WorkIdentifier",
     "main",
     "parse_dev_result",
     "prompt_args",
