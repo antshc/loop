@@ -9,7 +9,7 @@ Let a repository prepare a fresh worktree (copy `.env`, install dependencies) be
 
 A Hook is a user-declared shell command that Loop runs at a named Hook point in a run's lifecycle. Loop defines one Hook point, before the agent starts: `worktree-ready`, after the worktree is created. Hooks run on the host, so a hook that needs a different environment carries that in its own command.
 
-The workflow declares its hooks as code and passes them to `create_worktree_runner(..., hooks=...)`, which runs them through `run_host_hooks` right after `WorktreeService.create`. `WorktreeService.run_hook` owns execution, timeout, and cancellation; a failing hook removes the worktree and raises `HookError`, so the caller gets a ready runner or none. Hooks exist only before the agent: post-iteration work is an explicit step of the workflow's use case, not a hook.
+The workflow declares its hooks as code and passes them to `AgentRunnerProvider.create(..., hooks=...)`, which runs them through `run_host_hooks` right after `WorktreeService.create`. `WorktreeService.run_hook` owns execution, timeout, and cancellation; a failing hook removes the worktree and raises `HookError`, so the caller gets a ready runner or none. Hooks exist only before the agent: post-iteration work is an explicit step of the workflow's use case, not a hook.
 
 Modelled on Sandcastle's host-side `onWorktreeReady` hook ([research](../research/sandcastle-agent-invocation-and-extension-points.md)); Loop has no agent-side hooks.
 

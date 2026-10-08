@@ -9,7 +9,7 @@ Let each autonomous procedure (`dev`, a review loop, a custom flow) be written a
 
 Loop is a library of contracts and default implementations; a **workflow** is one ordinary Python file that wires them and runs its own loop (the unit Sandcastle calls a template).
 
-- The core of Loop is the **worktree runner** and git. A worktree runner owns one worktree under the harness's `workspace` folder, runs the agent the workflow passes on each run directly on the host from the harness root, and removes the worktree when closed; git creates the branch and worktree.
+- The core of Loop is the **worktree runner** and git. A worktree runner owns one worktree under the harness's `workspace` folder and one agent client, runs the agent directly on the host from the harness root, and removes the worktree when disposed; git creates the branch and worktree.
 - Loop ships default implementations for git, the Copilot CLI agent client, and the stores. Parts Loop's own code calls (agent client, stores) sit behind a contract; the git services (`BranchService`, `WorktreeService`, `CommitService`) are concrete deep modules with no contract, replaced in tests by fakes that subclass them ([ADR 0003](../adr/0003-ship-loop-as-a-workflow-library-with-no-built-in-workflows.md), [ADR 0010](../adr/0010-split-git-access-into-concrete-branch-worktree-and-commit-services.md)). The GitHub client and Spec/Ticket tracker are workflow-side code in `workflows/platforms/work_tracking`.
 - Loop ships no workflows: the user writes every workflow, `dev` included; this repository's `workflows/dev.py` is only an example and test subject.
 - A workflow imports only the public `loop` API and is a runnable script: its entry point takes an argument list and returns an exit code, and a `__main__` guard passes that code to the process exit. Dependencies enter that entry point as optional parameters that default to the shipped implementations, so tests substitute fakes ([ADR 0003](../adr/0003-ship-loop-as-a-workflow-library-with-no-built-in-workflows.md)).
@@ -44,7 +44,7 @@ Sketch — not the implementation (derived from the prot2 prototype):
 
 ```text
 loop/                              # public API: contracts + default implementations
-├── WorktreeRunner, create_worktree_runner  # worktree + host agent runs
+├── AgentRunnerProvider, AgentRunner, WorktreeLifecycle  # worktree + host agent runs
 ├── AgentClient, CopilotClient
 ├── ExecutionStore, SessionStore, file stores
 ├── BranchService, WorktreeService, CommitService  # concrete, no contract
@@ -60,8 +60,9 @@ def main(argv=None, *, branches=None, commits=None, github_factory=None, store=N
     branches = branches or BranchService()
     github_factory = github_factory or (lambda checkout: GitHubClient.for_repo(checkout)[0])
     ...
-    with create_worktree_runner(git, checkout=..., harness_root=harness_root, ..., executor=executor) as runner:
-        runner.run(agent, template, prompt_args, options)
+    provider = AgentRunnerProvider(git, harness_root, agent, executor=executor)
+    with provider.create(checkout=..., worktree_root=..., base=...) as runner:
+        runner.run(template, prompt_args, options)
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))

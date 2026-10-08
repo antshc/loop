@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from loop import AgentOptions, Cancelled, Commit, LoopError, WorktreeRunner, create_worktree_runner
+from loop import AgentRunner, AgentRunnerProvider, Cancelled, Commit, LoopError
 from workflows.platforms.work_tracking import Ticket, WorkIdentifier
 
 from .acceptance import commit_violation
@@ -13,23 +13,22 @@ from .result import DevResult, DevResultError, parse_response
 from .settings import MAX_TICKET_FAILURES
 
 
-def open_runner(run: SpecRun, deps: DevDeps) -> WorktreeRunner:
-    """Creates the feature-branch worktree runner for `run`."""
-    return create_worktree_runner(
-        deps.git,
+def open_runner(run: SpecRun, deps: DevDeps) -> AgentRunner:
+    """Creates the feature-branch agent runner for `run`."""
+    provider = AgentRunnerProvider(
+        deps.git, deps.harness_root, deps.agent_factory, executor=deps.executor, cancel=deps.cancel
+    )
+    return provider.create(
         checkout=run.repository.path,
-        harness_root=deps.harness_root,
         base=run.spec.base_branch,
         branch=run.spec.feature_branch,
         hooks=tuple(deps.hooks),
-        executor=deps.executor,
-        cancel=deps.cancel,
         worktree_root=run.repository.worktree_root,
     )
 
 
 def _run_and_validate(
-    runner: WorktreeRunner,
+    runner: AgentRunner,
     deps: DevDeps,
     identifier: WorkIdentifier,
     head_before: Commit,
@@ -37,7 +36,7 @@ def _run_and_validate(
 ) -> DevResult | str:
     """Runs the agent and validates its response and Git; returns the accepted result, or the failure reason."""
     try:
-        outcome = runner.run(deps.agent_factory, deps.template, args, AgentOptions(session_key=None)).result
+        outcome = runner.run(deps.template, args).result
     except Cancelled:
         raise
     except LoopError as exception:
@@ -56,7 +55,7 @@ def _run_and_validate(
     return dev_result if violation is None else violation
 
 
-def _deliver_ticket(run: SpecRun, ticket: Ticket, runner: WorktreeRunner, deps: DevDeps) -> bool:
+def _deliver_ticket(run: SpecRun, ticket: Ticket, runner: AgentRunner, deps: DevDeps) -> bool:
     """Fresh agent runs for `ticket` until one is accepted or its failure cap is reached; True on success."""
     worktree = runner.worktree.path
     identifier = WorkIdentifier(run.spec.initiative, ticket.number)
@@ -81,7 +80,7 @@ def _deliver_ticket(run: SpecRun, ticket: Ticket, runner: WorktreeRunner, deps: 
             deps.tracker.escalate(run.spec.number, ticket.number, attempt)
             return False
 
-def deliver_tickets(run: SpecRun, runner: WorktreeRunner, deps: DevDeps) -> bool:
+def deliver_tickets(run: SpecRun, runner: AgentRunner, deps: DevDeps) -> bool:
     """Deliver Ticket for each actionable Ticket in order; stops at the first failure."""
     for ticket in run.tickets:
         if not _deliver_ticket(run, ticket, runner, deps):

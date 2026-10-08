@@ -1,5 +1,7 @@
 # Run agents on the host through a worktree runner and pass the agent to each run
 
+The per-run agent and `WorktreeRunner` parts are superseded by [ADR 0011](0011-bind-one-agent-client-to-each-agent-runner-created-by-a-provider.md); host-only runs stand.
+
 A worktree is built once and serves one or more agent runs. Loop runs every agent directly on the host, from the harness root, with the user's own permissions, through a `WorktreeRunner` that owns the worktree and its lifecycle; there is no Sandbox, container, or isolation layer. The workflow passes the agent on each run (`runner.run(agent, prompt, ...)`), and the runner hands that agent the executor it runs through.
 
 ## Considered Options

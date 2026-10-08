@@ -9,13 +9,13 @@ The client accepts an agent prompt, the arguments that render it, and run option
 
 ## Concept
 
-An **AgentClient** wraps a provider-specific CLI adapter, uses a **Prompt Preprocessor** to render the prompt, and uses a **SessionStore** for resumable agent sessions. The workflow passes the AgentClient to each worktree run, and the **worktree runner** supplies the executor the CLI runs through ([ADR 0008](../adr/0008-run-agents-on-the-host-through-a-worktree-runner-and-pass-the-agent-to-each-run.md)).
+An **AgentClient** wraps a provider-specific CLI adapter, uses a **Prompt Preprocessor** to render the prompt, and uses a **SessionStore** for resumable agent sessions. The `AgentRunnerProvider` builds the AgentClient once per **agent runner**, and the runner supplies the executor the CLI runs through and calls `exit()` on the client when it is disposed ([ADR 0011](../adr/0011-bind-one-agent-client-to-each-agent-runner-created-by-a-provider.md)).
 
 ```text
 Loop / Ralph / Crew
           |
           v
-   WorktreeRunner
+   AgentRunner
           |
           v
       AgentClient

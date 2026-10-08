@@ -6,7 +6,7 @@ import logging
 from enum import Enum, auto
 from pathlib import Path
 
-from loop import Branch, BranchService, Cancelled, LoopError, WorktreeRunner
+from loop import AgentRunner, Branch, BranchService, Cancelled, LoopError
 from workflows.platforms.work_tracking import HITL_LABEL, Spec
 
 from .delivery import deliver_tickets, open_runner
@@ -47,7 +47,7 @@ def _base_branch_exists(run: SpecRun, deps: DevDeps) -> bool:
     return False
 
 
-def _prepare(run: SpecRun, deps: DevDeps) -> WorktreeRunner | None:
+def _prepare(run: SpecRun, deps: DevDeps) -> AgentRunner | None:
     """Publishes earlier runs' commits; returns a runner only when there are Tickets to deliver."""
     deps.git.branches.fetch(run.repository.path)
     if not run.tickets:
@@ -60,7 +60,7 @@ def _prepare(run: SpecRun, deps: DevDeps) -> WorktreeRunner | None:
     return open_runner(run, deps)
 
 
-def _deliver_in_worktree(run: SpecRun, runner: WorktreeRunner, deps: DevDeps) -> Outcome:
+def _deliver_in_worktree(run: SpecRun, runner: AgentRunner, deps: DevDeps) -> Outcome:
     """Delivers and publishes on `runner`'s worktree, always closing it; a cancelled run keeps only uncommitted work."""
     kept_on_cancel = False
     try:
@@ -70,11 +70,11 @@ def _deliver_in_worktree(run: SpecRun, runner: WorktreeRunner, deps: DevDeps) ->
             deps.tracker.announce_delivered(run.spec.number, pull_request_url)
         return Outcome.SUCCESS if delivered else Outcome.FAILED
     except Cancelled:
-        kept_on_cancel = deps.git.worktrees.has_changes(runner.worktree)
+        kept_on_cancel = runner.lifecycle.has_changes()
         _report_cancelled(run.spec, runner.worktree.path if kept_on_cancel else None)
         return Outcome.SKIPPED
     finally:
-        runner.close(keep_worktree=kept_on_cancel)
+        runner.exit(keep_worktree=kept_on_cancel)
 
 
 def _process_spec(spec: Spec, deps: DevDeps) -> Outcome:

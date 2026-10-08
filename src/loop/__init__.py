@@ -42,7 +42,13 @@ from loop.platforms.git import (
 )
 from loop.process import CommandExecutor, CommandResult, cli_runner, run_command
 from loop.prompt import PromptPreprocessor
-from loop.runs.lifecycle import WorktreeRunner, WorktreeRunResult, create_worktree_runner, run_host_hooks
+from loop.runs.lifecycle import (
+    AgentRunner,
+    AgentRunnerProvider,
+    AgentRunResult,
+    WorktreeLifecycle,
+    run_host_hooks,
+)
 from loop.stores.file import FileExecutionStore, FileSessionStore
 from loop.stores.memory import InMemoryExecutionStore, InMemorySessionStore
 from loop.tags import extract_json, extract_tag
@@ -55,6 +61,9 @@ __all__ = [
     "AgentOptions",
     "AgentOutputParser",
     "AgentResult",
+    "AgentRunResult",
+    "AgentRunner",
+    "AgentRunnerProvider",
     "AgentSession",
     "Branch",
     "BranchService",
@@ -82,13 +91,11 @@ __all__ = [
     "SessionStore",
     "Settled",
     "Worktree",
-    "WorktreeRunResult",
-    "WorktreeRunner",
+    "WorktreeLifecycle",
     "WorktreeService",
     "cli_runner",
     "configure_logging",
     "copilot",
-    "create_worktree_runner",
     "extract_json",
     "extract_tag",
     "parallel_settled",

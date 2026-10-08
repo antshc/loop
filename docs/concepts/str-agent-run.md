@@ -9,14 +9,14 @@ Define Loop's smallest agent-execution unit so workflows can compose planner, im
 
 An **Agent Run** is one bounded invocation of one Headless AI Agent with one prompt on one prepared worktree.
 
-The runtime owns the Run boundary: it binds the prepared execution context, runs the `AgentClient` the workflow passes for that Run through the worktree runner's executor on the host, and returns one result. A Workflow owns topology by composing Runs with ordinary Python control flow such as sequence, branching, iteration, and concurrency. A Run does not encode workflow roles such as planner, implementer, or reviewer.
+The runtime owns the Run boundary: it binds the prepared execution context, runs the `AgentClient` bound to the runner at creation through its executor on the host, and returns one result. A Workflow owns topology by composing Runs with ordinary Python control flow such as sequence, branching, iteration, and concurrency. A Run does not encode workflow roles such as planner, implementer, or reviewer.
 
 ## Rules
 
 - MUST treat one Agent Run as the smallest executable runtime unit: one agent, one prompt, one worktree, and one result.
 - MUST bind the Run to its prepared worktree runner before invoking the agent.
 - MUST invoke the agent provider through the `AgentClient` contract.
-- MUST take the agent for each Run as an argument of the Run rather than from the runner, so Runs on one worktree may use different agents ([ADR 0008](../adr/0008-run-agents-on-the-host-through-a-worktree-runner-and-pass-the-agent-to-each-run.md)).
+- MUST take the agent from the runner, bound at creation, so one runner runs one agent; Runs with a different agent use another runner ([ADR 0011](../adr/0011-bind-one-agent-client-to-each-agent-runner-created-by-a-provider.md)).
 - MUST return a machine-readable result containing execution success and agent output.
 - MUST keep workflow topology in Workflow code rather than in the Run abstraction.
 - MUST let a Workflow decide subsequent Runs from prior Run results and external state.
@@ -29,7 +29,7 @@ The runtime owns the Run boundary: it binds the prepared execution context, runs
 
 - MUST reuse one worktree runner across the dependent Runs.
 - MUST preserve each Run as a separate agent invocation with its own prompt and result.
-- MAY use a different agent for each Run.
+- MAY continue one conversation across Runs by passing the previous result's session id.
 - SHOULD execute dependent Runs sequentially in workflow-defined order.
 
 ### Variant: Separate Worktrees
@@ -44,11 +44,10 @@ The runtime owns the Run boundary: it binds the prepared execution context, runs
 Shared worktree:
 
 ```text
-WorktreeRunner
-  ├─ run(planner)
-  ├─ run(implementer)
-  ├─ run(reviewer)
-  └─ run(fixer)
+AgentRunner
+  ├─ run(prompt) → session id
+  ├─ run(prompt, session id)
+  └─ run(prompt, session id)
 ```
 
 Separate worktrees:
@@ -77,7 +76,7 @@ The Workflow selects the variant, sequence, conditions, and concurrency. Each Ru
 
 ## Validation
 
-The runtime prototype already exposes `AgentClient` as a one-prompt-to-one-result boundary and keeps repeated invocation policy in Workflow code. Binding to a prepared worktree is a decided Loop rule enforced by `WorktreeRunner.run`.
+The runtime prototype already exposes `AgentClient` as a one-prompt-to-one-result boundary and keeps repeated invocation policy in Workflow code. Binding to a prepared worktree is a decided Loop rule enforced by `AgentRunner.run`.
 
 ## References
 

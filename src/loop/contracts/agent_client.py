@@ -105,6 +105,9 @@ class AgentClient(ABC):
             self._sessions.save(session)
         return result
 
+    def exit(self) -> None:
+        """Releases what the client holds; the default holds nothing."""
+
     @abstractmethod
     def _invoke(
         self,
