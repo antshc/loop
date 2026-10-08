@@ -20,7 +20,7 @@ def open_sandbox(run: SpecRun, deps: DevDeps) -> WorktreeSandbox:
         deps.sandbox_factory,
         checkout=run.checkout,
         harness_root=deps.harness_root,
-        base=run.base_branch,
+        base=run.spec.base_branch,
         branch=run.feature_branch,
         hooks=SandboxHooks(worktree_ready=tuple(deps.hooks)),
         cancel=deps.cancel,
@@ -58,15 +58,15 @@ def _run_and_validate(
 def _deliver_ticket(run: SpecRun, ticket: Ticket, sandbox: WorktreeSandbox, deps: DevDeps) -> bool:
     """Fresh agent runs for `ticket` until one is accepted or its failure cap is reached; True on success."""
     worktree = sandbox.worktree.path
-    identifier = task_id(run.initiative, ticket.number)
+    identifier = task_id(run.spec.initiative, ticket.number)
     while True:
         head_before = deps.git.commits.head(worktree)
         args = prompt_args(
             ticket,
             identifier,
-            initiative_commits(deps.git.commits, worktree, run.base_branch, run.initiative),
+            initiative_commits(deps.git.commits, worktree, run.spec.base_branch, run.spec.initiative),
             worktree,
-            run.base_branch,
+            run.spec.base_branch,
             run.feature_branch,
         )
         attempt = _run_and_validate(sandbox, deps, identifier, head_before, args)

@@ -32,9 +32,9 @@ def _report_cancelled(spec: Spec, worktree: Path | None) -> None:
 
 def _base_branch_exists(run: SpecRun, deps: DevDeps) -> bool:
     """True when the base branch is on the target's origin; otherwise hands the Spec to a human."""
-    if deps.git.branches.can_prepare(Branch(run.checkout, run.base_branch)):
+    if deps.git.branches.can_prepare(Branch(run.checkout, run.spec.base_branch)):
         return True
-    deps.tracker.hitl(run.spec.number, f"dev: target branch {run.base_branch!r} does not exist on {run.target}")
+    deps.tracker.hitl(run.spec.number, f"dev: target branch {run.spec.base_branch!r} does not exist on {run.spec.target}")
     return False
 
 

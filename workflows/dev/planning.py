@@ -30,13 +30,10 @@ def feature_branch_name(base_branch: str, title: str) -> str:
 class SpecRun:
     spec: Spec
     tickets: tuple[Ticket, ...]
-    initiative: str
-    bare_title: str
-    target: str
-    base_branch: str
     feature_branch: str
     checkout: Path
     target_github: GitHubClient
+
 
 def _same_slug(a: str | None, b: str | None) -> bool:
     """Case-insensitive equality for two `origin_slug` results."""
@@ -94,10 +91,6 @@ def prepare_run(
     return SpecRun(
         spec=spec,
         tickets=tickets,
-        initiative=spec.initiative,
-        bare_title=spec.bare_title,
-        target=target,
-        base_branch=base_branch,
         feature_branch=feature_branch_name(base_branch, spec.bare_title),
         checkout=checkout,
         target_github=target_github,
