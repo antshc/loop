@@ -42,14 +42,7 @@ from loop.platforms.git import (
 )
 from loop.process import CommandExecutor, CommandResult, cli_runner, run_command
 from loop.prompt import PromptPreprocessor
-from loop.runs.lifecycle import (
-    LifecycleResult,
-    WorktreeRunner,
-    WorktreeRunResult,
-    create_worktree_runner,
-    run_host_hooks,
-    run_lifecycle,
-)
+from loop.runs.lifecycle import WorktreeRunner, WorktreeRunResult, create_worktree_runner, run_host_hooks
 from loop.stores.file import FileExecutionStore, FileSessionStore
 from loop.stores.memory import InMemoryExecutionStore, InMemorySessionStore
 from loop.tags import extract_json, extract_tag
@@ -83,7 +76,6 @@ __all__ = [
     "HookError",
     "InMemoryExecutionStore",
     "InMemorySessionStore",
-    "LifecycleResult",
     "LoopError",
     "PromptError",
     "PromptPreprocessor",
@@ -102,5 +94,4 @@ __all__ = [
     "parallel_settled",
     "run_command",
     "run_host_hooks",
-    "run_lifecycle",
 ]

@@ -26,7 +26,7 @@ Paths relative to `src/loop/`.
 ```text
 __init__.py     public API
 contracts/      ABCs: AgentClient, SessionStore, ExecutionStore
-runs/           WorktreeRunner and create_worktree_runner (worktree + host agent runs), run_lifecycle, run_host_hooks
+runs/           WorktreeRunner and create_worktree_runner (worktree + host agent runs), run_host_hooks
 agents/         CopilotClient, AgentOutputParser per agent kind, fake agent and Copilot CLI doubles
 platforms/      git/ (BranchService, WorktreeService, CommitService over an internal git client; branch, feature-branch, and worktree-path naming), fake doubles
 stores/         file and in-memory execution/session stores
@@ -63,7 +63,7 @@ C4Component
         Component(agents, "Agent clients", "CopilotClient, AgentOutputParser", "Render the prompt, run the provider CLI through the runner's executor, stream its output for logging, and after exit parse the response envelope with the agent kind's output parser.")
         Component(platforms, "Branch & commit services", "BranchService, CommitService", "Branch prepare/push/merge and commit log/rollback via the internal git client, also used by the worktree service.")
         Component(worktrees, "Worktree service", "WorktreeService", "Creates, tracks, and removes worktrees through the git client, and names their branches and folders.")
-        Component(runner, "Worktree runner", "WorktreeRunner, create_worktree_runner, run_lifecycle", "Builds a long-lived worktree, runs each agent on the host through the executor it hands the agent, and wraps each run with the base head and commit collection.")
+        Component(runner, "Worktree runner", "WorktreeRunner, create_worktree_runner", "Builds a long-lived worktree, runs each agent on the host through the executor it hands the agent, and wraps each run with the base head and commit collection.")
         ComponentDb(stores, "Stores", "File and in-memory", "Persist session keys and attempt counts.")
         Component(contracts, "Contracts", "ABCs", "AgentClient, SessionStore, and ExecutionStore boundaries.")
         Component(policy, "Shared policy", "process, prompt, tags, parallel, errors", "Command execution, prompt preprocessing, tag extraction, parallel settling, and errors.")

@@ -8,16 +8,13 @@ import pytest
 
 from loop import (
     AgentOptions,
-    Branch,
     Cancelled,
     Hook,
     HookError,
     InMemorySessionStore,
     LoopError,
-    Worktree,
     copilot,
     create_worktree_runner,
-    run_lifecycle,
 )
 from loop.testing import FakeAgentClient, FakeCopilotCli, FakeGit
 
@@ -201,58 +198,20 @@ def test_leaving_the_context_without_an_error_removes_the_worktree(tmp_path: Pat
     assert git.removed == [runner.worktree.path]
 
 
-def _worktree(git: FakeGit, branch: str = "tmp") -> Worktree:
-    return git.worktrees.create(Branch(CHECKOUT, branch), HARNESS / branch)
-
-
-def _lifecycle(git: FakeGit, worktree: Worktree, work, **kwargs):
-    return run_lifecycle(git.commits, git.branches, git.worktrees, CHECKOUT, worktree, work, **kwargs)
-
-
-def test_lifecycle_in_temp_branch_mode_merges_into_the_host_branch_then_detaches_and_deletes_the_temp_branch() -> None:
+def test_run_with_merge_to_head_passes_the_agent_commits_to_the_result(tmp_path: Path) -> None:
     git = FakeGit()
-    worktree = _worktree(git)
+    runner = _runner(git, tmp_path, branch="feature-x", merge_to_head=True)
+    agent = FakeAgentClient(lambda prompt, options: git.commit(runner.worktree.path, "x") and "done")
 
-    outcome = _lifecycle(git, worktree, lambda base_head: git.commit(worktree.path, "x"), branch=None)
+    result = runner.run(lambda binding: agent, "go")
 
-    assert outcome.branch == "tmp" and outcome.commits == (f"{1:040d}",)
-    assert git.merged == [(CHECKOUT, "tmp")]
-    assert git.detached == {worktree.path} and git.deleted_branches == ["tmp"]
-
-
-def test_lifecycle_with_keep_source_branch_skips_the_detach_and_delete() -> None:
-    git = FakeGit()
-
-    _lifecycle(git, _worktree(git), lambda base_head: None, branch=None, keep_source_branch=True)
-
-    assert git.merged == [(CHECKOUT, "tmp")]
-    assert git.detached == set() and git.deleted_branches == []
+    assert result.branch == "feature-x" and result.commits == (f"{1:040d}",)
 
 
-def test_lifecycle_with_an_explicit_branch_neither_merges_nor_deletes() -> None:
-    git = FakeGit()
-
-    _lifecycle(git, _worktree(git), lambda base_head: None, branch="tmp")
-
-    assert git.merged == [] and git.deleted_branches == []
-
-
-def test_lifecycle_passes_the_head_before_the_work_to_the_work() -> None:
-    git = FakeGit()
-    worktree = _worktree(git)
-    git.commit(worktree.path, "earlier")
-    seen: list[str] = []
-
-    outcome = _lifecycle(
-        git, worktree, lambda base_head: seen.append(base_head) or git.commit(worktree.path, "x"), branch="tmp"
-    )
-
-    assert seen == [f"{1:040d}"] and outcome.commits == (f"{2:040d}",)
-
-
-def test_lifecycle_rejects_a_temp_branch_merge_into_a_detached_host_checkout() -> None:
+def test_run_with_merge_to_head_rejects_a_detached_host_checkout(tmp_path: Path) -> None:
     git = FakeGit()
     git.host_branch = None
+    runner = _runner(git, tmp_path, branch="feature-x", merge_to_head=True)
 
     with pytest.raises(LoopError, match="detached HEAD"):
-        _lifecycle(git, _worktree(git), lambda base_head: None, branch=None)
+        runner.run(lambda binding: FakeAgentClient(), "go")
