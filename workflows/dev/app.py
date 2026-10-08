@@ -85,6 +85,7 @@ def _process_spec(spec: Spec, deps: DevDeps) -> Outcome:
         harness_slug=deps.harness_slug,
         tracker=deps.tracker,
         github_factory=deps.github_factory,
+        git=deps.git,
     )
     if run is None:
         return Outcome.SKIPPED

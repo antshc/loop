@@ -22,7 +22,6 @@ from loop import (
     SandboxFactory,
     configure_logging,
     copilot,
-    origin_slug,
 )
 
 from workflows.platforms.work_tracking import GitHubClient, TicketsTracker
@@ -58,7 +57,7 @@ def _build_deps(
     harness_slug: str,
     log_dir: Path,
     *,
-    git: Git | None,
+    git: Git,
     github_factory: GithubFactory | None,
     agent_factory: AgentClientFactory | None,
     sandbox_factory: SandboxFactory | None,
@@ -72,7 +71,7 @@ def _build_deps(
         harness_slug=harness_slug,
         tracker=TicketsTracker(github_factory(harness_root), store or FileExecutionStore(log_dir), harness_slug),
         github_factory=github_factory,
-        git=git or Git(),
+        git=git,
         agent_factory=agent_factory or copilot(InMemorySessionStore()),
         sandbox_factory=sandbox_factory or SANDBOX_FACTORY,
         hooks=hooks,
@@ -99,7 +98,8 @@ def main(
     log_dir = (args.log_dir or harness_root / LOG_DIR_NAME).resolve()
     configure_logging(log_dir / "dev.log", args.log_level)
 
-    harness_slug = origin_slug(harness_root)
+    git = git or Git()
+    harness_slug = git.origin_slug(harness_root)
     if harness_slug is None:
         logger.error("harness root is not a resolvable github.com git repository: %s", harness_root)
         return 1

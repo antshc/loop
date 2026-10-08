@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from loop import origin_slug
+from loop import Git
 from workflows.platforms.work_tracking import PullRequests, Spec, Ticket, TicketsTracker
 
 from .deps import GithubFactory
@@ -47,12 +47,13 @@ def _resolve_checkout(
     harness_root: Path,
     harness_slug: str,
     tracker: TicketsTracker,
+    git: Git,
 ) -> Path | None:
     """The local checkout of `target`, or None after blocking the Spec when there is none."""
     if _same_slug(harness_slug, target):
         return harness_root
     checkout = harness_root / "workspace" / target.split("/", 1)[1]
-    checkout_slug = origin_slug(checkout) if checkout.is_dir() else None
+    checkout_slug = git.origin_slug(checkout) if checkout.is_dir() else None
     if not _same_slug(checkout_slug, target):
         tracker.block_spec(
             spec.number,
@@ -70,6 +71,7 @@ def prepare_run(
     harness_slug: str,
     tracker: TicketsTracker,
     github_factory: GithubFactory,
+    git: Git,
 ) -> SpecRun | None:
     """The SpecRun for `spec`, or None after blocking the Spec when its target cannot be resolved."""
     # Tickets live on the harness tracker, even when the Spec targets another repo.
@@ -82,7 +84,7 @@ def prepare_run(
         return None
 
     checkout = _resolve_checkout(
-        spec, target, tickets, harness_root=harness_root, harness_slug=harness_slug, tracker=tracker
+        spec, target, tickets, harness_root=harness_root, harness_slug=harness_slug, tracker=tracker, git=git
     )
     if checkout is None:
         return None

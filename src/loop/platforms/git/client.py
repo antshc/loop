@@ -37,15 +37,6 @@ class Hook:
     timeout_s: float = DEFAULT_HOOK_TIMEOUT_S
 
 
-def origin_slug(path: Path, *, run: GitRunner = execute) -> str | None:
-    """The `owner/name` of `path`'s `origin` remote on github.com, or None when unresolvable."""
-    result = run(("git", "remote", "get-url", "origin"), cwd=path)
-    if result.returncode != 0:
-        return None
-    match = _REMOTE.search(result.stdout.strip())
-    return f"{match['owner']}/{match['repo']}" if match else None
-
-
 class GitClient:
     """Internal git command runner: fetch, branch, Hooks, commit, push; worktree policy lives in WorktreeService."""
 
@@ -67,6 +58,14 @@ class GitClient:
     def config_get(self, path: Path, key: str) -> str | None:
         result = self._execute(("git", "config", "--get", key), cwd=path)
         return result.stdout.strip() or None if result.returncode == 0 else None
+
+    def origin_slug(self, path: Path) -> str | None:
+        """The `owner/name` of `path`'s `origin` remote on github.com, or None when unresolvable."""
+        result = self._execute(("git", "remote", "get-url", "origin"), cwd=path)
+        if result.returncode != 0:
+            return None
+        match = _REMOTE.search(result.stdout.strip())
+        return f"{match['owner']}/{match['repo']}" if match else None
 
     def commit(self, worktree: Path, subject: str, body: str = "") -> None:
         self._run(("git", "add", "-A"), cwd=worktree)

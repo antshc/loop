@@ -5,7 +5,7 @@ from pathlib import Path
 
 from loop.errors import Cancelled, CommandError, HookError
 from loop.platforms.git.branch_service import BranchService
-from loop.platforms.git.client import Hook
+from loop.platforms.git.client import GitClient, Hook
 from loop.platforms.git.commit_service import CommitService
 from loop.platforms.git.facade import Git
 from loop.platforms.git.objects import Branch, Commit, Worktree
@@ -48,6 +48,10 @@ class FakeGit(Git):
         # Compatibility aliases for callers that still address the service classes directly.
         self.branch_service = self.branches
         self.worktree_service = self.worktrees
+
+    def origin_slug(self, path: Path) -> str | None:
+        # Reads the real on-disk remote: tests back harness/workspace checkouts with real repos.
+        return GitClient().origin_slug(path)
 
     def commit(self, worktree: Path, subject: str, body: str = "") -> str:
         commits = self.branch_commits[self.worktree_branches[worktree]]

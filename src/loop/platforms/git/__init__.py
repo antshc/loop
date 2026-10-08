@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from loop.platforms.git.branch_service import BranchService
-from loop.platforms.git.client import GitClient, Hook, origin_slug
+from loop.platforms.git.client import GitClient, Hook
 from loop.platforms.git.commit_service import CommitService
 from loop.platforms.git.facade import Git
 from loop.platforms.git.objects import Branch, Commit, Worktree
@@ -19,5 +19,4 @@ __all__ = [
     "Hook",
     "WorktreeService",
     "Worktree",
-    "origin_slug",
 ]

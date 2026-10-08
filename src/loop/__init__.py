@@ -38,7 +38,6 @@ from loop.platforms.git import (
     Hook,
     Worktree,
     WorktreeService,
-    origin_slug,
 )
 from loop.process import CommandExecutor, CommandResult, cli_runner, run_command
 from loop.prompt import PromptPreprocessor
@@ -106,7 +105,6 @@ __all__ = [
     "create_sandbox",
     "extract_json",
     "extract_tag",
-    "origin_slug",
     "parallel_settled",
     "run_command",
     "run_host_hooks",
