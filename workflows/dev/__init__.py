@@ -77,9 +77,8 @@ def _build_deps(
     return DevDeps(
         harness_root=harness_root,
         repository_pool=repository_pool,
-        tracker=TicketsTracker(
-            github_factory(harness_root), store or FileExecutionStore(log_dir), repository_pool.harness.owner_repo
-        ),
+        tracker=TicketsTracker(github_factory(harness_root)),
+        store=store or FileExecutionStore(log_dir),
         git=git,
         agent_factory=agent_factory or copilot(InMemorySessionStore()),
         executor=executor,

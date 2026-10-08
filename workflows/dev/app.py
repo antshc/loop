@@ -42,7 +42,8 @@ def _base_branch_exists(spec: Spec, repository: Repository, deps: DevDeps) -> bo
     """True when the base branch is on the target's origin; otherwise hands the Spec to a human."""
     if deps.git.branches.can_prepare(Branch(repository.path, spec.base_branch)):
         return True
-    deps.tracker.hitl(spec.number, f"dev: target branch {spec.base_branch!r} does not exist on {spec.target}")
+    spec.hand_to_human(f"dev: target branch {spec.base_branch!r} does not exist on {spec.target}")
+    deps.tracker.update_spec(spec)
     return False
 
 
@@ -66,7 +67,8 @@ def _deliver_in_worktree(spec: Spec, repository: Repository, runner: AgentRunner
         delivered = deliver_tickets(spec, runner, deps)
         pull_request_url = publish(deps.git.branches, spec, repository, runner.worktree.path)
         if delivered and pull_request_url is not None:
-            deps.tracker.announce_delivered(spec.number, pull_request_url)
+            spec.announce_delivered(pull_request_url)
+            deps.tracker.update_spec(spec)
         return Outcome.SUCCESS if delivered else Outcome.FAILED
     except Cancelled:
         kept_on_cancel = runner.lifecycle.has_changes()
@@ -79,12 +81,14 @@ def _deliver_in_worktree(spec: Spec, repository: Repository, runner: AgentRunner
 def _process_spec(spec: Spec, deps: DevDeps) -> Outcome:
     """Prepare, deliver, and publish one Spec."""
     if spec.target is None or spec.base_branch is None:
-        deps.tracker.block_spec(spec, f"dev: cannot resolve repo:target/repo:base labels on {spec.url}")
+        spec.block(f"dev: cannot resolve repo:target/repo:base labels on {spec.url}")
+        deps.tracker.update_spec(spec)
         return Outcome.SKIPPED
 
     repository = deps.repository_pool.get(spec.target)
     if repository is None:
-        deps.tracker.block_spec(spec, f"dev: repo:target:{spec.target} is not configured in the RepositoryPool")
+        spec.block(f"dev: repo:target:{spec.target} is not configured in the RepositoryPool")
+        deps.tracker.update_spec(spec)
         return Outcome.SKIPPED
 
     try:
@@ -93,7 +97,8 @@ def _process_spec(spec: Spec, deps: DevDeps) -> Outcome:
         _report_cancelled(spec, exception.worktree)
         return Outcome.SKIPPED
     except LoopError as exception:
-        deps.tracker.comment(spec.number, f"dev: {exception}")
+        spec.comment(f"dev: {exception}")
+        deps.tracker.update_spec(spec)
         return Outcome.FAILED
 
     if runner is None:

@@ -1,13 +1,11 @@
-"""Spec/Ticket entities and the harness tracker: Spec metadata, actionable Tickets, failure counts, hand-offs."""
+"""Spec/Ticket entities and the harness tracker: Spec metadata, actionable Tickets, hand-offs, persisted Spec changes."""
 
 from __future__ import annotations
 
 import re
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
-
-from loop import ExecutionStore
 
 from .gh_client import GitHubClient
 
@@ -32,7 +30,30 @@ class Comment:
 
 
 @dataclass(frozen=True)
+class _CommentOn:
+    number: int
+    body: str
+
+
+@dataclass(frozen=True)
+class _AddLabel:
+    number: int
+    label: str
+
+
+@dataclass(frozen=True)
+class _Close:
+    number: int
+    comment: str
+
+
+_Change = _CommentOn | _AddLabel | _Close
+
+
+@dataclass
 class Spec:
+    """Aggregate root: its Tickets change only through it, and `TicketsTracker.update_spec` persists the changes."""
+
     number: int
     title: str
     url: str
@@ -41,6 +62,8 @@ class Spec:
     comments: tuple[Comment, ...] = ()
     # Open Tickets ready for delivery, in order; they live on the harness tracker even when the Spec targets another repo.
     tickets: tuple[Ticket, ...] = ()
+    # Changes made since the last update_spec, in the order GitHub must see them.
+    _changes: list[_Change] = field(default_factory=list, init=False, repr=False, compare=False)
 
     @property
     def awaiting_human(self) -> bool:
@@ -50,7 +73,53 @@ class Spec:
     @property
     def has_work(self) -> bool:
         """Has at least one Ticket ready for delivery."""
-        return bool(self.tickets)
+        return any(ticket.actionable for ticket in self.tickets)
+
+    @property
+    def pending_changes(self) -> tuple[_Change, ...]:
+        """Changes not yet persisted, oldest first."""
+        return tuple(self._changes)
+
+    def acknowledge(self, change: _Change) -> None:
+        """Marks the oldest occurrence of `change` as persisted."""
+        self._changes.remove(change)
+
+    def comment(self, message: str) -> None:
+        """Comments `message` on the Spec."""
+        self._changes.append(_CommentOn(self.number, message))
+
+    def hand_to_human(self, message: str) -> None:
+        """Labels the Spec `hitl` and comments `message` on it."""
+        self.labels = _with_label(self.labels, HITL_LABEL)
+        self._changes += [_AddLabel(self.number, HITL_LABEL), _CommentOn(self.number, message)]
+
+    def block(self, message: str) -> None:
+        """Hands the Spec to a human, but only when there is work it is blocking."""
+        if self.has_work:
+            self.hand_to_human(message)
+
+    def escalate(self, ticket_number: int, reason: str) -> None:
+        """Hands both the Ticket and the Spec to a human."""
+        message = f"dev: {reason}"
+        ticket = self._ticket(ticket_number)
+        ticket.labels = _with_label(ticket.labels, HITL_LABEL)
+        self._changes += [_AddLabel(ticket_number, HITL_LABEL), _CommentOn(ticket_number, message)]
+        self.hand_to_human(message)
+
+    def close_ticket(self, ticket_number: int, comment: str) -> None:
+        """Closes a delivered Ticket with `comment`."""
+        self._ticket(ticket_number).state = "closed"
+        self._changes.append(_Close(ticket_number, comment))
+
+    def announce_delivered(self, pull_request_url: str) -> None:
+        """Tells the Spec that all its Tickets are delivered and where the draft PR is."""
+        self.comment(f"dev: all Tickets delivered; draft pull request: {pull_request_url}")
+
+    def _ticket(self, number: int) -> Ticket:
+        for ticket in self.tickets:
+            if ticket.number == number:
+                return ticket
+        raise ValueError(f"ticket #{number} does not belong to spec #{self.number}")
 
     @property
     def initiative(self) -> str:
@@ -89,7 +158,7 @@ class Spec:
         return slug if match is None else f"{match[1].replace('.', '_')}_{slug}"
 
 
-@dataclass(frozen=True)
+@dataclass
 class Ticket:
     number: int
     title: str
@@ -103,6 +172,10 @@ class Ticket:
     def actionable(self) -> bool:
         """Open and carrying neither the `hitl` nor the `spec` label."""
         return self.state == "open" and not ({label.casefold() for label in self.labels} & _BLOCKING_LABELS)
+
+
+def _with_label(labels: tuple[str, ...], label: str) -> tuple[str, ...]:
+    return labels if label in labels else (*labels, label)
 
 
 def _comments(node: dict[str, Any]) -> tuple[Comment, ...]:
@@ -142,12 +215,10 @@ def _ticket(node: dict[str, Any]) -> Ticket:
 
 
 class TicketsTracker:
-    """The harness repo's Spec/Ticket tracker and each Ticket's persisted failure count."""
+    """The harness repo's Spec/Ticket tracker: loads Specs and persists the changes made to them."""
 
-    def __init__(self, github: GitHubClient, store: ExecutionStore, harness_slug: str) -> None:
+    def __init__(self, github: GitHubClient) -> None:
         self.github = github
-        self._store = store
-        self._harness_slug = harness_slug
 
     def specs(self) -> Iterable[Spec]:
         """Every open Spec on the harness tracker, each with its deliverable Tickets."""
@@ -157,44 +228,16 @@ class TicketsTracker:
         tickets = (_ticket(node) for node in self.github.sub_issues(spec_number))
         return tuple(ticket for ticket in tickets if ticket.actionable)
 
-    def comment(self, number: int, message: str) -> None:
-        """Comments `message` on issue `number`."""
-        self.github.comment(number, message)
+    def update_spec(self, spec: Spec) -> None:
+        """Persists the Spec's and its Tickets' pending changes in order; a failed change stays pending."""
+        for change in spec.pending_changes:
+            self._apply(change)
+            spec.acknowledge(change)
 
-    def record_failure(self, ticket: Ticket) -> int:
-        """Counts one failure for `ticket` and returns its persisted total."""
-        owner, repo = self._harness_slug.split("/", 1)
-        self._store.record_failure(
-            ticket.url,
-            owner=owner,
-            repo=repo,
-            task_id=str(ticket.number),
-            title=ticket.title,
-            items=[ticket.number],
-        )
-        return self._store.failed_attempts(ticket.url)
-
-    def hitl(self, number: int, message: str) -> None:
-        """Hands issue `number` to a human with `message`."""
-        self.github.add_label(number, HITL_LABEL)
-        self.github.comment(number, message)
-
-    def escalate(self, spec_number: int, ticket_number: int, reason: str) -> None:
-        """Hands both the Ticket and its Spec to a human."""
-        message = f"dev: {reason}"
-        self.hitl(ticket_number, message)
-        self.hitl(spec_number, message)
-
-    def block_spec(self, spec: Spec, message: str) -> None:
-        """Hands the Spec to a human, but only when there is work it is blocking."""
-        if spec.has_work:
-            self.hitl(spec.number, message)
-
-    def close_delivered(self, ticket: Ticket, comment: str) -> None:
-        """Closes a delivered Ticket with `comment` and clears its failures."""
-        self.github.close_with_comment(ticket.number, comment)
-        self._store.reset(ticket.url)
-
-    def announce_delivered(self, spec_number: int, pull_request_url: str) -> None:
-        """Tells the Spec that all its Tickets are delivered and where the draft PR is."""
-        self.github.comment(spec_number, f"dev: all Tickets delivered; draft pull request: {pull_request_url}")
+    def _apply(self, change: _Change) -> None:
+        if isinstance(change, _CommentOn):
+            self.github.comment(change.number, change.body)
+        elif isinstance(change, _AddLabel):
+            self.github.add_label(change.number, change.label)
+        else:
+            self.github.close_with_comment(change.number, change.comment)

@@ -54,6 +54,20 @@ def _run_and_validate(
     return dev_result if violation is None else violation
 
 
+def _record_failure(ticket: Ticket, deps: DevDeps) -> int:
+    """Counts one failure for `ticket` and returns its persisted total."""
+    owner, repo = deps.repository_pool.harness.owner_repo.split("/", 1)
+    deps.store.record_failure(
+        ticket.url,
+        owner=owner,
+        repo=repo,
+        task_id=str(ticket.number),
+        title=ticket.title,
+        items=[ticket.number],
+    )
+    return deps.store.failed_attempts(ticket.url)
+
+
 def _deliver_ticket(spec: Spec, ticket: Ticket, runner: AgentRunner, deps: DevDeps) -> bool:
     """Fresh agent runs for `ticket` until one is accepted or its failure cap is reached; True on success."""
     worktree = runner.worktree.path
@@ -70,13 +84,16 @@ def _deliver_ticket(spec: Spec, ticket: Ticket, runner: AgentRunner, deps: DevDe
         )
         attempt = _run_and_validate(runner, deps, identifier, head_before, args)
         if isinstance(attempt, DevResult):
-            deps.tracker.close_delivered(
-                ticket, f"Delivered in {attempt.commit}.\n\n{attempt.summary}\n\n{attempt.verification}"
+            spec.close_ticket(
+                ticket.number, f"Delivered in {attempt.commit}.\n\n{attempt.summary}\n\n{attempt.verification}"
             )
+            deps.tracker.update_spec(spec)
+            deps.store.reset(ticket.url)
             return True
         deps.git.commits.restore(head_before)
-        if deps.tracker.record_failure(ticket) >= MAX_TICKET_FAILURES:
-            deps.tracker.escalate(spec.number, ticket.number, attempt)
+        if _record_failure(ticket, deps) >= MAX_TICKET_FAILURES:
+            spec.escalate(ticket.number, attempt)
+            deps.tracker.update_spec(spec)
             return False
 
 def deliver_tickets(spec: Spec, runner: AgentRunner, deps: DevDeps) -> bool:
