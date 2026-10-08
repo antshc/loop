@@ -6,10 +6,11 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+from loop import LoopError
 from workflows.platforms.work_tracking import WorkIdentifier
 
 
-class DevResultError(Exception):
+class DevResultError(LoopError):
     """The agent's response is missing, not valid JSON, or missing a required `result` field."""
 
 

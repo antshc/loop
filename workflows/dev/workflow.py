@@ -7,7 +7,6 @@ from enum import Enum, auto
 from pathlib import Path
 
 from loop import (
-    AgentResult,
     AgentRunner,
     AgentRunnerProvider,
     Branch,
@@ -22,7 +21,7 @@ from workflows.platforms.work_tracking import Repository, Spec, Ticket, WorkIden
 
 from .deps import DevDeps
 from .prompting import initiative_commits, prompt_args
-from .result import DevResult, DevResultError, parse_response
+from .result import DevResult, parse_response
 from .settings import MAX_TICKET_FAILURES
 
 logger = logging.getLogger("workflow.dev")
@@ -54,8 +53,16 @@ class DevWorkflow:
         for spec in self._tracker.specs():
             if spec.awaiting_human:
                 continue
-            failed = (self._process_spec(spec) is Outcome.FAILED) or failed
+            failed = (self._process_spec_or_skip(spec) is Outcome.FAILED) or failed
         return 1 if failed else 0
+
+    def _process_spec_or_skip(self, spec: Spec) -> Outcome:
+        """The single place a cancelled run is reported; it skips the Spec."""
+        try:
+            return self._process_spec(spec)
+        except Cancelled as exception:
+            self._report_cancelled(spec, exception.worktree)
+            return Outcome.SKIPPED
 
     def _process_spec(self, spec: Spec) -> Outcome:
         """Prepare, deliver, and publish one Spec."""
@@ -74,9 +81,6 @@ class DevWorkflow:
             if not self._prepare(spec, repository):
                 return Outcome.SKIPPED
             agent_runner = self.create_agent_runner(spec, repository)
-        except Cancelled as exception:
-            self._report_cancelled(spec, exception.worktree)
-            return Outcome.SKIPPED
         except LoopError as exception:
             spec.comment(f"dev: {exception}")
             self._tracker.update_spec(spec)
@@ -91,10 +95,9 @@ class DevWorkflow:
                 spec.announce_delivered(pull_request_url)
                 self._tracker.update_spec(spec)
             return Outcome.SUCCESS if delivered else Outcome.FAILED
-        except Cancelled:
+        except Cancelled as exception:
             kept_on_cancel = agent_runner.lifecycle.has_changes()
-            self._report_cancelled(spec, agent_runner.worktree.path if kept_on_cancel else None)
-            return Outcome.SKIPPED
+            raise Cancelled(agent_runner.worktree.path if kept_on_cancel else None) from exception
         finally:
             agent_runner.exit(keep_worktree=kept_on_cancel)
 
@@ -143,10 +146,7 @@ class DevWorkflow:
                 spec.base_branch,
                 spec.feature_branch,
             )
-            outcome = self._run(runner, Prompt(self._prompts.dev, args))
-            attempt = (
-                outcome if isinstance(outcome, str) else self._validate(runner, identifier, head_before, outcome)
-            )
+            attempt = self._attempt(runner, Prompt(self._prompts.dev, args), identifier, head_before)
             if isinstance(attempt, DevResult):
                 spec.close_ticket(
                     ticket.number, f"Delivered in {attempt.commit}.\n\n{attempt.summary}\n\n{attempt.verification}"
@@ -160,22 +160,14 @@ class DevWorkflow:
                 self._tracker.update_spec(spec)
                 return False
 
-    def _run(self, runner: AgentRunner, prompt: Prompt) -> AgentResult | str:
-        """Runs the agent once; returns its outcome, or the failure reason."""
-        try:
-            return runner.run(prompt.template, prompt.args).result
-        except Cancelled:
-            raise
-        except LoopError as exception:
-            return str(exception)
-
-    def _validate(
-        self, runner: AgentRunner, identifier: WorkIdentifier, head_before: Commit, outcome: AgentResult
+    def _attempt(
+        self, runner: AgentRunner, prompt: Prompt, identifier: WorkIdentifier, head_before: Commit
     ) -> DevResult | str:
-        """Validates the agent's response and Git; returns the accepted result, or the failure reason."""
+        """Runs the agent once and validates its response and Git; returns the accepted result, or the failure reason."""
         try:
+            outcome = runner.run(prompt.template, prompt.args).result
             dev_result = parse_response(outcome.response, identifier)
-        except DevResultError as exception:
+        except LoopError as exception:
             return str(exception)
         if dev_result.status == "failed":
             return dev_result.reason or ""

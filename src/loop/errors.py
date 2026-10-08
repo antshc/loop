@@ -41,8 +41,8 @@ class HookError(LoopError):
         self.output = output
 
 
-class Cancelled(LoopError):
-    """A run was cancelled; `worktree` carries its location when a dirty worktree was kept."""
+class Cancelled(Exception):
+    """A run was cancelled (control flow, not a failure); `worktree` carries its location when a dirty worktree was kept."""
 
     def __init__(self, worktree: Path | None = None) -> None:
         suffix = f" (worktree kept at {worktree})" if worktree else ""
