@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -59,6 +59,14 @@ class SessionStore(ABC):
     def save(self, session: AgentSession) -> None: ...
 
 
+@dataclass(frozen=True)
+class AgentBinding:
+    """What a run gives the agent factory: the executor the agent runs through and the harness-root workspace."""
+
+    executor: CommandExecutor
+    workspace: str
+
+
 class AgentClient(ABC):
     """Renders the prompt, resolves the logical session, and leaves command building to the provider."""
 
@@ -106,3 +114,6 @@ class AgentClient(ABC):
         *,
         resume: bool,
     ) -> AgentResult: ...
+
+
+AgentClientFactory = Callable[[AgentBinding], AgentClient]

@@ -11,14 +11,11 @@ import pytest
 
 from loop import (
     AgentClient,
-    Sandbox,
     CommandError,
     CopilotClient,
-    DockerSandbox,
     FileExecutionStore,
     Hook,
     InMemoryExecutionStore,
-    NoSandbox,
 )
 from loop.testing import FakeAgentClient, FakeCopilotCli, FakeGit
 from workflows import dev
@@ -122,20 +119,23 @@ def test_prompt_args_carry_only_the_ticket_its_task_id_and_the_initiative_commit
 # --- Functional tests: drive dev.main with fakes at every process boundary --------------------------------
 
 
-def test_sandbox_is_created_on_the_harness_root_while_the_prompt_carries_the_worktree(tmp_path: Path) -> None:
+def test_agents_run_on_the_harness_root_while_the_prompt_carries_the_worktree(tmp_path: Path) -> None:
     harness = DevHarness(tmp_path)
-    sandbox_workspaces: list[Path] = []
+    workspaces: list[str] = []
 
-    def sandbox_factory(workspace: Path, cancel: threading.Event):
-        sandbox_workspaces.append(workspace)
-        return NoSandbox(workspace, executor=FakeCopilotCli(), cancel=cancel)
+    def agent_factory(binding):
+        workspaces.append(binding.workspace)
 
-    code = harness.run(
-        handler=lambda prompt, options: _commit_and_report(harness, 10), sandbox_factory=sandbox_factory
-    )
+        def handler(prompt, options):
+            harness.agent_calls.append((prompt, options))
+            return _commit_and_report(harness, 10)
+
+        return FakeAgentClient(handler)
+
+    code = harness.run(agent_factory=agent_factory)
 
     assert code == 0
-    assert sandbox_workspaces == [harness.harness_root]
+    assert workspaces == [str(harness.harness_root)]
     worktree = harness.git.removed[-1]
     assert worktree != harness.harness_root
     assert str(worktree) in harness.agent_calls[0][0]
@@ -799,11 +799,10 @@ def test_only_the_selected_ticket_is_closed(tmp_path: Path) -> None:
 
 def test_implementations_follow_the_contracts() -> None:
     assert issubclass(CopilotClient, AgentClient) and issubclass(FakeAgentClient, AgentClient)
-    assert issubclass(NoSandbox, Sandbox) and issubclass(DockerSandbox, Sandbox)
 
 
 def test_core_never_imports_adapters() -> None:
-    adapter_packages = ("loop.agents", "loop.sandboxes", "loop.stores", "loop.platforms")
+    adapter_packages = ("loop.agents", "loop.runs", "loop.stores", "loop.platforms")
     core = [p for p in SRC.glob("*.py") if p.name != "__init__.py"] + list((SRC / "contracts").glob("*.py"))
     for path in core:
         for module in imports_of(path):

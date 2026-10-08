@@ -1,4 +1,4 @@
-"""Integration test: `dev.main` through the real Copilot agent client, parser, prompt preprocessor, and host sandbox.
+"""Integration test: `dev.main` through the real Copilot agent client, parser, prompt preprocessor, and host executor.
 
 Only Git, GitHub, the Copilot CLI process, and the execution store are stand-ins
 (docs/concepts/str-loop-library-workflow-architecture.md).
@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from loop import InMemorySessionStore, NoSandbox, copilot
+from loop import InMemorySessionStore, copilot
 from loop.testing import FakeCopilotCli
 
 from workflow_harness import DevHarness, RecordingExecutor, _issue, _only_worktree, copilot_event_frames
@@ -36,7 +36,7 @@ def _run_with_real_agent(harness: DevHarness, fake_cli: FakeCopilotCli) -> tuple
     recorder = RecordingExecutor(fake_cli)
     code = harness.run(
         agent_factory=copilot(InMemorySessionStore()),
-        sandbox_factory=lambda workspace, cancel: NoSandbox(workspace, executor=recorder, cancel=cancel),
+        executor=recorder,
     )
     return code, recorder
 

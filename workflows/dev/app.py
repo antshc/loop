@@ -6,10 +6,10 @@ import logging
 from enum import Enum, auto
 from pathlib import Path
 
-from loop import Branch, BranchService, Cancelled, LoopError, WorktreeSandbox
+from loop import Branch, BranchService, Cancelled, LoopError, WorktreeRunner
 from workflows.platforms.work_tracking import HITL_LABEL, Spec
 
-from .delivery import deliver_tickets, open_sandbox
+from .delivery import deliver_tickets, open_runner
 from .deps import DevDeps
 from .planning import SpecRun, prepare_run
 
@@ -47,8 +47,8 @@ def _base_branch_exists(run: SpecRun, deps: DevDeps) -> bool:
     return False
 
 
-def _prepare(run: SpecRun, deps: DevDeps) -> WorktreeSandbox | None:
-    """Publishes earlier runs' commits; returns a sandbox only when there are Tickets to deliver."""
+def _prepare(run: SpecRun, deps: DevDeps) -> WorktreeRunner | None:
+    """Publishes earlier runs' commits; returns a runner only when there are Tickets to deliver."""
     deps.git.branches.fetch(run.repository.path)
     if not run.tickets:
         publish(deps.git.branches, run, run.repository.path)
@@ -57,24 +57,24 @@ def _prepare(run: SpecRun, deps: DevDeps) -> WorktreeSandbox | None:
         return None
     # Worktree creation force-resets the local feature branch, so publish earlier runs' commits first.
     publish(deps.git.branches, run, run.repository.path)
-    return open_sandbox(run, deps)
+    return open_runner(run, deps)
 
 
-def _deliver_in_sandbox(run: SpecRun, sandbox: WorktreeSandbox, deps: DevDeps) -> Outcome:
-    """Delivers and publishes inside `sandbox`, always closing it; a cancelled run keeps only uncommitted work."""
+def _deliver_in_worktree(run: SpecRun, runner: WorktreeRunner, deps: DevDeps) -> Outcome:
+    """Delivers and publishes on `runner`'s worktree, always closing it; a cancelled run keeps only uncommitted work."""
     kept_on_cancel = False
     try:
-        delivered = deliver_tickets(run, sandbox, deps)
-        pull_request_url = publish(deps.git.branches, run, sandbox.worktree.path)
+        delivered = deliver_tickets(run, runner, deps)
+        pull_request_url = publish(deps.git.branches, run, runner.worktree.path)
         if delivered and pull_request_url is not None:
             deps.tracker.announce_delivered(run.spec.number, pull_request_url)
         return Outcome.SUCCESS if delivered else Outcome.FAILED
     except Cancelled:
-        kept_on_cancel = deps.git.worktrees.has_changes(sandbox.worktree)
-        _report_cancelled(run.spec, sandbox.worktree.path if kept_on_cancel else None)
+        kept_on_cancel = deps.git.worktrees.has_changes(runner.worktree)
+        _report_cancelled(run.spec, runner.worktree.path if kept_on_cancel else None)
         return Outcome.SKIPPED
     finally:
-        sandbox.close(keep_worktree=kept_on_cancel)
+        runner.close(keep_worktree=kept_on_cancel)
 
 
 def _process_spec(spec: Spec, deps: DevDeps) -> Outcome:
@@ -88,7 +88,7 @@ def _process_spec(spec: Spec, deps: DevDeps) -> Outcome:
         return Outcome.SKIPPED
 
     try:
-        sandbox = _prepare(run, deps)
+        runner = _prepare(run, deps)
     except Cancelled as exception:
         _report_cancelled(spec, exception.worktree)
         return Outcome.SKIPPED
@@ -96,9 +96,9 @@ def _process_spec(spec: Spec, deps: DevDeps) -> Outcome:
         deps.tracker.comment(run.spec.number, f"dev: {exception}")
         return Outcome.FAILED
 
-    if sandbox is None:
+    if runner is None:
         return Outcome.SKIPPED
-    return _deliver_in_sandbox(run, sandbox, deps)
+    return _deliver_in_worktree(run, runner, deps)
 
 
 def process_specs(deps: DevDeps) -> int:

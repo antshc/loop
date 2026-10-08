@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "loop"
 version = "0.0.0"
-description = "Library for composing agent workflows on git worktree sandboxes."
+description = "Library for composing agent workflows on git worktrees."
 requires-python = ">=3.12"
 dependencies = [
     "python-json-logger>=2.0",
@@ -38,17 +38,17 @@ source_modules = [
 ]
 forbidden_modules = [
     "loop.agents",
-    "loop.sandboxes",
+    "loop.runs",
     "loop.platforms",
     "loop.stores",
     "loop.testing",
 ]
 
 [[tool.importlinter.contracts]]
-name = "Adapters import no sandbox code"
+name = "Adapters import no run code"
 type = "forbidden"
 source_modules = ["loop.agents", "loop.platforms", "loop.stores"]
-forbidden_modules = ["loop.sandboxes"]
+forbidden_modules = ["loop.runs"]
 
 [[tool.importlinter.contracts]]
 name = "The git platform module imports no workflow code"
@@ -61,7 +61,7 @@ name = "Only loop.testing imports loop.testing"
 type = "forbidden"
 source_modules = [
     "loop.agents",
-    "loop.sandboxes",
+    "loop.runs",
     "loop.platforms",
     "loop.stores",
     "loop.contracts",
@@ -81,7 +81,7 @@ source_modules = ["workflows.dev", "workflows.platforms"]
 forbidden_modules = [
     "loop.contracts",
     "loop.agents",
-    "loop.sandboxes",
+    "loop.runs",
     "loop.platforms",
     "loop.stores",
     "loop.errors",

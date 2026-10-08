@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import threading
 from pathlib import Path
 
-from loop import Hook, NoSandbox, Sandbox
+from loop import Hook
 from workflows.platforms.work_tracking import RepositoryConfig
 
 LOG_DIR_NAME = ".loop"
@@ -23,10 +22,3 @@ REPOSITORIES: tuple[RepositoryConfig, ...] = (
 )
 MAX_TICKET_FAILURES = 2
 PROMPT = Path(__file__).parent / "prompts" / "dev.md"
-
-
-def _no_sandbox(workspace: Path, cancel: threading.Event) -> Sandbox:
-    return NoSandbox(workspace, cancel=cancel)
-
-
-SANDBOX_FACTORY = _no_sandbox

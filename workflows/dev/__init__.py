@@ -1,4 +1,4 @@
-"""Autonomous dev loop: one branch, worktree, and sandbox per open Spec, one Ticket per fresh agent run.
+"""Autonomous dev loop: one branch and worktree per open Spec, one Ticket per fresh agent run.
 
 Control flow, metadata parsing, and the dev result model are owned here,
 not by the loop library (see docs/concepts/str-loop-library-workflow-architecture.md).
@@ -14,12 +14,12 @@ from pathlib import Path
 
 from loop import (
     AgentClientFactory,
+    CommandExecutor,
     ExecutionStore,
     FileExecutionStore,
     Git,
     Hook,
     InMemorySessionStore,
-    SandboxFactory,
     configure_logging,
     copilot,
 )
@@ -38,7 +38,7 @@ from .app import process_specs
 from .deps import DevDeps, GithubFactory
 from .prompting import prompt_args
 from .result import DevResult, DevResultError, parse_dev_result
-from .settings import HOOKS, LOG_DIR_NAME, LOG_LEVEL, PROMPT, REPOSITORIES, SANDBOX_FACTORY
+from .settings import HOOKS, LOG_DIR_NAME, LOG_LEVEL, PROMPT, REPOSITORIES
 
 __all__ = [
     "PROMPT",
@@ -69,7 +69,7 @@ def _build_deps(
     git: Git,
     github_factory: GithubFactory,
     agent_factory: AgentClientFactory | None,
-    sandbox_factory: SandboxFactory | None,
+    executor: CommandExecutor | None,
     store: ExecutionStore | None,
     hooks: Sequence[Hook],
     cancel: threading.Event | None,
@@ -82,7 +82,7 @@ def _build_deps(
         ),
         git=git,
         agent_factory=agent_factory or copilot(InMemorySessionStore()),
-        sandbox_factory=sandbox_factory or SANDBOX_FACTORY,
+        executor=executor,
         hooks=hooks,
         template=PROMPT.read_text(),
         cancel=cancel or threading.Event(),
@@ -96,7 +96,7 @@ def main(
     github_factory: GithubFactory | None = None,
     repositories: Sequence[RepositoryConfig] = REPOSITORIES,
     agent_factory: AgentClientFactory | None = None,
-    sandbox_factory: SandboxFactory | None = None,
+    executor: CommandExecutor | None = None,
     store: ExecutionStore | None = None,
     hooks: Sequence[Hook] = HOOKS,
     cancel: threading.Event | None = None,
@@ -123,7 +123,7 @@ def main(
         git=git,
         github_factory=github_factory,
         agent_factory=agent_factory,
-        sandbox_factory=sandbox_factory,
+        executor=executor,
         store=store,
         hooks=hooks,
         cancel=cancel,

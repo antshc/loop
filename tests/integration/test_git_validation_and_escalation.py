@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from loop import InMemorySessionStore, NoSandbox, copilot
+from loop import InMemorySessionStore, copilot
 from loop.testing import FakeCopilotCli
 
 from workflow_harness import DevHarness, RecordingExecutor, _issue, _only_worktree, copilot_event_frames
@@ -25,7 +25,7 @@ def _run_with_real_agent(harness: DevHarness, fake_cli: FakeCopilotCli) -> tuple
     recorder = RecordingExecutor(fake_cli)
     code = harness.run(
         agent_factory=copilot(InMemorySessionStore()),
-        sandbox_factory=lambda workspace, cancel: NoSandbox(workspace, executor=recorder, cancel=cancel),
+        executor=recorder,
     )
     return code, recorder
 

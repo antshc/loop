@@ -1,6 +1,6 @@
-"""Library for composing agent workflows on sandboxes.
+"""Library for composing agent workflows on git worktrees.
 
-A workflow is an ordinary Python script that wires a sandbox, an agent client, git and GitHub clients,
+A workflow is an ordinary Python script that wires a worktree runner, an agent client, git and GitHub clients,
 and owns its own control flow. Import only from here.
 """
 
@@ -8,7 +8,9 @@ from __future__ import annotations
 
 from loop.agents.copilot import CopilotClient, CopilotOutputParser, copilot
 from loop.contracts.agent_client import (
+    AgentBinding,
     AgentClient,
+    AgentClientFactory,
     AgentOptions,
     AgentOutputParser,
     AgentResult,
@@ -16,7 +18,6 @@ from loop.contracts.agent_client import (
     SessionStore,
 )
 from loop.contracts.execution_store import ExecutionStore
-from loop.contracts.sandbox import AgentClientFactory, Sandbox, SandboxBinding
 from loop.errors import (
     AgentError,
     Cancelled,
@@ -41,20 +42,14 @@ from loop.platforms.git import (
 )
 from loop.process import CommandExecutor, CommandResult, cli_runner, run_command
 from loop.prompt import PromptPreprocessor
-from loop.sandboxes.create_sandbox import SandboxFactory, SandboxRunResult, WorktreeSandbox, create_sandbox
-from loop.sandboxes.sandbox_lifecycle import (
-    LifecycleResult,
-    SandboxHooks,
-    run_host_hooks,
-    with_sandbox_lifecycle,
-)
-from loop.sandboxes.docker import DockerSandbox, Mount
-from loop.sandboxes.no_sandbox import NoSandbox
+from loop.runs.lifecycle import LifecycleResult, run_host_hooks, run_lifecycle
+from loop.runs.worktree_runner import WorktreeRunResult, WorktreeRunner, create_worktree_runner
 from loop.stores.file import FileExecutionStore, FileSessionStore
 from loop.stores.memory import InMemoryExecutionStore, InMemorySessionStore
 from loop.tags import extract_json, extract_tag
 
 __all__ = [
+    "AgentBinding",
     "AgentClient",
     "AgentClientFactory",
     "AgentError",
@@ -72,7 +67,6 @@ __all__ = [
     "CommitService",
     "CopilotClient",
     "CopilotOutputParser",
-    "DockerSandbox",
     "ExecutionStore",
     "ExecutionStoreError",
     "ExtractionError",
@@ -85,28 +79,22 @@ __all__ = [
     "InMemorySessionStore",
     "LifecycleResult",
     "LoopError",
-    "Mount",
-    "NoSandbox",
     "PromptError",
     "PromptPreprocessor",
-    "Sandbox",
-    "SandboxBinding",
-    "SandboxFactory",
-    "SandboxHooks",
-    "SandboxRunResult",
     "SessionStore",
     "Settled",
     "Worktree",
-    "WorktreeSandbox",
+    "WorktreeRunResult",
+    "WorktreeRunner",
     "WorktreeService",
     "cli_runner",
     "configure_logging",
     "copilot",
-    "create_sandbox",
+    "create_worktree_runner",
     "extract_json",
     "extract_tag",
     "parallel_settled",
     "run_command",
     "run_host_hooks",
-    "with_sandbox_lifecycle",
+    "run_lifecycle",
 ]

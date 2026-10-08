@@ -9,13 +9,13 @@ The client accepts an agent prompt, the arguments that render it, and run option
 
 ## Concept
 
-An **AgentClient** wraps a provider-specific CLI adapter, uses a **Prompt Preprocessor** to render the prompt, and uses a **SessionStore** for resumable agent sessions. The workflow passes the AgentClient to each Sandbox run, and the **Sandbox** supplies the executor the CLI runs through ([ADR 0008](../adr/0008-pass-the-agent-to-each-sandbox-run-instead-of-binding-it-to-the-sandbox.md)).
+An **AgentClient** wraps a provider-specific CLI adapter, uses a **Prompt Preprocessor** to render the prompt, and uses a **SessionStore** for resumable agent sessions. The workflow passes the AgentClient to each worktree run, and the **worktree runner** supplies the executor the CLI runs through ([ADR 0008](../adr/0008-run-agents-on-the-host-through-a-worktree-runner-and-pass-the-agent-to-each-run.md)).
 
 ```text
 Loop / Ralph / Crew
           |
           v
-       Sandbox  (NoSandbox | DockerSandbox)
+   WorktreeRunner
           |
           v
       AgentClient
@@ -30,7 +30,7 @@ Preprocessor              |
 
 `AgentClient` exposes a provider-neutral `run(prompt, prompt_args, options)` operation. The Prompt Preprocessor first replaces `{{KEY}}` placeholders in the prompt with `prompt_args` and expands `!`cmd`` commands the template author wrote. A run without `options.session_key` starts a fresh provider invocation. A run with a session key resolves the logical session through `SessionStore`; the provider adapter then creates or resumes the corresponding provider session.
 
-The Sandbox decides where the provider CLI runs. `NoSandbox` runs it directly in the workspace without a sandbox. `DockerSandbox` starts a container and runs the CLI, and the template commands, inside it. The client never knows which; it runs commands through the executor its Sandbox gave it.
+The worktree runner runs the provider CLI, and the template commands, directly on the host in the harness-root workspace. The client never builds the process itself; it runs commands through the executor its runner gave it, which tests replace.
 
 `SessionStore` owns Loop's logical-session metadata, not the provider conversation history. It maps a logical session key to the provider-facing session reference needed for later continuation. The provider CLI remains authoritative for the actual transcript and session state.
 
@@ -47,8 +47,8 @@ The CLI adapter owns command construction, process execution, and provider-speci
 - MUST render the prompt through the Prompt Preprocessor before invoking the provider CLI.
 - MUST substitute only `{{KEY}}` placeholders; a placeholder without a matching argument MUST fail the run, and an argument no placeholder uses SHOULD log a warning.
 - MUST execute only `!`cmd`` commands written in the prompt template; text arriving through `prompt_args` MUST NOT be executed.
-- MUST run the provider CLI and template commands through the executor of the owning Sandbox.
-- MUST pass the provider's allow-all permission flag (`--allow-all` for Copilot CLI) when the Sandbox is isolated, and path-scoped permissions (`--allow-all-tools` with `--add-dir`) when it is not; the adapter owns these flags and the Sandbox only states whether it is isolated ([ADR 0005](../adr/0005-run-copilot-cli-agents-from-the-harness-root-with-harness-and-workspace-isolation.md)).
+- MUST run the provider CLI and template commands through the executor of the owning worktree runner.
+- MUST pass path-scoped permissions (`--allow-all-tools` with `--add-dir` for Copilot CLI), never the provider's allow-all flag; the adapter owns these flags ([ADR 0005](../adr/0005-run-copilot-cli-agents-from-the-harness-root-with-harness-and-workspace-isolation.md)).
 - MUST treat an omitted session key as a fresh provider invocation.
 - MUST resolve a supplied logical session key through `SessionStore`.
 - MUST persist a new session only after its first provider invocation succeeds.
@@ -57,9 +57,9 @@ The CLI adapter owns command construction, process execution, and provider-speci
 - MUST derive provider-facing session names from the logical session key rather than requiring workflows to supply provider-native names.
 - MUST prepend the configured `session_name_prefix` when creating provider-facing session names.
 - MUST keep provider executable names, arguments, session creation/resume flags, and naming syntax inside the provider CLI adapter.
-- MUST execute the provider CLI in the workspace of the owning Sandbox.
+- MUST execute the provider CLI in the harness-root workspace of the owning worktree runner.
 - MUST capture stdout, stderr, and exit code for every invocation.
-- MUST stream provider output line by line through the Sandbox executor for live logging while the process runs, and parse it only after the process exits, through the `AgentOutputParser` of the agent kind ([ADR 0007](../adr/0007-stream-agent-output-live-and-parse-it-after-exit-with-a-per-agent-kind-output-parser.md)).
+- MUST stream provider output line by line through the runner's executor for live logging while the process runs, and parse it only after the process exits, through the `AgentOutputParser` of the agent kind ([ADR 0007](../adr/0007-stream-agent-output-live-and-parse-it-after-exit-with-a-per-agent-kind-output-parser.md)).
 - MUST let the output parser fill `AgentResult`'s response string from the generic envelope (`identifier`, `status`, `result`) and decide success or error from `status`; the parser MUST NOT check workflow-specific fields or the expected `identifier`.
 - MUST keep `AgentClient` and its output parsers agnostic of what a prompt asks for: they run a prompt and return its response; Tickets, Specs, and identifier meaning belong to the workflow.
 - MUST NOT terminate the provider process early; it runs until it exits or times out.

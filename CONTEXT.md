@@ -55,17 +55,13 @@ A user-declared shell command that Loop runs on the host at a Hook point, before
 _Avoid_: Callback, script, setup step
 
 **Hook point**:  
-A named moment in the Sandbox lifecycle at which Loop runs the Hooks declared for it, such as `worktree-ready`.  
+A named moment in the Run lifecycle at which Loop runs the Hooks declared for it, such as `worktree-ready`.  
 _Avoid_: Event, trigger, stage
 
-**Sandbox**:  
-The place where a Headless AI Agent runs on a worktree: either isolated in a container, separated from the host and from other runs, or, with no isolation, directly on the host.  
-_Avoid_: Capsule, container, environment
+**Worktree runner**:  
+The long-lived pairing of one worktree with the agent runs a Workflow makes on it; agents run directly on the host with the user's own permissions, with no isolation.  
+_Avoid_: Sandbox, container, environment
 
-**NoSandbox**:  
-The Sandbox that skips isolation and runs the agent directly on the host with the user's own permissions.  
-_Avoid_: NoCapsule, host mode
-
-**Sandbox lifecycle**:  
-The ordered stages of one Workflow run on a worktree: worktree creation and `worktree-ready` Hooks, Sandbox start, one or more agent runs, Sandbox close, publication of the agent's work, and worktree removal.  
-_Avoid_: Run lifecycle, Capsule lifecycle
+**Run lifecycle**:  
+The ordered stages of one Workflow run on a worktree: worktree creation and `worktree-ready` Hooks, one or more agent runs, publication of the agent's work, and worktree removal.  
+_Avoid_: Sandbox lifecycle

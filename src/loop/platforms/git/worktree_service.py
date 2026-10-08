@@ -105,7 +105,7 @@ class WorktreeService:
         return not self.has_changes(worktree)
 
     def run_hook(self, hook: Hook, worktree: Path, cancel: threading.Event | None = None) -> None:
-        """Runs a worktree-ready/sandbox-ready Hook on the host, inside `worktree`."""
+        """Runs a worktree-ready Hook on the host, inside `worktree`."""
         self._git.run_hook(hook, worktree, cancel)
 
     def _run(self, args: Sequence[str], *, cwd: Path) -> str:

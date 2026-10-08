@@ -56,13 +56,13 @@ def test_prepare_moves_an_existing_unchecked_out_local_branch_to_the_base_origin
     assert git(checkout, "rev-parse", "feature-z") == git(checkout, "rev-parse", "origin/main")
 
 
-def test_prepare_generates_a_unique_sandbox_name_when_no_branch_is_given(tmp_path: Path) -> None:
+def test_prepare_generates_a_unique_run_name_when_no_branch_is_given(tmp_path: Path) -> None:
     checkout = _init_pushed_repo(tmp_path / "harness")
     service = BranchService()
 
     prepared = service.prepare(None, Branch(checkout, "main"))
 
-    assert prepared.name.startswith("loop/sandbox-")
+    assert prepared.name.startswith("loop/run-")
     assert git(checkout, "rev-parse", prepared.name) == git(checkout, "rev-parse", "origin/main")
 
 

@@ -1,8 +1,8 @@
-"""Delivers a SpecRun's Tickets in its sandbox, one fresh agent run per attempt."""
+"""Delivers a SpecRun's Tickets on its worktree, one fresh agent run per attempt."""
 
 from __future__ import annotations
 
-from loop import AgentOptions, Cancelled, Commit, LoopError, SandboxHooks, WorktreeSandbox, create_sandbox
+from loop import AgentOptions, Cancelled, Commit, LoopError, WorktreeRunner, create_worktree_runner
 from workflows.platforms.work_tracking import Ticket, WorkIdentifier
 
 from .acceptance import commit_violation
@@ -13,23 +13,23 @@ from .result import DevResult, DevResultError, parse_response
 from .settings import MAX_TICKET_FAILURES
 
 
-def open_sandbox(run: SpecRun, deps: DevDeps) -> WorktreeSandbox:
-    """Creates the feature-branch worktree sandbox for `run`."""
-    return create_sandbox(
+def open_runner(run: SpecRun, deps: DevDeps) -> WorktreeRunner:
+    """Creates the feature-branch worktree runner for `run`."""
+    return create_worktree_runner(
         deps.git,
-        deps.sandbox_factory,
         checkout=run.repository.path,
         harness_root=deps.harness_root,
         base=run.spec.base_branch,
         branch=run.spec.feature_branch,
-        hooks=SandboxHooks(worktree_ready=tuple(deps.hooks)),
+        hooks=tuple(deps.hooks),
+        executor=deps.executor,
         cancel=deps.cancel,
         worktree_root=run.repository.worktree_root,
     )
 
 
 def _run_and_validate(
-    sandbox: WorktreeSandbox,
+    runner: WorktreeRunner,
     deps: DevDeps,
     identifier: WorkIdentifier,
     head_before: Commit,
@@ -37,7 +37,7 @@ def _run_and_validate(
 ) -> DevResult | str:
     """Runs the agent and validates its response and Git; returns the accepted result, or the failure reason."""
     try:
-        outcome = sandbox.run(deps.agent_factory, deps.template, args, AgentOptions(session_key=None)).result
+        outcome = runner.run(deps.agent_factory, deps.template, args, AgentOptions(session_key=None)).result
     except Cancelled:
         raise
     except LoopError as exception:
@@ -52,13 +52,13 @@ def _run_and_validate(
     if not outcome.success:
         return "agent process did not exit successfully"
 
-    violation = commit_violation(deps.git.worktrees, deps.git.commits, sandbox.worktree, head_before, identifier, dev_result)
+    violation = commit_violation(deps.git.worktrees, deps.git.commits, runner.worktree, head_before, identifier, dev_result)
     return dev_result if violation is None else violation
 
 
-def _deliver_ticket(run: SpecRun, ticket: Ticket, sandbox: WorktreeSandbox, deps: DevDeps) -> bool:
+def _deliver_ticket(run: SpecRun, ticket: Ticket, runner: WorktreeRunner, deps: DevDeps) -> bool:
     """Fresh agent runs for `ticket` until one is accepted or its failure cap is reached; True on success."""
-    worktree = sandbox.worktree.path
+    worktree = runner.worktree.path
     identifier = WorkIdentifier(run.spec.initiative, ticket.number)
     while True:
         head_before = deps.git.commits.head(worktree)
@@ -70,7 +70,7 @@ def _deliver_ticket(run: SpecRun, ticket: Ticket, sandbox: WorktreeSandbox, deps
             run.spec.base_branch,
             run.spec.feature_branch,
         )
-        attempt = _run_and_validate(sandbox, deps, identifier, head_before, args)
+        attempt = _run_and_validate(runner, deps, identifier, head_before, args)
         if isinstance(attempt, DevResult):
             deps.tracker.close_delivered(
                 ticket, f"Delivered in {attempt.commit}.\n\n{attempt.summary}\n\n{attempt.verification}"
@@ -81,9 +81,9 @@ def _deliver_ticket(run: SpecRun, ticket: Ticket, sandbox: WorktreeSandbox, deps
             deps.tracker.escalate(run.spec.number, ticket.number, attempt)
             return False
 
-def deliver_tickets(run: SpecRun, sandbox: WorktreeSandbox, deps: DevDeps) -> bool:
+def deliver_tickets(run: SpecRun, runner: WorktreeRunner, deps: DevDeps) -> bool:
     """Deliver Ticket for each actionable Ticket in order; stops at the first failure."""
     for ticket in run.tickets:
-        if not _deliver_ticket(run, ticket, sandbox, deps):
+        if not _deliver_ticket(run, ticket, runner, deps):
             return False
     return True

@@ -7,10 +7,10 @@ from pathlib import Path
 import pytest
 
 from loop import (
+    AgentBinding,
     AgentOptions,
     AgentResult,
     AgentSession,
-    SandboxBinding,
     CommandResult,
     FileSessionStore,
     InMemorySessionStore,
@@ -25,8 +25,8 @@ def flags(argv: tuple[str, ...]) -> set[str]:
     return set(argv[3:])
 
 
-def binding(executor, *, isolated: bool = False, workspace: str = WORKSPACE) -> SandboxBinding:
-    return SandboxBinding(executor, isolated, workspace)
+def binding(executor, *, workspace: str = WORKSPACE) -> AgentBinding:
+    return AgentBinding(executor, workspace)
 
 
 def _event(delta: str) -> str:
@@ -51,20 +51,10 @@ def test_run_without_session_key_is_a_fresh_invocation() -> None:
     assert not any(arg == "--name" or arg.startswith("--resume") for arg in cli.calls[0])
 
 
-def test_a_container_run_carries_allow_all_and_no_allow_all_tools() -> None:
+def test_a_run_carries_allow_all_tools_and_add_dir_for_the_workspace_and_no_allow_all() -> None:
     cli = FakeCopilotCli()
 
-    copilot(InMemorySessionStore())(binding(cli, isolated=True)).run("go")
-
-    call_flags = flags(cli.calls[0])
-    assert "--allow-all" in call_flags
-    assert "--allow-all-tools" not in call_flags
-
-
-def test_a_host_run_carries_allow_all_tools_and_add_dir_for_the_workspace_and_no_allow_all() -> None:
-    cli = FakeCopilotCli()
-
-    copilot(InMemorySessionStore())(binding(cli, isolated=False, workspace=WORKSPACE)).run(
+    copilot(InMemorySessionStore())(binding(cli, workspace=WORKSPACE)).run(
         "go", options=AgentOptions(add_dirs=(Path("/extra"),))
     )
 
@@ -75,23 +65,22 @@ def test_a_host_run_carries_allow_all_tools_and_add_dir_for_the_workspace_and_no
     assert "/extra" in call_flags
 
 
-def test_deny_rules_are_rendered_as_deny_tool_on_both_isolation_levels() -> None:
-    for isolated in (True, False):
-        cli = FakeCopilotCli()
-
-        copilot(InMemorySessionStore())(binding(cli, isolated=isolated)).run(
-            "go", options=AgentOptions(deny_tools=("shell", "write"))
-        )
-
-        argv = cli.calls[0]
-        deny_indexes = [i for i, arg in enumerate(argv) if arg == "--deny-tool"]
-        assert [argv[i + 1] for i in deny_indexes] == ["shell", "write"]
-
-
-def test_custom_extra_args_do_not_change_the_isolation_driven_permission_level() -> None:
+def test_deny_rules_are_rendered_as_deny_tool() -> None:
     cli = FakeCopilotCli()
 
-    copilot(InMemorySessionStore())(binding(cli, isolated=False)).run(
+    copilot(InMemorySessionStore())(binding(cli)).run(
+        "go", options=AgentOptions(deny_tools=("shell", "write"))
+    )
+
+    argv = cli.calls[0]
+    deny_indexes = [i for i, arg in enumerate(argv) if arg == "--deny-tool"]
+    assert [argv[i + 1] for i in deny_indexes] == ["shell", "write"]
+
+
+def test_custom_extra_args_do_not_change_the_permission_level() -> None:
+    cli = FakeCopilotCli()
+
+    copilot(InMemorySessionStore())(binding(cli)).run(
         "go", options=AgentOptions(extra_args=("--allow-all", "--no-color"))
     )
 
@@ -226,7 +215,7 @@ def test_agent_option_selects_the_named_agent_and_is_omitted_when_unset() -> Non
     assert "--agent" not in second
 
 
-def test_template_commands_run_through_the_sandbox_executor() -> None:
+def test_template_commands_run_through_the_run_executor() -> None:
     cli = FakeCopilotCli(shell=lambda command: "main\n")
 
     copilot(InMemorySessionStore())(binding(cli)).run("on !`git branch --show-current`")

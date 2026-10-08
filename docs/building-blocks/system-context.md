@@ -14,30 +14,26 @@ C4Context
 
     Person(author, "Workflow author", "Writes and runs Workflow scripts through their own shell alias.")
 
-    System(loop, "Loop", "Python library for composing autonomous agent Workflows on Git worktrees and Sandboxes.")
+    System(loop, "Loop", "Python library for composing autonomous agent Workflows on Git worktrees.")
 
     System_Ext(github, "GitHub", "Hosts the repository, Specs, Tickets, review threads, and pull requests.")
     System_Ext(copilot, "Copilot CLI", "Headless coding agent that does the Crew's work.")
-    System_Ext(docker, "Docker", "Container runtime that isolates agent runs.")
     System_Ext(git, "Git", "Local repository, worktrees, commits, and pushes.")
 
     Rel(author, loop, "Runs Workflows built on", "Python")
     Rel(loop, github, "Reads Tickets and writes pull requests via", "gh CLI")
     Rel(loop, copilot, "Runs prompts through", "CLI, JSON events")
-    Rel(loop, docker, "Starts and execs Sandbox containers in", "docker CLI")
     Rel(loop, git, "Creates worktrees, commits, and pushes via", "git CLI")
 
     UpdateElementStyle(author, $fontColor="#c9d1d9", $bgColor="#2a2a2a", $borderColor="#4a5a8a")
     UpdateElementStyle(loop, $fontColor="#c9d1d9", $bgColor="#2a2a2a", $borderColor="#8b949e")
     UpdateElementStyle(github, $fontColor="#c9d1d9", $bgColor="#1a1a1a", $borderColor="#8b949e")
     UpdateElementStyle(copilot, $fontColor="#c9d1d9", $bgColor="#1a1a1a", $borderColor="#8b949e")
-    UpdateElementStyle(docker, $fontColor="#c9d1d9", $bgColor="#1a1a1a", $borderColor="#8b949e")
     UpdateElementStyle(git, $fontColor="#c9d1d9", $bgColor="#1a1a1a", $borderColor="#8b949e")
 
     UpdateRelStyle(author, loop, $textColor="#c9d1d9", $lineColor="#8b949e")
     UpdateRelStyle(loop, github, $textColor="#c9d1d9", $lineColor="#8b949e")
     UpdateRelStyle(loop, copilot, $textColor="#c9d1d9", $lineColor="#8b949e")
-    UpdateRelStyle(loop, docker, $textColor="#c9d1d9", $lineColor="#8b949e")
     UpdateRelStyle(loop, git, $textColor="#c9d1d9", $lineColor="#8b949e")
 ```
 
@@ -58,19 +54,17 @@ C4Container
     Container_Ext(workflow, "Workflow script", "Python script", "User-owned runnable script on the public loop API; the repository's dev Workflow is only an example.")
 
     System_Boundary(system, "Loop") {
-        Container(loop, "loop library", "Python package", "Sandboxes, agent clients, git and GitHub clients, stores, and shared policy for composing Workflows.")
+        Container(loop, "loop library", "Python package", "Worktree runner, agent clients, git and GitHub clients, stores, and shared policy for composing Workflows.")
     }
 
     System_Ext(github, "GitHub", "Hosts the repository, Specs, Tickets, and pull requests.")
     System_Ext(copilot, "Copilot CLI", "Headless coding agent.")
-    System_Ext(docker, "Docker", "Container runtime for isolated Sandboxes.")
     System_Ext(git, "Git", "Local repository and worktrees.")
 
     Rel(author, workflow, "Runs", "Shell alias")
-    Rel(workflow, loop, "Composes Sandbox Runs with", "Python import")
+    Rel(workflow, loop, "Composes Agent Runs with", "Python import")
     Rel(loop, github, "Reads Tickets and writes pull requests via", "gh CLI")
     Rel(loop, copilot, "Runs prompts through", "CLI, JSON events")
-    Rel(loop, docker, "Starts and execs Sandbox containers in", "docker CLI")
     Rel(loop, git, "Creates worktrees, commits, and pushes via", "git CLI")
 
     UpdateElementStyle(author, $fontColor="#c9d1d9", $bgColor="#2a2a2a", $borderColor="#4a5a8a")
@@ -78,13 +72,11 @@ C4Container
     UpdateElementStyle(loop, $fontColor="#c9d1d9", $bgColor="#2a2a2a", $borderColor="#8b949e")
     UpdateElementStyle(github, $fontColor="#c9d1d9", $bgColor="#1a1a1a", $borderColor="#8b949e")
     UpdateElementStyle(copilot, $fontColor="#c9d1d9", $bgColor="#1a1a1a", $borderColor="#8b949e")
-    UpdateElementStyle(docker, $fontColor="#c9d1d9", $bgColor="#1a1a1a", $borderColor="#8b949e")
     UpdateElementStyle(git, $fontColor="#c9d1d9", $bgColor="#1a1a1a", $borderColor="#8b949e")
 
     UpdateRelStyle(author, workflow, $textColor="#c9d1d9", $lineColor="#8b949e")
     UpdateRelStyle(workflow, loop, $textColor="#c9d1d9", $lineColor="#8b949e")
     UpdateRelStyle(loop, github, $textColor="#c9d1d9", $lineColor="#8b949e")
     UpdateRelStyle(loop, copilot, $textColor="#c9d1d9", $lineColor="#8b949e")
-    UpdateRelStyle(loop, docker, $textColor="#c9d1d9", $lineColor="#8b949e")
     UpdateRelStyle(loop, git, $textColor="#c9d1d9", $lineColor="#8b949e")
 ```

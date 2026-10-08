@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from conftest import commit_file, git
-from loop import CommandExecutor, CommandResult, InMemoryExecutionStore, NoSandbox
+from loop import CommandExecutor, CommandResult, InMemoryExecutionStore
 from loop.testing import FakeAgentClient, FakeCopilotCli, FakeGit
 from workflows import dev
 from workflows.platforms.work_tracking import GitHubClient, RepositoryConfig
@@ -94,7 +94,7 @@ class DevHarness:
         *,
         handler=None,
         agent_factory=None,
-        sandbox_factory=None,
+        executor=None,
         github_factory=None,
         repositories: Sequence[RepositoryConfig] | None = None,
         store=None,
@@ -117,8 +117,7 @@ class DevHarness:
             if repositories is not None
             else [RepositoryConfig(path=self.harness_root, owner_repo="owner/repo", is_harness=True)],
             agent_factory=agent_factory or default_agent_factory,
-            sandbox_factory=sandbox_factory
-            or (lambda workspace, cancel: NoSandbox(workspace, executor=FakeCopilotCli(), cancel=cancel)),
+            executor=executor or FakeCopilotCli(),
             store=store if store is not None else self.store,
             hooks=hooks,
             cancel=cancel,

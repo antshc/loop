@@ -70,7 +70,7 @@ class BranchService:
 
     @staticmethod
     def _generate_name() -> str:
-        return f"loop/sandbox-{uuid4().hex[:8]}"
+        return f"loop/run-{uuid4().hex[:8]}"
 
     def _exists_local(self, checkout: Path, name: str) -> bool:
         return self._execute(("git", "show-ref", "--verify", "--quiet", Branch(checkout, name).ref), cwd=checkout).returncode == 0

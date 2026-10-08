@@ -7,7 +7,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from loop import AgentClientFactory, Git, Hook, SandboxFactory
+from loop import AgentClientFactory, CommandExecutor, Git, Hook
 from workflows.platforms.work_tracking import GitHubClient, RepositoryPool, TicketsTracker
 
 GithubFactory = Callable[[Path], GitHubClient]
@@ -20,7 +20,7 @@ class DevDeps:
     tracker: TicketsTracker
     git: Git
     agent_factory: AgentClientFactory
-    sandbox_factory: SandboxFactory
+    executor: CommandExecutor | None
     hooks: Sequence[Hook]
     template: str
     cancel: threading.Event

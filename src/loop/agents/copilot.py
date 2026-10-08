@@ -4,14 +4,15 @@ import json
 import logging
 
 from loop.contracts.agent_client import (
+    AgentBinding,
     AgentClient,
+    AgentClientFactory,
     AgentOptions,
     AgentOutputParser,
     AgentResult,
     AgentSession,
     SessionStore,
 )
-from loop.contracts.sandbox import AgentClientFactory, SandboxBinding
 from loop.process import CommandExecutor, checked_output
 from loop.prompt import PromptPreprocessor
 
@@ -37,13 +38,11 @@ class CopilotClient(AgentClient):
         preprocessor: PromptPreprocessor,
         sessions: SessionStore,
         *,
-        isolated: bool,
         workspace: str,
         executable: str = "copilot",
         parser: AgentOutputParser | None = None,
     ) -> None:
         super().__init__(executor, preprocessor, sessions)
-        self._isolated = isolated
         self._workspace = workspace
         self._executable = executable
         self._parser = parser or CopilotOutputParser()
@@ -57,7 +56,7 @@ class CopilotClient(AgentClient):
         resume: bool,
     ) -> AgentResult:
         args = [self._executable, "-p", prompt, "--output-format", "json"]
-        args += ["--allow-all"] if self._isolated else ["--allow-all-tools", "--add-dir", self._workspace]
+        args += ["--allow-all-tools", "--add-dir", self._workspace]
         args += list(options.extra_args)
         if session is not None:
             args += [f"--resume={session.name}"] if resume else ["--name", session.name]
@@ -134,9 +133,9 @@ def _last_envelope(text: str) -> tuple[str, dict] | None:
 
 
 def copilot(sessions: SessionStore, *, executable: str = "copilot") -> AgentClientFactory:
-    """A factory a sandbox calls with its own binding, so the CLI runs where the sandbox runs."""
+    """A factory a run calls with its binding, so the CLI runs through the run's executor."""
 
-    def create(binding: SandboxBinding) -> CopilotClient:
+    def create(binding: AgentBinding) -> CopilotClient:
         def execute(command: str) -> str:
             return checked_output(command, binding.executor(command))
 
@@ -144,7 +143,6 @@ def copilot(sessions: SessionStore, *, executable: str = "copilot") -> AgentClie
             binding.executor,
             PromptPreprocessor(execute),
             sessions,
-            isolated=binding.isolated,
             workspace=binding.workspace,
             executable=executable,
         )

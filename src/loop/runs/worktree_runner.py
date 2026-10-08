@@ -1,49 +1,47 @@
 from __future__ import annotations
 
 import threading
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import TracebackType
 
-from loop.contracts.agent_client import AgentOptions, AgentResult
-from loop.contracts.sandbox import AgentClientFactory, Sandbox
+from loop.contracts.agent_client import AgentBinding, AgentClientFactory, AgentOptions, AgentResult
 from loop.errors import Cancelled
-from loop.platforms.git import Branch, Git, Worktree
-from loop.sandboxes.sandbox_lifecycle import SandboxHooks, run_host_hooks, with_sandbox_lifecycle
-
-SandboxFactory = Callable[[Path, threading.Event], Sandbox]
+from loop.platforms.git import Branch, Git, Hook, Worktree
+from loop.process import CommandExecutor, CommandResult, OnLine, execute
+from loop.runs.lifecycle import run_host_hooks, run_lifecycle
 
 
 @dataclass(frozen=True)
-class SandboxRunResult:
+class WorktreeRunResult:
     result: AgentResult
     branch: str
     commits: tuple[str, ...]
 
 
-class WorktreeSandbox:
-    """A long-lived worktree and Sandbox; each `run` is wrapped in the sandbox lifecycle."""
+class WorktreeRunner:
+    """A long-lived worktree whose agents run on the host from the harness root; each `run` collects its commits."""
 
     def __init__(
         self,
         git: Git,
-        sandbox: Sandbox,
+        harness_root: Path,
         checkout: Path,
         worktree: Worktree,
         branch: str,
         *,
         merge_to_head: bool,
-        apply_to_host: Callable[[], None] | None,
+        executor: CommandExecutor | None,
         cancel: threading.Event,
     ) -> None:
         self._git = git
-        self._sandbox = sandbox
+        self._harness_root = harness_root
         self._checkout = checkout
         self._worktree = worktree
         self._branch = branch
         self._merge_to_head = merge_to_head
-        self._apply_to_host = apply_to_host
+        self._executor = executor or self._host_executor
         self._cancel = cancel
         self._closed = False
 
@@ -61,33 +59,27 @@ class WorktreeSandbox:
         prompt: str,
         prompt_args: Mapping[str, str] | None = None,
         options: AgentOptions | None = None,
-    ) -> SandboxRunResult:
-        outcome = with_sandbox_lifecycle(
+    ) -> WorktreeRunResult:
+        outcome = run_lifecycle(
             self._git.commits,
             self._git.branches,
             self._git.worktrees,
-            self._sandbox,
             self._checkout,
             self._worktree,
-            lambda _base_head: self._sandbox.run(agent, prompt, prompt_args, options),
+            lambda _base_head: self._run_agent(agent, prompt, prompt_args, options),
             branch=None if self._merge_to_head else self._branch,
-            apply_to_host=self._apply_to_host,
             keep_source_branch=self._merge_to_head,
-            cancel=self._cancel,
         )
-        return SandboxRunResult(outcome.result, outcome.branch, outcome.commits)
+        return WorktreeRunResult(outcome.result, outcome.branch, outcome.commits)
 
     def close(self, *, keep_worktree: bool = False) -> None:
         if self._closed:
             return
         self._closed = True
-        try:
-            self._sandbox.close()
-        finally:
-            if not keep_worktree:
-                self._git.worktrees.remove(self._worktree, force=True)
+        if not keep_worktree:
+            self._git.worktrees.remove(self._worktree, force=True)
 
-    def __enter__(self) -> WorktreeSandbox:
+    def __enter__(self) -> WorktreeRunner:
         return self
 
     def __exit__(
@@ -99,25 +91,53 @@ class WorktreeSandbox:
         # A cancelled run with uncommitted work keeps its worktree for the user.
         self.close(keep_worktree=isinstance(exception, Cancelled) and self._git.worktrees.has_changes(self._worktree))
 
+    def _run_agent(
+        self,
+        agent: AgentClientFactory,
+        prompt: str,
+        prompt_args: Mapping[str, str] | None,
+        options: AgentOptions | None,
+    ) -> AgentResult:
+        binding = AgentBinding(self._bound_executor, str(self._harness_root))
+        result = agent(binding).run(prompt, prompt_args, options)
+        if self._cancel.is_set():
+            raise Cancelled()
+        return result
 
-def create_sandbox(
+    def _bound_executor(
+        self, command: Sequence[str] | str, *, timeout_s: float | None = None, on_line: OnLine | None = None
+    ) -> CommandResult:
+        return self._executor(command, timeout_s=timeout_s, on_line=on_line, cancel=self._cancel)
+
+    def _host_executor(
+        self,
+        command: Sequence[str] | str,
+        *,
+        timeout_s: float | None = None,
+        on_line: OnLine | None = None,
+        cancel: threading.Event | None = None,
+    ) -> CommandResult:
+        return execute(command, cwd=self._harness_root, timeout_s=timeout_s, on_line=on_line, cancel=cancel)
+
+
+def create_worktree_runner(
     git: Git,
-    sandbox_factory: SandboxFactory,
     *,
     checkout: Path,
     harness_root: Path,
     worktree_root: Path,
     base: str,
     branch: str | None = None,
-    hooks: SandboxHooks = SandboxHooks(),
+    hooks: Sequence[Hook] = (),
     merge_to_head: bool = False,
-    apply_to_host: Callable[[], None] | None = None,
+    executor: CommandExecutor | None = None,
     cancel: threading.Event | None = None,
-) -> WorktreeSandbox:
-    """Create the worktree, start the Sandbox, and run the setup hooks.
+) -> WorktreeRunner:
+    """Create the worktree and run the `worktree-ready` hooks.
 
     `merge_to_head` merges each run's commits into the checkout's current branch and keeps the
-    worktree on its branch. A branch named `loop/sandbox-<id>` is generated when none is given.
+    worktree on its branch. A branch named `loop/run-<id>` is generated when none is given.
+    `executor` defaults to running commands on the host in the harness root.
     """
     cancel = cancel or threading.Event()
     target = worktree_root / branch if branch is not None else None
@@ -126,13 +146,7 @@ def create_sandbox(
         target = worktree_root / prepared.name
     worktree = git.worktrees.create(prepared, target)
     try:
-        run_host_hooks(git.worktrees, hooks.worktree_ready, worktree.path, cancel=cancel)
-        sandbox = sandbox_factory(harness_root, cancel)
-        try:
-            run_host_hooks(git.worktrees, hooks.sandbox_ready, worktree.path, cancel=cancel)
-        except Exception:
-            sandbox.close()
-            raise
+        run_host_hooks(git.worktrees, hooks, worktree.path, cancel=cancel)
     except Cancelled as exception:
         if git.worktrees.has_changes(worktree):
             raise Cancelled(worktree.path) from exception
@@ -141,13 +155,13 @@ def create_sandbox(
     except Exception:
         git.worktrees.remove(worktree, force=True)
         raise
-    return WorktreeSandbox(
+    return WorktreeRunner(
         git,
-        sandbox,
+        harness_root,
         checkout,
         worktree,
         prepared.name,
         merge_to_head=merge_to_head,
-        apply_to_host=apply_to_host,
+        executor=executor,
         cancel=cancel,
     )

@@ -23,14 +23,10 @@ OnLine = Callable[[str], "bool | None"]
 
 _CANCEL_POLL_S = 0.05
 
-# Transient exit codes, retry count, and delay are copied from Sandcastle's sandbox lifecycle.
-TRANSIENT_EXIT_CODES = frozenset({126, 137})
-TRANSIENT_RETRIES = 2
-TRANSIENT_RETRY_DELAY_S = 0.25
 
 
 class CommandExecutor(Protocol):
-    """Runs a command in a sandbox's environment; a non-zero exit is returned, not raised."""
+    """Runs a command in a run's environment; a non-zero exit is returned, not raised."""
 
     def __call__(
         self,

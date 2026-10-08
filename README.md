@@ -4,18 +4,18 @@
 
 # Loop
 
-Python library for composing autonomous agent Workflows on Git worktrees and Sandboxes.
+Python library for composing autonomous agent Workflows on Git worktrees.
 
 Loop ships no command and no built-in Workflows. You write each Workflow as a plain Python script on the public `loop` API and run it through your own shell alias. The repository's [`workflows/dev/`](workflows/dev/) package is an example only.
 
 ## Features
 
-- **Sandboxes** — run agents on a Git worktree directly on the host (`NoSandbox`) or in a container (`DockerSandbox`).
+- **Worktree runner** — creates a Git worktree and runs agents on the host from the harness root, collecting each run's commits.
 - **Agent clients** — Copilot CLI client with live output streaming and session resume.
 - **Git and GitHub clients** — worktrees, branches, commits, pushes, draft pull requests, and Ticket state; Python owns push, pull requests, and Ticket state, while the agent commits each task.
 - **Lifecycle hooks** — shell-command hooks run on the host before the agent starts.
 - **Stores** — file and in-memory stores for sessions and executions.
-- **Test doubles** — fakes for `gh`, `git`, Docker, and the Copilot CLI in `loop.testing`.
+- **Test doubles** — fakes for `gh`, `git`, and the Copilot CLI in `loop.testing`.
 
 ## Requirements
 
@@ -23,7 +23,6 @@ Loop ships no command and no built-in Workflows. You write each Workflow as a pl
 - `git`
 - GitHub CLI (`gh`) for the GitHub client
 - Copilot CLI for the Copilot agent client
-- Docker, only when using `DockerSandbox`
 
 ## Install
 
@@ -56,12 +55,20 @@ Write a Workflow as a script that imports only from `loop`:
 ```python
 from pathlib import Path
 
-from loop import InMemorySessionStore, NoSandbox, copilot
+from loop import InMemorySessionStore, copilot, create_worktree_runner, Git
 
-sandbox = NoSandbox(Path("workspace/my-repo"))
+repo = Path("workspace/my-repo").resolve()
 agent = copilot(InMemorySessionStore())
 
-result = sandbox.run(agent, "Fix the failing tests and report what changed.")
+with create_worktree_runner(
+    Git(),
+    checkout=repo,
+    harness_root=Path.cwd(),
+    worktree_root=Path("workspace/my-repo.worktrees").resolve(),
+    base="main",
+    branch="fix-tests",
+) as runner:
+    result = runner.run(agent, "Fix the failing tests and report what changed.")
 ```
 
 Run it through your own alias:

@@ -22,7 +22,7 @@ from loop import (
 ROOT = Path(__file__).parents[2]
 SRC = ROOT / "src" / "loop"
 WORKFLOWS = ROOT / "workflows"
-FAKES = {"FakeGit", "FakeDocker", "FakeCopilotCli", "FakeAgentClient"}
+FAKES = {"FakeGit", "FakeCopilotCli", "FakeAgentClient"}
 
 
 def test_preprocessor_substitutes_placeholders_and_runs_template_commands() -> None:
