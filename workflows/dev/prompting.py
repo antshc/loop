@@ -7,7 +7,6 @@ from collections.abc import Sequence
 from dataclasses import asdict
 from pathlib import Path
 
-from loop import Branch, CommitService
 from workflows.platforms.work_tracking import Ticket, WorkIdentifier
 
 
@@ -29,9 +28,3 @@ def prompt_args(
         "TARGET_BRANCH": base_branch,
         "FEATURE_BRANCH": feature_branch,
     }
-
-
-def initiative_commits(commits: CommitService, worktree: Path, base_branch: str, initiative: str) -> list[str]:
-    """This Initiative's `ccode(<initiative-id>|` commits on the feature branch since the base branch, as `<short hash> <subject>`."""
-    found = commits.find_since(Branch(worktree, base_branch), subject_prefix=f"ccode({initiative}|")
-    return [f"{commit.sha[:7]} {commit.subject}" for commit in found]

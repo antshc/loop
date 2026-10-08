@@ -20,7 +20,7 @@ from loop import (
 from workflows.platforms.work_tracking import Repository, Spec, Ticket, WorkIdentifier
 
 from .deps import DevDeps
-from .prompting import initiative_commits, prompt_args
+from .prompting import prompt_args
 from .result import DevResult, parse_response
 from .settings import MAX_TICKET_FAILURES
 
@@ -141,7 +141,7 @@ class DevWorkflow:
             args = prompt_args(
                 ticket,
                 identifier,
-                initiative_commits(self._git.commits, worktree, spec.base_branch, spec.initiative),
+                self._initiative_commits(worktree, spec.base_branch, spec.initiative),
                 worktree,
                 spec.base_branch,
                 spec.feature_branch,
@@ -159,6 +159,11 @@ class DevWorkflow:
                 spec.escalate(ticket.number, attempt)
                 self._tracker.update_spec(spec)
                 return False
+
+    def _initiative_commits(self, worktree: Path, base_branch: str, initiative: str) -> list[str]:
+        """This Initiative's `ccode(<initiative-id>|` commits on the feature branch since the base branch, as `<short hash> <subject>`."""
+        found = self._git.commits.find_since(Branch(worktree, base_branch), subject_prefix=f"ccode({initiative}|")
+        return [f"{commit.sha[:7]} {commit.subject}" for commit in found]
 
     def _attempt(
         self, runner: AgentRunner, prompt: Prompt, identifier: WorkIdentifier, head_before: Commit
