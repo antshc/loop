@@ -199,15 +199,6 @@
         <mxCell id="I9oRm3RWguibgEzQ6AS1-19" parent="I9oRm3RWguibgEzQ6AS1-16" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="&lt;div style=&quot;text-align: center;&quot;&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;+ Create(type):&amp;nbsp;&lt;/span&gt;&lt;span style=&quot;background-color: transparent; text-align: left;&quot;&gt;&lt;b&gt;AgentRunner&lt;/b&gt;&lt;/span&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry height="26" width="220" y="34" as="geometry" />
         </mxCell>
-        <mxCell id="I9oRm3RWguibgEzQ6AS1-24" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;" value="WorktreeProvider" vertex="1">
-          <mxGeometry height="60" width="250" x="2000" y="516" as="geometry" />
-        </mxCell>
-        <mxCell id="I9oRm3RWguibgEzQ6AS1-26" parent="I9oRm3RWguibgEzQ6AS1-24" style="line;strokeWidth=1;fillColor=none;align=left;verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;strokeColor=inherit;" value="" vertex="1">
-          <mxGeometry height="8" width="250" y="26" as="geometry" />
-        </mxCell>
-        <mxCell id="I9oRm3RWguibgEzQ6AS1-27" parent="I9oRm3RWguibgEzQ6AS1-24" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="+ CreateWorktree(type): WorktreeSpace" vertex="1">
-          <mxGeometry height="26" width="250" y="34" as="geometry" />
-        </mxCell>
         <mxCell id="I9oRm3RWguibgEzQ6AS1-33" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;" value="&lt;span style=&quot;font-weight: 400; text-align: left;&quot;&gt;WorktreeLifecycle&lt;/span&gt;" vertex="1">
           <mxGeometry height="60" width="160" x="1355" y="480" as="geometry" />
         </mxCell>
@@ -216,12 +207,6 @@
         </mxCell>
         <mxCell id="I9oRm3RWguibgEzQ6AS1-36" parent="I9oRm3RWguibgEzQ6AS1-33" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" value="+ exit(type): type" vertex="1">
           <mxGeometry height="26" width="160" y="34" as="geometry" />
-        </mxCell>
-        <mxCell id="I9oRm3RWguibgEzQ6AS1-37" edge="1" parent="1" source="I9oRm3RWguibgEzQ6AS1-27" style="endArrow=diamondThin;endFill=0;endSize=24;html=1;rounded=0;exitX=0.452;exitY=1;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="I9oRm3RWguibgEzQ6AS1-16" value="">
-          <mxGeometry relative="1" width="160" as="geometry">
-            <mxPoint x="2230" y="520" as="sourcePoint" />
-            <mxPoint x="2390" y="520" as="targetPoint" />
-          </mxGeometry>
         </mxCell>
         <mxCell id="I9oRm3RWguibgEzQ6AS1-39" edge="1" parent="1" source="I9oRm3RWguibgEzQ6AS1-36" style="endArrow=diamondThin;endFill=1;endSize=24;html=1;rounded=0;exitX=0.469;exitY=1.115;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="I9oRm3RWguibgEzQ6AS1-40" value="">
           <mxGeometry relative="1" width="160" as="geometry">
@@ -254,7 +239,7 @@
           <mxGeometry height="434" width="480" x="2410" y="490" as="geometry" />
         </mxCell>
         <mxCell id="I9oRm3RWguibgEzQ6AS1-47" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;" value="AgentClientFactory" vertex="1">
-          <mxGeometry height="34" width="160" x="1800" y="516" as="geometry" />
+          <mxGeometry height="34" width="160" x="2010" y="516" as="geometry" />
         </mxCell>
         <mxCell id="I9oRm3RWguibgEzQ6AS1-49" parent="I9oRm3RWguibgEzQ6AS1-47" style="line;strokeWidth=1;fillColor=none;align=left;verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;strokeColor=inherit;" value="" vertex="1">
           <mxGeometry height="8" width="160" y="26" as="geometry" />
