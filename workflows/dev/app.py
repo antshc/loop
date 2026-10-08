@@ -38,44 +38,19 @@ def publish(branches: BranchService, spec: Spec, repository: Repository, pusher:
     return repository.pull_requests.publish_draft(spec, spec.feature_branch)
 
 
-def _base_branch_exists(spec: Spec, repository: Repository, deps: DevDeps) -> bool:
-    """True when the base branch is on the target's origin; otherwise hands the Spec to a human."""
-    if deps.git.branches.can_prepare(Branch(repository.path, spec.base_branch)):
-        return True
-    spec.hand_to_human(f"dev: target branch {spec.base_branch!r} does not exist on {spec.target}")
-    deps.tracker.update_spec(spec)
-    return False
-
-
 def _prepare(spec: Spec, repository: Repository, deps: DevDeps) -> AgentRunner | None:
     """Publishes earlier runs' commits; returns a runner only when there are Tickets to deliver."""
     deps.git.branches.fetch(repository.path)
     if not spec.has_work:
         publish(deps.git.branches, spec, repository, repository.path)
         return None
-    if not _base_branch_exists(spec, repository, deps):
+    if not deps.git.branches.can_prepare(Branch(repository.path, spec.base_branch)):
+        spec.hand_to_human(f"dev: target branch {spec.base_branch!r} does not exist on {spec.target}")
+        deps.tracker.update_spec(spec)
         return None
     # Worktree creation force-resets the local feature branch, so publish earlier runs' commits first.
     publish(deps.git.branches, spec, repository, repository.path)
     return open_runner(spec, repository, deps)
-
-
-def _deliver_in_worktree(spec: Spec, repository: Repository, runner: AgentRunner, deps: DevDeps) -> Outcome:
-    """Delivers and publishes on `runner`'s worktree, always closing it; a cancelled run keeps only uncommitted work."""
-    kept_on_cancel = False
-    try:
-        delivered = deliver_tickets(spec, runner, deps)
-        pull_request_url = publish(deps.git.branches, spec, repository, runner.worktree.path)
-        if delivered and pull_request_url is not None:
-            spec.announce_delivered(pull_request_url)
-            deps.tracker.update_spec(spec)
-        return Outcome.SUCCESS if delivered else Outcome.FAILED
-    except Cancelled:
-        kept_on_cancel = runner.lifecycle.has_changes()
-        _report_cancelled(spec, runner.worktree.path if kept_on_cancel else None)
-        return Outcome.SKIPPED
-    finally:
-        runner.exit(keep_worktree=kept_on_cancel)
 
 
 def _process_spec(spec: Spec, deps: DevDeps) -> Outcome:
@@ -103,7 +78,22 @@ def _process_spec(spec: Spec, deps: DevDeps) -> Outcome:
 
     if runner is None:
         return Outcome.SKIPPED
-    return _deliver_in_worktree(spec, repository, runner, deps)
+
+    # A cancelled run keeps the worktree only when it holds uncommitted work.
+    kept_on_cancel = False
+    try:
+        delivered = deliver_tickets(spec, runner, deps)
+        pull_request_url = publish(deps.git.branches, spec, repository, runner.worktree.path)
+        if delivered and pull_request_url is not None:
+            spec.announce_delivered(pull_request_url)
+            deps.tracker.update_spec(spec)
+        return Outcome.SUCCESS if delivered else Outcome.FAILED
+    except Cancelled:
+        kept_on_cancel = runner.lifecycle.has_changes()
+        _report_cancelled(spec, runner.worktree.path if kept_on_cancel else None)
+        return Outcome.SKIPPED
+    finally:
+        runner.exit(keep_worktree=kept_on_cancel)
 
 
 def process_specs(deps: DevDeps) -> int:
