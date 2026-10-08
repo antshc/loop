@@ -130,6 +130,10 @@ class GitHubClient:
         self._write(("issue", "close", str(number), "--repo", self._slug, "--comment", body))
 
     def create_draft_pull_request(self, head: str, base: str, title: str, body: str = "") -> PullRequest:
+        """One draft PR per head branch: returns the open PR for `head` when there is one, else creates it."""
+        existing = self.find_pull_request(head)
+        if existing is not None:
+            return existing
         output = self._write(
             (
                 "pr", "create",
