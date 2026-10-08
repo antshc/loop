@@ -6,11 +6,22 @@ import logging
 from enum import Enum, auto
 from pathlib import Path
 
-from loop import AgentRunner, AgentRunnerProvider, Branch, Cancelled, LoopError, RepositoryData
-from workflows.platforms.work_tracking import Repository, Spec
+from loop import (
+    AgentRunner,
+    AgentRunnerProvider,
+    Branch,
+    Cancelled,
+    Commit,
+    LoopError,
+    RepositoryData,
+    Worktree,
+)
+from workflows.platforms.work_tracking import Repository, Spec, Ticket, WorkIdentifier
 
-from .delivery import deliver_tickets
 from .deps import DevDeps
+from .prompting import initiative_commits, prompt_args
+from .result import DevResult, DevResultError, parse_response
+from .settings import MAX_TICKET_FAILURES
 
 logger = logging.getLogger("workflow.dev")
 
@@ -25,10 +36,12 @@ class DevWorkflow:
     """Delivers every open Spec through the dependencies it is constructed with."""
 
     def __init__(self, deps: DevDeps) -> None:
-        self._deps = deps
         self._tracker = deps.tracker
         self._repository_pool = deps.repository_pool
         self._git = deps.git
+        self._store = deps.store
+        self._hooks = tuple(deps.hooks)
+        self._template = deps.template
         self._runner_provider = AgentRunnerProvider(
             deps.git, deps.harness_root, deps.agent_factory, executor=deps.executor, cancel=deps.cancel
         )
@@ -58,7 +71,7 @@ class DevWorkflow:
         try:
             if not self._prepare(spec, repository):
                 return Outcome.SKIPPED
-            runner = self.create_agent_runner(spec, repository)
+            agent_runner = self.create_agent_runner(spec, repository)
         except Cancelled as exception:
             self._report_cancelled(spec, exception.worktree)
             return Outcome.SKIPPED
@@ -70,18 +83,18 @@ class DevWorkflow:
         # A cancelled run keeps the worktree only when it holds uncommitted work.
         kept_on_cancel = False
         try:
-            delivered = deliver_tickets(spec, runner, self._deps)
-            pull_request_url = self.publish_pull_request(spec, repository, runner.worktree.path)
+            delivered = self._deliver_tickets(spec, agent_runner)
+            pull_request_url = self.publish_pull_request(spec, repository, agent_runner.worktree.path)
             if delivered and pull_request_url is not None:
                 spec.announce_delivered(pull_request_url)
                 self._tracker.update_spec(spec)
             return Outcome.SUCCESS if delivered else Outcome.FAILED
         except Cancelled:
-            kept_on_cancel = runner.lifecycle.has_changes()
-            self._report_cancelled(spec, runner.worktree.path if kept_on_cancel else None)
+            kept_on_cancel = agent_runner.lifecycle.has_changes()
+            self._report_cancelled(spec, agent_runner.worktree.path if kept_on_cancel else None)
             return Outcome.SKIPPED
         finally:
-            runner.exit(keep_worktree=kept_on_cancel)
+            agent_runner.exit(keep_worktree=kept_on_cancel)
 
     def _prepare(self, spec: Spec, repository: Repository) -> bool:
         """Publishes earlier runs' commits; True only when there are Tickets to deliver."""
@@ -104,8 +117,99 @@ class DevWorkflow:
             repository,
             base=spec.base_branch,
             branch=spec.feature_branch,
-            hooks=tuple(self._deps.hooks),
+            hooks=self._hooks,
         )
+
+    def _deliver_tickets(self, spec: Spec, runner: AgentRunner) -> bool:
+        """Delivers each actionable Ticket in order; stops at the first failure."""
+        for ticket in spec.tickets:
+            if not self._deliver_ticket(spec, ticket, runner):
+                return False
+        return True
+
+    def _deliver_ticket(self, spec: Spec, ticket: Ticket, runner: AgentRunner) -> bool:
+        """Fresh agent runs for `ticket` until one is accepted or its failure cap is reached; True on success."""
+        worktree = runner.worktree.path
+        identifier = WorkIdentifier(spec.initiative, ticket.number)
+        while True:
+            head_before = self._git.commits.head(worktree)
+            args = prompt_args(
+                ticket,
+                identifier,
+                initiative_commits(self._git.commits, worktree, spec.base_branch, spec.initiative),
+                worktree,
+                spec.base_branch,
+                spec.feature_branch,
+            )
+            attempt = self._run_and_validate(runner, identifier, head_before, args)
+            if isinstance(attempt, DevResult):
+                spec.close_ticket(
+                    ticket.number, f"Delivered in {attempt.commit}.\n\n{attempt.summary}\n\n{attempt.verification}"
+                )
+                self._tracker.update_spec(spec)
+                self._store.reset(ticket.url)
+                return True
+            self._git.commits.restore(head_before)
+            if self._record_failure(ticket) >= MAX_TICKET_FAILURES:
+                spec.escalate(ticket.number, attempt)
+                self._tracker.update_spec(spec)
+                return False
+
+    def _run_and_validate(
+        self, runner: AgentRunner, identifier: WorkIdentifier, head_before: Commit, args: dict[str, str]
+    ) -> DevResult | str:
+        """Runs the agent and validates its response and Git; returns the accepted result, or the failure reason."""
+        try:
+            outcome = runner.run(self._template, args).result
+        except Cancelled:
+            raise
+        except LoopError as exception:
+            return str(exception)
+
+        try:
+            dev_result = parse_response(outcome.response, identifier)
+        except DevResultError as exception:
+            return str(exception)
+        if dev_result.status == "failed":
+            return dev_result.reason or ""
+        if not outcome.success:
+            return "agent process did not exit successfully"
+
+        violation = self._commit_violation(runner.worktree, head_before, identifier, dev_result)
+        return dev_result if violation is None else violation
+
+    def _commit_violation(
+        self, worktree: Worktree, head_before: Commit, identifier: WorkIdentifier, dev_result: DevResult
+    ) -> str | None:
+        """Why the worktree does not hold exactly the one clean, correctly tagged commit the result claims, or None."""
+        commits = self._git.commits
+        head = commits.head(worktree.path)
+        if head.sha == head_before.sha:
+            return "HEAD did not change: the agent made no commit"
+        new_commits = commits.since(head_before)
+        if len(new_commits) != 1:
+            return f"expected exactly one commit since {head_before.sha}, found {len(new_commits)}"
+        prefix = identifier.to_subject()
+        if not head.subject.startswith(prefix):
+            return f"HEAD subject {head.subject!r} does not start with {prefix!r}"
+        if not self._git.worktrees.is_clean(worktree):
+            return "the worktree has uncommitted changes"
+        if dev_result.commit != head.sha:
+            return f"result.commit {dev_result.commit!r} does not equal HEAD {head.sha!r}"
+        return None
+
+    def _record_failure(self, ticket: Ticket) -> int:
+        """Counts one failure for `ticket` and returns its persisted total."""
+        owner, repo = self._repository_pool.harness.owner_repo.split("/", 1)
+        self._store.record_failure(
+            ticket.url,
+            owner=owner,
+            repo=repo,
+            task_id=str(ticket.number),
+            title=ticket.title,
+            items=[ticket.number],
+        )
+        return self._store.failed_attempts(ticket.url)
 
     def publish_pull_request(self, spec: Spec, repository: Repository, pusher: Path) -> str | None:
         """Pushes the feature branch from `pusher` and ensures its draft PR when it is ahead of origin.
