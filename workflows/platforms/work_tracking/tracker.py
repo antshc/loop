@@ -17,6 +17,11 @@ _INITIATIVE = re.compile(r"^(?P<initiative>[^:]+):\s*(?P<title>.+)$")
 _TARGET_PREFIX = "repo:target:"
 _BASE_PREFIX = "repo:base:"
 _SLUG = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
+_VERSION = re.compile(r"(\d+(?:\.\d+)+)")
+
+
+def slugify(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-") or "spec"
 
 
 @dataclass(frozen=True)
@@ -60,6 +65,16 @@ class Spec:
         """The single `repo:base:<branch>` label's value, or None when missing/empty/duplicated."""
         values = [label[len(_BASE_PREFIX) :] for label in self.labels if label.startswith(_BASE_PREFIX)]
         return values[0] if len(values) == 1 and values[0] else None
+
+    @property
+    def feature_branch(self) -> str | None:
+        """`<version_with_underscores>_<title slug>` when base_branch carries a version, else `<title slug>`; None without a base_branch."""
+        base_branch = self.base_branch
+        if base_branch is None:
+            return None
+        slug = slugify(self.bare_title)
+        match = _VERSION.search(base_branch)
+        return slug if match is None else f"{match[1].replace('.', '_')}_{slug}"
 
 
 @dataclass(frozen=True)

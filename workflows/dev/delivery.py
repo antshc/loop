@@ -21,7 +21,7 @@ def open_sandbox(run: SpecRun, deps: DevDeps) -> WorktreeSandbox:
         checkout=run.checkout,
         harness_root=deps.harness_root,
         base=run.spec.base_branch,
-        branch=run.feature_branch,
+        branch=run.spec.feature_branch,
         hooks=SandboxHooks(worktree_ready=tuple(deps.hooks)),
         cancel=deps.cancel,
     )
@@ -67,7 +67,7 @@ def _deliver_ticket(run: SpecRun, ticket: Ticket, sandbox: WorktreeSandbox, deps
             initiative_commits(deps.git.commits, worktree, run.spec.base_branch, run.spec.initiative),
             worktree,
             run.spec.base_branch,
-            run.feature_branch,
+            run.spec.feature_branch,
         )
         attempt = _run_and_validate(sandbox, deps, identifier, head_before, args)
         if isinstance(attempt, DevResult):

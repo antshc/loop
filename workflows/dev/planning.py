@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,25 +11,11 @@ from workflows.platforms.work_tracking import PullRequests, Spec, Ticket, Ticket
 
 from .deps import GithubFactory
 
-_VERSION = re.compile(r"(\d+(?:\.\d+)+)")
-
-
-def slugify(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-") or "spec"
-
-
-def feature_branch_name(base_branch: str, title: str) -> str:
-    """`<version_with_underscores>_<title slug>` when base_branch carries a version, else `<title slug>`."""
-    slug = slugify(title)
-    match = _VERSION.search(base_branch)
-    return slug if match is None else f"{match[1].replace('.', '_')}_{slug}"
-
 
 @dataclass(frozen=True)
 class SpecRun:
     spec: Spec
     tickets: tuple[Ticket, ...]
-    feature_branch: str
     checkout: Path
     pull_requests: PullRequests
 
@@ -93,7 +78,6 @@ def prepare_run(
     return SpecRun(
         spec=spec,
         tickets=tickets,
-        feature_branch=feature_branch_name(base_branch, spec.bare_title),
         checkout=checkout,
         pull_requests=PullRequests(target_github),
     )

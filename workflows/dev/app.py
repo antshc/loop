@@ -34,9 +34,9 @@ def publish(branches: BranchService, run: SpecRun, pusher: Path) -> str | None:
 
     Returns the PR URL, or None when there was nothing to publish.
     """
-    if not branches.push(Branch(pusher, run.feature_branch), Branch(pusher, run.spec.base_branch)):
+    if not branches.push(Branch(pusher, run.spec.feature_branch), Branch(pusher, run.spec.base_branch)):
         return None
-    return run.pull_requests.publish_draft(run.spec, run.feature_branch)
+    return run.pull_requests.publish_draft(run.spec, run.spec.feature_branch)
 
 
 def _base_branch_exists(run: SpecRun, deps: DevDeps) -> bool:
