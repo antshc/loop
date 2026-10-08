@@ -30,21 +30,26 @@ class PullRequests:
 
 @dataclass(frozen=True)
 class RepositoryConfig:
-    """A user-declared repository: its checkout path and `owner/name`; one must carry `is_harness`."""
+    """A user-declared repository: its checkout path and `owner/name`; one must carry `is_harness`.
+
+    `worktree_root` hardcodes the harness's default worktrees root; only the `is_harness` entry sets it.
+    """
 
     path: Path
     owner_repo: RepoTarget
     is_harness: bool = False
+    worktree_root: Path | None = None
 
 
 @dataclass(frozen=True)
 class Repository:
-    """A `RepositoryConfig` resolved to its ready-to-use `PullRequests`."""
+    """A `RepositoryConfig` resolved to its ready-to-use `PullRequests` and worktree root."""
 
     path: Path
     owner_repo: RepoTarget
     is_harness: bool
     pull_requests: PullRequests
+    worktree_root: Path
 
 
 class RepositoryPoolError(Exception):
@@ -55,20 +60,23 @@ class RepositoryPool:
     """Every manually checked-out Repository, keyed by `owner/name`; built once from `RepositoryConfig`."""
 
     def __init__(self, configs: Sequence[RepositoryConfig], github_factory: GithubFactory) -> None:
+        harness_configs = [config for config in configs if config.is_harness]
+        if len(harness_configs) != 1:
+            raise RepositoryPoolError(f"expected exactly one is_harness repository, found {len(harness_configs)}")
+        harness_path = harness_configs[0].path
         repositories = [
             Repository(
                 path=config.path,
                 owner_repo=config.owner_repo,
                 is_harness=config.is_harness,
                 pull_requests=PullRequests(github_factory(config.path)),
+                worktree_root=config.worktree_root
+                or harness_path / "workspace" / f"{config.path.name}.worktrees",
             )
             for config in configs
         ]
         self._by_target = {repository.owner_repo.casefold(): repository for repository in repositories}
-        harnesses = [repository for repository in repositories if repository.is_harness]
-        if len(harnesses) != 1:
-            raise RepositoryPoolError(f"expected exactly one is_harness repository, found {len(harnesses)}")
-        self._harness = harnesses[0]
+        self._harness = next(repository for repository in repositories if repository.is_harness)
 
     @property
     def harness(self) -> Repository:

@@ -48,6 +48,7 @@ class _Sandbox(NoSandbox):
 
 
 def _sandbox(git: FakeGit, sandbox: _Sandbox, tmp_path: Path, **kwargs):
+    kwargs.setdefault("worktree_root", tmp_path / "workspace" / f"{CHECKOUT.name}.worktrees")
     return create_sandbox(
         git,
         lambda workspace, cancel: sandbox,
@@ -69,6 +70,15 @@ def test_create_sandbox_runs_worktree_ready_then_sandbox_ready_hooks_on_a_genera
     assert git.worktree_branches == {sandbox.worktree.path: sandbox.branch}
 
 
+def test_create_sandbox_roots_the_worktree_under_an_explicit_worktree_root(tmp_path: Path) -> None:
+    git = FakeGit()
+    worktree_root = tmp_path / "custom-worktrees"
+
+    sandbox = _sandbox(git, _Sandbox(), tmp_path, branch="feature-x", worktree_root=worktree_root)
+
+    assert sandbox.worktree.path == worktree_root / "feature-x"
+
+
 def test_create_sandbox_removes_the_worktree_and_does_not_start_the_sandbox_when_a_worktree_ready_hook_fails(
     tmp_path: Path,
 ) -> None:
@@ -82,6 +92,7 @@ def test_create_sandbox_removes_the_worktree_and_does_not_start_the_sandbox_when
             lambda workspace, cancel: started.append(True) or _Sandbox(),
             checkout=CHECKOUT,
             harness_root=tmp_path,
+            worktree_root=tmp_path / "workspace" / f"{CHECKOUT.name}.worktrees",
             base="main",
             branch="feature-x",
             hooks=SandboxHooks(worktree_ready=(Hook("a"),)),
@@ -171,6 +182,7 @@ def test_create_sandbox_removes_the_worktree_when_the_sandbox_cannot_start(tmp_p
             factory,
             checkout=CHECKOUT,
             harness_root=tmp_path,
+            worktree_root=tmp_path / "workspace" / f"{CHECKOUT.name}.worktrees",
             base="main",
             branch="feature-x",
         )

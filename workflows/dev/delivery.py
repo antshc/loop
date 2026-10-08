@@ -24,6 +24,7 @@ def open_sandbox(run: SpecRun, deps: DevDeps) -> WorktreeSandbox:
         branch=run.spec.feature_branch,
         hooks=SandboxHooks(worktree_ready=tuple(deps.hooks)),
         cancel=deps.cancel,
+        worktree_root=run.repository.worktree_root,
     )
 
 

@@ -15,23 +15,6 @@ from loop.sandboxes.sandbox_lifecycle import SandboxHooks, run_host_hooks, with_
 SandboxFactory = Callable[[Path, threading.Event], Sandbox]
 
 
-def _default_worktree_path(checkout: Path, harness_root: Path, branch: str) -> Path:
-    return harness_root / "workspace" / f"{checkout.name}.worktrees" / branch
-
-
-def _exclude_workspace(harness_root: Path) -> None:
-    """Adds `workspace/` to the harness checkout's local exclude list, once."""
-    exclude_file = harness_root / ".git" / "info" / "exclude"
-    exclude_file.parent.mkdir(parents=True, exist_ok=True)
-    existing = exclude_file.read_text() if exclude_file.exists() else ""
-    if "workspace/" in existing.splitlines():
-        return
-    with exclude_file.open("a") as handle:
-        if existing and not existing.endswith("\n"):
-            handle.write("\n")
-        handle.write("workspace/\n")
-
-
 @dataclass(frozen=True)
 class SandboxRunResult:
     result: AgentResult
@@ -123,6 +106,7 @@ def create_sandbox(
     *,
     checkout: Path,
     harness_root: Path,
+    worktree_root: Path,
     base: str,
     branch: str | None = None,
     hooks: SandboxHooks = SandboxHooks(),
@@ -136,12 +120,11 @@ def create_sandbox(
     worktree on its branch. A branch named `loop/sandbox-<id>` is generated when none is given.
     """
     cancel = cancel or threading.Event()
-    target = _default_worktree_path(checkout, harness_root, branch) if branch is not None else None
+    target = worktree_root / branch if branch is not None else None
     prepared = git.branches.prepare(Branch(checkout, branch) if branch else None, Branch(checkout, base), target)
     if target is None:
-        target = _default_worktree_path(checkout, harness_root, prepared.name)
+        target = worktree_root / prepared.name
     worktree = git.worktrees.create(prepared, target)
-    _exclude_workspace(harness_root)
     try:
         run_host_hooks(git.worktrees, hooks.worktree_ready, worktree.path, cancel=cancel)
         sandbox = sandbox_factory(harness_root, cancel)
