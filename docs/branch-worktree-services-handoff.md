@@ -71,9 +71,9 @@ class BranchService(Protocol):
             git branch -D <branch>
         """
 
-    def push(self, branch: Branch) -> None:
+    def push(self, branch: Branch, base: Branch) -> bool:
         """
-        Push branch to origin.
+        Push branch to origin when ahead_of_remote(branch, base); return whether it pushed.
 
             git push origin <branch>
         """

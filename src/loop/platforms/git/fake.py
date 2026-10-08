@@ -158,11 +158,14 @@ class FakeBranchService(BranchService):
         start = commits.index(upstream) + 1 if upstream in commits else 0
         return len(commits) > start
 
-    def push(self, branch: Branch) -> None:
+    def push(self, branch: Branch, base: Branch) -> bool:
+        if not self.ahead_of_remote(branch, base):
+            return False
         commits = self._fake.branch_commits.get(branch.name, [])
         self._fake.pushed.append((branch.path, branch.name))
         self._fake.remote_branches.add(branch.name)
         self._fake.remote_heads[branch.name] = commits[-1] if commits else _BASE_COMMIT
+        return True
 
     def merge(self, target: Path, branch: Branch) -> None:
         self._fake.merged.append((target, branch.name))

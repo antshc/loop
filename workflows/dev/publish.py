@@ -23,8 +23,6 @@ def publish(branches: BranchService, run: SpecRun, pusher: Path) -> str | None:
 
     Returns the PR URL, or None when there was nothing to publish.
     """
-    feature = Branch(run.checkout, run.feature_branch)
-    if not branches.ahead_of_remote(feature, Branch(run.checkout, run.base_branch)):
+    if not branches.push(Branch(pusher, run.feature_branch), Branch(pusher, run.base_branch)):
         return None
-    branches.push(Branch(pusher, run.feature_branch))
     return _ensure_pull_request(run.target_github, run.feature_branch, run.base_branch, run.initiative, run.bare_title)

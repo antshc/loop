@@ -127,10 +127,22 @@ def test_push_publishes_the_local_branch_commit_to_origin(tmp_path: Path) -> Non
     commit_file(checkout, "a.txt", "1\n", "work")
     service = BranchService()
 
-    service.push(Branch(checkout, "feature-x"))
+    pushed = service.push(Branch(checkout, "feature-x"), Branch(checkout, "main"))
 
+    assert pushed is True
     git(checkout, "fetch", "origin")
     assert git(checkout, "rev-parse", "feature-x") == git(checkout, "rev-parse", "origin/feature-x")
+
+
+def test_push_does_nothing_when_the_branch_is_not_ahead_of_remote(tmp_path: Path) -> None:
+    checkout = _init_pushed_repo(tmp_path / "harness")
+    git(checkout, "checkout", "-b", "feature-x")
+    service = BranchService()
+
+    pushed = service.push(Branch(checkout, "feature-x"), Branch(checkout, "main"))
+
+    assert pushed is False
+    assert git(checkout, "ls-remote", "--heads", "origin", "feature-x").strip() == ""
 
 
 def test_merge_brings_the_branch_commits_into_the_target_checkout_without_an_editor(tmp_path: Path) -> None:

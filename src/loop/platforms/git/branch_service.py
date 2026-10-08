@@ -51,9 +51,12 @@ class BranchService:
         upstream = branch.upstream if self._git.remote_branch_exists(branch.path, branch.name) else base.upstream
         return bool(self._run(("git", "rev-list", f"{upstream}..{branch.name}"), cwd=branch.path).strip())
 
-    def push(self, branch: Branch) -> None:
-        """Pushes `branch` to `origin`."""
+    def push(self, branch: Branch, base: Branch) -> bool:
+        """Pushes `branch` to `origin` when it is ahead of its remote counterpart (see `ahead_of_remote`); returns whether it pushed."""
+        if not self.ahead_of_remote(branch, base):
+            return False
         self._run(("git", "push", "origin", branch.name), cwd=branch.path)
+        return True
 
     def merge(self, target: Path, branch: Branch) -> None:
         """Merges `branch` into `target`'s checked-out branch."""
