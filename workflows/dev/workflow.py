@@ -71,7 +71,7 @@ class DevWorkflow:
         kept_on_cancel = False
         try:
             delivered = deliver_tickets(spec, runner, self._deps)
-            pull_request_url = self.publish(spec, repository, runner.worktree.path)
+            pull_request_url = self.publish_pull_request(spec, repository, runner.worktree.path)
             if delivered and pull_request_url is not None:
                 spec.announce_delivered(pull_request_url)
                 self._tracker.update_spec(spec)
@@ -88,14 +88,14 @@ class DevWorkflow:
         branches = self._git.branches
         branches.fetch(repository.path)
         if not spec.has_work:
-            self.publish(spec, repository, repository.path)
+            self.publish_pull_request(spec, repository, repository.path)
             return False
         if not branches.can_prepare(Branch(repository.path, spec.base_branch)):
             spec.hand_to_human(f"dev: target branch {spec.base_branch!r} does not exist on {spec.target}")
             self._tracker.update_spec(spec)
             return False
         # Worktree creation force-resets the local feature branch, so publish earlier runs' commits first.
-        self.publish(spec, repository, repository.path)
+        self.publish_pull_request(spec, repository, repository.path)
         return True
 
     def create_agent_runner(self, spec: Spec, repository: RepositoryData) -> AgentRunner:
@@ -107,7 +107,7 @@ class DevWorkflow:
             hooks=tuple(self._deps.hooks),
         )
 
-    def publish(self, spec: Spec, repository: Repository, pusher: Path) -> str | None:
+    def publish_pull_request(self, spec: Spec, repository: Repository, pusher: Path) -> str | None:
         """Pushes the feature branch from `pusher` and ensures its draft PR when it is ahead of origin.
 
         Returns the PR URL, or None when there was nothing to publish.
