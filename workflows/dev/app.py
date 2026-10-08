@@ -8,14 +8,7 @@ from enum import Enum, auto
 from pathlib import Path
 
 from loop import AgentRunner, Branch, BranchService, Cancelled, LoopError
-from workflows.platforms.work_tracking import (
-    HITL_LABEL,
-    Repository,
-    RepositoryPool,
-    Spec,
-    Ticket,
-    TicketsTracker,
-)
+from workflows.platforms.work_tracking import HITL_LABEL, Repository, Spec, Ticket
 
 from .delivery import deliver_tickets, open_runner
 from .deps import DevDeps
@@ -28,34 +21,6 @@ class SpecRun:
     spec: Spec
     tickets: tuple[Ticket, ...]
     repository: Repository
-
-
-def prepare_run(
-    spec: Spec,
-    *,
-    repository_pool: RepositoryPool,
-    tracker: TicketsTracker,
-) -> SpecRun | None:
-    """The SpecRun for `spec`, or None after blocking the Spec when its target cannot be resolved."""
-    # Tickets live on the harness tracker, even when the Spec targets another repo.
-    tickets = tracker.get_tickets(spec)
-
-    target = spec.target
-    base_branch = spec.base_branch
-    if target is None or base_branch is None:
-        tracker.block_spec(spec.number, tickets, f"dev: cannot resolve repo:target/repo:base labels on {spec.url}")
-        return None
-
-    repository = repository_pool.get(target)
-    if repository is None:
-        tracker.block_spec(spec.number, tickets, f"dev: repo:target:{target} is not configured in the RepositoryPool")
-        return None
-
-    return SpecRun(
-        spec=spec,
-        tickets=tickets,
-        repository=repository,
-    )
 
 
 class Outcome(Enum):
@@ -121,13 +86,23 @@ def _deliver_in_worktree(run: SpecRun, runner: AgentRunner, deps: DevDeps) -> Ou
 
 def _process_spec(spec: Spec, deps: DevDeps) -> Outcome:
     """Prepare, deliver, and publish one Spec."""
-    run = prepare_run(
-        spec,
-        repository_pool=deps.repository_pool,
-        tracker=deps.tracker,
-    )
-    if run is None:
+    # Tickets live on the harness tracker, even when the Spec targets another repo.
+    tickets = deps.tracker.get_tickets(spec)
+
+    if spec.target is None or spec.base_branch is None:
+        deps.tracker.block_spec(
+            spec.number, tickets, f"dev: cannot resolve repo:target/repo:base labels on {spec.url}"
+        )
         return Outcome.SKIPPED
+
+    repository = deps.repository_pool.get(spec.target)
+    if repository is None:
+        deps.tracker.block_spec(
+            spec.number, tickets, f"dev: repo:target:{spec.target} is not configured in the RepositoryPool"
+        )
+        return Outcome.SKIPPED
+
+    run = SpecRun(spec=spec, tickets=tickets, repository=repository)
 
     try:
         runner = _prepare(run, deps)
