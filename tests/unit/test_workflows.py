@@ -94,7 +94,7 @@ def test_feature_branch_is_just_the_slug_without_a_version() -> None:
 
 def _first_ticket():
     tracker = TicketsTracker(GitHubClient("o", "r", gh=FakeGhCli()), InMemoryExecutionStore(), "o/r")
-    return tracker.get_tickets(next(iter(tracker.specs())))[0]
+    return next(iter(tracker.specs())).tickets[0]
 
 
 def test_prompt_template_placeholders_match_the_supplied_arguments_exactly() -> None:

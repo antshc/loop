@@ -1,11 +1,9 @@
-"""Delivers a SpecRun's Tickets on its worktree, one fresh agent run per attempt."""
+"""Delivers a Spec's Tickets on its worktree, one fresh agent run per attempt."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from loop import AgentRunner, AgentRunnerProvider, Cancelled, Commit, LoopError
-from workflows.platforms.work_tracking import Ticket, WorkIdentifier
+from workflows.platforms.work_tracking import Repository, Spec, Ticket, WorkIdentifier
 
 from .acceptance import commit_violation
 from .deps import DevDeps
@@ -13,21 +11,18 @@ from .prompting import initiative_commits, prompt_args
 from .result import DevResult, DevResultError, parse_response
 from .settings import MAX_TICKET_FAILURES
 
-if TYPE_CHECKING:
-    from .app import SpecRun
 
-
-def open_runner(run: SpecRun, deps: DevDeps) -> AgentRunner:
-    """Creates the feature-branch agent runner for `run`."""
+def open_runner(spec: Spec, repository: Repository, deps: DevDeps) -> AgentRunner:
+    """Creates the feature-branch agent runner for `spec`."""
     provider = AgentRunnerProvider(
         deps.git, deps.harness_root, deps.agent_factory, executor=deps.executor, cancel=deps.cancel
     )
     return provider.create(
-        checkout=run.repository.path,
-        base=run.spec.base_branch,
-        branch=run.spec.feature_branch,
+        checkout=repository.path,
+        base=spec.base_branch,
+        branch=spec.feature_branch,
         hooks=tuple(deps.hooks),
-        worktree_root=run.repository.worktree_root,
+        worktree_root=repository.worktree_root,
     )
 
 
@@ -59,19 +54,19 @@ def _run_and_validate(
     return dev_result if violation is None else violation
 
 
-def _deliver_ticket(run: SpecRun, ticket: Ticket, runner: AgentRunner, deps: DevDeps) -> bool:
+def _deliver_ticket(spec: Spec, ticket: Ticket, runner: AgentRunner, deps: DevDeps) -> bool:
     """Fresh agent runs for `ticket` until one is accepted or its failure cap is reached; True on success."""
     worktree = runner.worktree.path
-    identifier = WorkIdentifier(run.spec.initiative, ticket.number)
+    identifier = WorkIdentifier(spec.initiative, ticket.number)
     while True:
         head_before = deps.git.commits.head(worktree)
         args = prompt_args(
             ticket,
             identifier,
-            initiative_commits(deps.git.commits, worktree, run.spec.base_branch, run.spec.initiative),
+            initiative_commits(deps.git.commits, worktree, spec.base_branch, spec.initiative),
             worktree,
-            run.spec.base_branch,
-            run.spec.feature_branch,
+            spec.base_branch,
+            spec.feature_branch,
         )
         attempt = _run_and_validate(runner, deps, identifier, head_before, args)
         if isinstance(attempt, DevResult):
@@ -81,12 +76,12 @@ def _deliver_ticket(run: SpecRun, ticket: Ticket, runner: AgentRunner, deps: Dev
             return True
         deps.git.commits.restore(head_before)
         if deps.tracker.record_failure(ticket) >= MAX_TICKET_FAILURES:
-            deps.tracker.escalate(run.spec.number, ticket.number, attempt)
+            deps.tracker.escalate(spec.number, ticket.number, attempt)
             return False
 
-def deliver_tickets(run: SpecRun, runner: AgentRunner, deps: DevDeps) -> bool:
+def deliver_tickets(spec: Spec, runner: AgentRunner, deps: DevDeps) -> bool:
     """Deliver Ticket for each actionable Ticket in order; stops at the first failure."""
-    for ticket in run.tickets:
-        if not _deliver_ticket(run, ticket, runner, deps):
+    for ticket in spec.tickets:
+        if not _deliver_ticket(spec, ticket, runner, deps):
             return False
     return True

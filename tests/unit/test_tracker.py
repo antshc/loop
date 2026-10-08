@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from loop import InMemoryExecutionStore
@@ -33,19 +35,24 @@ def test_specs_carry_their_body_and_comments() -> None:
     ]
 
 
-def test_get_tickets_drops_closed_hitl_and_spec_labelled_sub_issues() -> None:
-    tracker = _tracker()
+def test_specs_carry_only_the_open_unblocked_sub_issues_as_tickets() -> None:
+    spec = next(iter(_tracker().specs()))
 
-    tickets = tracker.get_tickets(next(iter(tracker.specs())))
+    assert [ticket.number for ticket in spec.tickets] == [10]
+    assert (spec.tickets[0].state, spec.tickets[0].labels) == ("open", ())
+    assert spec.has_work
 
-    assert [ticket.number for ticket in tickets] == [10]
-    assert (tickets[0].state, tickets[0].labels) == ("open", ())
+
+def test_a_spec_has_no_work_when_every_sub_issue_is_blocked() -> None:
+    spec = next(iter(_tracker(FakeGhCli(tickets={1: []})).specs()))
+
+    assert spec.tickets == ()
+    assert not spec.has_work
 
 
-def test_get_tickets_is_empty_when_every_sub_issue_is_blocked() -> None:
-    tracker = _tracker(FakeGhCli(tickets={1: []}))
-
-    assert tracker.get_tickets(next(iter(tracker.specs()))) == ()
+def test_spec_is_awaiting_a_human_only_with_the_hitl_label() -> None:
+    assert _spec(labels=("spec", "hitl")).awaiting_human
+    assert not _spec(labels=("spec",)).awaiting_human
 
 
 def test_a_comment_whose_author_account_was_deleted_is_attributed_to_ghost() -> None:
@@ -78,13 +85,13 @@ def test_hitl_labels_then_comments_on_the_issue() -> None:
 def test_block_spec_hands_the_spec_to_a_human_only_when_it_has_tickets() -> None:
     gh = FakeGhCli()
     tracker = _tracker(gh)
-    ticket = tracker.get_tickets(next(iter(tracker.specs())))[0]
+    spec = next(iter(tracker.specs()))
 
     calls_before = len(gh.calls)
-    tracker.block_spec(1, (), "nothing blocked")
+    tracker.block_spec(replace(spec, tickets=()), "nothing blocked")
     assert len(gh.calls) == calls_before
 
-    tracker.block_spec(1, (ticket,), "blocked")
+    tracker.block_spec(spec, "blocked")
     assert gh.calls[-1] == ("issue", "comment", "1", "--repo", "owner/repo", "--body", "blocked")
 
 

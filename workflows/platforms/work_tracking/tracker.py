@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
@@ -39,6 +39,18 @@ class Spec:
     labels: tuple[str, ...]
     body: str = ""
     comments: tuple[Comment, ...] = ()
+    # Open Tickets ready for delivery, in order; they live on the harness tracker even when the Spec targets another repo.
+    tickets: tuple[Ticket, ...] = ()
+
+    @property
+    def awaiting_human(self) -> bool:
+        """Carries the `hitl` label."""
+        return HITL_LABEL in self.labels
+
+    @property
+    def has_work(self) -> bool:
+        """Has at least one Ticket ready for delivery."""
+        return bool(self.tickets)
 
     @property
     def initiative(self) -> str:
@@ -105,7 +117,7 @@ def _labels(node: dict[str, Any]) -> tuple[str, ...]:
     return tuple(label["name"] for label in node["labels"]["nodes"])
 
 
-def _spec(node: dict[str, Any]) -> Spec:
+def _spec(node: dict[str, Any], tickets: tuple[Ticket, ...]) -> Spec:
     return Spec(
         number=node["number"],
         title=node["title"],
@@ -113,6 +125,7 @@ def _spec(node: dict[str, Any]) -> Spec:
         labels=_labels(node),
         body=node["body"],
         comments=_comments(node),
+        tickets=tickets,
     )
 
 
@@ -137,12 +150,11 @@ class TicketsTracker:
         self._harness_slug = harness_slug
 
     def specs(self) -> Iterable[Spec]:
-        """Every open Spec on the harness tracker."""
-        return [_spec(node) for node in self.github.spec_issues()]
+        """Every open Spec on the harness tracker, each with its deliverable Tickets."""
+        return [_spec(node, self._tickets(node["number"])) for node in self.github.spec_issues()]
 
-    def get_tickets(self, spec: Spec) -> tuple[Ticket, ...]:
-        """The Spec's open Tickets ready for delivery, in order."""
-        tickets = (_ticket(node) for node in self.github.sub_issues(spec.number))
+    def _tickets(self, spec_number: int) -> tuple[Ticket, ...]:
+        tickets = (_ticket(node) for node in self.github.sub_issues(spec_number))
         return tuple(ticket for ticket in tickets if ticket.actionable)
 
     def comment(self, number: int, message: str) -> None:
@@ -173,10 +185,10 @@ class TicketsTracker:
         self.hitl(ticket_number, message)
         self.hitl(spec_number, message)
 
-    def block_spec(self, spec_number: int, tickets: Sequence[Ticket], message: str) -> None:
+    def block_spec(self, spec: Spec, message: str) -> None:
         """Hands the Spec to a human, but only when there is work it is blocking."""
-        if tickets:
-            self.hitl(spec_number, message)
+        if spec.has_work:
+            self.hitl(spec.number, message)
 
     def close_delivered(self, ticket: Ticket, comment: str) -> None:
         """Closes a delivered Ticket with `comment` and clears its failures."""
