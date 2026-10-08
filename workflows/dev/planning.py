@@ -3,17 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 
-from workflows.platforms.work_tracking import PullRequests, RepositoryPool, Spec, Ticket, TicketsTracker
+from workflows.platforms.work_tracking import Repository, RepositoryPool, Spec, Ticket, TicketsTracker
 
 
 @dataclass(frozen=True)
 class SpecRun:
     spec: Spec
     tickets: tuple[Ticket, ...]
-    checkout: Path
-    pull_requests: PullRequests
+    repository: Repository
 
 
 def prepare_run(
@@ -40,6 +38,5 @@ def prepare_run(
     return SpecRun(
         spec=spec,
         tickets=tickets,
-        checkout=repository.path,
-        pull_requests=repository.pull_requests,
+        repository=repository,
     )

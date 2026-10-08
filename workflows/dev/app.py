@@ -36,12 +36,12 @@ def publish(branches: BranchService, run: SpecRun, pusher: Path) -> str | None:
     """
     if not branches.push(Branch(pusher, run.spec.feature_branch), Branch(pusher, run.spec.base_branch)):
         return None
-    return run.pull_requests.publish_draft(run.spec, run.spec.feature_branch)
+    return run.repository.pull_requests.publish_draft(run.spec, run.spec.feature_branch)
 
 
 def _base_branch_exists(run: SpecRun, deps: DevDeps) -> bool:
     """True when the base branch is on the target's origin; otherwise hands the Spec to a human."""
-    if deps.git.branches.can_prepare(Branch(run.checkout, run.spec.base_branch)):
+    if deps.git.branches.can_prepare(Branch(run.repository.path, run.spec.base_branch)):
         return True
     deps.tracker.hitl(run.spec.number, f"dev: target branch {run.spec.base_branch!r} does not exist on {run.spec.target}")
     return False
@@ -49,14 +49,14 @@ def _base_branch_exists(run: SpecRun, deps: DevDeps) -> bool:
 
 def _prepare(run: SpecRun, deps: DevDeps) -> WorktreeSandbox | None:
     """Publishes earlier runs' commits; returns a sandbox only when there are Tickets to deliver."""
-    deps.git.branches.fetch(run.checkout)
+    deps.git.branches.fetch(run.repository.path)
     if not run.tickets:
-        publish(deps.git.branches, run, run.checkout)
+        publish(deps.git.branches, run, run.repository.path)
         return None
     if not _base_branch_exists(run, deps):
         return None
     # Worktree creation force-resets the local feature branch, so publish earlier runs' commits first.
-    publish(deps.git.branches, run, run.checkout)
+    publish(deps.git.branches, run, run.repository.path)
     return open_sandbox(run, deps)
 
 
