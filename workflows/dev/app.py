@@ -6,13 +6,12 @@ import logging
 from enum import Enum, auto
 from pathlib import Path
 
-from loop import Branch, Cancelled, LoopError, WorktreeSandbox
+from loop import Branch, BranchService, Cancelled, LoopError, WorktreeSandbox
 from workflows.platforms.work_tracking import HITL_LABEL, Spec
 
 from .delivery import deliver_tickets, open_sandbox
 from .deps import DevDeps
 from .planning import SpecRun, prepare_run
-from .publish import publish
 
 logger = logging.getLogger("workflow.dev")
 
@@ -28,6 +27,20 @@ def _report_cancelled(spec: Spec, worktree: Path | None) -> None:
         logger.warning("spec #%s run cancelled; worktree kept at %s", spec.number, worktree)
     else:
         logger.info("spec #%s run cancelled", spec.number)
+
+
+def publish(branches: BranchService, run: SpecRun, pusher: Path) -> str | None:
+    """Pushes the feature branch from `pusher` and ensures its draft PR when it is ahead of origin.
+
+    Returns the PR URL, or None when there was nothing to publish.
+    """
+    if not branches.push(Branch(pusher, run.feature_branch), Branch(pusher, run.spec.base_branch)):
+        return None
+    spec = run.spec
+    pull_request = run.target_github.create_draft_pull_request(
+        run.feature_branch, spec.base_branch, f"{spec.initiative}: {spec.bare_title}"
+    )
+    return pull_request.url
 
 
 def _base_branch_exists(run: SpecRun, deps: DevDeps) -> bool:
