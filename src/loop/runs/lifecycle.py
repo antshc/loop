@@ -31,12 +31,10 @@ class AgentRunResult:
 class WorktreeLifecycle:
     """Owns one worktree from creation to disposal and collects the commits each run adds to it."""
 
-    def __init__(self, git: Git, checkout: Path, worktree: Worktree, branch: str, *, merge_to_head: bool) -> None:
+    def __init__(self, git: Git, worktree: Worktree, branch: str) -> None:
         self._git = git
-        self._checkout = checkout
         self._worktree = worktree
         self._branch = branch
-        self._merge_to_head = merge_to_head
         self._closed = False
 
     @property
@@ -48,20 +46,14 @@ class WorktreeLifecycle:
         return self._branch
 
     def begin_run(self) -> Commit:
-        """Validates the branches a run needs and returns the head the run starts from."""
-        if self._merge_to_head:
-            host = self._git.worktrees.get(self._checkout)
-            if host is None or host.branch is None:
-                raise LoopError(f"cannot merge into a detached HEAD in {self._checkout}")
+        """Validates the branch a run needs and returns the head the run starts from."""
         if self._worktree.branch is None:
             raise LoopError(f"worktree is on a detached HEAD: {self._worktree.path}")
         return self._git.commits.head(self._worktree.path)
 
     def end_run(self, base_head: Commit) -> tuple[str, ...]:
-        """Returns the commits added since `base_head`, merging them into the checkout when configured."""
+        """Returns the commits added since `base_head`."""
         new_commits = self._git.commits.since(base_head)
-        if self._merge_to_head:
-            self._git.branches.merge(self._checkout, Branch(self._checkout, self._branch))
         return tuple(commit.sha for commit in new_commits)
 
     def has_changes(self) -> bool:
@@ -160,15 +152,13 @@ class AgentRunnerProvider:
         base: str,
         branch: str | None = None,
         hooks: Sequence[Hook] = (),
-        merge_to_head: bool = False,
     ) -> AgentRunner:
         """Create the worktree, run the `worktree-ready` hooks, and bind the agent client to it.
 
-        `merge_to_head` merges each run's commits into the checkout's current branch and keeps the
-        worktree on its branch. A branch named `loop/run-<id>` is generated when none is given.
+        A branch named `loop/run-<id>` is generated when none is given.
         """
         worktree, branch_name = self._create_worktree(checkout, worktree_root, base, branch, hooks)
-        lifecycle = WorktreeLifecycle(self._git, checkout, worktree, branch_name, merge_to_head=merge_to_head)
+        lifecycle = WorktreeLifecycle(self._git, worktree, branch_name)
         try:
             client = self._agent(AgentBinding(self._bound_executor, str(self._harness_root)))
         except Exception:

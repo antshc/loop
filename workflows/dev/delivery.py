@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from loop import (
     AgentRunner,
-    AgentRunnerProvider,
     Cancelled,
     Commit,
     CommitService,
@@ -12,26 +11,12 @@ from loop import (
     Worktree,
     WorktreeService,
 )
-from workflows.platforms.work_tracking import Repository, Spec, Ticket, WorkIdentifier
+from workflows.platforms.work_tracking import Spec, Ticket, WorkIdentifier
 
 from .deps import DevDeps
 from .prompting import initiative_commits, prompt_args
 from .result import DevResult, DevResultError, parse_response
 from .settings import MAX_TICKET_FAILURES
-
-
-def open_runner(spec: Spec, repository: Repository, deps: DevDeps) -> AgentRunner:
-    """Creates the feature-branch agent runner for `spec`."""
-    provider = AgentRunnerProvider(
-        deps.git, deps.harness_root, deps.agent_factory, executor=deps.executor, cancel=deps.cancel
-    )
-    return provider.create(
-        checkout=repository.path,
-        base=spec.base_branch,
-        branch=spec.feature_branch,
-        hooks=tuple(deps.hooks),
-        worktree_root=repository.worktree_root,
-    )
 
 
 def commit_violation(

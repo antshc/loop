@@ -34,7 +34,7 @@ from workflows.platforms.work_tracking import (
 
 from workflows.platforms.work_tracking import WorkIdentifier
 
-from .workflow import process_specs
+from .workflow import DevWorkflow
 from .deps import DevDeps, GithubFactory
 from .prompting import prompt_args
 from .result import DevResult, DevResultError, parse_dev_result
@@ -129,7 +129,7 @@ def main(
     )
 
     try:
-        return process_specs(deps)
+        return DevWorkflow(deps).process_specs()
     except Exception as exception:  # last-resort boundary the ticket requires: log and fail, never crash bare
         logger.exception("unexpected error: %s", exception)
         return 1

@@ -205,17 +205,6 @@ def test_run_cancels_an_in_flight_agent_run_and_reports_cancelled(tmp_path: Path
     assert cli.terminated
 
 
-def test_run_with_merge_to_head_merges_each_run_and_keeps_the_branch(tmp_path: Path) -> None:
-    git = FakeGit()
-    runner = _runner(git, tmp_path, branch="feature-x", merge_to_head=True)
-
-    runner.run("go")
-    runner.run("go")
-
-    assert git.merged == [(CHECKOUT, "feature-x")] * 2
-    assert git.detached == set() and git.deleted_branches == []
-
-
 def test_exit_disposes_the_client_then_removes_the_worktree_once(tmp_path: Path) -> None:
     git = FakeGit()
     order: list[str] = []
@@ -260,12 +249,3 @@ def test_leaving_the_context_without_an_error_removes_the_worktree(tmp_path: Pat
         pass
 
     assert git.removed == [runner.worktree.path]
-
-
-def test_run_with_merge_to_head_rejects_a_detached_host_checkout(tmp_path: Path) -> None:
-    git = FakeGit()
-    git.host_branch = None
-    runner = _runner(git, tmp_path, branch="feature-x", merge_to_head=True)
-
-    with pytest.raises(LoopError, match="detached HEAD"):
-        runner.run("go")
