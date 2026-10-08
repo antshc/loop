@@ -14,6 +14,11 @@ GithubFactory = Callable[[Path], GitHubClient]
 
 
 @dataclass(frozen=True)
+class Prompts:
+    dev: str
+
+
+@dataclass(frozen=True)
 class DevDeps:
     harness_root: Path
     repository_pool: RepositoryPool
@@ -23,5 +28,5 @@ class DevDeps:
     agent_factory: AgentClientFactory
     executor: CommandExecutor | None
     hooks: Sequence[Hook]
-    template: str
+    prompts: Prompts
     cancel: threading.Event

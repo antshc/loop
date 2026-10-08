@@ -35,7 +35,7 @@ from workflows.platforms.work_tracking import (
 from workflows.platforms.work_tracking import WorkIdentifier
 
 from .workflow import DevWorkflow
-from .deps import DevDeps, GithubFactory
+from .deps import DevDeps, GithubFactory, Prompts
 from .prompting import prompt_args
 from .result import DevResult, DevResultError, parse_dev_result
 from .settings import HOOKS, LOG_DIR_NAME, LOG_LEVEL, PROMPT, REPOSITORIES
@@ -83,7 +83,7 @@ def _build_deps(
         agent_factory=agent_factory or copilot(InMemorySessionStore()),
         executor=executor,
         hooks=hooks,
-        template=PROMPT.read_text(),
+        prompts=Prompts(dev=PROMPT.read_text()),
         cancel=cancel or threading.Event(),
     )
 

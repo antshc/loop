@@ -7,12 +7,14 @@ from enum import Enum, auto
 from pathlib import Path
 
 from loop import (
+    AgentResult,
     AgentRunner,
     AgentRunnerProvider,
     Branch,
     Cancelled,
     Commit,
     LoopError,
+    Prompt,
     RepositoryData,
     Worktree,
 )
@@ -41,7 +43,7 @@ class DevWorkflow:
         self._git = deps.git
         self._store = deps.store
         self._hooks = tuple(deps.hooks)
-        self._template = deps.template
+        self._prompts = deps.prompts
         self._runner_provider = AgentRunnerProvider(
             deps.git, deps.harness_root, deps.agent_factory, executor=deps.executor, cancel=deps.cancel
         )
@@ -141,7 +143,10 @@ class DevWorkflow:
                 spec.base_branch,
                 spec.feature_branch,
             )
-            attempt = self._run_and_validate(runner, identifier, head_before, args)
+            outcome = self._run(runner, Prompt(self._prompts.dev, args))
+            attempt = (
+                outcome if isinstance(outcome, str) else self._validate(runner, identifier, head_before, outcome)
+            )
             if isinstance(attempt, DevResult):
                 spec.close_ticket(
                     ticket.number, f"Delivered in {attempt.commit}.\n\n{attempt.summary}\n\n{attempt.verification}"
@@ -155,17 +160,19 @@ class DevWorkflow:
                 self._tracker.update_spec(spec)
                 return False
 
-    def _run_and_validate(
-        self, runner: AgentRunner, identifier: WorkIdentifier, head_before: Commit, args: dict[str, str]
-    ) -> DevResult | str:
-        """Runs the agent and validates its response and Git; returns the accepted result, or the failure reason."""
+    def _run(self, runner: AgentRunner, prompt: Prompt) -> AgentResult | str:
+        """Runs the agent once; returns its outcome, or the failure reason."""
         try:
-            outcome = runner.run(self._template, args).result
+            return runner.run(prompt.template, prompt.args).result
         except Cancelled:
             raise
         except LoopError as exception:
             return str(exception)
 
+    def _validate(
+        self, runner: AgentRunner, identifier: WorkIdentifier, head_before: Commit, outcome: AgentResult
+    ) -> DevResult | str:
+        """Validates the agent's response and Git; returns the accepted result, or the failure reason."""
         try:
             dev_result = parse_response(outcome.response, identifier)
         except DevResultError as exception:

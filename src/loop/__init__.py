@@ -42,7 +42,7 @@ from loop.platforms.git import (
     WorktreeService,
 )
 from loop.process import CommandExecutor, CommandResult, cli_runner, run_command
-from loop.prompt import PromptPreprocessor
+from loop.prompt import Prompt, PromptPreprocessor
 from loop.runs.lifecycle import (
     AgentRunner,
     AgentRunnerProvider,
@@ -87,6 +87,7 @@ __all__ = [
     "InMemoryExecutionStore",
     "InMemorySessionStore",
     "LoopError",
+    "Prompt",
     "PromptError",
     "PromptPreprocessor",
     "RepositoryData",

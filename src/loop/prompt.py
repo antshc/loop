@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 
 from loop.errors import PromptError
 
@@ -37,3 +38,15 @@ class PromptPreprocessor:
         for key in sorted(set(args) - used):
             _logger.warning("unused prompt argument: %s", key)
         return _COMMAND.sub(lambda match: self._execute(match[1]).rstrip("\n"), substituted)
+
+
+@dataclass(frozen=True)
+class Prompt:
+    """A prompt template with the arguments for its placeholders."""
+
+    template: str
+    args: Mapping[str, str]
+
+    def __str__(self) -> str:
+        # Template-authored !`cmd` stay unexpanded: the agent client runs them, not this rendering.
+        return PromptPreprocessor(lambda command: f"!`{command}`").process(self.template, self.args)
