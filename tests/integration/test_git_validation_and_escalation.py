@@ -109,7 +109,7 @@ def test_a_completed_response_failing_git_validation_resets_the_worktree_and_esc
     code, _ = _run_with_real_agent(harness, FakeCopilotCli(handler_for(harness)))
 
     assert code == 1
-    assert harness.git.branches["add-login-page"] == []
+    assert harness.git.branch_commits["add-login-page"] == []
     assert _closed(harness) == []
     assert _hitl_labelled(harness) == {"1", "10"}
     assert any(reason in comment for comment in _reason_comments(harness))
@@ -157,7 +157,7 @@ def test_a_failed_status_reported_after_committing_discards_the_commit_and_uses_
     code, _ = _run_with_real_agent(harness, FakeCopilotCli(handler))
 
     assert code == 1
-    assert harness.git.branches["add-login-page"] == []
+    assert harness.git.branch_commits["add-login-page"] == []
     assert harness.git.pushed == []
     assert _closed(harness) == []
     assert all("the acceptance tests do not pass" in comment for comment in _reason_comments(harness))

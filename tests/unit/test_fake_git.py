@@ -10,10 +10,10 @@ def test_a_commit_is_visible_to_the_branch_worktree_and_commit_services() -> Non
     git = FakeGit()
     target = Path("/repo.worktrees/feature-x")
     branch = Branch(target, "feature-x")
-    git.worktree_service.create(branch, target)
+    git.worktrees.create(branch, target)
 
     sha = git.commit(target, "add x")
 
     assert git.commits.head(target) == Commit(target, sha, "add x")
-    assert git.worktree_service.has_changes(Worktree(target, branch)) is True
-    assert git.branch_service.ahead_of_remote(branch, Branch(target, "main")) is True
+    assert git.worktrees.has_changes(Worktree(target, branch)) is True
+    assert git.branches.ahead_of_remote(branch, Branch(target, "main")) is True

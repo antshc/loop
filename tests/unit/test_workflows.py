@@ -258,7 +258,7 @@ def test_missing_workspace_clone_is_labelled_hitl_with_no_worktree_created(tmp_p
     code = harness.run()
 
     assert code == 0
-    assert harness.git.worktrees == {} and harness.git.fetched == []
+    assert harness.git.worktree_branches == {} and harness.git.fetched == []
     labels = [c for c in harness.gh.calls if c[:2] == ("issue", "edit")]
     comments = [c for c in harness.gh.calls if c[:2] == ("issue", "comment")]
     assert labels and labels[0][-1] == "hitl"
@@ -278,7 +278,7 @@ def test_mismatched_origin_clone_is_labelled_hitl_naming_expected_path_and_actua
     assert code == 0
     comments = [c for c in harness.gh.calls if c[:2] == ("issue", "comment")]
     assert comments and "someoneelse/widgets" in comments[0][-1]
-    assert harness.git.worktrees == {}
+    assert harness.git.worktree_branches == {}
 
 
 @pytest.mark.parametrize(
@@ -385,7 +385,7 @@ def test_remote_target_branch_missing_is_labelled_hitl(tmp_path: Path) -> None:
     assert code == 0
     edits = [c for c in harness.gh.calls if c[:2] == ("issue", "edit")]
     assert edits and edits[0][-1] == "hitl"
-    assert harness.git.worktrees == {}
+    assert harness.git.worktree_branches == {}
 
 
 def test_worktree_branch_name_follows_the_versioned_or_plain_slug_rule(tmp_path: Path) -> None:
@@ -401,7 +401,7 @@ def test_worktree_branch_name_follows_the_versioned_or_plain_slug_rule(tmp_path:
     code = harness.run()
 
     assert code == 1
-    assert "2_4_add-login-page" in harness.git.branches
+    assert "2_4_add-login-page" in harness.git.branch_commits
 
 
 def test_a_dirty_leftover_worktree_fails_the_attempt_and_is_left_in_place(tmp_path: Path) -> None:
@@ -425,7 +425,7 @@ def test_a_failing_worktree_ready_hook_removes_the_worktree_and_fails_the_attemp
     code = harness.run(hooks=(Hook("setup.sh"),))
 
     assert code == 1
-    assert harness.git.worktrees == {}
+    assert harness.git.worktree_branches == {}
     assert len(harness.git.removed) == 1
     assert harness.agent_calls == []
 
@@ -437,7 +437,7 @@ def test_a_cancelled_hook_on_a_clean_worktree_is_reported_cancelled_and_removes_
     code = harness.run(hooks=(Hook("setup.sh"),))
 
     assert code == 0
-    assert harness.git.worktrees == {}
+    assert harness.git.worktree_branches == {}
     assert len(harness.git.removed) == 1
     assert _writes(harness.gh) == []
     assert harness.store.failed_attempts("https://github.com/owner/repo/issues/1") == 0
@@ -446,14 +446,14 @@ def test_a_cancelled_hook_on_a_clean_worktree_is_reported_cancelled_and_removes_
 def test_a_cancelled_hook_on_a_dirty_worktree_keeps_it_with_no_publication_or_label(tmp_path: Path) -> None:
     harness = DevHarness(tmp_path)
     harness.git.cancelled_hooks.add("setup.sh")
-    harness.git.branches["add-login-page"] = ["already-dirty"]
+    harness.git.branch_commits["add-login-page"] = ["already-dirty"]
     harness.git.remote_branches.add("add-login-page")
     harness.git.remote_heads["add-login-page"] = "already-dirty"
 
     code = harness.run(hooks=(Hook("setup.sh"),))
 
     assert code == 0
-    assert harness.git.worktrees
+    assert harness.git.worktree_branches
     assert harness.git.removed == []
     assert _writes(harness.gh) == []
     assert harness.store.failed_attempts("https://github.com/owner/repo/issues/1") == 0
@@ -472,7 +472,7 @@ def test_a_cancelled_agent_run_with_no_changes_is_reported_cancelled_and_removes
     code = harness.run(handler=handler, cancel=cancel)
 
     assert code == 0
-    assert harness.git.worktrees == {}
+    assert harness.git.worktree_branches == {}
     assert len(harness.git.removed) == 1
     assert _writes(harness.gh) == []
     assert harness.store.failed_attempts("https://github.com/owner/repo/issues/1") == 0
@@ -492,7 +492,7 @@ def test_a_cancelled_agent_run_with_committed_changes_keeps_the_worktree_with_no
     code = harness.run(handler=handler, cancel=cancel)
 
     assert code == 0
-    assert harness.git.worktrees
+    assert harness.git.worktree_branches
     assert harness.git.removed == []
     assert _writes(harness.gh) == []
     assert harness.store.failed_attempts("https://github.com/owner/repo/issues/1") == 0
@@ -504,9 +504,9 @@ def test_any_attempt_ending_removes_the_worktree_but_keeps_the_local_branch(tmp_
     code = harness.run()
 
     assert code == 1
-    assert harness.git.worktrees == {}
+    assert harness.git.worktree_branches == {}
     assert len(harness.git.removed) == 1
-    assert "add-login-page" in harness.git.branches
+    assert "add-login-page" in harness.git.branch_commits
 
 
 def test_a_prompt_placeholder_with_no_argument_fails_the_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -577,7 +577,7 @@ def test_a_tickets_prompt_excludes_the_spec_body_and_other_tickets(tmp_path: Pat
 
 def test_the_prompt_lists_only_this_initiatives_task_commits(tmp_path: Path) -> None:
     harness = DevHarness(tmp_path)
-    harness.git.branches["add-login-page"] = ["c1", "c2", "c3"]
+    harness.git.branch_commits["add-login-page"] = ["c1", "c2", "c3"]
     harness.git.subjects.update(
         {"c1": "ccode(Checkout|9): earlier work", "c2": "ccode(Other|3): other initiative", "c3": "ccode: bare"}
     )
@@ -629,16 +629,16 @@ def test_a_branch_ahead_at_spec_start_is_pushed_from_the_checkout_before_the_wor
     tmp_path: Path,
 ) -> None:
     harness = DevHarness(tmp_path)
-    harness.git.branches["add-login-page"] = ["c1"]
+    harness.git.branch_commits["add-login-page"] = ["c1"]
     harness.git.subjects["c1"] = "ccode(Checkout|9): earlier"
     created_after_push: list[bool] = []
-    original = harness.git.worktree_service.create
+    original = harness.git.worktrees.create
 
     def spy(*args, **kwargs):
         created_after_push.append(bool(harness.git.pushed))
         return original(*args, **kwargs)
 
-    harness.git.worktree_service.create = spy
+    harness.git.worktrees.create = spy
 
     harness.run(handler=lambda prompt, options: "")
 
@@ -650,7 +650,7 @@ def test_a_branch_ahead_at_spec_start_is_pushed_from_the_checkout_before_the_wor
 
 def test_a_spec_with_no_actionable_ticket_and_a_branch_ahead_is_pushed_with_its_pr(tmp_path: Path) -> None:
     harness = DevHarness(tmp_path, tickets={1: []})
-    harness.git.branches["add-login-page"] = ["c1"]
+    harness.git.branch_commits["add-login-page"] = ["c1"]
 
     code = harness.run()
 
@@ -720,7 +720,7 @@ def test_a_failed_validation_resets_the_worktree_and_escalates_the_ticket_and_th
     code = harness.run(handler=handler_for(harness))
 
     assert code == 1
-    assert harness.git.branches["add-login-page"] == []
+    assert harness.git.branch_commits["add-login-page"] == []
     assert harness.git.pushed == [] and all(c[:2] != ("pr", "create") for c in harness.gh.calls)
     assert {c[2] for c in harness.gh.calls if c[:2] == ("issue", "edit") and c[-1] == "hitl"} == {"1", "10"}
     comments = [c for c in harness.gh.calls if c[:2] == ("issue", "comment")]
@@ -738,7 +738,7 @@ def test_two_commits_in_one_run_fail_the_run(tmp_path: Path) -> None:
     code = harness.run(handler=handler)
 
     assert code == 1
-    assert harness.git.branches["add-login-page"] == []
+    assert harness.git.branch_commits["add-login-page"] == []
     assert any("exactly one commit" in c[-1] for c in harness.gh.calls if c[:2] == ("issue", "comment"))
 
 
@@ -766,7 +766,7 @@ def test_a_failed_response_after_committing_discards_the_commit_and_comments_its
     code = harness.run(handler=handler)
 
     assert code == 1
-    assert harness.git.branches["add-login-page"] == []
+    assert harness.git.branch_commits["add-login-page"] == []
     assert harness.git.pushed == []
     comments = [c for c in harness.gh.calls if c[:2] == ("issue", "comment")]
     assert comments and all("needs a decision" in c[-1] for c in comments)

@@ -49,9 +49,7 @@ class _Sandbox(NoSandbox):
 
 def _sandbox(git: FakeGit, sandbox: _Sandbox, tmp_path: Path, **kwargs):
     return create_sandbox(
-        git.commits,
-        git.worktree_service,
-        git.branch_service,
+        git,
         lambda workspace, cancel: sandbox,
         checkout=CHECKOUT,
         harness_root=tmp_path,
@@ -68,7 +66,7 @@ def test_create_sandbox_runs_worktree_ready_then_sandbox_ready_hooks_on_a_genera
 
     assert git.hook_calls == ["a", "b"]
     assert sandbox.branch.startswith("loop/sandbox-")
-    assert git.worktrees == {sandbox.worktree.path: sandbox.branch}
+    assert git.worktree_branches == {sandbox.worktree.path: sandbox.branch}
 
 
 def test_create_sandbox_removes_the_worktree_and_does_not_start_the_sandbox_when_a_worktree_ready_hook_fails(
@@ -80,9 +78,7 @@ def test_create_sandbox_removes_the_worktree_and_does_not_start_the_sandbox_when
 
     with pytest.raises(HookError):
         create_sandbox(
-            git.commits,
-            git.worktree_service,
-            git.branch_service,
+            git,
             lambda workspace, cancel: started.append(True) or _Sandbox(),
             checkout=CHECKOUT,
             harness_root=tmp_path,
@@ -91,7 +87,7 @@ def test_create_sandbox_removes_the_worktree_and_does_not_start_the_sandbox_when
             hooks=SandboxHooks(worktree_ready=(Hook("a"),)),
         )
 
-    assert git.worktrees == {}
+    assert git.worktree_branches == {}
     assert not started
 
 
@@ -103,18 +99,18 @@ def test_create_sandbox_removes_a_clean_worktree_when_cancelled_during_a_worktre
         _sandbox(git, _Sandbox(), tmp_path, branch="feature-x", hooks=SandboxHooks(worktree_ready=(Hook("a"),)))
 
     assert raised.value.worktree is None
-    assert git.worktrees == {}
+    assert git.worktree_branches == {}
 
 
 def test_create_sandbox_keeps_a_dirty_worktree_when_cancelled_during_a_worktree_ready_hook(tmp_path: Path) -> None:
     git = FakeGit()
     git.cancelled_hooks.add("a")
-    git.branches["feature-x"] = ["c1"]
+    git.branch_commits["feature-x"] = ["c1"]
 
     with pytest.raises(Cancelled) as raised:
         _sandbox(git, _Sandbox(), tmp_path, branch="feature-x", hooks=SandboxHooks(worktree_ready=(Hook("a"),)))
 
-    assert raised.value.worktree is not None and raised.value.worktree in git.worktrees
+    assert raised.value.worktree is not None and raised.value.worktree in git.worktree_branches
 
 
 def test_create_sandbox_uses_the_given_branch(tmp_path: Path) -> None:
@@ -136,20 +132,20 @@ def test_create_sandbox_closes_the_sandbox_and_removes_the_worktree_when_a_sandb
         _sandbox(git, sandbox, tmp_path, branch="feature-x", hooks=SandboxHooks(sandbox_ready=(Hook("b"),)))
 
     assert sandbox.closed
-    assert git.worktrees == {}
+    assert git.worktree_branches == {}
 
 
 def test_create_sandbox_keeps_a_dirty_worktree_when_cancelled_during_setup(tmp_path: Path) -> None:
     git = FakeGit()
     git.cancelled_hooks.add("b")
-    git.branches["feature-x"] = ["c1"]
+    git.branch_commits["feature-x"] = ["c1"]
     sandbox = _Sandbox()
 
     with pytest.raises(Cancelled) as raised:
         _sandbox(git, sandbox, tmp_path, branch="feature-x", hooks=SandboxHooks(sandbox_ready=(Hook("b"),)))
 
     assert sandbox.closed
-    assert raised.value.worktree is not None and raised.value.worktree in git.worktrees
+    assert raised.value.worktree is not None and raised.value.worktree in git.worktree_branches
 
 
 def test_create_sandbox_removes_a_clean_worktree_when_cancelled_during_setup(tmp_path: Path) -> None:
@@ -160,7 +156,7 @@ def test_create_sandbox_removes_a_clean_worktree_when_cancelled_during_setup(tmp
         _sandbox(git, _Sandbox(), tmp_path, branch="feature-x", hooks=SandboxHooks(sandbox_ready=(Hook("b"),)))
 
     assert raised.value.worktree is None
-    assert git.worktrees == {}
+    assert git.worktree_branches == {}
 
 
 def test_create_sandbox_removes_the_worktree_when_the_sandbox_cannot_start(tmp_path: Path) -> None:
@@ -171,9 +167,7 @@ def test_create_sandbox_removes_the_worktree_when_the_sandbox_cannot_start(tmp_p
 
     with pytest.raises(LoopError, match="no docker"):
         create_sandbox(
-            git.commits,
-            git.worktree_service,
-            git.branch_service,
+            git,
             factory,
             checkout=CHECKOUT,
             harness_root=tmp_path,
@@ -181,7 +175,7 @@ def test_create_sandbox_removes_the_worktree_when_the_sandbox_cannot_start(tmp_p
             branch="feature-x",
         )
 
-    assert git.worktrees == {}
+    assert git.worktree_branches == {}
 
 
 def test_run_returns_the_agent_result_and_the_commits_the_agent_made_on_the_branch(tmp_path: Path) -> None:
@@ -262,7 +256,7 @@ def test_leaving_the_context_without_an_error_removes_the_worktree(tmp_path: Pat
 
 
 def _worktree(git: FakeGit, branch: str = "tmp") -> Worktree:
-    return git.worktree_service.create(Branch(CHECKOUT, branch), HARNESS / branch)
+    return git.worktrees.create(Branch(CHECKOUT, branch), HARNESS / branch)
 
 
 def test_lifecycle_in_temp_branch_mode_merges_into_the_host_branch_then_detaches_and_deletes_the_temp_branch() -> None:
@@ -271,8 +265,8 @@ def test_lifecycle_in_temp_branch_mode_merges_into_the_host_branch_then_detaches
 
     outcome = with_sandbox_lifecycle(
         git.commits,
-        git.branch_service,
-        git.worktree_service,
+        git.branches,
+        git.worktrees,
         _Sandbox(),
         CHECKOUT,
         worktree,
@@ -291,8 +285,8 @@ def test_lifecycle_with_keep_source_branch_skips_the_detach_and_delete() -> None
 
     with_sandbox_lifecycle(
         git.commits,
-        git.branch_service,
-        git.worktree_service,
+        git.branches,
+        git.worktrees,
         _Sandbox(),
         CHECKOUT,
         worktree,
@@ -311,8 +305,8 @@ def test_lifecycle_with_an_explicit_branch_neither_merges_nor_deletes() -> None:
 
     with_sandbox_lifecycle(
         git.commits,
-        git.branch_service,
-        git.worktree_service,
+        git.branches,
+        git.worktrees,
         _Sandbox(),
         CHECKOUT,
         worktree,
@@ -331,8 +325,8 @@ def test_lifecycle_passes_the_head_before_the_work_to_the_work() -> None:
 
     outcome = with_sandbox_lifecycle(
         git.commits,
-        git.branch_service,
-        git.worktree_service,
+        git.branches,
+        git.worktrees,
         _Sandbox(),
         CHECKOUT,
         worktree,
@@ -351,8 +345,8 @@ def test_lifecycle_rejects_a_temp_branch_merge_into_a_detached_host_checkout() -
     with pytest.raises(LoopError, match="detached HEAD"):
         with_sandbox_lifecycle(
             git.commits,
-            git.branch_service,
-            git.worktree_service,
+            git.branches,
+            git.worktrees,
             _Sandbox(),
             CHECKOUT,
             worktree,
@@ -368,8 +362,8 @@ def test_lifecycle_runs_sandbox_ready_hooks_before_the_work() -> None:
 
     with_sandbox_lifecycle(
         git.commits,
-        git.branch_service,
-        git.worktree_service,
+        git.branches,
+        git.worktrees,
         _Sandbox(),
         CHECKOUT,
         worktree,
@@ -389,8 +383,8 @@ def test_lifecycle_trusts_the_worktree_and_copies_the_host_identity_into_an_isol
 
     with_sandbox_lifecycle(
         git.commits,
-        git.branch_service,
-        git.worktree_service,
+        git.branches,
+        git.worktrees,
         sandbox,
         CHECKOUT,
         worktree,
@@ -413,8 +407,8 @@ def test_lifecycle_leaves_a_host_sandbox_untouched() -> None:
 
     with_sandbox_lifecycle(
         git.commits,
-        git.branch_service,
-        git.worktree_service,
+        git.branches,
+        git.worktrees,
         sandbox,
         CHECKOUT,
         _worktree(git),
@@ -432,8 +426,8 @@ def test_lifecycle_retries_a_transient_sandbox_setup_exit_then_continues() -> No
 
     with_sandbox_lifecycle(
         git.commits,
-        git.branch_service,
-        git.worktree_service,
+        git.branches,
+        git.worktrees,
         sandbox,
         CHECKOUT,
         _worktree(git),
@@ -453,8 +447,8 @@ def test_lifecycle_fails_after_exhausting_retries_on_a_transient_sandbox_setup_e
     with pytest.raises(LoopError, match="137"):
         with_sandbox_lifecycle(
             git.commits,
-            git.branch_service,
-            git.worktree_service,
+            git.branches,
+            git.worktrees,
             sandbox,
             CHECKOUT,
             _worktree(git),
@@ -474,8 +468,8 @@ def test_lifecycle_fails_at_once_on_a_non_transient_sandbox_setup_exit() -> None
     with pytest.raises(LoopError):
         with_sandbox_lifecycle(
             git.commits,
-            git.branch_service,
-            git.worktree_service,
+            git.branches,
+            git.worktrees,
             sandbox,
             CHECKOUT,
             _worktree(git),
