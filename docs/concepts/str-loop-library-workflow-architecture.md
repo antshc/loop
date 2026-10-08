@@ -61,7 +61,7 @@ def main(argv=None, *, branches=None, commits=None, github_factory=None, store=N
     github_factory = github_factory or (lambda checkout: GitHubClient.for_repo(checkout)[0])
     ...
     provider = AgentRunnerProvider(git, harness_root, agent, executor=executor)
-    with provider.create(checkout=..., worktree_root=..., base=...) as runner:
+    with provider.create(repository, base=...) as runner:
         runner.run(template, prompt_args, options)
 
 if __name__ == "__main__":

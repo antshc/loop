@@ -17,6 +17,7 @@ from loop import (
     HookError,
     InMemorySessionStore,
     LoopError,
+    RepositoryData,
     copilot,
 )
 from loop.testing import FakeAgentClient, FakeCopilotCli, FakeGit
@@ -44,8 +45,11 @@ def _runner(
     provider = AgentRunnerProvider(
         git, tmp_path, factory, executor=FakeCopilotCli() if executor is ... else executor, cancel=cancel
     )
-    kwargs.setdefault("worktree_root", tmp_path / "workspace" / f"{CHECKOUT.name}.worktrees")
-    return provider.create(checkout=CHECKOUT, base="main", **kwargs)
+    worktree_root = kwargs.pop("worktree_root", tmp_path / "workspace" / f"{CHECKOUT.name}.worktrees")
+    repository = RepositoryData(
+        path=CHECKOUT, owner_repo="owner/repo", is_harness=False, worktree_root=worktree_root
+    )
+    return provider.create(repository, base="main", **kwargs)
 
 
 def test_create_runs_worktree_ready_hooks_on_a_generated_branch(tmp_path: Path) -> None:

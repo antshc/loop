@@ -37,6 +37,7 @@ from loop.platforms.git import (
     CommitService,
     Git,
     Hook,
+    RepositoryData,
     Worktree,
     WorktreeService,
 )
@@ -88,6 +89,7 @@ __all__ = [
     "LoopError",
     "PromptError",
     "PromptPreprocessor",
+    "RepositoryData",
     "SessionStore",
     "Settled",
     "Worktree",

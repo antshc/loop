@@ -27,6 +27,16 @@ class Branch:
 
 
 @dataclass(frozen=True)
+class RepositoryData:
+    """A repository's resolved location: its checkout path, `owner/name`, harness flag, and worktree root."""
+
+    path: Path
+    owner_repo: str
+    is_harness: bool
+    worktree_root: Path
+
+
+@dataclass(frozen=True)
 class Worktree:
     """A worktree of a Codebase Checkout; `branch` is None on a detached HEAD."""
 

@@ -6,6 +6,8 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from loop import RepositoryData
+
 from .gh_client import GitHubClient
 from .tracker import Spec
 
@@ -42,14 +44,10 @@ class RepositoryConfig:
 
 
 @dataclass(frozen=True)
-class Repository:
+class Repository(RepositoryData):
     """A `RepositoryConfig` resolved to its ready-to-use `PullRequests` and worktree root."""
 
-    path: Path
-    owner_repo: RepoTarget
-    is_harness: bool
     pull_requests: PullRequests
-    worktree_root: Path
 
 
 class RepositoryPoolError(Exception):

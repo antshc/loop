@@ -3,7 +3,14 @@
 from __future__ import annotations
 
 from .gh_client import GhCli, GitHubClient, PullRequest, ReviewThread
-from .repository import PullRequests, Repository, RepoTarget, RepositoryConfig, RepositoryPool, RepositoryPoolError
+from .repository import (
+    PullRequests,
+    Repository,
+    RepositoryConfig,
+    RepositoryPool,
+    RepositoryPoolError,
+    RepoTarget,
+)
 from .tracker import HITL_LABEL, Comment, Spec, Ticket, TicketsTracker
 from .work_identifier import WorkIdentifier
 

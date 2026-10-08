@@ -9,7 +9,7 @@ from types import TracebackType
 
 from loop.contracts.agent_client import AgentBinding, AgentClient, AgentClientFactory, AgentOptions, AgentResult
 from loop.errors import Cancelled, LoopError
-from loop.platforms.git import Branch, Commit, Git, Hook, Worktree, WorktreeService
+from loop.platforms.git import Branch, Commit, Git, Hook, RepositoryData, Worktree, WorktreeService
 from loop.process import CommandExecutor, CommandResult, OnLine, execute
 
 
@@ -146,9 +146,8 @@ class AgentRunnerProvider:
 
     def create(
         self,
+        repository: RepositoryData,
         *,
-        checkout: Path,
-        worktree_root: Path,
         base: str,
         branch: str | None = None,
         hooks: Sequence[Hook] = (),
@@ -157,7 +156,7 @@ class AgentRunnerProvider:
 
         A branch named `loop/run-<id>` is generated when none is given.
         """
-        worktree, branch_name = self._create_worktree(checkout, worktree_root, base, branch, hooks)
+        worktree, branch_name = self._create_worktree(repository, base, branch, hooks)
         lifecycle = WorktreeLifecycle(self._git, worktree, branch_name)
         try:
             client = self._agent(AgentBinding(self._bound_executor, str(self._harness_root)))
@@ -167,8 +166,9 @@ class AgentRunnerProvider:
         return AgentRunner(lifecycle, client, self._cancel)
 
     def _create_worktree(
-        self, checkout: Path, worktree_root: Path, base: str, branch: str | None, hooks: Sequence[Hook]
+        self, repository: RepositoryData, base: str, branch: str | None, hooks: Sequence[Hook]
     ) -> tuple[Worktree, str]:
+        checkout, worktree_root = repository.path, repository.worktree_root
         target = worktree_root / branch if branch is not None else None
         prepared = self._git.branches.prepare(
             Branch(checkout, branch) if branch else None, Branch(checkout, base), target

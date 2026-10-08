@@ -6,7 +6,7 @@ import logging
 from enum import Enum, auto
 from pathlib import Path
 
-from loop import AgentRunner, AgentRunnerProvider, Branch, Cancelled, LoopError
+from loop import AgentRunner, AgentRunnerProvider, Branch, Cancelled, LoopError, RepositoryData
 from workflows.platforms.work_tracking import Repository, Spec
 
 from .delivery import deliver_tickets
@@ -98,14 +98,13 @@ class DevWorkflow:
         self.publish(spec, repository, repository.path)
         return True
 
-    def create_agent_runner(self, spec: Spec, repository: Repository) -> AgentRunner:
+    def create_agent_runner(self, spec: Spec, repository: RepositoryData) -> AgentRunner:
         """Creates the feature-branch agent runner for `spec`."""
         return self._runner_provider.create(
-            checkout=repository.path,
+            repository,
             base=spec.base_branch,
             branch=spec.feature_branch,
             hooks=tuple(self._deps.hooks),
-            worktree_root=repository.worktree_root,
         )
 
     def publish(self, spec: Spec, repository: Repository, pusher: Path) -> str | None:
