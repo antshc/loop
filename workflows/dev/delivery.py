@@ -86,7 +86,7 @@ def task_id(initiative: str, ticket_number: int) -> str:
 
 def deliver_tickets(run: SpecRun, sandbox: WorktreeSandbox, deps: DevDeps) -> bool:
     """Deliver Ticket for each actionable Ticket in order; stops at the first failure."""
-    for ticket in run.actionable:
+    for ticket in run.tickets:
         if not _deliver_ticket(run, ticket, sandbox, deps):
             return False
     return True

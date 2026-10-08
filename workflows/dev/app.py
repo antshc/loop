@@ -41,7 +41,7 @@ def _base_branch_exists(run: SpecRun, deps: DevDeps) -> bool:
 def _prepare(run: SpecRun, deps: DevDeps) -> WorktreeSandbox | None:
     """Publishes earlier runs' commits; returns a sandbox only when there are Tickets to deliver."""
     deps.git.branches.fetch(run.checkout)
-    if not run.actionable:
+    if not run.tickets:
         publish(deps.git.branches, run, run.checkout)
         return None
     if not _base_branch_exists(run, deps):

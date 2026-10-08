@@ -29,7 +29,7 @@ def feature_branch_name(base_branch: str, title: str) -> str:
 @dataclass(frozen=True)
 class SpecRun:
     spec: Spec
-    actionable: tuple[Ticket, ...]
+    tickets: tuple[Ticket, ...]
     initiative: str
     bare_title: str
     target: str
@@ -93,7 +93,7 @@ def prepare_run(
     target_github = tracker.github if checkout == harness_root else github_factory(checkout)
     return SpecRun(
         spec=spec,
-        actionable=tickets,
+        tickets=tickets,
         initiative=spec.initiative,
         bare_title=spec.bare_title,
         target=target,
