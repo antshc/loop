@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 from .gh_client import GhCli, GitHubClient, PullRequest, ReviewThread
-from .pull_requests import PullRequests
-from .repository import Repository, RepoTarget, RepositoryConfig, RepositoryPool, RepositoryPoolError
+from .repository import PullRequests, Repository, RepoTarget, RepositoryConfig, RepositoryPool, RepositoryPoolError
 from .tracker import HITL_LABEL, Comment, Spec, Ticket, TicketsTracker
 
 __all__ = [
