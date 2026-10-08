@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .gh_client import GhCli, GitHubClient, PullRequest, ReviewThread
+from .pull_requests import PullRequests
 from .tracker import HITL_LABEL, Comment, Spec, Ticket, TicketsTracker
 
 __all__ = [
@@ -11,6 +12,7 @@ __all__ = [
     "GhCli",
     "GitHubClient",
     "PullRequest",
+    "PullRequests",
     "ReviewThread",
     "Spec",
     "Ticket",

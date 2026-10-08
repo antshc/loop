@@ -36,11 +36,7 @@ def publish(branches: BranchService, run: SpecRun, pusher: Path) -> str | None:
     """
     if not branches.push(Branch(pusher, run.feature_branch), Branch(pusher, run.spec.base_branch)):
         return None
-    spec = run.spec
-    pull_request = run.target_github.create_draft_pull_request(
-        run.feature_branch, spec.base_branch, f"{spec.initiative}: {spec.bare_title}"
-    )
-    return pull_request.url
+    return run.pull_requests.publish_draft(run.spec, run.feature_branch)
 
 
 def _base_branch_exists(run: SpecRun, deps: DevDeps) -> bool:

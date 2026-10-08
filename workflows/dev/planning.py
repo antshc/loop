@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from loop import origin_slug
-from workflows.platforms.work_tracking import GitHubClient, Spec, Ticket, TicketsTracker
+from workflows.platforms.work_tracking import PullRequests, Spec, Ticket, TicketsTracker
 
 from .deps import GithubFactory
 
@@ -32,7 +32,7 @@ class SpecRun:
     tickets: tuple[Ticket, ...]
     feature_branch: str
     checkout: Path
-    target_github: GitHubClient
+    pull_requests: PullRequests
 
 
 def _same_slug(a: str | None, b: str | None) -> bool:
@@ -93,5 +93,5 @@ def prepare_run(
         tickets=tickets,
         feature_branch=feature_branch_name(base_branch, spec.bare_title),
         checkout=checkout,
-        target_github=target_github,
+        pull_requests=PullRequests(target_github),
     )
