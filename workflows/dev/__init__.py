@@ -34,7 +34,7 @@ from workflows.platforms.work_tracking import (
 
 from workflows.platforms.work_tracking import WorkIdentifier
 
-from .app import process_specs
+from .workflow import process_specs
 from .deps import DevDeps, GithubFactory
 from .prompting import prompt_args
 from .result import DevResult, DevResultError, parse_dev_result
