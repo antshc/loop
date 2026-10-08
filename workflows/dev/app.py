@@ -3,17 +3,59 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
 
 from loop import AgentRunner, Branch, BranchService, Cancelled, LoopError
-from workflows.platforms.work_tracking import HITL_LABEL, Spec
+from workflows.platforms.work_tracking import (
+    HITL_LABEL,
+    Repository,
+    RepositoryPool,
+    Spec,
+    Ticket,
+    TicketsTracker,
+)
 
 from .delivery import deliver_tickets, open_runner
 from .deps import DevDeps
-from .planning import SpecRun, prepare_run
 
 logger = logging.getLogger("workflow.dev")
+
+
+@dataclass(frozen=True)
+class SpecRun:
+    spec: Spec
+    tickets: tuple[Ticket, ...]
+    repository: Repository
+
+
+def prepare_run(
+    spec: Spec,
+    *,
+    repository_pool: RepositoryPool,
+    tracker: TicketsTracker,
+) -> SpecRun | None:
+    """The SpecRun for `spec`, or None after blocking the Spec when its target cannot be resolved."""
+    # Tickets live on the harness tracker, even when the Spec targets another repo.
+    tickets = tracker.get_tickets(spec)
+
+    target = spec.target
+    base_branch = spec.base_branch
+    if target is None or base_branch is None:
+        tracker.block_spec(spec.number, tickets, f"dev: cannot resolve repo:target/repo:base labels on {spec.url}")
+        return None
+
+    repository = repository_pool.get(target)
+    if repository is None:
+        tracker.block_spec(spec.number, tickets, f"dev: repo:target:{target} is not configured in the RepositoryPool")
+        return None
+
+    return SpecRun(
+        spec=spec,
+        tickets=tickets,
+        repository=repository,
+    )
 
 
 class Outcome(Enum):

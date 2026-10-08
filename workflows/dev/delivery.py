@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from loop import AgentRunner, AgentRunnerProvider, Cancelled, Commit, LoopError
 from workflows.platforms.work_tracking import Ticket, WorkIdentifier
 
 from .acceptance import commit_violation
 from .deps import DevDeps
-from .planning import SpecRun
 from .prompting import initiative_commits, prompt_args
 from .result import DevResult, DevResultError, parse_response
 from .settings import MAX_TICKET_FAILURES
+
+if TYPE_CHECKING:
+    from .app import SpecRun
 
 
 def open_runner(run: SpecRun, deps: DevDeps) -> AgentRunner:
