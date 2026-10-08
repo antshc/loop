@@ -24,13 +24,19 @@ from loop import (
     copilot,
 )
 
-from workflows.platforms.work_tracking import GitHubClient, TicketsTracker
+from workflows.platforms.work_tracking import (
+    GitHubClient,
+    RepositoryConfig,
+    RepositoryPool,
+    RepositoryPoolError,
+    TicketsTracker,
+)
 
 from .app import process_specs
 from .deps import DevDeps, GithubFactory
 from .prompting import prompt_args
 from .result import DevResult, DevResultError, parse_dev_result
-from .settings import HOOKS, LOG_DIR_NAME, LOG_LEVEL, PROMPT, SANDBOX_FACTORY
+from .settings import HOOKS, LOG_DIR_NAME, LOG_LEVEL, PROMPT, REPOSITORIES, SANDBOX_FACTORY
 
 __all__ = [
     "PROMPT",
@@ -54,23 +60,23 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
 
 def _build_deps(
     harness_root: Path,
-    harness_slug: str,
+    repository_pool: RepositoryPool,
     log_dir: Path,
     *,
     git: Git,
-    github_factory: GithubFactory | None,
+    github_factory: GithubFactory,
     agent_factory: AgentClientFactory | None,
     sandbox_factory: SandboxFactory | None,
     store: ExecutionStore | None,
     hooks: Sequence[Hook],
     cancel: threading.Event | None,
 ) -> DevDeps:
-    github_factory = github_factory or (lambda checkout: GitHubClient.for_repo(checkout)[0])
     return DevDeps(
         harness_root=harness_root,
-        harness_slug=harness_slug,
-        tracker=TicketsTracker(github_factory(harness_root), store or FileExecutionStore(log_dir), harness_slug),
-        github_factory=github_factory,
+        repository_pool=repository_pool,
+        tracker=TicketsTracker(
+            github_factory(harness_root), store or FileExecutionStore(log_dir), repository_pool.harness.owner_repo
+        ),
         git=git,
         agent_factory=agent_factory or copilot(InMemorySessionStore()),
         sandbox_factory=sandbox_factory or SANDBOX_FACTORY,
@@ -85,6 +91,7 @@ def main(
     *,
     git: Git | None = None,
     github_factory: GithubFactory | None = None,
+    repositories: Sequence[RepositoryConfig] = REPOSITORIES,
     agent_factory: AgentClientFactory | None = None,
     sandbox_factory: SandboxFactory | None = None,
     store: ExecutionStore | None = None,
@@ -99,14 +106,16 @@ def main(
     configure_logging(log_dir / "dev.log", args.log_level)
 
     git = git or Git()
-    harness_slug = git.origin_slug(harness_root)
-    if harness_slug is None:
-        logger.error("harness root is not a resolvable github.com git repository: %s", harness_root)
+    github_factory = github_factory or (lambda checkout: GitHubClient.for_repo(checkout)[0])
+    try:
+        repository_pool = RepositoryPool(repositories, github_factory)
+    except RepositoryPoolError as exception:
+        logger.error("repository pool misconfigured: %s", exception)
         return 1
 
     deps = _build_deps(
         harness_root,
-        harness_slug,
+        repository_pool,
         log_dir,
         git=git,
         github_factory=github_factory,

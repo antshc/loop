@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from loop.platforms.git.branch_service import BranchService
 from loop.platforms.git.client import GitClient, GitRunner
 from loop.platforms.git.commit_service import CommitService
@@ -17,6 +15,3 @@ class Git:
         self.branches = BranchService(self._client, run=run)
         self.worktrees = WorktreeService(self._client, run=run)
         self.commits = CommitService(run=run)
-
-    def origin_slug(self, path: Path) -> str | None:
-        return self._client.origin_slug(path)

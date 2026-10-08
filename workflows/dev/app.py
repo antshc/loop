@@ -81,11 +81,8 @@ def _process_spec(spec: Spec, deps: DevDeps) -> Outcome:
     """Prepare, deliver, and publish one Spec."""
     run = prepare_run(
         spec,
-        harness_root=deps.harness_root,
-        harness_slug=deps.harness_slug,
+        repository_pool=deps.repository_pool,
         tracker=deps.tracker,
-        github_factory=deps.github_factory,
-        git=deps.git,
     )
     if run is None:
         return Outcome.SKIPPED

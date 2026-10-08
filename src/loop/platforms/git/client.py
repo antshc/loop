@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 import threading
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -12,8 +11,6 @@ from loop.platforms.git.objects import Branch
 from loop.process import CommandResult, checked_output, execute
 
 DEFAULT_HOOK_TIMEOUT_S = 120.0
-
-_REMOTE = re.compile(r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?/?$", re.IGNORECASE)
 
 
 class GitRunner(Protocol):
@@ -58,14 +55,6 @@ class GitClient:
     def config_get(self, path: Path, key: str) -> str | None:
         result = self._execute(("git", "config", "--get", key), cwd=path)
         return result.stdout.strip() or None if result.returncode == 0 else None
-
-    def origin_slug(self, path: Path) -> str | None:
-        """The `owner/name` of `path`'s `origin` remote on github.com, or None when unresolvable."""
-        result = self._execute(("git", "remote", "get-url", "origin"), cwd=path)
-        if result.returncode != 0:
-            return None
-        match = _REMOTE.search(result.stdout.strip())
-        return f"{match['owner']}/{match['repo']}" if match else None
 
     def commit(self, worktree: Path, subject: str, body: str = "") -> None:
         self._run(("git", "add", "-A"), cwd=worktree)

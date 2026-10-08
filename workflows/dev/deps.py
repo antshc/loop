@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from loop import AgentClientFactory, Git, Hook, SandboxFactory
-from workflows.platforms.work_tracking import GitHubClient, TicketsTracker
+from workflows.platforms.work_tracking import GitHubClient, RepositoryPool, TicketsTracker
 
 GithubFactory = Callable[[Path], GitHubClient]
 
@@ -16,9 +16,8 @@ GithubFactory = Callable[[Path], GitHubClient]
 @dataclass(frozen=True)
 class DevDeps:
     harness_root: Path
-    harness_slug: str
+    repository_pool: RepositoryPool
     tracker: TicketsTracker
-    github_factory: GithubFactory
     git: Git
     agent_factory: AgentClientFactory
     sandbox_factory: SandboxFactory

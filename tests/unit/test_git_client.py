@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from conftest import FakeRunner, commit_file, git
-from loop import Cancelled, CommandError, CommandResult, Hook, HookError
+from loop import Cancelled, CommandError, Hook, HookError
 from loop.platforms.git.client import GitClient
 
 CHECKOUT = Path("/repo")
@@ -92,25 +92,4 @@ def test_a_failing_git_command_raises_a_typed_error_with_the_command_and_stderr(
         GitClient(run=runner).check_branch_name(CHECKOUT, "feature-x")
 
     assert excinfo.value.command == "git check-ref-format --branch feature-x"
-
-
-def test_origin_slug_normalises_ssh_and_https_forms_and_a_trailing_git_suffix() -> None:
-    def fixed(url: str) -> object:
-        return lambda args, **kwargs: CommandResult(0, url, "")
-
-    ssh = GitClient(run=fixed("git@github.com:Owner/Repo.git")).origin_slug(Path("/x"))
-    https = GitClient(run=fixed("https://github.com/owner/repo")).origin_slug(Path("/x"))
-
-    assert ssh == "Owner/Repo"
-    assert https == "owner/repo"
-
-
-def test_origin_slug_reports_unresolvable_when_origin_is_missing_or_not_github() -> None:
-    missing = GitClient(run=lambda args, **kwargs: CommandResult(1, "", "no such remote")).origin_slug(Path("/x"))
-    other_host = GitClient(run=lambda args, **kwargs: CommandResult(0, "https://example.com/a/b", "")).origin_slug(
-        Path("/x")
-    )
-
-    assert missing is None
-    assert other_host is None
 

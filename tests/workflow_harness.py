@@ -15,7 +15,7 @@ from conftest import commit_file, git
 from loop import CommandExecutor, CommandResult, InMemoryExecutionStore, NoSandbox
 from loop.testing import FakeAgentClient, FakeCopilotCli, FakeGit
 from workflows import dev
-from workflows.platforms.work_tracking import GitHubClient
+from workflows.platforms.work_tracking import GitHubClient, RepositoryConfig
 from workflows.platforms.work_tracking.fake_gh_cli import FakeGhCli
 
 
@@ -96,6 +96,7 @@ class DevHarness:
         agent_factory=None,
         sandbox_factory=None,
         github_factory=None,
+        repositories: Sequence[RepositoryConfig] | None = None,
         store=None,
         hooks=(),
         log_dir: Path | None = None,
@@ -112,6 +113,9 @@ class DevHarness:
             ["--harness-root", str(self.harness_root), "--log-dir", str(log_dir or self.log_dir)],
             git=self.git,
             github_factory=github_factory or (lambda checkout: self.github),
+            repositories=repositories
+            if repositories is not None
+            else [RepositoryConfig(path=self.harness_root, owner_repo="owner/repo", is_harness=True)],
             agent_factory=agent_factory or default_agent_factory,
             sandbox_factory=sandbox_factory
             or (lambda workspace, cancel: NoSandbox(workspace, executor=FakeCopilotCli(), cancel=cancel)),

@@ -9,7 +9,6 @@ from pathlib import Path
 
 import pytest
 
-from conftest import git
 from loop import (
     AgentClient,
     Sandbox,
@@ -23,7 +22,7 @@ from loop import (
 )
 from loop.testing import FakeAgentClient, FakeCopilotCli, FakeGit
 from workflows import dev
-from workflows.platforms.work_tracking import GitHubClient, Spec, TicketsTracker
+from workflows.platforms.work_tracking import GitHubClient, RepositoryConfig, Spec, TicketsTracker
 from workflows.platforms.work_tracking.fake_gh_cli import FakeGhCli
 
 from workflow_harness import (
@@ -153,6 +152,7 @@ def test_no_arguments_use_the_current_folder_as_the_harness_root_and_its_exit_co
     code = dev.main(
         [],
         github_factory=lambda checkout: github,
+        repositories=[RepositoryConfig(path=tmp_path, owner_repo="owner/repo", is_harness=True)],
         store=InMemoryExecutionStore(),
     )
 
@@ -171,20 +171,13 @@ def test_log_dir_override_writes_logs_to_that_folder(tmp_path: Path) -> None:
     assert not (harness.harness_root / ".loop").exists()
 
 
-@pytest.mark.parametrize("origin", [None, "git@gitlab.com:owner/repo.git"])
-def test_exits_before_reading_specs_when_the_harness_origin_is_missing_or_not_on_github(
-    tmp_path: Path, origin: str | None
-) -> None:
-    root = tmp_path / "root"
-    root.mkdir()
-    git(root, "init", "-b", "main")
-    if origin is not None:
-        git(root, "remote", "add", "origin", origin)
+def test_exits_before_reading_specs_when_no_repository_is_configured_as_the_harness(tmp_path: Path) -> None:
     gh = FakeGhCli()
 
     code = dev.main(
-        ["--harness-root", str(root), "--log-dir", str(tmp_path / "logs")],
+        ["--harness-root", str(tmp_path), "--log-dir", str(tmp_path / "logs")],
         github_factory=lambda checkout: GitHubClient("owner", "repo", gh=gh),
+        repositories=[RepositoryConfig(path=tmp_path, owner_repo="owner/repo")],
         store=InMemoryExecutionStore(),
     )
 
@@ -192,19 +185,38 @@ def test_exits_before_reading_specs_when_the_harness_origin_is_missing_or_not_on
     assert gh.calls == []
 
 
-def test_exits_non_zero_when_the_harness_root_is_not_a_git_repository(tmp_path: Path) -> None:
+def test_exits_before_reading_specs_when_more_than_one_repository_is_configured_as_the_harness(
+    tmp_path: Path,
+) -> None:
+    gh = FakeGhCli()
+
+    code = dev.main(
+        ["--harness-root", str(tmp_path), "--log-dir", str(tmp_path / "logs")],
+        github_factory=lambda checkout: GitHubClient("owner", "repo", gh=gh),
+        repositories=[
+            RepositoryConfig(path=tmp_path, owner_repo="owner/repo", is_harness=True),
+            RepositoryConfig(path=tmp_path / "other", owner_repo="owner/other", is_harness=True),
+        ],
+        store=InMemoryExecutionStore(),
+    )
+
+    assert code == 1
+    assert gh.calls == []
+
+
+def test_a_plain_folder_can_be_the_harness_root_when_configured_in_the_pool(tmp_path: Path) -> None:
     root = tmp_path / "plain"
     root.mkdir()
-    gh = FakeGhCli()
+    gh = FakeGhCli(specs=[], tickets={})
 
     code = dev.main(
         ["--harness-root", str(root), "--log-dir", str(tmp_path / "logs")],
         github_factory=lambda checkout: GitHubClient("owner", "repo", gh=gh),
+        repositories=[RepositoryConfig(path=root, owner_repo="owner/repo", is_harness=True)],
         store=InMemoryExecutionStore(),
     )
 
-    assert code == 1
-    assert gh.calls == []
+    assert code == 0
 
 
 def test_an_unexpected_error_is_logged_and_the_process_exits_non_zero(tmp_path: Path) -> None:
@@ -243,7 +255,14 @@ def test_worktree_is_created_from_the_workspace_clone_and_pr_goes_to_the_target_
     def github_factory(checkout: Path):
         return harness.github if checkout == harness.harness_root else target_github
 
-    code = harness.run(handler=lambda prompt, options: _commit_and_report(harness, 10, initiative="1"), github_factory=github_factory)
+    code = harness.run(
+        handler=lambda prompt, options: _commit_and_report(harness, 10, initiative="1"),
+        github_factory=github_factory,
+        repositories=[
+            RepositoryConfig(path=harness.harness_root, owner_repo="owner/repo", is_harness=True),
+            RepositoryConfig(path=clone, owner_repo="acme/widgets"),
+        ],
+    )
 
     assert code == 0
     assert harness.git.fetched == [clone]
@@ -251,7 +270,7 @@ def test_worktree_is_created_from_the_workspace_clone_and_pr_goes_to_the_target_
     assert any(call[:2] == ("issue", "close") for call in harness.gh.calls)
 
 
-def test_missing_workspace_clone_is_labelled_hitl_with_no_worktree_created(tmp_path: Path) -> None:
+def test_unconfigured_repo_target_is_labelled_hitl_with_no_worktree_created(tmp_path: Path) -> None:
     harness = DevHarness(
         tmp_path,
         specs=[_issue(1, "Add a widget", labels=("spec", "repo:target:acme/widgets", "repo:base:main"))],
@@ -265,23 +284,7 @@ def test_missing_workspace_clone_is_labelled_hitl_with_no_worktree_created(tmp_p
     labels = [c for c in harness.gh.calls if c[:2] == ("issue", "edit")]
     comments = [c for c in harness.gh.calls if c[:2] == ("issue", "comment")]
     assert labels and labels[0][-1] == "hitl"
-    assert comments and "workspace/widgets" in comments[0][-1] and "no clone" in comments[0][-1]
-
-
-def test_mismatched_origin_clone_is_labelled_hitl_naming_expected_path_and_actual_origin(tmp_path: Path) -> None:
-    harness = DevHarness(
-        tmp_path,
-        specs=[_issue(1, "Add a widget", labels=("spec", "repo:target:acme/widgets", "repo:base:main"))],
-        tickets={1: [_issue(10, "Build the widget")]},
-    )
-    _make_repo(harness.harness_root / "workspace" / "widgets", "git@github.com:someoneelse/widgets.git")
-
-    code = harness.run()
-
-    assert code == 0
-    comments = [c for c in harness.gh.calls if c[:2] == ("issue", "comment")]
-    assert comments and "someoneelse/widgets" in comments[0][-1]
-    assert harness.git.worktree_branches == {}
+    assert comments and "repo:target:acme/widgets" in comments[0][-1] and "RepositoryPool" in comments[0][-1]
 
 
 @pytest.mark.parametrize(
