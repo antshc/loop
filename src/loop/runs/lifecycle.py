@@ -76,7 +76,11 @@ class WorktreeRunner:
         worktree_branch = self._worktree.branch.name
 
         base_head = self._git.commits.head(self._worktree.path)
+
+        # Run the agent prompt
         result = self._run_agent(agent, prompt, prompt_args, options)
+        # End run of the agent promt
+ 
         new_commits = self._git.commits.since(base_head)
 
         if self._merge_to_head:
