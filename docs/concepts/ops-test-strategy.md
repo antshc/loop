@@ -6,10 +6,12 @@ Loop's behavior is spread over shipped components (agent client, output parser, 
 
 ## Approach
 
-Tests form two groups that run independently of each other and together in one test run.
+Tests form two groups that run independently of each other and together in one test run, plus an opt-in live group that the default run excludes.
 
 - **Unit group** — one component or one Workflow rule at a time against its process-boundary stand-ins. It is fast and covers edge cases, plus the architecture checks. Workflow rules that do not depend on a real Loop part (retry bounds, labelling, worktree location, argument handling) are tested here with the agent client replaced by `FakeAgentClient`.
 - **Functional slice group** (the integration group) — one business scenario of a Workflow at a time, driven through the Workflow's entry point with the shipped Copilot agent client, its output parser, the prompt preprocessor, and the worktree runner all real. Only Git, GitHub, the Copilot CLI process, and the execution store are stand-ins, so a slice proves that the real parts cooperate. A scenario earns a slice test when its outcome depends on those parts interacting — response extraction, prompt content, live output, Git validation, publication — not when a unit test already settles it.
+
+- **Live group** (opt-in) — a Workflow scenario run against the real Copilot CLI, to prove that real provider flags and output work end to end. It is marked `live`, excluded from the default test run, and selected with `pytest -m live`.
 
 The shared Workflow wiring (`DevHarness`) and the provider-shaped output builders live in one support module imported by both groups; the doubles come from `loop.testing`.
 
@@ -17,7 +19,8 @@ The shared Workflow wiring (`DevHarness`) and the provider-shaped output builder
 
 - MUST keep unit and functional slice tests in separate groups that can each be selected alone and that both run in the project's single test command.
 - MUST test every shipped component in the unit group against its own process-boundary double, one behavior per test.
-- MUST NOT start a real `gh` or Copilot CLI process, or reach the network, from any test; real Git MAY run only in throwaway repositories under the test temp folder.
+- MUST NOT start a real `gh` or Copilot CLI process, or reach the network, from any test outside the `live` group; real Git MAY run only in throwaway repositories under the test temp folder.
+- MUST keep live tests in `tests/live/`, marked `live` and excluded from the default run (`addopts = "-m 'not live'"`); a live test MUST skip when `copilot` is not on the PATH, and SHOULD use the cheapest model and the simplest task that proves the scenario.
 - MUST test each Workflow rule in the unit group and each Workflow business scenario that depends on real Loop parts interacting in the functional slice group.
 - MUST drive a functional slice test through the Workflow's entry point with injected dependencies, with the real Copilot agent client, output parser, prompt preprocessor, and worktree runner, and stand-ins only for Git, GitHub, the Copilot CLI process, and the execution store.
 - MUST feed the Copilot CLI stand-in a provider-shaped event stream (unrelated events, response split across delta events, closing events); a slice test MUST NOT hand the Workflow a pre-built agent result.

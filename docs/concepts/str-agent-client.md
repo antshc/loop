@@ -28,7 +28,7 @@ Preprocessor              |
                     e.g. Copilot CLI
 ```
 
-`AgentClient` exposes a provider-neutral `run(prompt, prompt_args, options)` operation. The Prompt Preprocessor first replaces `{{KEY}}` placeholders in the prompt with `prompt_args` and expands `!`cmd`` commands the template author wrote. A run without `options.session_key` starts a fresh provider invocation. A run with a session key resolves the logical session through `SessionStore`; the provider adapter then creates or resumes the corresponding provider session.
+`AgentClient` exposes a provider-neutral `run(prompt, prompt_args, model, reasoning_effort, options)` operation; the optional `model` and `reasoning_effort` are chosen per run, so Runs on one runner can use different models ([ADR 0012](../adr/0012-pass-the-model-and-reasoning-effort-as-run-arguments.md)). The Prompt Preprocessor first replaces `{{KEY}}` placeholders in the prompt with `prompt_args` and expands `!`cmd`` commands the template author wrote. A run without `options.session_key` starts a fresh provider invocation. A run with a session key resolves the logical session through `SessionStore`; the provider adapter then creates or resumes the corresponding provider session.
 
 The worktree runner runs the provider CLI, and the template commands, directly on the host in the harness-root workspace. The client never builds the process itself; it runs commands through the executor its runner gave it, which tests replace.
 
@@ -43,7 +43,8 @@ The CLI adapter owns command construction, process execution, and provider-speci
 ## Rules
 
 - MUST make orchestration code depend on `AgentClient` rather than a concrete provider CLI.
-- MUST expose prompt execution through a stable `run(prompt, prompt_args, options)` operation, with the session key carried in `options`.
+- MUST expose prompt execution through a stable `run(prompt, prompt_args, model, reasoning_effort, options)` operation, with the session key carried in `options` and the model and reasoning effort as optional run arguments, never in `options` ([ADR 0012](../adr/0012-pass-the-model-and-reasoning-effort-as-run-arguments.md)).
+- MUST map the model and reasoning effort to provider flags inside the CLI adapter (`--model`, `--reasoning-effort` for Copilot CLI), omit each flag when it is not given, and leave validating the values to the provider.
 - MUST render the prompt through the Prompt Preprocessor before invoking the provider CLI.
 - MUST substitute only `{{KEY}}` placeholders; a placeholder without a matching argument MUST fail the run, and an argument no placeholder uses SHOULD log a warning.
 - MUST execute only `!`cmd`` commands written in the prompt template; text arriving through `prompt_args` MUST NOT be executed.
@@ -105,7 +106,6 @@ class SessionStore(Protocol):
 class AgentOptions:
     session_key: str | None = None
     session_name_prefix: str = ""
-    model: str | None = None
 
 
 class PromptPreprocessor(Protocol):
@@ -137,7 +137,9 @@ class AgentClient:
         self,
         prompt: str,
         prompt_args: Mapping[str, str],
-        options: AgentOptions,
+        model: str | None = None,
+        reasoning_effort: str | None = None,
+        options: AgentOptions = AgentOptions(),
     ) -> AgentRunResult:
         text = self._preprocessor.process(prompt, prompt_args)
 
