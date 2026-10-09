@@ -95,11 +95,11 @@ class AgentBuilder:
         self._use_worktrees = False
         self._use_docker = False
 
-    def WithWorktrees(self) -> Self:
+    def with_worktrees(self) -> Self:
         self._use_worktrees = True
         return self
 
-    def withdocker(self) -> Self:
+    def with_docker(self) -> Self:
         self._use_docker = True
         return self
 
@@ -122,7 +122,7 @@ class CopilotCli:
         return f"[{mode}] cwd={context.cwd} prompt={prompt}"
 
 
-class GitWorktrees:
+class WorktreesRuntime:
     @contextmanager
     def open(self, cwd: Path) -> Iterator[Path]:
         # Demonstration only: no git worktree is created or removed.
@@ -142,11 +142,11 @@ def Agent() -> AgentBuilder:
     """Composition root: register private default dependencies and return builder."""
     return AgentBuilder(
         runner=CopilotCli(),
-        worktrees=GitWorktrees(),
+        worktrees=WorktreesRuntime(),
         docker=DockerRuntime(),
     )
 
 
 if __name__ == "__main__":
     print(Agent().create().run("Implement ticket #123"))
-    print(Agent().WithWorktrees().withdocker().create().run("Implement ticket #123"))
+    print(Agent().with_worktrees().with_docker().create().run("Implement ticket #123"))

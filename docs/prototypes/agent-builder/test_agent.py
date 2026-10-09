@@ -83,8 +83,8 @@ class AgentBuilderTests(unittest.TestCase):
 
     def test_one_chain_creates_worktree_outer_and_docker_inner(self) -> None:
         builder = self.builder()
-        self.assertIs(builder.WithWorktrees(), builder)
-        self.assertIs(builder.withdocker(), builder)
+        self.assertIs(builder.with_worktrees(), builder)
+        self.assertIs(builder.with_docker(), builder)
         client = builder.create()
         self.assertIsInstance(client, WorktreeAgent)
         self.assertIsInstance(client._inner, DockerAgent)
@@ -100,11 +100,11 @@ class AgentBuilderTests(unittest.TestCase):
     def test_worktree_is_released_on_failure(self) -> None:
         self.runner.fail = True
         with self.assertRaisesRegex(RuntimeError, "runner failed"):
-            self.builder().WithWorktrees().create().run("broken")
+            self.builder().with_worktrees().create().run("broken")
         self.assertEqual(self.events, ["worktree.enter", "cli.run", "worktree.exit"])
 
     def test_docker_only_keeps_original_workspace(self) -> None:
-        self.builder().withdocker().create().run("hello", RunContext(cwd=Path("/repo")))
+        self.builder().with_docker().create().run("hello", RunContext(cwd=Path("/repo")))
         self.assertEqual(self.events, ["docker.configure", "cli.run"])
         self.assertEqual(self.runner.contexts[0].cwd, Path("/repo"))
 
