@@ -21,16 +21,18 @@ class FakeAgentClient(AgentClient):
             InMemorySessionStore(),
         )
         self._handler = handler or (lambda prompt, options: "")
-        self.calls: list[tuple[str, AgentOptions]] = []
+        self.calls: list[tuple[str, str | None, str | None, AgentOptions]] = []
 
     def _invoke(
         self,
         prompt: str,
+        model: str | None,
+        reasoning_effort: str | None,
         options: AgentOptions,
         session: AgentSession | None,
         *,
         resume: bool,
     ) -> AgentResult:
-        self.calls.append((prompt, options))
+        self.calls.append((prompt, model, reasoning_effort, options))
         outcome = self._handler(prompt, options)
         return outcome if isinstance(outcome, AgentResult) else CopilotOutputParser().parse(outcome, "", 0)

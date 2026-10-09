@@ -42,13 +42,31 @@ def test_run_without_session_key_is_a_fresh_invocation() -> None:
     sessions = InMemorySessionStore()
 
     result = copilot(sessions)(binding(cli)).run(
-        "hi {{A}}", {"A": "1"}, AgentOptions(model="m", add_dirs=(Path("/d"),))
+        "hi {{A}}", {"A": "1"}, "m", options=AgentOptions(add_dirs=(Path("/d"),))
     )
 
     assert result == AgentResult("echo:hi 1", "", 0)
     assert cli.calls[0][:4] == ("copilot", "-p", "hi 1", "--output-format")
     assert {"--model", "m", "--add-dir", "/d"} <= flags(cli.calls[0])
     assert not any(arg == "--name" or arg.startswith("--resume") for arg in cli.calls[0])
+
+
+def test_reasoning_effort_is_rendered_as_a_flag_when_given() -> None:
+    cli = FakeCopilotCli()
+
+    copilot(InMemorySessionStore())(binding(cli)).run("go", reasoning_effort="high")
+
+    argv = cli.calls[0]
+    assert argv[argv.index("--reasoning-effort") + 1] == "high"
+
+
+def test_neither_model_nor_reasoning_effort_flag_is_present_when_both_are_omitted() -> None:
+    cli = FakeCopilotCli()
+
+    copilot(InMemorySessionStore())(binding(cli)).run("go")
+
+    argv = cli.calls[0]
+    assert "--model" not in argv and "--reasoning-effort" not in argv
 
 
 def test_a_run_carries_allow_all_tools_and_add_dir_for_the_workspace_and_no_allow_all() -> None:

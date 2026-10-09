@@ -87,6 +87,8 @@ class AgentRunner:
         self,
         prompt: str,
         prompt_args: Mapping[str, str] | None = None,
+        model: str | None = None,
+        reasoning_effort: str | None = None,
         options: AgentOptions | None = None,
         session_id: str | None = None,
         *,
@@ -101,7 +103,7 @@ class AgentRunner:
         options = replace(options or AgentOptions(), session_key=session_id)
         base_head = self.lifecycle.begin_run()
 
-        result = self._client.run(prompt, prompt_args, options)
+        result = self._client.run(prompt, prompt_args, model, reasoning_effort, options)
         if self._cancel.is_set():
             raise Cancelled()
 
