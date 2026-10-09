@@ -5,6 +5,9 @@ No real Git worktree, Docker container, or Copilot process is started here.
 
 from __future__ import annotations
 
+import secrets
+import subprocess
+from collections.abc import Callable
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -12,9 +15,39 @@ from typing import Iterator, Protocol, Self
 
 
 @dataclass(frozen=True)
-class RunContext:
+class AgentContext:
+    """Agent-level settings; `cli_args` map straight onto the Copilot CLI."""
+
     cwd: Path = field(default_factory=Path.cwd)
     docker_image: str | None = None
+    cli_args: tuple[str, ...] = ("--allow-all-tools",)
+    # Extra directories the agent may access (`--add-dir`), e.g. created worktrees.
+    add_dirs: tuple[Path, ...] = ()
+
+
+@dataclass(frozen=True)
+class AgentOptions:
+    """Optional caller overrides; unset (None) fields keep the AgentContext defaults."""
+
+    docker_image: str | None = None
+    cli_args: tuple[str, ...] | None = None
+
+
+@dataclass(frozen=True)
+class WorktreesOptions:
+    """Where and under which new branch the worktree is created: target = root_path/branch."""
+
+    # Must resolve inside the agent cwd; relative paths are taken from the cwd.
+    root_path: Path = Path(".worktrees")
+    # None generates `feat_<hex>` per run, so each run gets its own branch.
+    branch: str | None = None
+    # Repository that git -C targets (multi-repository setups); None uses the agent cwd.
+    repository_path: Path | None = None
+
+
+@dataclass(frozen=True)
+class RunContext:
+    agent: AgentContext = field(default_factory=AgentContext)
 
 
 class AgentClient(Protocol):
@@ -30,7 +63,7 @@ class CliRunner(Protocol):
 
 
 class WorktreeService(Protocol):
-    def open(self, cwd: Path) -> AbstractContextManager[Path]: ...
+    def open(self, cwd: Path, options: WorktreesOptions) -> AbstractContextManager[Path]: ...
 
 
 class DockerService(Protocol):
@@ -40,11 +73,12 @@ class DockerService(Protocol):
 class CopilotAgentClient:
     """Core agent; delegates execution to its runner."""
 
-    def __init__(self, runner: CliRunner) -> None:
+    def __init__(self, runner: CliRunner, defaults: RunContext | None = None) -> None:
         self._runner = runner
+        self._defaults = defaults or RunContext()
 
     def run(self, prompt: str, context: RunContext | None = None) -> str:
-        return self._runner.run(prompt, context or RunContext())
+        return self._runner.run(prompt, context or self._defaults)
 
     def close(self) -> None:
         pass
@@ -53,32 +87,47 @@ class CopilotAgentClient:
 class AgentWrapper:
     """Composes an AgentClient and delegates common lifecycle operations."""
 
-    def __init__(self, inner: AgentClient) -> None:
+    def __init__(self, inner: AgentClient, defaults: RunContext | None = None) -> None:
         self._inner = inner
+        self._defaults = defaults or RunContext()
 
     def close(self) -> None:
         self._inner.close()
 
 
 class WorktreeAgent(AgentWrapper):
-    def __init__(self, inner: AgentClient, worktrees: WorktreeService) -> None:
-        super().__init__(inner)
+    def __init__(
+        self,
+        inner: AgentClient,
+        worktrees: WorktreeService,
+        options: WorktreesOptions | None = None,
+        defaults: RunContext | None = None,
+    ) -> None:
+        super().__init__(inner, defaults)
         self._worktrees = worktrees
+        self._options = options or WorktreesOptions()
 
     def run(self, prompt: str, context: RunContext | None = None) -> str:
-        original = context or RunContext()
+        original = context or self._defaults
         # The worktree lifecycle surrounds the entire delegated execution.
-        with self._worktrees.open(original.cwd) as workspace:
-            return self._inner.run(prompt, replace(original, cwd=workspace))
+        with self._worktrees.open(original.agent.cwd, self._options) as workspace:
+            # cwd stays the harness dir; the worktree is granted as an extra directory.
+            granted = replace(original.agent, add_dirs=(*original.agent.add_dirs, workspace))
+            return self._inner.run(prompt, replace(original, agent=granted))
 
 
 class DockerAgent(AgentWrapper):
-    def __init__(self, inner: AgentClient, docker: DockerService) -> None:
-        super().__init__(inner)
+    def __init__(
+        self,
+        inner: AgentClient,
+        docker: DockerService,
+        defaults: RunContext | None = None,
+    ) -> None:
+        super().__init__(inner, defaults)
         self._docker = docker
 
     def run(self, prompt: str, context: RunContext | None = None) -> str:
-        configured = self._docker.configure(context or RunContext())
+        configured = self._docker.configure(context or self._defaults)
         return self._inner.run(prompt, configured)
 
 
@@ -88,15 +137,19 @@ class AgentBuilder:
         runner: CliRunner,
         worktrees: WorktreeService,
         docker: DockerService,
+        agent_context: AgentContext | None = None,
     ) -> None:
         self._runner = runner
         self._worktrees = worktrees
         self._docker = docker
+        self._defaults = RunContext(agent_context or AgentContext())
         self._use_worktrees = False
+        self._worktrees_options: WorktreesOptions | None = None
         self._use_docker = False
 
-    def with_worktrees(self) -> Self:
+    def with_worktrees(self, options: WorktreesOptions | None = None) -> Self:
         self._use_worktrees = True
+        self._worktrees_options = options
         return self
 
     def with_docker(self) -> Self:
@@ -104,11 +157,11 @@ class AgentBuilder:
         return self
 
     def create(self) -> AgentClient:
-        client: AgentClient = CopilotAgentClient(self._runner)
+        client: AgentClient = CopilotAgentClient(self._runner, self._defaults)
         if self._use_docker:
-            client = DockerAgent(client, self._docker)
+            client = DockerAgent(client, self._docker, self._defaults)
         if self._use_worktrees:
-            client = WorktreeAgent(client, self._worktrees)
+            client = WorktreeAgent(client, self._worktrees, self._worktrees_options, self._defaults)
         return client
 
 
@@ -118,35 +171,111 @@ class AgentBuilder:
 class CopilotCli:
     def run(self, prompt: str, context: RunContext) -> str:
         # Demonstration only: a real adapter would invoke the Copilot CLI.
-        mode = f"docker:{context.docker_image}" if context.docker_image else "local"
-        return f"[{mode}] cwd={context.cwd} prompt={prompt}"
+        agent = context.agent
+        mode = f"docker:{agent.docker_image}" if agent.docker_image else "local"
+        dirs = [part for directory in agent.add_dirs for part in ("--add-dir", str(directory))]
+        args = " ".join(("copilot", "-p", prompt, *agent.cli_args, *dirs))
+        return f"[{mode}] cwd={agent.cwd} cmd={args}"
+
+
+class GitCli:
+    """Runs git against a given repository; `run` is injectable for testing."""
+
+    def __init__(
+        self,
+        *,
+        run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+    ) -> None:
+        self._run = run
+
+    def create_worktree(self, repository: Path, target: Path, branch: str, base: str = "main") -> None:
+        """Fetch, validate `branch`, point it at its start ref, and attach a worktree at `target`."""
+        self._git(repository, "fetch", "--all", "--prune")
+        self._git(repository, "check-ref-format", "--branch", branch)
+        start_ref = self._start_ref(repository, branch, base)
+        # Move an existing local branch; create it otherwise.
+        if self._succeeds(repository, "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"):
+            self._git(repository, "branch", "-f", branch, start_ref)
+        else:
+            self._git(repository, "branch", branch, start_ref)
+        self._git(repository, "worktree", "add", str(target), branch)
+
+    def _start_ref(self, repository: Path, branch: str, base: str) -> str:
+        if self._succeeds(repository, "show-ref", "--verify", "--quiet", f"refs/remotes/origin/{branch}"):
+            return f"origin/{branch}"
+        return f"origin/{base}"
+
+    def _succeeds(self, repository: Path, *args: str) -> bool:
+        return self._invoke(repository, args, check=False).returncode == 0
+
+    def _git(self, repository: Path, *args: str) -> None:
+        self._invoke(repository, args, check=True)
+
+    def _invoke(
+        self, repository: Path, args: tuple[str, ...], *, check: bool
+    ) -> subprocess.CompletedProcess[str]:
+        command = ["git", "-C", str(repository), *args]
+        return self._run(command, check=check, capture_output=True, text=True)
 
 
 class WorktreesRuntime:
+    """Creates the worktree at root_path/branch through git and yields its path."""
+
+    def __init__(self, git: GitCli) -> None:
+        self._git = git
+
     @contextmanager
-    def open(self, cwd: Path) -> Iterator[Path]:
-        # Demonstration only: no git worktree is created or removed.
-        try:
-            yield cwd / ".worktrees" / "task"
-        finally:
-            pass
+    def open(self, cwd: Path, options: WorktreesOptions) -> Iterator[Path]:
+        root = (cwd / options.root_path).resolve()
+        if not root.is_relative_to(cwd.resolve()):
+            raise ValueError(f"worktrees root {root} must be inside {cwd}")
+        branch = options.branch or f"feat_{secrets.token_hex(4)}"
+        target = root / branch
+        repository = (cwd / options.repository_path) if options.repository_path else cwd
+        self._git.create_worktree(repository, target, branch)
+        # Removal is out of scope for this prototype; the worktree is left in place.
+        yield target
 
 
 class DockerRuntime:
     def configure(self, context: RunContext) -> RunContext:
         # Demonstration only: records intent; runner does not launch Docker.
-        return replace(context, docker_image="agent:latest")
+        return replace(context, agent=replace(context.agent, docker_image="agent:latest"))
 
 
-def Agent() -> AgentBuilder:
+def Agent(options: AgentOptions | None = None) -> AgentBuilder:
     """Composition root: register private default dependencies and return builder."""
+    agent_context = _apply_options(AgentContext(), options)
     return AgentBuilder(
         runner=CopilotCli(),
-        worktrees=WorktreesRuntime(),
+        worktrees=WorktreesRuntime(GitCli()),
         docker=DockerRuntime(),
+        agent_context=agent_context,
     )
 
 
+def _apply_options(context: AgentContext, options: AgentOptions | None) -> AgentContext:
+    if options is None:
+        return context
+    if options.docker_image is not None:
+        context = replace(context, docker_image=options.docker_image)
+    if options.cli_args is not None:
+        context = replace(context, cli_args=options.cli_args)
+    return context
+
+
+def repo_agent(repo: str, branch: str | None = None) -> AgentClient:
+    """One worktree-isolated agent for workspace/<repo>, with worktrees in workspace/<repo>.worktrees."""
+    workspace = Path("workspace")
+    options = WorktreesOptions(
+        root_path=workspace / f"{repo}.worktrees",
+        branch=branch,
+        repository_path=workspace / repo,
+    )
+    return Agent().with_worktrees(options).with_docker().create()
+
+
 if __name__ == "__main__":
-    print(Agent().create().run("Implement ticket #123"))
-    print(Agent().with_worktrees().with_docker().create().run("Implement ticket #123"))
+    # Run from the harness dir (the agent cwd); this runs real git in workspace/repo1 and repo2.
+    print(repo_agent("repo1", "loop/ticket-123").run("Implement ticket #123 in repo1"))
+    print(repo_agent("repo2", "loop/ticket-123").run("Implement ticket #123 in repo2"))
