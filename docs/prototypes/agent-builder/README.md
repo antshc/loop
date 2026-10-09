@@ -41,7 +41,7 @@ Python 3.12+, standard library only. No real Git, Docker, or Copilot installatio
 - `AgentBuilder.with_docker() -> Self`: enable Docker execution configuration.
 - `AgentBuilder.create() -> AgentClient`: create a new composed client; no wrapper when no options enabled.
 - `AgentClient.run(prompt: str, context: RunContext | None = None) -> str`: invariant public entry point.
-- `AgentContext`: frozen agent settings `cwd`, `docker_image`, `cli_args` (default `("--allow-all-tools",)`) and `add_dirs` (each passed as `--add-dir`); the agent always starts in `cwd` (the harness dir) and `WorktreeAgent` adds the created worktree to `add_dirs`. `Agent()` creates it and the builder seeds the default `RunContext` with it.
+- `AgentContext`: frozen agent settings `cwd`, `docker_image`, `cli_args` (default `("--allow-all-tools",)`) and `add_dirs` (extra directories, each passed as `--add-dir`); the agent always starts in `cwd` (the harness dir), which already contains the worktree, so `WorktreeAgent` does not add it to `add_dirs`. `Agent()` creates it and the builder seeds the default `RunContext` with it.
 - `RunContext`: per-run context; carries the `AgentContext` as `agent` (no `cwd`/`docker_image` of its own).
 - `AgentClient.close() -> None`: lifecycle operation delegated through all wrappers.
 - `CliRunner`, `WorktreeService`, `DockerService`: narrow dependency protocols. The builder accepts their implementations; callers of `Agent()` do not see them.
@@ -163,6 +163,33 @@ classDiagram
     classDef default fill:#242424,stroke:#8b949e,color:#c9d1d9,stroke-width:1px
 ```
 
+## Single-repository example
+
+The agent `cwd` is the repository itself, so `repository_path` stays unset and only the worktrees root matters. Run from the repo root.
+
+```python
+agent = Agent().with_worktrees().create()  # all defaults
+
+agent = Agent().with_worktrees(WorktreesOptions(
+    root_path=Path("tmp/worktrees"),   # must resolve inside the cwd
+    branch="loop/ticket-123",          # optional; unset generates feat_<hex>
+)).create()
+```
+
+`WorktreesOptions()` defaults to `root_path=".worktrees"`, `branch=None` and `repository_path=None`, so the default run creates `<repo>/.worktrees/feat_<hex>`:
+
+```text
+<repo>/                         # agent cwd, also the git repository
+├── .git
+├── .worktrees/                 # root_path (add to .gitignore)
+│   └── feat_1a2b3c4d/          # target = root_path/branch, removed when the run ends
+└── ...
+```
+
+- `root_path` must stay inside the cwd: `WorktreesRuntime.open()` raises `ValueError` otherwise, so a sibling such as `../repo.worktrees` is rejected. The sibling layout only works in the multi-repository setup, where the cwd is the harness dir above the repositories.
+- The default root is inside the repository, so add `.worktrees/` to `.gitignore`.
+- The branch starts from `origin/<branch>` if it exists on the remote, otherwise from `origin/main`. `GitCli.create_worktree` has a `base` argument that `WorktreesOptions` does not expose.
+
 ## Multi-repository example
 
 `repo_agent(repo, branch=None)` builds one worktree-isolated agent for `workspace/<repo>`, with worktrees in `workspace/<repo>.worktrees`. Run it from the harness dir, which is the agent `cwd`.
@@ -198,7 +225,15 @@ Resulting folder structure after one run (`feat_1a2b3c4d` is the generated branc
     └── repo2.worktrees/            # created on the first repo2 run
 ```
 
-The agent runs with `cwd=<harness>` and `--add-dir <harness>/workspace/repo1.worktrees/feat_1a2b3c4d`. Each run adds a new `feat_<hex>` directory while it runs and removes it afterwards (the branch stays in `repo1`). An explicit branch such as `loop/ticket-123` adds a directory level (`repo1.worktrees/loop/ticket-123/`). One agent covers one repository; a second `with_worktrees()` call replaces the first.
+The agent runs with `cwd=<harness>`; the worktree is inside it, so no `--add-dir` is needed. Each run adds a new `feat_<hex>` directory while it runs and removes it afterwards (the branch stays in `repo1`). An explicit branch such as `loop/ticket-123` adds a directory level (`repo1.worktrees/loop/ticket-123/`). One agent covers one repository; a second `with_worktrees()` call replaces the first.
+
+## Dry run
+
+`Agent(AgentOptions(dry_run=True))` registers stub adapters that only log to the console (lines prefixed `[dry-run]`): `LoggingGitCli` logs each git command instead of running it, and `LoggingRunner` / `LoggingDocker` log the stubbed CLI and Docker steps. No git, Docker or Copilot process starts and nothing is created on disk.
+
+```sh
+python agent.py --dry-run   # run from the harness dir
+```
 
 ## Delegation order
 
@@ -217,7 +252,7 @@ Agent().with_worktrees().with_docker().create()
     -> WorktreeService.open() [exit even on error]
 ```
 
-`with_worktrees()` and `with_docker()` set builder flags; `create()` establishes the fixed wrapper order **worktree (outer) -> Docker (inner) -> core**. Calls preserve prompt and context, replacing only the Docker setting and appending the worktree to `add_dirs` (`cwd` is unchanged). `close()` forwards to the innermost client.
+`with_worktrees()` and `with_docker()` set builder flags; `create()` establishes the fixed wrapper order **worktree (outer) -> Docker (inner) -> core**. Calls preserve prompt and context, replacing only the Docker setting (`cwd` is unchanged; the worktree sits inside it). `close()` forwards to the innermost client.
 
 ## Prototype boundaries
 

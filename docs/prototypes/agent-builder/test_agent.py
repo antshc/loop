@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import unittest
-from contextlib import contextmanager
+from contextlib import contextmanager, redirect_stdout
+from io import StringIO
 from pathlib import Path
 from typing import Iterator
 
@@ -11,6 +12,7 @@ from agent import (
     Agent,
     AgentBuilder,
     AgentContext,
+    AgentOptions,
     CopilotAgentClient,
     DockerAgent,
     GitCli,
@@ -104,7 +106,6 @@ class AgentBuilderTests(unittest.TestCase):
             ["worktree.enter", "docker.configure", "cli.run", "worktree.exit"],
         )
         self.assertEqual(self.runner.contexts[0].agent.cwd, Path("/repo"))
-        self.assertEqual(self.runner.contexts[0].agent.add_dirs, (Path("/repo/worktree"),))
         self.assertEqual(self.runner.contexts[0].agent.docker_image, "test-image")
 
     def test_worktree_is_released_on_failure(self) -> None:
@@ -196,6 +197,19 @@ class WorktreesRuntimeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "must be inside"):
             with runtime.open(Path("/repo"), WorktreesOptions(Path("../x"))):
                 pass
+
+
+class DryRunTests(unittest.TestCase):
+    def test_dry_run_logs_every_step_without_running_git(self) -> None:
+        agent = Agent(AgentOptions(dry_run=True)).with_worktrees(WorktreesOptions(Path("wt"), "loop/a")).with_docker()
+        output = StringIO()
+        with redirect_stdout(output):
+            agent.create().run("hello")
+        lines = output.getvalue().splitlines()
+        self.assertTrue(all(line.startswith("[dry-run] ") for line in lines))
+        text = output.getvalue()
+        for expected in ("fetch --all --prune", "worktree add", "docker image=", "copilot -p hello", "worktree remove"):
+            self.assertIn(expected, text)
 
 
 if __name__ == "__main__":

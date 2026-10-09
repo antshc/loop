@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import secrets
 import subprocess
+import sys
 from collections.abc import Callable
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass, field, replace
@@ -21,7 +22,7 @@ class AgentContext:
     cwd: Path = field(default_factory=Path.cwd)
     docker_image: str | None = None
     cli_args: tuple[str, ...] = ("--allow-all-tools",)
-    # Extra directories the agent may access (`--add-dir`), e.g. created worktrees.
+    # Extra directories the agent may access (`--add-dir`); the cwd is always included by the CLI.
     add_dirs: tuple[Path, ...] = ()
 
 
@@ -31,6 +32,8 @@ class AgentOptions:
 
     docker_image: str | None = None
     cli_args: tuple[str, ...] | None = None
+    # Runs stub adapters that only log to the console: no git, Docker or Copilot process.
+    dry_run: bool = False
 
 
 @dataclass(frozen=True)
@@ -110,10 +113,9 @@ class WorktreeAgent(AgentWrapper):
     def run(self, prompt: str, context: RunContext | None = None) -> str:
         original = context or self._defaults
         # The worktree lifecycle surrounds the entire delegated execution.
-        with self._worktrees.open(original.agent.cwd, self._options) as workspace:
-            # cwd stays the harness dir; the worktree is granted as an extra directory.
-            granted = replace(original.agent, add_dirs=(*original.agent.add_dirs, workspace))
-            return self._inner.run(prompt, replace(original, agent=granted))
+        with self._worktrees.open(original.agent.cwd, self._options):
+            # The worktree is inside cwd, so the CLI already has access to it.
+            return self._inner.run(prompt, original)
 
 
 class DockerAgent(AgentWrapper):
@@ -249,9 +251,55 @@ class DockerRuntime:
         return replace(context, agent=replace(context.agent, docker_image="agent:latest"))
 
 
+def _log(message: str) -> None:
+    print(f"[dry-run] {message}")
+
+
+class LoggingGitCli(GitCli):
+    """Dry-run GitCli: logs each git command instead of running it; show-ref reports a missing ref."""
+
+    def _invoke(
+        self, repository: Path, args: tuple[str, ...], *, check: bool
+    ) -> subprocess.CompletedProcess[str]:
+        command = ["git", "-C", str(repository), *args]
+        _log(" ".join(command))
+        return subprocess.CompletedProcess(command, 1 if "show-ref" in args else 0, "", "")
+
+
+class LoggingRunner:
+    """Dry-run CliRunner: delegates to the stub and logs its result."""
+
+    def __init__(self, inner: CliRunner) -> None:
+        self._inner = inner
+
+    def run(self, prompt: str, context: RunContext) -> str:
+        result = self._inner.run(prompt, context)
+        _log(result)
+        return result
+
+
+class LoggingDocker:
+    """Dry-run DockerService: delegates to the stub and logs the configured image."""
+
+    def __init__(self, inner: DockerService) -> None:
+        self._inner = inner
+
+    def configure(self, context: RunContext) -> RunContext:
+        configured = self._inner.configure(context)
+        _log(f"docker image={configured.agent.docker_image}")
+        return configured
+
+
 def Agent(options: AgentOptions | None = None) -> AgentBuilder:
     """Composition root: register private default dependencies and return builder."""
     agent_context = _apply_options(AgentContext(), options)
+    if options is not None and options.dry_run:
+        return AgentBuilder(
+            runner=LoggingRunner(CopilotCli()),
+            worktrees=WorktreesRuntime(LoggingGitCli()),
+            docker=LoggingDocker(DockerRuntime()),
+            agent_context=agent_context,
+        )
     return AgentBuilder(
         runner=CopilotCli(),
         worktrees=WorktreesRuntime(GitCli()),
@@ -282,6 +330,13 @@ def repo_agent(repo: str, branch: str | None = None) -> AgentClient:
 
 
 if __name__ == "__main__":
-    # Run from the harness dir (the agent cwd); this runs real git in workspace/repo1 and repo2.
-    print(repo_agent("repo1", "loop/ticket-123").run("Implement ticket #123 in repo1"))
-    print(repo_agent("repo2", "loop/ticket-123").run("Implement ticket #123 in repo2"))
+    # Run from the harness dir (the agent cwd). `--dry-run` only logs; otherwise real git runs in workspace/repo1 and repo2.
+    if "--dry-run" in sys.argv:
+        _DRY = AgentOptions(dry_run=True)
+        _opts = WorktreesOptions(Path("workspace/repo1.worktrees"), repository_path=Path("workspace/repo1"))
+        # Agent(_DRY).create().run("Implement ticket #123 in harness")
+        Agent(_DRY).with_worktrees(_opts).create().run("Implement ticket #123 in repo1")
+        # print(Agent(_DRY).with_worktrees(_opts).with_docker().create().run("Implement ticket #123 in repo1"))
+        sys.exit()
+    # print(repo_agent("repo1", "loop/ticket-123").run("Implement ticket #123 in repo1"))
+    # print(repo_agent("repo2", "loop/ticket-123").run("Implement ticket #123 in repo2"))
