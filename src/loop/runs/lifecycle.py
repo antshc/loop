@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from types import TracebackType
@@ -11,6 +11,7 @@ from loop.contracts.agent_client import AgentBinding, AgentClient, AgentClientFa
 from loop.errors import Cancelled, LoopError
 from loop.platforms.git import Branch, Commit, Git, Hook, RepositoryData, Worktree, WorktreeService
 from loop.process import CommandExecutor, CommandResult, OnLine, execute
+from loop.prompt import Prompt
 
 
 def run_host_hooks(
@@ -26,7 +27,7 @@ class AgentRunResult:
     result: AgentResult
     branch: str
     commits: tuple[str, ...]
-    session_id: str | None
+    session_key: str | None
 
 class WorktreeLifecycle:
     """Owns one worktree from creation to disposal and collects the commits each run adds to it."""
@@ -85,29 +86,27 @@ class AgentRunner:
 
     def run(
         self,
-        prompt: str,
-        prompt_args: Mapping[str, str] | None = None,
+        prompt: Prompt,
         model: str | None = None,
         reasoning_effort: str | None = None,
         options: AgentOptions | None = None,
-        session_id: str | None = None,
         *,
         new_session: bool = False,
     ) -> AgentRunResult:
-        """Continues the conversation `session_id` names, starts a resumable one when `new_session`, else runs stateless.
+        """Continues the conversation `options.session_key` names, starts a resumable one when `new_session`, else runs stateless.
 
-        The result carries the session id used, to pass back to the next run.
+        The result carries the session key used, to pass back in the next run's options.
         """
-        if session_id is None and new_session:
-            session_id = uuid.uuid4().hex
-        options = replace(options or AgentOptions(), session_key=session_id)
+        options = options or AgentOptions()
+        if options.session_key is None and new_session:
+            options = replace(options, session_key=uuid.uuid4().hex)
         base_head = self.lifecycle.begin_run()
 
-        result = self._client.run(prompt, prompt_args, model, reasoning_effort, options)
+        result = self._client.run(prompt, model, reasoning_effort, options)
         if self._cancel.is_set():
             raise Cancelled()
 
-        return AgentRunResult(result, self.branch, self.lifecycle.end_run(base_head), session_id)
+        return AgentRunResult(result, self.branch, self.lifecycle.end_run(base_head), options.session_key)
 
     def exit(self, *, keep_worktree: bool = False) -> None:
         try:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 
 from loop.contracts.agent_client import (
     AgentBinding,
@@ -14,13 +15,12 @@ from loop.contracts.agent_client import (
     SessionStore,
 )
 from loop.process import CommandExecutor, checked_output
-from loop.prompt import PromptPreprocessor
 
 logger = logging.getLogger("loop.agents.copilot")
 
 
 class CopilotOutputParser(AgentOutputParser):
-    """The last `{identifier, status, result}` object in Copilot's concatenated assistant text is the response."""
+    """The last `{status, result}` object in Copilot's concatenated assistant text is the response."""
 
     def parse(self, stdout: str, stderr: str, exit_code: int) -> AgentResult:
         envelope = _last_envelope(stdout)
@@ -35,14 +35,14 @@ class CopilotClient(AgentClient):
     def __init__(
         self,
         executor: CommandExecutor,
-        preprocessor: PromptPreprocessor,
+        execute_command: Callable[[str], str],
         sessions: SessionStore,
         *,
         workspace: str,
         executable: str = "copilot",
         parser: AgentOutputParser | None = None,
     ) -> None:
-        super().__init__(executor, preprocessor, sessions)
+        super().__init__(executor, execute_command, sessions)
         self._workspace = workspace
         self._executable = executable
         self._parser = parser or CopilotOutputParser()
@@ -131,8 +131,8 @@ def _json_objects(text: str) -> list[tuple[str, dict]]:
 
 
 def _last_envelope(text: str) -> tuple[str, dict] | None:
-    """The last top-level JSON object in `text` carrying both `identifier` and `status`, if any."""
-    candidates = [item for item in _json_objects(text) if "identifier" in item[1] and "status" in item[1]]
+    """The last top-level JSON object in `text` carrying `status`, if any."""
+    candidates = [item for item in _json_objects(text) if "status" in item[1]]
     return candidates[-1] if candidates else None
 
 
@@ -145,7 +145,7 @@ def copilot(sessions: SessionStore, *, executable: str = "copilot") -> AgentClie
 
         return CopilotClient(
             binding.executor,
-            PromptPreprocessor(execute),
+            execute,
             sessions,
             workspace=binding.workspace,
             executable=executable,

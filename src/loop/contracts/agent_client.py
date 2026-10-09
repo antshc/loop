@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 from loop.process import CommandExecutor
-from loop.prompt import PromptPreprocessor
+from loop.prompt import Prompt
 
 
 @dataclass(frozen=True)
@@ -72,23 +72,22 @@ class AgentClient(ABC):
     def __init__(
         self,
         executor: CommandExecutor,
-        preprocessor: PromptPreprocessor,
+        execute_command: Callable[[str], str],
         sessions: SessionStore,
     ) -> None:
         self._executor = executor
-        self._preprocessor = preprocessor
+        self._execute_command = execute_command
         self._sessions = sessions
 
     def run(
         self,
-        prompt: str,
-        prompt_args: Mapping[str, str] | None = None,
+        prompt: Prompt,
         model: str | None = None,
         reasoning_effort: str | None = None,
         options: AgentOptions | None = None,
     ) -> AgentResult:
         options = options or AgentOptions()
-        text = self._preprocessor.process(prompt, prompt_args)
+        text = prompt.render(self._execute_command)
         if options.session_key is None:
             return self._invoke(text, model, reasoning_effort, options, None, resume=False)
 

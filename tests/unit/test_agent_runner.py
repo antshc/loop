@@ -14,8 +14,10 @@ from loop import (
     Cancelled,
     Hook,
     HookError,
+    AgentOptions,
     InMemorySessionStore,
     LoopError,
+    Prompt,
     RepositoryData,
     copilot,
 )
@@ -120,8 +122,8 @@ def test_run_returns_the_agent_result_and_the_commits_the_agent_made_on_the_bran
     runner = _runner(git, tmp_path, agent, branch="feature-x")
     holder.append(runner)
 
-    first = runner.run("go")
-    second = runner.run("go")
+    first = runner.run(Prompt("go"))
+    second = runner.run(Prompt("go"))
 
     assert first.result.stdout == "done" and first.branch == "feature-x"
     assert first.commits == (f"{1:040d}",) and second.commits == (f"{2:040d}",)
@@ -132,7 +134,7 @@ def test_run_delegates_prompt_args_model_and_reasoning_effort_to_the_agent(tmp_p
     agent = FakeAgentClient(lambda prompt, options: prompt)
     runner = _runner(FakeGit(), tmp_path, agent, branch="feature-x")
 
-    result = runner.run("p={{A}}", {"A": "1"}, "gpt-5", "high")
+    result = runner.run(Prompt("p={{A}}", {"A": "1"}), "gpt-5", "high")
 
     assert result.result.stdout == "p=1"
     _, model, reasoning_effort, _ = agent.calls[0]
@@ -143,33 +145,33 @@ def test_two_runs_on_one_runner_may_use_different_models_and_efforts(tmp_path: P
     agent = FakeAgentClient(lambda prompt, options: prompt)
     runner = _runner(FakeGit(), tmp_path, agent, branch="feature-x")
 
-    runner.run("go", model="opus", reasoning_effort="max")
-    runner.run("go", model="sonnet", reasoning_effort="low")
+    runner.run(Prompt("go"), model="opus", reasoning_effort="max")
+    runner.run(Prompt("go"), model="sonnet", reasoning_effort="low")
 
     assert [(model, effort) for _, model, effort, _ in agent.calls] == [("opus", "max"), ("sonnet", "low")]
 
 
-def test_run_with_new_session_starts_a_conversation_and_returns_its_id(tmp_path: Path) -> None:
+def test_run_with_new_session_starts_a_conversation_and_returns_its_key(tmp_path: Path) -> None:
     agent = FakeAgentClient()
     runner = _runner(FakeGit(), tmp_path, agent, branch="feature-x")
 
-    first = runner.run("go", new_session=True)
-    second = runner.run("go", new_session=True)
-    stateless = runner.run("go")
+    first = runner.run(Prompt("go"), new_session=True)
+    second = runner.run(Prompt("go"), new_session=True)
+    stateless = runner.run(Prompt("go"))
 
-    assert first.session_id and first.session_id != second.session_id and stateless.session_id is None
-    assert [options.session_key for _, _, _, options in agent.calls] == [first.session_id, second.session_id, None]
+    assert first.session_key and first.session_key != second.session_key and stateless.session_key is None
+    assert [options.session_key for _, _, _, options in agent.calls] == [first.session_key, second.session_key, None]
 
 
-def test_run_with_a_session_id_continues_that_conversation(tmp_path: Path) -> None:
+def test_run_with_a_session_key_in_options_continues_that_conversation(tmp_path: Path) -> None:
     agent = FakeAgentClient()
     runner = _runner(FakeGit(), tmp_path, agent, branch="feature-x")
 
-    first = runner.run("go", new_session=True)
-    second = runner.run("again", session_id=first.session_id)
+    first = runner.run(Prompt("go"), new_session=True)
+    second = runner.run(Prompt("again"), options=AgentOptions(session_key=first.session_key))
 
-    assert second.session_id == first.session_id
-    assert [options.session_key for _, _, _, options in agent.calls] == [first.session_id] * 2
+    assert second.session_key == first.session_key
+    assert [options.session_key for _, _, _, options in agent.calls] == [first.session_key] * 2
 
 
 def test_run_binds_the_agent_to_the_harness_root(tmp_path: Path) -> None:
@@ -200,7 +202,7 @@ def test_run_streams_copilot_output_and_parses_the_response_after_exit(tmp_path:
     cli = FakeCopilotCli(lambda prompt: [_event("working"), _event(_RESPONSE), _event("trailing")])
     runner = _runner(FakeGit(), tmp_path, copilot(InMemorySessionStore()), branch="feature-x", executor=cli)
 
-    result = runner.run("go").result
+    result = runner.run(Prompt("go")).result
 
     assert result.success and json.loads(result.response)["identifier"] == "t|1"
     assert "trailing" in result.stdout and not cli.terminated
@@ -215,7 +217,7 @@ def test_run_cancels_an_in_flight_agent_run_and_reports_cancelled(tmp_path: Path
     cancel.set()
 
     with pytest.raises(Cancelled):
-        runner.run("go")
+        runner.run(Prompt("go"))
 
     assert cli.terminated
 

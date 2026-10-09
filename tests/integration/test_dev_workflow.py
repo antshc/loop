@@ -1,4 +1,4 @@
-"""Integration test: `dev.main` through the real Copilot agent client, parser, prompt preprocessor, and host executor.
+"""Integration test: `dev.main` through the real Copilot agent client, parser, prompt rendering, and host executor.
 
 Only Git, GitHub, the Copilot CLI process, and the execution store are stand-ins
 (docs/concepts/str-loop-library-workflow-architecture.md).

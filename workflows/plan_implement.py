@@ -10,7 +10,6 @@ import argparse
 import json
 import logging
 import sys
-from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +20,7 @@ from loop import (
     AgentRunResult,
     Git,
     InMemorySessionStore,
+    Prompt,
     RepositoryData,
     copilot,
 )
@@ -32,32 +32,26 @@ PLAN_EFFORT = "max"
 IMPLEMENT_MODEL = "claude-sonnet-5.5"
 IMPLEMENT_EFFORT = "high"
 
-PLAN_PROMPT = """You are planning a coding task on this repository. Do not write or change any code.
-
-Task:
-{{TASK}}
+PLAN_INSTRUCTIONS = """You are planning a coding task on this repository. Do not write or change any code.
 
 Write a concise, actionable implementation plan for another agent to follow.
 
 Reply with exactly one JSON object as your final message, with nothing after it:
-{"identifier": "plan", "status": "completed", "result": {"plan": "<the plan, as plain text>"}}
+{"status": "completed", "result": {"plan": "<the plan, as plain text>"}}
 
 If you cannot produce a plan, reply instead with:
-{"identifier": "plan", "status": "failed", "result": {"reason": "<why>"}}
+{"status": "failed", "result": {"reason": "<why>"}}
 """
 
-IMPLEMENT_PROMPT = """You are implementing a coding task on this repository, following a plan.
-
-Plan:
-{{PLAN}}
+IMPLEMENT_INSTRUCTIONS = """You are implementing a coding task on this repository, following the plan above.
 
 Implement the plan. Commit your work with git. Do not push.
 
 Reply with exactly one JSON object as your final message, with nothing after it:
-{"identifier": "implement", "status": "completed", "result": {}}
+{"status": "completed", "result": {}}
 
 If you cannot complete the implementation, reply instead with:
-{"identifier": "implement", "status": "failed", "result": {"reason": "<why>"}}
+{"status": "failed", "result": {"reason": "<why>"}}
 """
 
 
@@ -68,34 +62,32 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
 
 
 def _envelope(response: str) -> dict[str, Any] | None:
-    """The decoded `{identifier, status, result}` envelope, or None when the response is not that shape."""
+    """The decoded `{status, result}` envelope, or None when the response is not that shape."""
     try:
         envelope = json.loads(response)
     except json.JSONDecodeError:
         return None
     if not isinstance(envelope, dict):
         return None
-    identifier, status, result = envelope.get("identifier"), envelope.get("status"), envelope.get("result")
-    if not isinstance(identifier, str) or status not in ("completed", "failed") or not isinstance(result, dict):
+    status, result = envelope.get("status"), envelope.get("result")
+    if status not in ("completed", "failed") or not isinstance(result, dict):
         return None
     return envelope
 
 
 def _run_step(
     runner: AgentRunner,
-    prompt: str,
-    prompt_args: Mapping[str, str],
+    prompt: Prompt,
     model: str,
     reasoning_effort: str,
-    identifier: str,
 ) -> tuple[AgentRunResult, dict[str, Any] | None]:
-    """Runs one fresh, stateless step; its `result` object, or None when it failed or answered the wrong step."""
-    run = runner.run(prompt, prompt_args, model, reasoning_effort)
+    """Runs one fresh, stateless step; its `result` object, or None when it failed or answered in the wrong shape."""
+    run = runner.run(prompt, model, reasoning_effort)
     outcome = run.result
     if not outcome.success:
         return run, None
     envelope = _envelope(outcome.response)
-    if envelope is None or envelope["identifier"] != identifier:
+    if envelope is None:
         return run, None
     return run, envelope["result"]
 
@@ -118,7 +110,9 @@ def _run(
     implement_model: str,
     implement_effort: str,
 ) -> int:
-    _, plan_result = _run_step(runner, PLAN_PROMPT, {"TASK": task}, plan_model, plan_effort, "plan")
+    # The agent-written plan and the task are embedded as text and sent verbatim; they are never preprocessed.
+    plan_prompt = Prompt(f"{task}\n\n{PLAN_INSTRUCTIONS}")
+    _, plan_result = _run_step(runner, plan_prompt, plan_model, plan_effort)
     if plan_result is None:
         logger.error("planning run failed")
         return 1
@@ -127,9 +121,8 @@ def _run(
         logger.error("planning run returned an empty plan")
         return 1
 
-    implement_run, implement_result = _run_step(
-        runner, IMPLEMENT_PROMPT, {"PLAN": plan}, implement_model, implement_effort, "implement"
-    )
+    implement_prompt = Prompt(f"{plan}\n\n{IMPLEMENT_INSTRUCTIONS}")
+    implement_run, implement_result = _run_step(runner, implement_prompt, implement_model, implement_effort)
     logger.info("commits: %s", ", ".join(implement_run.commits) or "none")
     if implement_result is None:
         logger.error("implementing run failed")

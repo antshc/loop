@@ -131,17 +131,6 @@ def test_the_workflow_exits_1_when_the_agent_process_exits_non_zero(tmp_path: Pa
     assert code == 1
 
 
-def test_the_workflow_exits_1_when_a_responses_identifier_does_not_match_its_run(tmp_path: Path) -> None:
-    harness = PlanImplementHarness(tmp_path)
-    # Answers the planning run with the "implement" identifier instead of "plan".
-    agent = FakeAgentClient(lambda prompt, options: implement_envelope())
-
-    code = harness.run(agent_factory=lambda binding: agent)
-
-    assert code == 1
-    assert len(agent.calls) == 1
-
-
 def test_the_branch_name_and_the_implementing_runs_commits_are_logged(tmp_path: Path, caplog) -> None:
     harness = PlanImplementHarness(tmp_path)
     responses = iter([plan_envelope()])

@@ -5,7 +5,6 @@ from collections.abc import Callable
 from loop.agents.copilot import CopilotOutputParser
 from loop.contracts.agent_client import AgentClient, AgentOptions, AgentResult, AgentSession
 from loop.process import CommandResult
-from loop.prompt import PromptPreprocessor
 from loop.stores.memory import InMemorySessionStore
 
 Handler = Callable[[str, AgentOptions], "str | AgentResult"]
@@ -17,7 +16,7 @@ class FakeAgentClient(AgentClient):
     def __init__(self, handler: Handler | None = None) -> None:
         super().__init__(
             lambda command, *, timeout_s=None, on_line=None: CommandResult(0, "", ""),
-            PromptPreprocessor(lambda command: ""),
+            lambda command: "",
             InMemorySessionStore(),
         )
         self._handler = handler or (lambda prompt, options: "")

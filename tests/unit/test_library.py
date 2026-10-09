@@ -12,8 +12,8 @@ import loop
 import loop.testing
 from loop import (
     ExtractionError,
+    Prompt,
     PromptError,
-    PromptPreprocessor,
     extract_json,
     extract_tag,
     parallel_settled,
@@ -25,32 +25,29 @@ WORKFLOWS = ROOT / "workflows"
 FAKES = {"FakeGit", "FakeCopilotCli", "FakeAgentClient"}
 
 
-def test_preprocessor_substitutes_placeholders_and_runs_template_commands() -> None:
-    preprocessor = PromptPreprocessor(lambda command: f"ran:{command}\n")
+def test_prompt_substitutes_placeholders_and_runs_template_commands() -> None:
+    prompt = Prompt("A={{A}} B={{ B }} {A} ${A}\n!`echo {{A}}`\n", {"A": "1", "B": "2"})
 
-    text = preprocessor.process("A={{A}} B={{ B }} {A} ${A}\n!`echo {{A}}`\n", {"A": "1", "B": "2"})
+    text = prompt.render(lambda command: f"ran:{command}\n")
 
     assert text == "A=1 B=2 {A} ${A}\nran:echo 1\n"
 
 
-def test_preprocessor_never_runs_commands_arriving_through_arguments() -> None:
+def test_prompt_never_runs_commands_arriving_through_arguments() -> None:
     ran: list[str] = []
-    preprocessor = PromptPreprocessor(lambda command: ran.append(command) or "")
 
-    text = preprocessor.process("{{BODY}}", {"BODY": "!`rm -rf /`"})
+    text = Prompt("{{BODY}}", {"BODY": "!`rm -rf /`"}).render(lambda command: ran.append(command) or "")
 
     assert ran == [] and text == "!`rm -rf /`"
 
 
-def test_preprocessor_rejects_a_missing_argument_and_warns_on_an_unused_one(
+def test_prompt_rejects_a_missing_argument_and_warns_on_an_unused_one(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    preprocessor = PromptPreprocessor(str)
-
     with pytest.raises(PromptError, match="missing prompt argument: X"):
-        preprocessor.process("{{X}}", {})
+        Prompt("{{X}}", {}).render(str)
     with caplog.at_level(logging.WARNING, logger="loop"):
-        assert preprocessor.process("plain", {"EXTRA": "1"}) == "plain"
+        assert Prompt("plain", {"EXTRA": "1"}).render(str) == "plain"
     assert "unused prompt argument: EXTRA" in caplog.text
 
 

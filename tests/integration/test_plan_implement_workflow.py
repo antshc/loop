@@ -1,4 +1,4 @@
-"""Integration test: `plan_implement.main` through the real Copilot agent client, parser, and prompt preprocessor.
+"""Integration test: `plan_implement.main` through the real Copilot agent client, parser, and prompt rendering.
 
 Only the Copilot CLI process and Git are stand-ins (docs/concepts/str-loop-library-workflow-architecture.md).
 """
@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from loop import AgentBinding, CopilotClient, InMemorySessionStore, PromptPreprocessor
+from loop import AgentBinding, CopilotClient, InMemorySessionStore
 from loop.testing import FakeCopilotCli
 from workflows import plan_implement
 
@@ -16,7 +16,7 @@ from workflow_harness import PlanImplementHarness, RecordingExecutor, copilot_ev
 
 def _real_agent_factory(executor):
     def factory(binding: AgentBinding) -> CopilotClient:
-        return CopilotClient(executor, PromptPreprocessor(lambda command: ""), InMemorySessionStore(), workspace=binding.workspace)
+        return CopilotClient(executor, lambda command: "", InMemorySessionStore(), workspace=binding.workspace)
 
     return factory
 

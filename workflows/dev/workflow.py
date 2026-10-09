@@ -170,7 +170,7 @@ class DevWorkflow:
     ) -> DevResult | str:
         """Runs the agent once and validates its response and Git; returns the accepted result, or the failure reason."""
         try:
-            outcome = runner.run(prompt.template, prompt.args).result
+            outcome = runner.run(prompt).result
             dev_result = parse_response(outcome.response, identifier)
         except LoopError as exception:
             return str(exception)

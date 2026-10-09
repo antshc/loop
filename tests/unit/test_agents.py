@@ -14,6 +14,7 @@ from loop import (
     CommandResult,
     FileSessionStore,
     InMemorySessionStore,
+    Prompt,
     copilot,
 )
 from loop.testing import FakeCopilotCli
@@ -42,7 +43,7 @@ def test_run_without_session_key_is_a_fresh_invocation() -> None:
     sessions = InMemorySessionStore()
 
     result = copilot(sessions)(binding(cli)).run(
-        "hi {{A}}", {"A": "1"}, "m", options=AgentOptions(add_dirs=(Path("/d"),))
+        Prompt("hi {{A}}", {"A": "1"}), "m", options=AgentOptions(add_dirs=(Path("/d"),))
     )
 
     assert result == AgentResult("echo:hi 1", "", 0)
@@ -54,7 +55,7 @@ def test_run_without_session_key_is_a_fresh_invocation() -> None:
 def test_reasoning_effort_is_rendered_as_a_flag_when_given() -> None:
     cli = FakeCopilotCli()
 
-    copilot(InMemorySessionStore())(binding(cli)).run("go", reasoning_effort="high")
+    copilot(InMemorySessionStore())(binding(cli)).run(Prompt("go"), reasoning_effort="high")
 
     argv = cli.calls[0]
     assert argv[argv.index("--reasoning-effort") + 1] == "high"
@@ -63,7 +64,7 @@ def test_reasoning_effort_is_rendered_as_a_flag_when_given() -> None:
 def test_neither_model_nor_reasoning_effort_flag_is_present_when_both_are_omitted() -> None:
     cli = FakeCopilotCli()
 
-    copilot(InMemorySessionStore())(binding(cli)).run("go")
+    copilot(InMemorySessionStore())(binding(cli)).run(Prompt("go"))
 
     argv = cli.calls[0]
     assert "--model" not in argv and "--reasoning-effort" not in argv
@@ -73,7 +74,7 @@ def test_a_run_carries_allow_all_tools_and_add_dir_for_the_workspace_and_no_allo
     cli = FakeCopilotCli()
 
     copilot(InMemorySessionStore())(binding(cli, workspace=WORKSPACE)).run(
-        "go", options=AgentOptions(add_dirs=(Path("/extra"),))
+        Prompt("go"), options=AgentOptions(add_dirs=(Path("/extra"),))
     )
 
     argv = cli.calls[0]
@@ -87,7 +88,7 @@ def test_deny_rules_are_rendered_as_deny_tool() -> None:
     cli = FakeCopilotCli()
 
     copilot(InMemorySessionStore())(binding(cli)).run(
-        "go", options=AgentOptions(deny_tools=("shell", "write"))
+        Prompt("go"), options=AgentOptions(deny_tools=("shell", "write"))
     )
 
     argv = cli.calls[0]
@@ -99,7 +100,7 @@ def test_custom_extra_args_do_not_change_the_permission_level() -> None:
     cli = FakeCopilotCli()
 
     copilot(InMemorySessionStore())(binding(cli)).run(
-        "go", options=AgentOptions(extra_args=("--allow-all", "--no-color"))
+        Prompt("go"), options=AgentOptions(extra_args=("--allow-all", "--no-color"))
     )
 
     argv = cli.calls[0]
@@ -113,8 +114,8 @@ def test_session_is_created_with_prefix_saved_after_the_run_and_resumed_by_key()
     client = copilot(sessions)(binding(cli))
     options = AgentOptions(session_key="issue-42", session_name_prefix="loop-")
 
-    client.run("one", options=options)
-    client.run("two", options=options)
+    client.run(Prompt("one"), options=options)
+    client.run(Prompt("two"), options=options)
 
     first, second = cli.calls
     assert first[first.index("--name") + 1] == "loop-issue-42"
@@ -126,7 +127,7 @@ def test_failed_run_keeps_stderr_and_exit_code_and_does_not_record_the_session()
     cli = FakeCopilotCli(lambda prompt: CommandResult(2, _event("partial"), "boom"))
     sessions = InMemorySessionStore()
 
-    result = copilot(sessions)(binding(cli)).run("go", options=AgentOptions(session_key="k"))
+    result = copilot(sessions)(binding(cli)).run(Prompt("go"), options=AgentOptions(session_key="k"))
 
     assert (result.stdout, result.stderr, result.exit_code) == ("partial", "boom", 2)
     assert not result.success and result.output == "partialboom"
@@ -136,7 +137,7 @@ def test_failed_run_keeps_stderr_and_exit_code_and_does_not_record_the_session()
 def test_assistant_text_is_the_concatenation_of_message_delta_events() -> None:
     cli = FakeCopilotCli(lambda prompt: [_event("Hel"), _event("lo"), _event(" world")])
 
-    result = copilot(InMemorySessionStore())(binding(cli)).run("go")
+    result = copilot(InMemorySessionStore())(binding(cli)).run(Prompt("go"))
 
     assert result.stdout == "Hello world"
 
@@ -145,7 +146,7 @@ def test_the_last_response_object_is_extracted_as_the_response_and_marks_success
     envelope = _envelope("t|1", result={"commit": "abc"})
     cli = FakeCopilotCli(lambda prompt: [_event("working on it"), _event(envelope)])
 
-    result = copilot(InMemorySessionStore())(binding(cli)).run("go")
+    result = copilot(InMemorySessionStore())(binding(cli)).run(Prompt("go"))
 
     assert result.success
     assert result.response == envelope
@@ -156,7 +157,7 @@ def test_an_earlier_unrelated_json_object_is_ignored_and_the_later_response_obje
     second = _envelope("t|1", result={"commit": "new"})
     cli = FakeCopilotCli(lambda prompt: [_event(first), _event("more work"), _event(second)])
 
-    result = copilot(InMemorySessionStore())(binding(cli)).run("go")
+    result = copilot(InMemorySessionStore())(binding(cli)).run(Prompt("go"))
 
     assert result.response == second
 
@@ -165,7 +166,7 @@ def test_a_failed_status_is_not_successful_but_its_response_is_kept() -> None:
     envelope = _envelope("t|1", status="failed", result={"reason": "tests did not pass"})
     cli = FakeCopilotCli(lambda prompt: _event(envelope))
 
-    result = copilot(InMemorySessionStore())(binding(cli)).run("go")
+    result = copilot(InMemorySessionStore())(binding(cli)).run(Prompt("go"))
 
     assert not result.success
     assert result.response == envelope
@@ -174,7 +175,7 @@ def test_a_failed_status_is_not_successful_but_its_response_is_kept() -> None:
 def test_no_response_object_is_an_error_with_an_empty_response() -> None:
     cli = FakeCopilotCli(lambda prompt: _event("just some assistant text, no envelope"))
 
-    result = copilot(InMemorySessionStore())(binding(cli)).run("go")
+    result = copilot(InMemorySessionStore())(binding(cli)).run(Prompt("go"))
 
     assert not result.success
     assert result.response == ""
@@ -183,7 +184,7 @@ def test_no_response_object_is_an_error_with_an_empty_response() -> None:
 def test_malformed_response_json_is_an_error() -> None:
     cli = FakeCopilotCli(lambda prompt: _event('{"identifier": "t|1", "status": '))
 
-    result = copilot(InMemorySessionStore())(binding(cli)).run("go")
+    result = copilot(InMemorySessionStore())(binding(cli)).run(Prompt("go"))
 
     assert not result.success
     assert result.response == ""
@@ -193,7 +194,7 @@ def test_a_nonzero_exit_with_a_completed_envelope_is_still_unsuccessful() -> Non
     envelope = _envelope("t|1")
     cli = FakeCopilotCli(lambda prompt: CommandResult(1, _event(envelope), "boom"))
 
-    result = copilot(InMemorySessionStore())(binding(cli)).run("go")
+    result = copilot(InMemorySessionStore())(binding(cli)).run(Prompt("go"))
 
     assert not result.success
     assert result.response == envelope
@@ -204,7 +205,7 @@ def test_the_process_is_not_terminated_early_when_the_agent_keeps_running_after_
     lines = [_event("working"), _event(envelope), _event("still cleaning up"), _event("done")]
     cli = FakeCopilotCli(lambda prompt: "\n".join(lines))
 
-    result = copilot(InMemorySessionStore())(binding(cli)).run("go")
+    result = copilot(InMemorySessionStore())(binding(cli)).run(Prompt("go"))
 
     assert result.success
     assert "still cleaning up" in result.stdout and "done" in result.stdout
@@ -215,7 +216,7 @@ def test_each_output_line_is_logged_live(caplog: pytest.LogCaptureFixture) -> No
     cli = FakeCopilotCli(lambda prompt: [_event("one"), _event("two")])
 
     with caplog.at_level(logging.INFO, logger="loop.agents.copilot"):
-        copilot(InMemorySessionStore())(binding(cli)).run("go")
+        copilot(InMemorySessionStore())(binding(cli)).run(Prompt("go"))
 
     assert any("one" in record.message for record in caplog.records)
     assert any("two" in record.message for record in caplog.records)
@@ -225,8 +226,8 @@ def test_agent_option_selects_the_named_agent_and_is_omitted_when_unset() -> Non
     cli = FakeCopilotCli()
     client = copilot(InMemorySessionStore())(binding(cli))
 
-    client.run("a", options=AgentOptions(agent="reviewer"))
-    client.run("b")
+    client.run(Prompt("a"), options=AgentOptions(agent="reviewer"))
+    client.run(Prompt("b"))
 
     first, second = cli.calls
     assert first[first.index("--agent") + 1] == "reviewer"
@@ -236,10 +237,30 @@ def test_agent_option_selects_the_named_agent_and_is_omitted_when_unset() -> Non
 def test_template_commands_run_through_the_run_executor() -> None:
     cli = FakeCopilotCli(shell=lambda command: "main\n")
 
-    copilot(InMemorySessionStore())(binding(cli)).run("on !`git branch --show-current`")
+    copilot(InMemorySessionStore())(binding(cli)).run(Prompt("on !`git branch --show-current`", {}))
 
     assert cli.shell_commands == ["git branch --show-current"]
     assert cli.calls[0][2] == "on main"
+
+
+def test_a_prompt_without_args_is_sent_verbatim_and_never_executed() -> None:
+    cli = FakeCopilotCli()
+    text = "keep {{X}} and !`rm -rf /`"
+
+    copilot(InMemorySessionStore())(binding(cli)).run(Prompt(text))
+
+    assert cli.calls[0][2] == text
+    assert cli.shell_commands == []
+
+
+def test_an_envelope_with_only_status_and_result_is_extracted_and_marks_success() -> None:
+    envelope = json.dumps({"status": "completed", "result": {}})
+    cli = FakeCopilotCli(lambda prompt: _event(envelope))
+
+    result = copilot(InMemorySessionStore())(binding(cli)).run(Prompt("go"))
+
+    assert result.success
+    assert result.response == envelope
 
 
 def test_file_session_store_survives_a_new_instance(tmp_path: Path) -> None:

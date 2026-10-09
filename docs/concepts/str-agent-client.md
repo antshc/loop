@@ -9,7 +9,7 @@ The client accepts a `Prompt` (a template with optional arguments) and run optio
 
 ## Concept
 
-An **AgentClient** wraps a provider-specific CLI adapter, uses a **Prompt Preprocessor** to render the prompt, and uses a **SessionStore** for resumable agent sessions. The `AgentRunnerProvider` builds the AgentClient once per **agent runner**, and the runner supplies the executor the CLI runs through and calls `exit()` on the client when it is disposed ([ADR 0011](../adr/0011-bind-one-agent-client-to-each-agent-runner-created-by-a-provider.md)).
+An **AgentClient** wraps a provider-specific CLI adapter, uses `Prompt.render` to render the prompt, and uses a **SessionStore** for resumable agent sessions. The `AgentRunnerProvider` builds the AgentClient once per **agent runner**, and the runner supplies the executor the CLI runs through and calls `exit()` on the client when it is disposed ([ADR 0011](../adr/0011-bind-one-agent-client-to-each-agent-runner-created-by-a-provider.md)).
 
 ```text
 Loop / Ralph / Crew
@@ -22,13 +22,13 @@ Loop / Ralph / Crew
      /     |      \
     v      v       v
 Prompt  SessionStore  Provider CLI Adapter
-Preprocessor              |
+render                    |
                           v
                     Headless AI Agent
                     e.g. Copilot CLI
 ```
 
-`AgentClient` exposes a provider-neutral `run(prompt, model, reasoning_effort, options)` operation taking one `Prompt`; the optional `model` and `reasoning_effort` are chosen per run, so Runs on one runner can use different models ([ADR 0012](../adr/0012-pass-the-model-and-reasoning-effort-as-run-arguments.md), [ADR 0013](../adr/0013-pass-a-prompt-object-to-each-run-and-carry-the-session-key-in-agent-options.md)). When the `Prompt` carries `args`, the Prompt Preprocessor replaces `{{KEY}}` placeholders with them and expands `!`cmd`` commands the template author wrote; a `Prompt` without `args` is sent verbatim. A run without `options.session_key` starts a fresh provider invocation. A run with a session key resolves the logical session through `SessionStore`; the provider adapter then creates or resumes the corresponding provider session.
+`AgentClient` exposes a provider-neutral `run(prompt, model, reasoning_effort, options)` operation taking one `Prompt`; the optional `model` and `reasoning_effort` are chosen per run, so Runs on one runner can use different models ([ADR 0012](../adr/0012-pass-the-model-and-reasoning-effort-as-run-arguments.md), [ADR 0013](../adr/0013-pass-a-prompt-object-to-each-run-and-carry-the-session-key-in-agent-options.md)). When the `Prompt` carries `args`, `Prompt.render` replaces `{{KEY}}` placeholders with them and expands `!`cmd`` commands the template author wrote; a `Prompt` without `args` is sent verbatim. A run without `options.session_key` starts a fresh provider invocation. A run with a session key resolves the logical session through `SessionStore`; the provider adapter then creates or resumes the corresponding provider session.
 
 The worktree runner runs the provider CLI, and the template commands, directly on the host in the harness-root workspace. The client never builds the process itself; it runs commands through the executor its runner gave it, which tests replace.
 
@@ -45,7 +45,7 @@ The CLI adapter owns command construction, process execution, and provider-speci
 - MUST make orchestration code depend on `AgentClient` rather than a concrete provider CLI.
 - MUST expose prompt execution through a stable `run(prompt: Prompt, model, reasoning_effort, options)` operation, with the session key carried only in `options.session_key` and the model and reasoning effort as optional run arguments, never in `options` ([ADR 0012](../adr/0012-pass-the-model-and-reasoning-effort-as-run-arguments.md), [ADR 0013](../adr/0013-pass-a-prompt-object-to-each-run-and-carry-the-session-key-in-agent-options.md)).
 - MUST map the model and reasoning effort to provider flags inside the CLI adapter (`--model`, `--reasoning-effort` for Copilot CLI), omit each flag when it is not given, and leave validating the values to the provider.
-- MUST render a `Prompt` that carries `args` through the Prompt Preprocessor before invoking the provider CLI, and MUST send a `Prompt` without `args` verbatim, with no substitution or command expansion.
+- MUST render a `Prompt` that carries `args` through `Prompt.render` before invoking the provider CLI, and MUST send a `Prompt` without `args` verbatim, with no substitution or command expansion.
 - MUST substitute only `{{KEY}}` placeholders; a placeholder without a matching argument MUST fail the run, and an argument no placeholder uses SHOULD log a warning.
 - MUST execute only `!`cmd`` commands written in the prompt template; text arriving through `Prompt.args`, or in a `Prompt` without `args`, MUST NOT be executed.
 - MUST run the provider CLI and template commands through the executor of the owning worktree runner.
@@ -75,7 +75,7 @@ The CLI adapter owns command construction, process execution, and provider-speci
 Sketch — not the implementation.
 
 ```python
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -113,9 +113,9 @@ class Prompt:
     template: str
     args: Mapping[str, str] | None = None
 
-
-class PromptPreprocessor(Protocol):
-    def process(self, prompt: str, prompt_args: Mapping[str, str]) -> str: ...
+    def render(self, execute: Callable[[str], str]) -> str:
+        """Substitutes `{{KEY}}` and expands template `!`cmd` through `execute`; no args means verbatim."""
+        ...
 
 
 class AgentCli(Protocol):
@@ -132,11 +132,11 @@ class AgentClient:
     def __init__(
         self,
         cli: AgentCli,
-        preprocessor: PromptPreprocessor,
+        execute_command: Callable[[str], str],
         sessions: SessionStore,
     ) -> None:
         self._cli = cli
-        self._preprocessor = preprocessor
+        self._execute_command = execute_command
         self._sessions = sessions
 
     def run(
@@ -146,7 +146,7 @@ class AgentClient:
         reasoning_effort: str | None = None,
         options: AgentOptions = AgentOptions(),
     ) -> AgentRunResult:
-        text = prompt.template if prompt.args is None else self._preprocessor.process(prompt.template, prompt.args)
+        text = prompt.render(self._execute_command)
 
         if options.session_key is None:
             return self._cli.run(text, options)

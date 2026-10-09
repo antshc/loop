@@ -31,7 +31,7 @@ agents/         CopilotClient, AgentOutputParser per agent kind, fake agent and 
 platforms/      git/ (BranchService, WorktreeService, CommitService over an internal git client; branch, feature-branch, and worktree-path naming), fake doubles
 stores/         file and in-memory execution/session stores
 process.py      CommandExecutor, streaming/cancellable subprocess execution
-prompt.py       PromptPreprocessor (prompt placeholders and args)
+prompt.py       Prompt (template, optional args; renders placeholders and template commands)
 tags.py         extract_tag, extract_json
 parallel.py     parallel_settled
 errors.py       LoopError hierarchy

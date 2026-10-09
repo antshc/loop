@@ -247,15 +247,15 @@ class RecordingExecutor:
 
 
 def plan_envelope(status: str = "completed", plan: str = "do the work", reason: str = "stuck") -> str:
-    """A `plan`-identified response envelope; `completed` carries `plan`, `failed` carries `reason`."""
+    """A planning response envelope; `completed` carries `plan`, `failed` carries `reason`."""
     result = {"plan": plan} if status == "completed" else {"reason": reason}
-    return json.dumps({"identifier": "plan", "status": status, "result": result})
+    return json.dumps({"status": status, "result": result})
 
 
 def implement_envelope(status: str = "completed", reason: str = "stuck") -> str:
-    """An `implement`-identified response envelope; `failed` carries `reason`."""
+    """An implementing response envelope; `failed` carries `reason`."""
     result = {} if status == "completed" else {"reason": reason}
-    return json.dumps({"identifier": "implement", "status": status, "result": result})
+    return json.dumps({"status": status, "result": result})
 
 
 class PlanImplementHarness:
