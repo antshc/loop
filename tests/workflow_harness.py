@@ -1,4 +1,4 @@
-"""Shared Workflow test-support: wires fakes at every process boundary around `dev.main`.
+"""Shared Workflow test-support: wires fakes at every process boundary around `dev.main` and `plan_implement.main`.
 
 Imported by both the unit and integration test groups; holds no tests of its own.
 """
@@ -12,9 +12,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from conftest import commit_file, git
-from loop import CommandExecutor, CommandResult, InMemoryExecutionStore
+from loop import AgentClientFactory, CommandExecutor, CommandResult, InMemoryExecutionStore
 from loop.testing import FakeAgentClient, FakeCopilotCli, FakeGit
-from workflows import dev
+from workflows import dev, plan_implement
 from workflows.platforms.work_tracking import GitHubClient, RepositoryConfig
 from workflows.platforms.work_tracking.fake_gh_cli import FakeGhCli
 
@@ -244,3 +244,44 @@ class RecordingExecutor:
             return stop
 
         return self.inner(command, timeout_s=timeout_s, on_line=record, cancel=cancel)
+
+
+def plan_envelope(status: str = "completed", plan: str = "do the work", reason: str = "stuck") -> str:
+    """A `plan`-identified response envelope; `completed` carries `plan`, `failed` carries `reason`."""
+    result = {"plan": plan} if status == "completed" else {"reason": reason}
+    return json.dumps({"identifier": "plan", "status": status, "result": result})
+
+
+def implement_envelope(status: str = "completed", reason: str = "stuck") -> str:
+    """An `implement`-identified response envelope; `failed` carries `reason`."""
+    result = {} if status == "completed" else {"reason": reason}
+    return json.dumps({"identifier": "implement", "status": status, "result": result})
+
+
+class PlanImplementHarness:
+    """Wires `plan_implement.main` to fakes at every process boundary; `harness_root` is a real git repo."""
+
+    def __init__(self, tmp_path: Path) -> None:
+        self.harness_root = _make_repo(tmp_path / "harness", "git@github.com:owner/repo.git")
+        self.git = FakeGit()
+        self.git.remote_branches.add("main")
+
+    def run(
+        self,
+        task: str = "add a widget",
+        *,
+        handler: Callable[[str, object], "str"] | None = None,
+        agent_factory: AgentClientFactory | None = None,
+        git: FakeGit | None = None,
+        **kwargs: object,
+    ) -> int:
+        def default_agent_factory(binding):
+            return FakeAgentClient(handler)
+
+        return plan_implement.main(
+            [task],
+            harness_root=self.harness_root,
+            git=git if git is not None else self.git,
+            agent_factory=agent_factory or default_agent_factory,
+            **kwargs,
+        )

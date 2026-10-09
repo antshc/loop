@@ -1,0 +1,173 @@
+"""Example Workflow: plan a task with a strong model, implement it with a cheaper one, on one worktree.
+
+One agent runner, two stateless runs (ADR 0012's `model`/`reasoning_effort` run arguments; the Shared
+Worktree Agent Run variant, docs/concepts/str-agent-run.md). No push, pull request, or Ticket access.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import logging
+import sys
+from collections.abc import Mapping
+from pathlib import Path
+from typing import Any
+
+from loop import (
+    AgentClientFactory,
+    AgentRunner,
+    AgentRunnerProvider,
+    AgentRunResult,
+    Git,
+    InMemorySessionStore,
+    RepositoryData,
+    copilot,
+)
+
+logger = logging.getLogger("workflow.plan_implement")
+
+PLAN_MODEL = "claude-opus-5.5"
+PLAN_EFFORT = "max"
+IMPLEMENT_MODEL = "claude-sonnet-5.5"
+IMPLEMENT_EFFORT = "high"
+
+PLAN_PROMPT = """You are planning a coding task on this repository. Do not write or change any code.
+
+Task:
+{{TASK}}
+
+Write a concise, actionable implementation plan for another agent to follow.
+
+Reply with exactly one JSON object as your final message, with nothing after it:
+{"identifier": "plan", "status": "completed", "result": {"plan": "<the plan, as plain text>"}}
+
+If you cannot produce a plan, reply instead with:
+{"identifier": "plan", "status": "failed", "result": {"reason": "<why>"}}
+"""
+
+IMPLEMENT_PROMPT = """You are implementing a coding task on this repository, following a plan.
+
+Plan:
+{{PLAN}}
+
+Implement the plan. Commit your work with git. Do not push.
+
+Reply with exactly one JSON object as your final message, with nothing after it:
+{"identifier": "implement", "status": "completed", "result": {}}
+
+If you cannot complete the implementation, reply instead with:
+{"identifier": "implement", "status": "failed", "result": {"reason": "<why>"}}
+"""
+
+
+def _parse_args(argv: list[str] | None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(prog="plan_implement")
+    parser.add_argument("task")
+    return parser.parse_args(argv)
+
+
+def _envelope(response: str) -> dict[str, Any] | None:
+    """The decoded `{identifier, status, result}` envelope, or None when the response is not that shape."""
+    try:
+        envelope = json.loads(response)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(envelope, dict):
+        return None
+    identifier, status, result = envelope.get("identifier"), envelope.get("status"), envelope.get("result")
+    if not isinstance(identifier, str) or status not in ("completed", "failed") or not isinstance(result, dict):
+        return None
+    return envelope
+
+
+def _run_step(
+    runner: AgentRunner,
+    prompt: str,
+    prompt_args: Mapping[str, str],
+    model: str,
+    reasoning_effort: str,
+    identifier: str,
+) -> tuple[AgentRunResult, dict[str, Any] | None]:
+    """Runs one fresh, stateless step; its `result` object, or None when it failed or answered the wrong step."""
+    run = runner.run(prompt, prompt_args, model, reasoning_effort)
+    outcome = run.result
+    if not outcome.success:
+        return run, None
+    envelope = _envelope(outcome.response)
+    if envelope is None or envelope["identifier"] != identifier:
+        return run, None
+    return run, envelope["result"]
+
+
+def _repository(harness_root: Path) -> RepositoryData:
+    # owner_repo is unused by this Workflow (no GitHub access); the harness folder name is a stable placeholder.
+    return RepositoryData(
+        path=harness_root,
+        owner_repo=f"local/{harness_root.name}",
+        is_harness=True,
+        worktree_root=harness_root / "workspace" / f"{harness_root.name}.worktrees",
+    )
+
+
+def _run(
+    runner: AgentRunner,
+    task: str,
+    plan_model: str,
+    plan_effort: str,
+    implement_model: str,
+    implement_effort: str,
+) -> int:
+    _, plan_result = _run_step(runner, PLAN_PROMPT, {"TASK": task}, plan_model, plan_effort, "plan")
+    if plan_result is None:
+        logger.error("planning run failed")
+        return 1
+    plan = plan_result.get("plan")
+    if not isinstance(plan, str) or not plan:
+        logger.error("planning run returned an empty plan")
+        return 1
+
+    implement_run, implement_result = _run_step(
+        runner, IMPLEMENT_PROMPT, {"PLAN": plan}, implement_model, implement_effort, "implement"
+    )
+    logger.info("commits: %s", ", ".join(implement_run.commits) or "none")
+    if implement_result is None:
+        logger.error("implementing run failed")
+        return 1
+    return 0
+
+
+def main(
+    argv: list[str] | None = None,
+    *,
+    plan_model: str = PLAN_MODEL,
+    plan_effort: str = PLAN_EFFORT,
+    implement_model: str = IMPLEMENT_MODEL,
+    implement_effort: str = IMPLEMENT_EFFORT,
+    harness_root: Path | None = None,
+    git: Git | None = None,
+    agent_factory: AgentClientFactory | None = None,
+) -> int:
+    """Plans `argv`'s task with `plan_model`, then implements it with `implement_model`; returns the exit code."""
+    args = _parse_args(argv)
+    root = (harness_root or Path.cwd()).resolve()
+    git = git or Git()
+    agent_factory = agent_factory or copilot(InMemorySessionStore())
+    provider = AgentRunnerProvider(git, root, agent_factory)
+    runner = provider.create(_repository(root), base="main")
+
+    try:
+        return _run(runner, args.task, plan_model, plan_effort, implement_model, implement_effort)
+    except KeyboardInterrupt:
+        logger.warning("interrupted")
+        return 130
+    finally:
+        logger.info("branch %s", runner.branch)
+        keep = runner.lifecycle.has_changes()
+        if keep:
+            logger.warning("worktree kept at %s", runner.worktree.path)
+        runner.exit(keep_worktree=keep)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
