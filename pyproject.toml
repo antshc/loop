@@ -21,6 +21,8 @@ where = ["src"]
 pythonpath = ["src", ".", "tests"]
 testpaths = ["tests"]
 norecursedirs = ["archive", ".*"]
+addopts = "-m 'not live'"
+markers = ["live: opt-in test against the real Copilot CLI, run with -m live"]
 
 [tool.importlinter]
 root_packages = ["loop", "workflows"]
