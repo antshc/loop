@@ -29,7 +29,7 @@ The runtime owns the Run boundary: it binds the prepared execution context, runs
 
 - MUST reuse one worktree runner across the dependent Runs.
 - MUST preserve each Run as a separate agent invocation with its own prompt and result.
-- MAY continue one conversation across Runs by passing the previous result's session id.
+- MAY continue one conversation across Runs by passing the previous result's session key in the next Run's `options.session_key`.
 - SHOULD execute dependent Runs sequentially in workflow-defined order.
 
 ### Variant: Separate Worktrees
@@ -45,9 +45,9 @@ Shared worktree:
 
 ```text
 AgentRunner
-  ├─ run(prompt) → session id
-  ├─ run(prompt, session id)
-  └─ run(prompt, session id)
+  ├─ run(prompt, new_session=True) → session key
+  ├─ run(prompt, options.session_key)
+  └─ run(prompt, options.session_key)
 ```
 
 Separate worktrees:

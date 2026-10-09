@@ -1,0 +1,3 @@
+{ type: "head" }: No worktree or branch is created. The agent works directly in the host working directory. Bind-mount and no-sandbox providers only (default for both). Isolated providers throw.
+{ type: "merge-to-head" }: Creates a temp-branch worktree, merges it back into the current HEAD, then deletes the temp branch. Supported by all providers (default for isolated).
+{ type: "branch", branch, baseBranch? }: Creates a worktree on the named branch. baseBranch is the start ref if the branch is new and defaults to HEAD. Supported by all providers.
