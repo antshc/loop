@@ -14,9 +14,9 @@ The runtime owns the Run boundary: it binds the prepared execution context, runs
 ## Rules
 
 - MUST treat one Agent Run as the smallest executable runtime unit: one agent, one prompt, one worktree, and one result.
-- MUST bind the Run to its prepared worktree runner before invoking the agent.
+- MUST bind the Run to its prepared agent runner before invoking the agent.
 - MUST invoke the agent provider through the `AgentClient` contract.
-- MUST take the agent from the runner, bound at creation, so one runner runs one agent; Runs with a different agent use another runner ([ADR 0011](../adr/0011-bind-one-agent-client-to-each-agent-runner-created-by-a-provider.md)).
+- MUST take the agent from the runner, bound at creation, so one runner runs one agent; Runs with a different agent use another runner ([Run agents through an agent runner](../adr/run-agents-on-the-host-through-an-agent-runner-that-binds-one-agent-client.md)).
 - MUST return a machine-readable result containing execution success and agent output.
 - MUST keep workflow topology in Workflow code rather than in the Run abstraction.
 - MUST let a Workflow decide subsequent Runs from prior Run results and external state.
@@ -27,7 +27,7 @@ The runtime owns the Run boundary: it binds the prepared execution context, runs
 ### Variant: Shared Worktree
 **Selected when:** multiple Runs operate on the same evolving workspace and later Runs depend on changes or results produced by earlier Runs.
 
-- MUST reuse one worktree runner across the dependent Runs.
+- MUST reuse one agent runner across the dependent Runs.
 - MUST preserve each Run as a separate agent invocation with its own prompt and result.
 - MAY continue one conversation across Runs by passing the previous result's session key in the next Run's `options.session_key`.
 - SHOULD execute dependent Runs sequentially in workflow-defined order.
@@ -35,7 +35,7 @@ The runtime owns the Run boundary: it binds the prepared execution context, runs
 ### Variant: Separate Worktrees
 **Selected when:** Runs operate on independent units of work that do not require a shared mutable workspace.
 
-- MUST give each independent unit of work its own worktree runner.
+- MUST give each independent unit of work its own agent runner.
 - MUST keep mutable workspace state separate between those worktrees.
 - MAY execute independent Runs concurrently when the Workflow allows it.
 

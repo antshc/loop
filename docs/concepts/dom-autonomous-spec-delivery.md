@@ -145,7 +145,7 @@ flowchart LR
 
 A solid edge is automatic; a dotted edge is a separately initiated step, labelled with its initiator.
 
-Decisions: [ADR 0009](../adr/0009-run-one-fresh-agent-per-ticket-from-python-and-let-the-agent-commit-it.md) (per-Ticket run, task commit, Git validation), [ADR 0007](../adr/0007-stream-agent-output-live-and-parse-it-after-exit-with-a-per-agent-kind-output-parser.md) (response envelope and output parser), [ADR 0006](../adr/0006-keep-commit-push-pull-request-and-ticket-state-changes-in-python.md) (Python owns push, pull request, and Ticket state).
+Decisions: [Run one fresh agent per Ticket](../adr/run-one-fresh-agent-per-ticket-from-python-and-let-the-agent-commit-it.md) (per-Ticket run, task commit, Git validation, Python owns push, pull request, and Ticket state), [Stream agent output live](../adr/stream-agent-output-live-and-parse-it-after-exit-with-a-per-agent-kind-output-parser.md) (response envelope and output parser).
 
 ## Implementation Map
 | Concern | Stable anchor | Semantic locator |

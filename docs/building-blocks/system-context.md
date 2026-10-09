@@ -54,7 +54,7 @@ C4Container
     Container_Ext(workflow, "Workflow script", "Python script", "User-owned runnable script on the public loop API; the repository's dev Workflow is only an example.")
 
     System_Boundary(system, "Loop") {
-        Container(loop, "loop library", "Python package", "Worktree runner, agent clients, git and GitHub clients, stores, and shared policy for composing Workflows.")
+        Container(loop, "loop library", "Python package", "Agent runner, agent clients, git services, stores, and shared policy for composing Workflows.")
     }
 
     System_Ext(github, "GitHub", "Hosts the repository, Specs, Tickets, and pull requests.")

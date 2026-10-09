@@ -6,7 +6,7 @@ Repositories need to prepare a fresh worktree before the agent starts, and Sandc
 
 - **Post-agent hooks** — rejected: Sandcastle shows pre-agent hooks suffice; post-iteration work is an explicit step of the workflow's use case.
 - **Agent-side hooks** — rejected: Loop runs the agent on the host, so the host already prepares the worktree the agent uses and a second setup stage would prepare the same worktree twice.
-- **In-language callbacks instead of shell commands** — rejected: ties hook authors to Python and widens the public API surface exposed to workflows (ADR 0003); shell commands stay language-neutral.
+- **In-language callbacks instead of shell commands** — rejected: ties hook authors to Python and widens the public API surface exposed to workflows ([Ship Loop as a workflow library](ship-loop-as-a-workflow-library-with-no-built-in-workflows.md)); shell commands stay language-neutral.
 - **Warn and continue on hook failure** — rejected: the agent would run against a half-prepared worktree and spend a session on a setup error.
 
 ## Consequences

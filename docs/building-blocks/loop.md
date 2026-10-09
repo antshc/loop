@@ -1,6 +1,6 @@
 # Loop
 
-The `loop` Python library: a single installable package (`pip install` from this repository, [ADR 0001](../adr/0001-install-loop-with-pip-from-the-repository.md)) that a user-owned Workflow script imports to run agent prompts on Git worktrees. It ships no command and no built-in Workflows ([ADR 0003](../adr/0003-ship-loop-as-a-workflow-library-with-no-built-in-workflows.md)).
+The `loop` Python library: a single installable package (`pip install` from this repository, [Install Loop with pip](../adr/install-loop-with-pip-from-the-repository.md)) that a user-owned Workflow script imports to run agent prompts on Git worktrees. It ships no command and no built-in Workflows ([Ship Loop as a workflow library](../adr/ship-loop-as-a-workflow-library-with-no-built-in-workflows.md)).
 
 ## Dependencies
 
@@ -9,7 +9,7 @@ The `loop` Python library: a single installable package (`pip install` from this
 
 ## Interfaces
 
-Public API re-exported from [`src/loop/__init__.py`](../../src/loop/__init__.py). ABC contracts exist only where Loop calls replaceable parts: `AgentClient`, `SessionStore`, `ExecutionStore`. `BranchService`, `WorktreeService`, and `CommitService` are concrete helpers; the git client is an internal command runner, not part of the public API. The GitHub client and the Spec/Ticket tracker are not part of the public API either: they live in `workflows/platforms/work_tracking` beside the example workflows.
+Public API re-exported from [`src/loop/__init__.py`](../../src/loop/__init__.py). ABC contracts exist only where Loop calls replaceable parts: `AgentClient`, `SessionStore`, `ExecutionStore`. `Git` groups the concrete `BranchService`, `WorktreeService`, and `CommitService` (`git.branches`, `git.worktrees`, `git.commits`); the git client is an internal command runner, not part of the public API. The GitHub client and the Spec/Ticket tracker are not part of the public API either: they live in `workflows/platforms/work_tracking` beside the example workflows.
 
 ## Tweaks/Configuration
 
@@ -26,7 +26,7 @@ Paths relative to `src/loop/`.
 ```text
 __init__.py     public API
 contracts/      ABCs: AgentClient, SessionStore, ExecutionStore
-runs/           WorktreeRunner and create_worktree_runner (worktree + host agent runs), run_host_hooks
+runs/           AgentRunnerProvider, AgentRunner, WorktreeLifecycle (worktree + host agent runs), run_host_hooks
 agents/         CopilotClient, AgentOutputParser per agent kind, fake agent and Copilot CLI doubles
 platforms/      git/ (BranchService, WorktreeService, CommitService over an internal git client; branch, feature-branch, and worktree-path naming), fake doubles
 stores/         file and in-memory execution/session stores
@@ -63,7 +63,7 @@ C4Component
         Component(agents, "Agent clients", "CopilotClient, AgentOutputParser", "Render the prompt, run the provider CLI through the runner's executor, stream its output for logging, and after exit parse the response envelope with the agent kind's output parser.")
         Component(platforms, "Branch & commit services", "BranchService, CommitService", "Branch prepare/push/merge and commit log/rollback via the internal git client, also used by the worktree service.")
         Component(worktrees, "Worktree service", "WorktreeService", "Creates, tracks, and removes worktrees through the git client, and names their branches and folders.")
-        Component(runner, "Worktree runner", "WorktreeRunner, create_worktree_runner", "Builds a long-lived worktree, runs each agent on the host through the executor it hands the agent, and wraps each run with the base head and commit collection.")
+        Component(runner, "Agent runner", "AgentRunnerProvider, AgentRunner, WorktreeLifecycle", "Builds a long-lived worktree and one agent client bound to the executor it hands the client, runs prompts on the host, and wraps each run with the base head and commit collection.")
         ComponentDb(stores, "Stores", "File and in-memory", "Persist session keys and attempt counts.")
         Component(contracts, "Contracts", "ABCs", "AgentClient, SessionStore, and ExecutionStore boundaries.")
         Component(policy, "Shared policy", "process, prompt, tags, parallel, errors", "Command execution, prompt preprocessing, tag extraction, parallel settling, and errors.")
@@ -74,7 +74,7 @@ C4Component
 
     Rel(workflow, platforms, "Commits and pushes with")
     Rel(workflow, worktrees, "Names feature branches with")
-    Rel(workflow, runner, "Creates worktree runners and runs agents with")
+    Rel(workflow, runner, "Creates agent runners and runs prompts with")
     Rel(runner, worktrees, "Creates and removes worktrees with")
     Rel(runner, platforms, "Collects commits with")
     Rel(worktrees, platforms, "Runs git worktree commands through")
@@ -122,7 +122,7 @@ Likewise indexed in [ARCHITECTURE.md](../../ARCHITECTURE.md#architecture-decisio
 
 ## Key features
 
-- **Worktree runner:** a worktree whose agents run on the host from the harness root; the agent is passed per run ([ADR 0008](../adr/0008-run-agents-on-the-host-through-a-worktree-runner-and-pass-the-agent-to-each-run.md)).
-- **Agent clients:** Copilot CLI with live output streaming and a per-agent-kind output parser run after exit ([ADR 0007](../adr/0007-stream-agent-output-live-and-parse-it-after-exit-with-a-per-agent-kind-output-parser.md)).
-- **Git and GitHub helpers:** worktrees with `worktree-ready` hooks ([ADR 0004](../adr/0004-run-only-pre-agent-shell-command-hooks-on-the-host.md)); push and pull requests stay in Python ([ADR 0006](../adr/0006-keep-commit-push-pull-request-and-ticket-state-changes-in-python.md)), while the agent commits each task ([ADR 0009](../adr/0009-run-one-fresh-agent-per-ticket-from-python-and-let-the-agent-commit-it.md)).
+- **Agent runner:** an `AgentRunnerProvider` creates a worktree and one agent client, run on the host from the harness root, and returns an `AgentRunner` that disposes both ([Run agents through an agent runner](../adr/run-agents-on-the-host-through-an-agent-runner-that-binds-one-agent-client.md)).
+- **Agent clients:** Copilot CLI with live output streaming and a per-agent-kind output parser run after exit ([Stream agent output live](../adr/stream-agent-output-live-and-parse-it-after-exit-with-a-per-agent-kind-output-parser.md)).
+- **Git and GitHub helpers:** worktrees with `worktree-ready` hooks ([Run only pre-agent hooks](../adr/run-only-pre-agent-shell-command-hooks-on-the-host.md)); push, pull requests, and Ticket state stay in Python, while the agent commits each task ([Run one fresh agent per Ticket](../adr/run-one-fresh-agent-per-ticket-from-python-and-let-the-agent-commit-it.md)).
 - **Test doubles:** `loop.testing` fakes every process boundary.

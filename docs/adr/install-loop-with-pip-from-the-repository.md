@@ -11,4 +11,4 @@ Loop must reach users in a form whose version the project controls. It is instal
 
 - Users need Python and `pip` and must update by pulling the repository and reinstalling.
 - No package index is involved; the repository is the only distribution channel.
-- The package name is set by [ADR 0002](0002-ship-loop-as-the-loop-package-with-an-loop-command.md); Loop ships no command.
+- The package is named `loop` and ships no command ([Ship Loop as a workflow library with no built-in workflows](ship-loop-as-a-workflow-library-with-no-built-in-workflows.md)).

@@ -16,7 +16,7 @@ Each agent CLI reports its output in its own event format (Copilot CLI emits `as
 
 ## Consequences
 
-- `AgentOutputParser`, its per-agent-kind implementations, and the `AgentResult` response field are part of the library's compatibility surface set by [ADR 0003](0003-ship-loop-as-a-workflow-library-with-no-built-in-workflows.md).
+- `AgentOutputParser`, its per-agent-kind implementations, and the `AgentResult` response field are part of the library's compatibility surface set by [Ship Loop as a workflow library](ship-loop-as-a-workflow-library-with-no-built-in-workflows.md).
 - Adding an agent kind means writing its output parser; nothing outside its adapter changes.
 - An agent that has already responded but keeps running costs time until it exits or times out.
 - Any later JSON object with a `status` key in the agent's text is taken as the response; a workflow that needs certainty adds and checks its own key.

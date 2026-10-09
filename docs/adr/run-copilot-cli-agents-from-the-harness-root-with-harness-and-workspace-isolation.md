@@ -14,7 +14,7 @@ Copilot CLI agents need the harness `.github` skills/instructions and `docs` whi
 
 - Agent commands that modify code must address the target worktree explicitly because the process starts from the harness root.
 - Isolation must admit the harness repository and the relevant workspace repositories/worktrees for the run.
-- The provider adapter owns the permission flags; there is a single host mode (see [ADR 0008](0008-run-agents-on-the-host-through-a-worktree-runner-and-pass-the-agent-to-each-run.md)).
+- The provider adapter owns the permission flags; there is a single host mode (see [Run agents through an agent runner](run-agents-on-the-host-through-an-agent-runner-that-binds-one-agent-client.md)).
 - Worktrees live under the harness's `workspace` folder in both layouts, as `<harness>/workspace/<checkout folder name>.worktrees/<branch>`, so the harness root contains every worktree; creating one adds `workspace/` to the checkout's `.git/info/exclude`.
 - Harness `.github` customizations and documentation stay available without copying them into each worktree.
 

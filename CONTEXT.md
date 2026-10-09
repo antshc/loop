@@ -58,9 +58,9 @@ _Avoid_: Callback, script, setup step
 A named moment in the Run lifecycle at which Loop runs the Hooks declared for it, such as `worktree-ready`.  
 _Avoid_: Event, trigger, stage
 
-**Worktree runner**:  
-The long-lived pairing of one worktree with the agent runs a Workflow makes on it; agents run directly on the host with the user's own permissions, with no isolation.  
-_Avoid_: Sandbox, container, environment
+**Agent runner**:  
+The long-lived pairing of one worktree with one agent client that a Workflow runs prompts through; the agent runs directly on the host with the user's own permissions, with no isolation.  
+_Avoid_: Worktree runner, Sandbox, container, environment
 
 **Run lifecycle**:  
 The ordered stages of one Workflow run on a worktree: worktree creation and `worktree-ready` Hooks, one or more agent runs, publication of the agent's work, and worktree removal.  

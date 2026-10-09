@@ -1,6 +1,6 @@
 """Example Workflow: plan a task with a strong model, implement it with a cheaper one, on one worktree.
 
-One agent runner, two stateless runs (ADR 0012's `model`/`reasoning_effort` run arguments; the Shared
+One agent runner, two stateless runs (the per-run `model`/`reasoning_effort` arguments; the Shared
 Worktree Agent Run variant, docs/concepts/str-agent-run.md). No push, pull request, or Ticket access.
 """
 

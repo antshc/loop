@@ -9,7 +9,7 @@ The client accepts a `Prompt` (a template with optional arguments) and run optio
 
 ## Concept
 
-An **AgentClient** wraps a provider-specific CLI adapter, uses `Prompt.render` to render the prompt, and uses a **SessionStore** for resumable agent sessions. The `AgentRunnerProvider` builds the AgentClient once per **agent runner**, and the runner supplies the executor the CLI runs through and calls `exit()` on the client when it is disposed ([ADR 0011](../adr/0011-bind-one-agent-client-to-each-agent-runner-created-by-a-provider.md)).
+An **AgentClient** wraps a provider-specific CLI adapter, uses `Prompt.render` to render the prompt, and uses a **SessionStore** for resumable agent sessions. The `AgentRunnerProvider` builds the AgentClient once per **agent runner**, and the runner supplies the executor the CLI runs through and calls `exit()` on the client when it is disposed ([Run agents through an agent runner](../adr/run-agents-on-the-host-through-an-agent-runner-that-binds-one-agent-client.md)).
 
 ```text
 Loop / Ralph / Crew
@@ -28,9 +28,9 @@ render                    |
                     e.g. Copilot CLI
 ```
 
-`AgentClient` exposes a provider-neutral `run(prompt, model, reasoning_effort, options)` operation taking one `Prompt`; the optional `model` and `reasoning_effort` are chosen per run, so Runs on one runner can use different models ([ADR 0012](../adr/0012-pass-the-model-and-reasoning-effort-as-run-arguments.md), [ADR 0013](../adr/0013-pass-a-prompt-object-to-each-run-and-carry-the-session-key-in-agent-options.md)). When the `Prompt` carries `args`, `Prompt.render` replaces `{{KEY}}` placeholders with them and expands `!`cmd`` commands the template author wrote; a `Prompt` without `args` is sent verbatim. A run without `options.session_key` starts a fresh provider invocation. A run with a session key resolves the logical session through `SessionStore`; the provider adapter then creates or resumes the corresponding provider session.
+`AgentClient` exposes a provider-neutral `run(prompt, model, reasoning_effort, options)` operation taking one `Prompt`; the optional `model` and `reasoning_effort` are chosen per run, so Runs on one runner can use different models ([Pass the model and reasoning effort as run arguments](../adr/pass-the-model-and-reasoning-effort-as-run-arguments.md), [Pass a Prompt object to each run](../adr/pass-a-prompt-object-to-each-run-and-carry-the-session-key-in-agent-options.md)). When the `Prompt` carries `args`, `Prompt.render` replaces `{{KEY}}` placeholders with them and expands `!`cmd`` commands the template author wrote; a `Prompt` without `args` is sent verbatim. A run without `options.session_key` starts a fresh provider invocation. A run with a session key resolves the logical session through `SessionStore`; the provider adapter then creates or resumes the corresponding provider session.
 
-The worktree runner runs the provider CLI, and the template commands, directly on the host in the harness-root workspace. The client never builds the process itself; it runs commands through the executor its runner gave it, which tests replace.
+The agent runner runs the provider CLI, and the template commands, directly on the host in the harness-root workspace. The client never builds the process itself; it runs commands through the executor its runner gave it, which tests replace.
 
 `SessionStore` owns Loop's logical-session metadata, not the provider conversation history. It maps a logical session key to the provider-facing session reference needed for later continuation. The provider CLI remains authoritative for the actual transcript and session state.
 
@@ -43,13 +43,13 @@ The CLI adapter owns command construction, process execution, and provider-speci
 ## Rules
 
 - MUST make orchestration code depend on `AgentClient` rather than a concrete provider CLI.
-- MUST expose prompt execution through a stable `run(prompt: Prompt, model, reasoning_effort, options)` operation, with the session key carried only in `options.session_key` and the model and reasoning effort as optional run arguments, never in `options` ([ADR 0012](../adr/0012-pass-the-model-and-reasoning-effort-as-run-arguments.md), [ADR 0013](../adr/0013-pass-a-prompt-object-to-each-run-and-carry-the-session-key-in-agent-options.md)).
+- MUST expose prompt execution through a stable `run(prompt: Prompt, model, reasoning_effort, options)` operation, with the session key carried only in `options.session_key` and the model and reasoning effort as optional run arguments, never in `options` ([Pass the model and reasoning effort as run arguments](../adr/pass-the-model-and-reasoning-effort-as-run-arguments.md), [Pass a Prompt object to each run](../adr/pass-a-prompt-object-to-each-run-and-carry-the-session-key-in-agent-options.md)).
 - MUST map the model and reasoning effort to provider flags inside the CLI adapter (`--model`, `--reasoning-effort` for Copilot CLI), omit each flag when it is not given, and leave validating the values to the provider.
 - MUST render a `Prompt` that carries `args` through `Prompt.render` before invoking the provider CLI, and MUST send a `Prompt` without `args` verbatim, with no substitution or command expansion.
 - MUST substitute only `{{KEY}}` placeholders; a placeholder without a matching argument MUST fail the run, and an argument no placeholder uses SHOULD log a warning.
 - MUST execute only `!`cmd`` commands written in the prompt template; text arriving through `Prompt.args`, or in a `Prompt` without `args`, MUST NOT be executed.
-- MUST run the provider CLI and template commands through the executor of the owning worktree runner.
-- MUST pass path-scoped permissions (`--allow-all-tools` with `--add-dir` for Copilot CLI), never the provider's allow-all flag; the adapter owns these flags ([ADR 0005](../adr/0005-run-copilot-cli-agents-from-the-harness-root-with-harness-and-workspace-isolation.md)).
+- MUST run the provider CLI and template commands through the executor of the owning agent runner.
+- MUST pass path-scoped permissions (`--allow-all-tools` with `--add-dir` for Copilot CLI), never the provider's allow-all flag; the adapter owns these flags ([Run Copilot CLI agents from the harness root](../adr/run-copilot-cli-agents-from-the-harness-root-with-harness-and-workspace-isolation.md)).
 - MUST treat an omitted session key as a fresh provider invocation.
 - MUST resolve a supplied logical session key through `SessionStore`.
 - MUST persist a new session only after its first provider invocation succeeds.
@@ -58,9 +58,9 @@ The CLI adapter owns command construction, process execution, and provider-speci
 - MUST derive provider-facing session names from the logical session key rather than requiring workflows to supply provider-native names.
 - MUST prepend the configured `session_name_prefix` when creating provider-facing session names.
 - MUST keep provider executable names, arguments, session creation/resume flags, and naming syntax inside the provider CLI adapter.
-- MUST execute the provider CLI in the harness-root workspace of the owning worktree runner.
+- MUST execute the provider CLI in the harness-root workspace of the owning agent runner.
 - MUST capture stdout, stderr, and exit code for every invocation.
-- MUST stream provider output line by line through the runner's executor for live logging while the process runs, and parse it only after the process exits, through the `AgentOutputParser` of the agent kind ([ADR 0007](../adr/0007-stream-agent-output-live-and-parse-it-after-exit-with-a-per-agent-kind-output-parser.md)).
+- MUST stream provider output line by line through the runner's executor for live logging while the process runs, and parse it only after the process exits, through the `AgentOutputParser` of the agent kind ([Stream agent output live](../adr/stream-agent-output-live-and-parse-it-after-exit-with-a-per-agent-kind-output-parser.md)).
 - MUST let the output parser fill `AgentResult`'s response string from the generic envelope (the last JSON object carrying `status`, with a `result` object) and decide success or error from `status`; the parser MUST NOT require or check workflow-specific keys such as `identifier`.
 - MUST keep `AgentClient` and its output parsers agnostic of what a prompt asks for: they run a prompt and return its response; Tickets, Specs, and identifier meaning belong to the workflow.
 - MUST NOT terminate the provider process early; it runs until it exits or times out.
