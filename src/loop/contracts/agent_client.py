@@ -13,7 +13,6 @@ from loop.prompt import PromptPreprocessor
 class AgentOptions:
     """Per-run agent configuration."""
 
-    model: str | None = None
     agent: str | None = None
     session_key: str | None = None
     session_name_prefix: str = ""
@@ -84,22 +83,24 @@ class AgentClient(ABC):
         self,
         prompt: str,
         prompt_args: Mapping[str, str] | None = None,
+        model: str | None = None,
+        reasoning_effort: str | None = None,
         options: AgentOptions | None = None,
     ) -> AgentResult:
         options = options or AgentOptions()
         text = self._preprocessor.process(prompt, prompt_args)
         if options.session_key is None:
-            return self._invoke(text, options, None, resume=False)
+            return self._invoke(text, model, reasoning_effort, options, None, resume=False)
 
         session = self._sessions.get(options.session_key)
         if session is not None:
-            return self._invoke(text, options, session, resume=True)
+            return self._invoke(text, model, reasoning_effort, options, session, resume=True)
 
         session = AgentSession(
             key=options.session_key,
             name=f"{options.session_name_prefix}{options.session_key}",
         )
-        result = self._invoke(text, options, session, resume=False)
+        result = self._invoke(text, model, reasoning_effort, options, session, resume=False)
         # A failed create may leave no provider session to resume.
         if result.success:
             self._sessions.save(session)
@@ -112,6 +113,8 @@ class AgentClient(ABC):
     def _invoke(
         self,
         prompt: str,
+        model: str | None,
+        reasoning_effort: str | None,
         options: AgentOptions,
         session: AgentSession | None,
         *,

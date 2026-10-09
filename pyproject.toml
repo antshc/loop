@@ -21,6 +21,8 @@ where = ["src"]
 pythonpath = ["src", ".", "tests"]
 testpaths = ["tests"]
 norecursedirs = ["archive", ".*"]
+addopts = "-m 'not live'"
+markers = ["live: opt-in test against the real Copilot CLI, run with -m live"]
 
 [tool.importlinter]
 root_packages = ["loop", "workflows"]
@@ -77,7 +79,7 @@ forbidden_modules = ["loop.testing"]
 [[tool.importlinter.contracts]]
 name = "The dev workflow and shared workflow platforms import only the public loop API"
 type = "forbidden"
-source_modules = ["workflows.dev", "workflows.platforms"]
+source_modules = ["workflows.dev", "workflows.plan_implement", "workflows.platforms"]
 forbidden_modules = [
     "loop.contracts",
     "loop.agents",
@@ -97,4 +99,9 @@ allow_indirect_imports = true
 name = "Shared workflow platforms import no workflow"
 type = "forbidden"
 source_modules = ["workflows.platforms"]
-forbidden_modules = ["workflows.dev"]
+forbidden_modules = ["workflows.dev", "workflows.plan_implement"]
+
+[[tool.importlinter.contracts]]
+name = "No workflow imports another workflow"
+type = "independence"
+modules = ["workflows.dev", "workflows.plan_implement"]

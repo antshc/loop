@@ -50,6 +50,8 @@ class CopilotClient(AgentClient):
     def _invoke(
         self,
         prompt: str,
+        model: str | None,
+        reasoning_effort: str | None,
         options: AgentOptions,
         session: AgentSession | None,
         *,
@@ -60,8 +62,10 @@ class CopilotClient(AgentClient):
         args += list(options.extra_args)
         if session is not None:
             args += [f"--resume={session.name}"] if resume else ["--name", session.name]
-        if options.model:
-            args += ["--model", options.model]
+        if model:
+            args += ["--model", model]
+        if reasoning_effort:
+            args += ["--reasoning-effort", reasoning_effort]
         if options.agent:
             args += ["--agent", options.agent]
         for directory in options.add_dirs:
