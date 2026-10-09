@@ -200,6 +200,10 @@ class GitCli:
             self._git(repository, "branch", branch, start_ref)
         self._git(repository, "worktree", "add", str(target), branch)
 
+    def remove_worktree(self, repository: Path, target: Path) -> None:
+        """Detach the worktree at `target`; git refuses when it has uncommitted changes. The branch is kept."""
+        self._git(repository, "worktree", "remove", str(target))
+
     def _start_ref(self, repository: Path, branch: str, base: str) -> str:
         if self._succeeds(repository, "show-ref", "--verify", "--quiet", f"refs/remotes/origin/{branch}"):
             return f"origin/{branch}"
@@ -219,7 +223,7 @@ class GitCli:
 
 
 class WorktreesRuntime:
-    """Creates the worktree at root_path/branch through git and yields its path."""
+    """Creates the worktree at root_path/branch through git, yields its path, and removes it on exit."""
 
     def __init__(self, git: GitCli) -> None:
         self._git = git
@@ -233,8 +237,10 @@ class WorktreesRuntime:
         target = root / branch
         repository = (cwd / options.repository_path) if options.repository_path else cwd
         self._git.create_worktree(repository, target, branch)
-        # Removal is out of scope for this prototype; the worktree is left in place.
-        yield target
+        try:
+            yield target
+        finally:
+            self._git.remove_worktree(repository, target)
 
 
 class DockerRuntime:

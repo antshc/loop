@@ -35,6 +35,7 @@ Python 3.12+, standard library only. No real Git, Docker, or Copilot installatio
 - `Agent(options: AgentOptions | None = None) -> AgentBuilder`: *composition root*; registers `CopilotCli`, `WorktreesRuntime(GitCli())`, and `DockerRuntime` internally.
 - `WorktreesOptions`: `root_path` (worktrees root, must resolve inside the cwd) and `branch` (new branch name; unset generates `feat_<hex>` per run); the worktree is created at `root_path/branch`. `repository_path` (optional, default the agent `cwd`; relative paths resolve from it) sets `git -C` for multi-repository setups.
 - `GitCli.create_worktree(repository, target, branch, base="main")`: with `git -C <repository>`: `fetch --all --prune`, `check-ref-format --branch`, `branch` (or `branch -f` when it exists locally) from `origin/<branch>` if present else `origin/<base>`, then `worktree add <target> <branch>`.
+- `GitCli.remove_worktree(repository, target)`: `worktree remove <target>`; called when `WorktreesRuntime.open()` exits (also on error). The branch is kept, and git refuses to remove a worktree with uncommitted changes.
 - `AgentOptions`: optional frozen caller overrides `docker_image` and `cli_args`; `Agent()` copies the set (non-`None`) values onto the `AgentContext`.
 - `AgentBuilder.with_worktrees(options: WorktreesOptions | None = None) -> Self`: enable per-run worktree scope; defaults to `WorktreesOptions()`.
 - `AgentBuilder.with_docker() -> Self`: enable Docker execution configuration.
@@ -120,6 +121,7 @@ classDiagram
         }
         class GitCli {
             +create_worktree(repository, target, branch, base) None
+            +remove_worktree(repository, target) None
         }
         class DockerRuntime
     }
@@ -196,7 +198,7 @@ Resulting folder structure after one run (`feat_1a2b3c4d` is the generated branc
     └── repo2.worktrees/            # created on the first repo2 run
 ```
 
-The agent runs with `cwd=<harness>` and `--add-dir <harness>/workspace/repo1.worktrees/feat_1a2b3c4d`. Each run adds a new `feat_<hex>` directory; nothing removes them. An explicit branch such as `loop/ticket-123` adds a directory level (`repo1.worktrees/loop/ticket-123/`). One agent covers one repository; a second `with_worktrees()` call replaces the first.
+The agent runs with `cwd=<harness>` and `--add-dir <harness>/workspace/repo1.worktrees/feat_1a2b3c4d`. Each run adds a new `feat_<hex>` directory while it runs and removes it afterwards (the branch stays in `repo1`). An explicit branch such as `loop/ticket-123` adds a directory level (`repo1.worktrees/loop/ticket-123/`). One agent covers one repository; a second `with_worktrees()` call replaces the first.
 
 ## Delegation order
 
@@ -219,6 +221,6 @@ Agent().with_worktrees().with_docker().create()
 
 ## Prototype boundaries
 
-**`CopilotCli` and `DockerRuntime` are stubs, not real container or Copilot execution.** `WorktreesRuntime` is real: it runs git through `GitCli` (fetch, branch, `worktree add`) against the repository at `repository_path` (default: the agent cwd) and leaves the worktree in place afterwards. `DockerRuntime.configure()` adds a Docker image to the context without running a container, and `CopilotCli.run()` returns descriptive text without invoking Copilot. Tests drive `GitCli` with a fake process runner, so no git is run; they verify composition and command contracts only.
+**`CopilotCli` and `DockerRuntime` are stubs, not real container or Copilot execution.** `WorktreesRuntime` is real: it runs git through `GitCli` (fetch, branch, `worktree add`) against the repository at `repository_path` (default: the agent cwd) and removes the worktree when the run ends. `DockerRuntime.configure()` adds a Docker image to the context without running a container, and `CopilotCli.run()` returns descriptive text without invoking Copilot. Tests drive `GitCli` with a fake process runner, so no git is run; they verify composition and command contracts only.
 
 Production integration with `loop` would replace these adapters and align the sketch's `run(str) -> str` / `close()` with the repository's actual `AgentClient.run(Prompt, model, reasoning_effort, AgentOptions) -> AgentResult` / `exit()` contract (`src/loop/contracts/agent_client.py`). In particular, a real Docker-capable runner must mount the newly created worktree and run the CLI inside the container. No production source files are changed by this prototype.

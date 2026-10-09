@@ -173,7 +173,15 @@ class WorktreesRuntimeTests(unittest.TestCase):
         runtime = WorktreesRuntime(GitCli(run=git))
         with runtime.open(Path("/repo"), WorktreesOptions(Path("wt"))) as target:
             self.assertRegex(target.name, r"^feat_[0-9a-f]{8}$")
-        self.assertEqual(git.commands[-1][-1], target.name)
+        self.assertEqual(git.commands[-2][-1], target.name)
+
+    def test_worktree_is_removed_on_exit_even_on_error(self) -> None:
+        git = GitFixture(missing=("refs/",))
+        runtime = WorktreesRuntime(GitCli(run=git))
+        with self.assertRaisesRegex(RuntimeError, "boom"):
+            with runtime.open(Path("/repo"), WorktreesOptions(Path("wt"), "loop/a")):
+                raise RuntimeError("boom")
+        self.assertEqual(git.commands[-1], ["worktree", "remove", "/repo/wt/loop/a"])
 
     def test_repository_path_selects_git_c_target(self) -> None:
         git = GitFixture(missing=("refs/",))
