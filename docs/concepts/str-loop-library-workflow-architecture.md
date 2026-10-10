@@ -48,7 +48,7 @@ loop/                              # public API: builder, profiles, strategies, 
 ├── LoopHook (three points), AgentCliHook
 └── SessionStore, MemorySessionStore
 <harness root>/workflows/         # user-written; imports only `loop`; main(argv) -> int
-├── platforms/work_tracking/      # GitHubClient (gh wrapper), Spec/Ticket entities, TicketsTracker
+├── platforms/work_tracking/      # GitHubRepo (gh wrapper), IssueClient, PullRequestClient, Spec/Ticket entities, TicketsTracker
 ├── dev/                          # runs via the user's alias: python -m workflows.dev
 ├── plan_implement.py             # plan with one model, implement with another, on one worktree
 └── review.py                     # may call its own tracker client

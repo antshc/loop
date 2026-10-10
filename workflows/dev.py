@@ -35,7 +35,8 @@ from workflows.platforms.agent_response import extract_response
 from workflows.platforms.git import Commit, WorkflowGit
 from workflows.platforms.process import CommandError
 from workflows.platforms.work_tracking import (
-    GitHubClient,
+    GitHubRepo,
+    IssueClient,
     Repository,
     RepositoryConfig,
     RepositoryPool,
@@ -276,7 +277,7 @@ class FileExecutionStore:
 
 # --- Dependencies `main` wires once and passes through the orchestration ---
 
-GithubFactory = Callable[[Path], GitHubClient]
+GithubFactory = Callable[[Path], GitHubRepo]
 
 
 @dataclass(frozen=True)
@@ -517,7 +518,7 @@ def main(
     # The workflow is the application: it owns the root logger so its own records land in the same file.
     configure_logging(args.log_level, log_file=log_dir / "dev.log", logger="")
 
-    github_factory = github_factory or (lambda checkout: GitHubClient.for_repo(checkout)[0])
+    github_factory = github_factory or GitHubRepo.from_origin
     try:
         repository_pool = RepositoryPool(repositories, github_factory)
     except RepositoryPoolError as exception:
@@ -526,7 +527,7 @@ def main(
 
     deps = DevDeps(
         repository_pool=repository_pool,
-        tracker=TicketsTracker(github_factory(repository_pool.harness.path)),
+        tracker=TicketsTracker(IssueClient(github_factory(repository_pool.harness.path))),
         store=store or FileExecutionStore(log_dir),
         git=git or WorkflowGit(),
         new_agent=new_agent,

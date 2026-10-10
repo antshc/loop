@@ -28,7 +28,7 @@ from loop import (
 from workflows import dev
 from workflows.dev import FileExecutionStore
 from workflows.platforms.git import Commit
-from workflows.platforms.work_tracking import GitHubClient, RepositoryConfig
+from workflows.platforms.work_tracking import GitHubRepo, RepositoryConfig
 from workflows.platforms.work_tracking.fake_gh_cli import FakeGhCli
 
 Handler = Callable[[str], str]
@@ -174,7 +174,7 @@ class DevHarness:
             tickets=tickets if tickets is not None else {1: [issue(10, "Add login form")]},
             prs=prs,
         )
-        self.github = GitHubClient("owner", "repo", gh=self.gh)
+        self.github = GitHubRepo("owner", "repo", gh=self.gh)
         self.store = FileExecutionStore(self.log_dir)
 
     @property

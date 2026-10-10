@@ -1,8 +1,9 @@
-"""Shared GitHub platform code for workflows: the `gh` client plus the Spec/Ticket tracker."""
+"""Shared GitHub platform code for workflows: the issue and pull-request clients plus the Spec/Ticket tracker."""
 
 from __future__ import annotations
 
-from .gh_client import GhCli, GitHubClient, PullRequest, ReviewThread
+from .github_repo import GhCli, GitHubRepo
+from .pull_request_client import PullRequest, PullRequestClient, ReviewThread
 from .repository import (
     PullRequests,
     Repository,
@@ -11,15 +12,17 @@ from .repository import (
     RepositoryPoolError,
     RepoTarget,
 )
-from .tracker import HITL_LABEL, Comment, Spec, Ticket, TicketsTracker
+from .tracker import HITL_LABEL, Comment, IssueClient, Spec, Ticket, TicketsTracker
 from .work_identifier import WorkIdentifier
 
 __all__ = [
     "HITL_LABEL",
     "Comment",
     "GhCli",
-    "GitHubClient",
+    "GitHubRepo",
+    "IssueClient",
     "PullRequest",
+    "PullRequestClient",
     "PullRequests",
     "Repository",
     "RepoTarget",

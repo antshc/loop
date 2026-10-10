@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
-from .gh_client import GitHubClient
+from .github_repo import GitHubRepo
 
 HITL_LABEL = "hitl"
 _BLOCKING_LABELS = frozenset({HITL_LABEL, "spec"})
@@ -16,6 +17,22 @@ _TARGET_PREFIX = "repo:target:"
 _BASE_PREFIX = "repo:base:"
 _SLUG = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
 _VERSION = re.compile(r"(\d+(?:\.\d+)+)")
+_ISSUE_FIELDS = (
+    "number title url state body labels(first: 20) { nodes { name } }"
+    " comments(first: 50) { nodes { author { login } body createdAt } }"
+)
+_SPECS_QUERY = (
+    "query($owner: String!, $repo: String!) {"
+    " repository(owner: $owner, name: $repo) {"
+    f'  issues(first: 100, states: OPEN, labels: ["spec"]) {{ nodes {{ {_ISSUE_FIELDS} }} }}'
+    " } }"
+)
+_SUB_ISSUES_QUERY = (
+    "query($owner: String!, $repo: String!, $number: Int!) {"
+    " repository(owner: $owner, name: $repo) {"
+    f"  issue(number: $number) {{ subIssues(first: 100) {{ nodes {{ {_ISSUE_FIELDS} }} }} }}"
+    " } }"
+)
 
 
 def slugify(text: str) -> str:
@@ -214,18 +231,47 @@ def _ticket(node: dict[str, Any]) -> Ticket:
     )
 
 
+class IssueClient:
+    """One repository's issues through `gh`; no GitHub shape leaves this class except raw issue nodes."""
+
+    def __init__(self, repo: GitHubRepo) -> None:
+        self._repo = repo
+
+    def spec_issues(self) -> list[dict[str, Any]]:
+        """Raw GraphQL nodes of every open issue labelled `spec`."""
+        pages = json.loads(self._repo.graphql(_SPECS_QUERY, paginate=True))
+        return [node for page in pages for node in page["data"]["repository"]["issues"]["nodes"]]
+
+    def sub_issues(self, number: int) -> list[dict[str, Any]]:
+        """Raw GraphQL nodes of issue `number`'s sub-issues."""
+        pages = json.loads(self._repo.graphql(_SUB_ISSUES_QUERY, paginate=True, number=number))
+        return [node for page in pages for node in page["data"]["repository"]["issue"]["subIssues"]["nodes"]]
+
+    def comment(self, number: int, body: str) -> None:
+        """Comments `body` on issue `number`."""
+        self._repo.run(("issue", "comment", str(number), "--repo", self._repo.slug, "--body", body))
+
+    def add_label(self, number: int, label: str) -> None:
+        """Adds `label` to issue `number`."""
+        self._repo.run(("issue", "edit", str(number), "--repo", self._repo.slug, "--add-label", label))
+
+    def close_with_comment(self, number: int, body: str) -> None:
+        """Closes issue `number` with `body` as its closing comment."""
+        self._repo.run(("issue", "close", str(number), "--repo", self._repo.slug, "--comment", body))
+
+
 class TicketsTracker:
     """The harness repo's Spec/Ticket tracker: loads Specs and persists the changes made to them."""
 
-    def __init__(self, github: GitHubClient) -> None:
-        self.github = github
+    def __init__(self, issues: IssueClient) -> None:
+        self._issues = issues
 
     def specs(self) -> Iterable[Spec]:
         """Every open Spec on the harness tracker, each with its deliverable Tickets."""
-        return [_spec(node, self._tickets(node["number"])) for node in self.github.spec_issues()]
+        return [_spec(node, self._tickets(node["number"])) for node in self._issues.spec_issues()]
 
     def _tickets(self, spec_number: int) -> tuple[Ticket, ...]:
-        tickets = (_ticket(node) for node in self.github.sub_issues(spec_number))
+        tickets = (_ticket(node) for node in self._issues.sub_issues(spec_number))
         return tuple(ticket for ticket in tickets if ticket.actionable)
 
     def update_spec(self, spec: Spec) -> None:
@@ -236,8 +282,8 @@ class TicketsTracker:
 
     def _apply(self, change: _Change) -> None:
         if isinstance(change, _CommentOn):
-            self.github.comment(change.number, change.body)
+            self._issues.comment(change.number, change.body)
         elif isinstance(change, _AddLabel):
-            self.github.add_label(change.number, change.label)
+            self._issues.add_label(change.number, change.label)
         else:
-            self.github.close_with_comment(change.number, change.comment)
+            self._issues.close_with_comment(change.number, change.comment)

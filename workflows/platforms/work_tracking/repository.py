@@ -6,11 +6,12 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from .gh_client import GitHubClient
+from .github_repo import GitHubRepo
+from .pull_request_client import PullRequestClient
 from .tracker import Spec
 
 RepoTarget = str
-GithubFactory = Callable[[Path], GitHubClient]
+GithubFactory = Callable[[Path], GitHubRepo]
 
 
 @dataclass(frozen=True)
@@ -26,8 +27,8 @@ class RepositoryData:
 class PullRequests:
     """The target repo's draft pull requests; hides which repo hosts them and how titles are formed."""
 
-    def __init__(self, github: GitHubClient) -> None:
-        self._github = github
+    def __init__(self, client: PullRequestClient) -> None:
+        self._client = client
 
     def publish_draft(self, spec: Spec, feature_branch: str) -> str:
         """URL of the Spec's draft PR from `feature_branch` into its base branch, created when none is open.
@@ -35,7 +36,7 @@ class PullRequests:
         Titles it `<initiative>: <bare title>`; an existing PR is reused unchanged.
         """
         title = f"{spec.initiative}: {spec.bare_title}"
-        return self._github.create_draft_pull_request(feature_branch, spec.base_branch, title).url
+        return self._client.create_draft_pull_request(feature_branch, spec.base_branch, title).url
 
 
 @dataclass(frozen=True)
@@ -75,7 +76,7 @@ class RepositoryPool:
                 path=config.path,
                 owner_repo=config.owner_repo,
                 is_harness=config.is_harness,
-                pull_requests=PullRequests(github_factory(config.path)),
+                pull_requests=PullRequests(PullRequestClient(github_factory(config.path))),
                 worktree_root=config.worktree_root
                 or harness_path / "workspace" / f"{config.path.name}.worktrees",
             )

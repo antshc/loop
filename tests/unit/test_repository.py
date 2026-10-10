@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from workflows.platforms.work_tracking import GitHubClient, RepositoryConfig, RepositoryPool
+from workflows.platforms.work_tracking import GitHubRepo, RepositoryConfig, RepositoryPool
 from workflows.platforms.work_tracking.fake_gh_cli import FakeGhCli
 
 
-def _github_factory(checkout: Path) -> GitHubClient:
-    return GitHubClient("owner", "repo", gh=FakeGhCli())
+def _github_factory(checkout: Path) -> GitHubRepo:
+    return GitHubRepo("owner", "repo", gh=FakeGhCli())
 
 
 def test_repository_pool_defaults_each_entrys_worktree_root_under_the_harness_workspace_folder(
