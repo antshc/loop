@@ -51,11 +51,11 @@ One autonomous procedure, such as `dev`, written by the user as a Python script 
 _Avoid_: Slice, feature, template, plugin, built-in workflow
 
 **Loop hook**:
-A user-declared shell command that Loop runs on the host at a Loop hook point, before the agent starts; a failing Loop hook fails the run.  
+A user-declared shell command that Loop runs on the host at a Loop hook point; a failing Loop hook fails the run.  
 _Avoid_: Hook (unqualified), Agent CLI hook, callback, script, setup step
 
 **Loop hook point**:
-A named moment in the Run lifecycle at which Loop runs the Loop hooks declared for it, such as `worktree-ready`.  
+A named moment in the Run lifecycle at which Loop runs the Loop hooks declared for it: `worktree-ready`, `worktree-removing`, or `run-finished`.  
 _Avoid_: Hook point (unqualified), Agent CLI hook point, event, trigger, stage
 
 **Agent CLI hook**:
@@ -66,30 +66,34 @@ _Avoid_: Hook (unqualified), Loop hook, callback, event handler
 A named moment in an agent CLI's own lifecycle at which it runs the Agent CLI hooks declared for it, such as session start or agent stop.  
 _Avoid_: Hook point (unqualified), Loop hook point, event, trigger
 
-**Agent runner**:  
-The long-lived pairing of one worktree with one agent client that a Workflow runs prompts through; the agent runs directly on the host with the user's own permissions, with no isolation.  
-_Avoid_: Worktree runner, Sandbox, container, environment
+**Agent client**:  
+The object a Workflow sends Agent requests to, built by the agent builder for one agent profile and, optionally, bound to a worktree; the agent runs directly on the host with the user's own permissions, with no isolation.  
+_Avoid_: Agent runner, Worktree runner, Sandbox, container, environment
+
+**Agent profile**:  
+The choice of agent CLI, model, reasoning effort, and extra arguments for an Agent client.  
+_Avoid_: Agent options, config
 
 **Run lifecycle**:  
-The ordered stages of one Workflow run on a worktree: worktree creation and `worktree-ready` Loop hooks, one or more agent runs, publication of the agent's work, and worktree removal.  
+The ordered stages of one Workflow run on a worktree: worktree creation and `worktree-ready` Loop hooks, one or more agent runs, a safety-net commit of leftover changes, `worktree-removing` Loop hooks, worktree removal and merge, and `run-finished` Loop hooks; publication of the agent's work is the Workflow's own step.  
 _Avoid_: Sandbox lifecycle
 
 **Agent request**:  
-One request to an agent; it either starts a new Agent session or resumes an existing one.  
+One prompt sent to an Agent client; it either starts a new Agent session or, with a session store, resumes an existing one.  
 _Avoid_: Prompt call, message
 
 **Agent result**:  
-The final response to an Agent request, including the Agent session's identity and the execution status.  
+The raw output the agent CLI wrote for an Agent request, with the Agent session's identity and the exit code; the Workflow interprets the output.  
 _Avoid_: Output, reply
 
 **Agent session**:  
-The persistent context of an agent, identified independently of any container or CLI process.  
+The persistent context of an agent, identified independently of any CLI process.  
 _Avoid_: Conversation, process, container
 
 **Session lifecycle**:  
-The creation, persistence, resumption, and cleanup of Agent sessions, managed by the agent adapter.  
+The creation, persistence, and resumption of Agent sessions, kept by a session store when the Workflow enables sessions.  
 _Avoid_: Process lifecycle
 
 **Stateless execution**:  
-An Agent request that omits a session id, and so starts a new Agent session.  
+An Agent request on a client with no session store, so every run starts a new Agent session.  
 _Avoid_: One-shot, ephemeral run

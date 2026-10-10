@@ -1,5 +1,7 @@
 # Run only pre-agent shell-command hooks on the host and fail the run on error
 
+> Superseded by [Build agents with an agent builder over profiles, branch strategies, and session stores](build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md).
+
 Repositories need to prepare a fresh worktree before the agent starts, and Sandcastle's hook model shows what is enough. Loop supports user-declared shell commands at a `worktree-ready` Loop hook point, executed on the host before the agent, and a Loop hook that exits non-zero or times out fails the run.
 
 ## Considered Options

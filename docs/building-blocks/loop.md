@@ -5,11 +5,11 @@ The `loop` Python library: a single installable package (`pip install` from this
 ## Dependencies
 
 - **Called by:** Workflow scripts (user-owned; the `workflows/dev/` package is the example) through the public `loop` API only.
-- **Calls (via subprocess):** `git`, `gh`, and the `copilot` CLI. No Python dependency beyond `python-json-logger`.
+- **Calls (via subprocess):** `git`, the `copilot` and `codex` CLIs, and optionally `docker`. No Python dependency beyond `python-json-logger`.
 
 ## Interfaces
 
-Public API re-exported from [`src/loop/__init__.py`](../../src/loop/__init__.py). ABC contracts exist only where Loop calls replaceable parts: `AgentClient`, `SessionStore`, `ExecutionStore`. `Git` groups the concrete `BranchService`, `WorktreeService`, and `CommitService` (`git.branches`, `git.worktrees`, `git.commits`); the git client is an internal command runner, not part of the public API. The GitHub client and the Spec/Ticket tracker are not part of the public API either: they live in `workflows/platforms/work_tracking` beside the example workflows.
+Public API re-exported from [`src/loop/__init__.py`](../../src/loop/__init__.py): `Agent()` returns an `AgentBuilder` ([Build agents with an agent builder](../adr/build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md)), configured with `with_git(GitOptions)`, `with_docker`, `with_session`, and `with_agent_cli_hooks`; `create()` yields an `AgentClient` and `open()` a `Worktree` whose `agent(profile)` yields clients. An `AgentProfile` picks the CLI (`copilot`, `codex`), model, and reasoning effort; a run takes an `AgentRequest` and returns an `AgentResult`. Replaceable seams are `CliRunner`, `GitService`, `DockerService`, and `SessionStore`. The GitHub client and the Spec/Ticket tracker are not part of the public API: they live in `workflows/platforms/work_tracking` beside the example workflows.
 
 ## Tweaks/Configuration
 
@@ -17,7 +17,7 @@ No config file. A Workflow declares its settings and hooks as code and injects d
 
 ## Persisted data
 
-`FileExecutionStore` (failure counts per workflow-chosen key) and `FileSessionStore` (logical agent session keys to provider session names); in-memory variants for tests.
+A `SessionStore` maps logical agent session keys to provider session identifiers when a Workflow calls `with_session()`; an in-memory store is provided. Nothing else is persisted by the library; Workflows own their own state.
 
 ## Source-folder structure
 
@@ -25,21 +25,20 @@ Paths relative to `src/loop/`.
 
 ```text
 __init__.py     public API
-contracts/      ABCs: AgentClient, SessionStore, ExecutionStore
-runs/           AgentRunnerProvider, AgentRunner, WorktreeLifecycle (worktree + host agent runs), run_host_hooks
-agents/         CopilotClient, AgentOutputParser per agent kind, fake agent and Copilot CLI doubles
-platforms/      git/ (BranchService, WorktreeService, CommitService over an internal git client; branch, feature-branch, and worktree-path naming), fake doubles
-stores/         file and in-memory execution/session stores
-process.py      CommandExecutor, streaming/cancellable subprocess execution
-prompt.py       Prompt (template, optional args; renders placeholders and template commands)
-tags.py         extract_tag, extract_json
-parallel.py     parallel_settled
-errors.py       LoopError hierarchy
-logging_config.py  configure_logging
-testing/        public test doubles for every process boundary
+__main__.py     python -m loop --dry-run (logging-only demo)
+factory.py      Agent() composition root
+builder.py      AgentBuilder, Worktree
+dryrun/         logging-only adapters for the demo
+agents/         AgentClient, AgentProfile, copilot and codex profiles, wrappers over a client
+clis/           CliRunner and the Copilot and Codex CLI adapters
+docker/         DockerRuntime and DockerService
+git/            GitOptions, BranchStrategy, MergeToHeadStrategy, HeadStrategy, GitService, git CLI
+run/            AgentRequest, AgentResult, RunContext
+hooks/          Loop hooks (worktree-ready, worktree-removing, run-finished), Agent CLI hooks
+sessions/       SessionStore and session values
 ```
 
-Dependency rule (enforced by import-linter in `pyproject.toml`): contracts and shared policy import no implementation; adapters (`agents`, `platforms`, `stores`) import no `runs` code; only `loop.testing` imports test doubles; `workflows.dev` and `workflows.platforms` import only the public `loop` API.
+Dependency rule (enforced by import-linter in `pyproject.toml`): a strict layering `__main__` > `factory` > `builder | dryrun` > `agents` > `clis | docker | git` > `run` > `hooks` > `sessions`; `workflows` import only the public `loop` API and `workflows.platforms` import no Workflow.
 
 ## Container view
 
@@ -60,56 +59,48 @@ C4Component
     Container_Ext(workflow, "Workflow script", "Python script", "User-owned script on the public loop API.")
 
     Container_Boundary(loop, "loop library") {
-        Component(agents, "Agent clients", "CopilotClient, AgentOutputParser", "Render the prompt, run the provider CLI through the runner's executor, stream its output for logging, and after exit parse the response envelope with the agent kind's output parser.")
-        Component(platforms, "Branch & commit services", "BranchService, CommitService", "Branch prepare/push/merge and commit log/rollback via the internal git client, also used by the worktree service.")
-        Component(worktrees, "Worktree service", "WorktreeService", "Creates, tracks, and removes worktrees through the git client, and names their branches and folders.")
-        Component(runner, "Agent runner", "AgentRunnerProvider, AgentRunner, WorktreeLifecycle", "Builds a long-lived worktree and one agent client bound to the executor it hands the client, runs prompts on the host, and wraps each run with the base head and commit collection.")
-        ComponentDb(stores, "Stores", "File and in-memory", "Persist session keys and attempt counts.")
-        Component(contracts, "Contracts", "ABCs", "AgentClient, SessionStore, and ExecutionStore boundaries.")
-        Component(policy, "Shared policy", "process, prompt, tags, parallel, errors", "Command execution, prompt preprocessing, tag extraction, parallel settling, and errors.")
+        Component(builder, "Agent builder", "Agent(), AgentBuilder, Worktree", "Composes git, Docker, session, and hook options into clients and worktrees.")
+        Component(agents, "Agent clients", "AgentClient, AgentProfile", "Send one AgentRequest per run for one profile and return the raw output.")
+        Component(clis, "CLI runners", "CliRunner, Copilot and Codex adapters", "Build and run the agent CLI command and report its output, session handle, and exit code.")
+        Component(git, "Git", "GitOptions, BranchStrategy, GitService", "Creates and removes worktrees on a branch strategy.")
+        Component(docker, "Docker", "DockerService", "Optional runtime for running the agent CLI in a container.")
+        Component(hooks, "Hooks", "LoopHook, AgentCliHook", "Run Loop hooks on the host at three points; install observe-only Agent CLI hooks.")
+        ComponentDb(sessions, "Sessions", "SessionStore", "Maps logical session keys to provider sessions.")
     }
 
-    System_Ext(copilot, "Copilot CLI", "Headless coding agent.")
-    System_Ext(git, "Git", "Local repository and worktrees.")
+    System_Ext(cli, "Agent CLI", "Copilot or Codex, headless.")
+    System_Ext(gitext, "Git", "Local repository and worktrees.")
 
-    Rel(workflow, platforms, "Commits and pushes with")
-    Rel(workflow, worktrees, "Names feature branches with")
-    Rel(workflow, runner, "Creates agent runners and runs prompts with")
-    Rel(runner, worktrees, "Creates and removes worktrees with")
-    Rel(runner, platforms, "Collects commits with")
-    Rel(worktrees, platforms, "Runs git worktree commands through")
-    Rel(runner, agents, "Passes its executor to")
-    Rel(agents, stores, "Resolves sessions through")
-    Rel(runner, policy, "Executes commands through")
-    Rel(agents, policy, "Renders prompts through")
-    Rel(platforms, policy, "Executes commands through")
-    Rel(agents, contracts, "Implements")
-    Rel(stores, contracts, "Implements")
-    Rel(agents, copilot, "Invokes", "CLI, JSON events")
-    Rel(platforms, git, "Runs worktree, commit, and push commands via", "git CLI")
+    Rel(workflow, builder, "Builds agents and worktrees with")
+    Rel(builder, agents, "Creates")
+    Rel(builder, git, "Opens worktrees through")
+    Rel(agents, clis, "Runs prompts through")
+    Rel(agents, docker, "Optionally wraps runs in")
+    Rel(git, hooks, "Runs Loop hooks through")
+    Rel(clis, sessions, "Resumes sessions through")
+    Rel(clis, cli, "Invokes", "CLI")
+    Rel(git, gitext, "Runs worktree commands via", "git CLI")
 
     UpdateElementStyle(workflow, $fontColor="#c9d1d9", $bgColor="#1a1a1a", $borderColor="#8b949e")
-    UpdateElementStyle(runner, $fontColor="#c9d1d9", $bgColor="#2a2a2a", $borderColor="#8b949e")
+    UpdateElementStyle(builder, $fontColor="#c9d1d9", $bgColor="#2a2a2a", $borderColor="#8b949e")
     UpdateElementStyle(agents, $fontColor="#c9d1d9", $bgColor="#2a2a2a", $borderColor="#8b949e")
-    UpdateElementStyle(platforms, $fontColor="#c9d1d9", $bgColor="#2a2a2a", $borderColor="#8b949e")
-    UpdateElementStyle(worktrees, $fontColor="#c9d1d9", $bgColor="#2a2a2a", $borderColor="#8b949e")
-    UpdateElementStyle(stores, $fontColor="#c9d1d9", $bgColor="#2a2a2a", $borderColor="#8b949e")
-    UpdateElementStyle(contracts, $fontColor="#c9d1d9", $bgColor="#2a2a2a", $borderColor="#8b949e")
-    UpdateElementStyle(policy, $fontColor="#c9d1d9", $bgColor="#2a2a2a", $borderColor="#8b949e")
-    UpdateElementStyle(copilot, $fontColor="#c9d1d9", $bgColor="#1a1a1a", $borderColor="#8b949e")
-    UpdateElementStyle(git, $fontColor="#c9d1d9", $bgColor="#1a1a1a", $borderColor="#8b949e")
+    UpdateElementStyle(clis, $fontColor="#c9d1d9", $bgColor="#2a2a2a", $borderColor="#8b949e")
+    UpdateElementStyle(git, $fontColor="#c9d1d9", $bgColor="#2a2a2a", $borderColor="#8b949e")
+    UpdateElementStyle(docker, $fontColor="#c9d1d9", $bgColor="#2a2a2a", $borderColor="#8b949e")
+    UpdateElementStyle(hooks, $fontColor="#c9d1d9", $bgColor="#2a2a2a", $borderColor="#8b949e")
+    UpdateElementStyle(sessions, $fontColor="#c9d1d9", $bgColor="#2a2a2a", $borderColor="#8b949e")
+    UpdateElementStyle(cli, $fontColor="#c9d1d9", $bgColor="#1a1a1a", $borderColor="#8b949e")
+    UpdateElementStyle(gitext, $fontColor="#c9d1d9", $bgColor="#1a1a1a", $borderColor="#8b949e")
 
-    UpdateRelStyle(workflow, platforms, $textColor="#c9d1d9", $lineColor="#8b949e")
-    UpdateRelStyle(workflow, worktrees, $textColor="#c9d1d9", $lineColor="#8b949e")
-    UpdateRelStyle(runner, agents, $textColor="#c9d1d9", $lineColor="#8b949e")
-    UpdateRelStyle(agents, stores, $textColor="#c9d1d9", $lineColor="#8b949e")
-    UpdateRelStyle(runner, policy, $textColor="#c9d1d9", $lineColor="#8b949e")
-    UpdateRelStyle(agents, policy, $textColor="#c9d1d9", $lineColor="#8b949e")
-    UpdateRelStyle(platforms, policy, $textColor="#c9d1d9", $lineColor="#8b949e")
-    UpdateRelStyle(agents, contracts, $textColor="#c9d1d9", $lineColor="#8b949e")
-    UpdateRelStyle(stores, contracts, $textColor="#c9d1d9", $lineColor="#8b949e")
-    UpdateRelStyle(agents, copilot, $textColor="#c9d1d9", $lineColor="#8b949e")
-    UpdateRelStyle(platforms, git, $textColor="#c9d1d9", $lineColor="#8b949e")
+    UpdateRelStyle(workflow, builder, $textColor="#c9d1d9", $lineColor="#8b949e")
+    UpdateRelStyle(builder, agents, $textColor="#c9d1d9", $lineColor="#8b949e")
+    UpdateRelStyle(builder, git, $textColor="#c9d1d9", $lineColor="#8b949e")
+    UpdateRelStyle(agents, clis, $textColor="#c9d1d9", $lineColor="#8b949e")
+    UpdateRelStyle(agents, docker, $textColor="#c9d1d9", $lineColor="#8b949e")
+    UpdateRelStyle(git, hooks, $textColor="#c9d1d9", $lineColor="#8b949e")
+    UpdateRelStyle(clis, sessions, $textColor="#c9d1d9", $lineColor="#8b949e")
+    UpdateRelStyle(clis, cli, $textColor="#c9d1d9", $lineColor="#8b949e")
+    UpdateRelStyle(git, gitext, $textColor="#c9d1d9", $lineColor="#8b949e")
 ```
 
 ## Concepts
@@ -122,7 +113,7 @@ Likewise indexed in [ARCHITECTURE.md](../../ARCHITECTURE.md#architecture-decisio
 
 ## Key features
 
-- **Agent runner:** an `AgentRunnerProvider` creates a worktree and one agent client, run on the host from the harness root, and returns an `AgentRunner` that disposes both ([Run agents through an agent runner](../adr/run-agents-on-the-host-through-an-agent-runner-that-binds-one-agent-client.md)).
-- **Agent clients:** Copilot CLI with live output streaming and a per-agent-kind output parser run after exit ([Stream agent output live](../adr/stream-agent-output-live-and-parse-it-after-exit-with-a-per-agent-kind-output-parser.md)).
-- **Git and GitHub helpers:** worktrees with `worktree-ready` hooks ([Run only pre-agent hooks](../adr/run-only-pre-agent-shell-command-hooks-on-the-host.md)); push, pull requests, and Ticket state stay in Python, while the agent commits each task ([Run one fresh agent per Ticket](../adr/run-one-fresh-agent-per-ticket-from-python-and-let-the-agent-commit-it.md)).
-- **Test doubles:** `loop.testing` fakes every process boundary.
+- **Agent builder:** `Agent()` composes git, Docker, session, and hook options into agent clients and worktrees; agents run on the host with the worktree as working directory ([Build agents with an agent builder](../adr/build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md)).
+- **Agent profiles:** the CLI (Copilot, Codex), model, and reasoning effort are chosen per client; the library returns the CLI's raw stdout and the Workflow parses it.
+- **Git worktrees and hooks:** `BranchStrategy`, `MergeToHeadStrategy`, and `HeadStrategy` choose the worktree branch; Loop hooks run at `worktree-ready`, `worktree-removing`, and `run-finished`. Push, pull requests, and Ticket state stay in Workflow Python, while the agent commits each task ([Run one fresh agent per Ticket](../adr/run-one-fresh-agent-per-ticket-from-python-and-let-the-agent-commit-it.md)).
+- **Dry run:** `python -m loop --dry-run` exercises the builder with logging-only adapters.

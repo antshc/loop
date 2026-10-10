@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-import threading
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from loop import AgentClientFactory, CommandExecutor, ExecutionStore, Git, Hook
+from loop import AgentBuilder, LoopHook
+from workflows.platforms.git import WorkflowGit
 from workflows.platforms.work_tracking import GitHubClient, RepositoryPool, TicketsTracker
+
+from .store import FileExecutionStore
 
 GithubFactory = Callable[[Path], GitHubClient]
 
@@ -20,13 +22,10 @@ class Prompts:
 
 @dataclass(frozen=True)
 class DevDeps:
-    harness_root: Path
     repository_pool: RepositoryPool
     tracker: TicketsTracker
-    store: ExecutionStore
-    git: Git
-    agent_factory: AgentClientFactory
-    executor: CommandExecutor | None
-    hooks: Sequence[Hook]
+    store: FileExecutionStore
+    git: WorkflowGit
+    new_agent: Callable[[], AgentBuilder]
+    loop_hooks: tuple[LoopHook, ...]
     prompts: Prompts
-    cancel: threading.Event

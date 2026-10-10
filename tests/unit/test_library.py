@@ -1,87 +1,13 @@
 from __future__ import annotations
 
-import logging
 import subprocess
 import sys
 import tomllib
 from pathlib import Path
 
-import pytest
-
-import loop
-import loop.testing
-from loop import (
-    ExtractionError,
-    Prompt,
-    PromptError,
-    extract_json,
-    extract_tag,
-    parallel_settled,
-)
-
 ROOT = Path(__file__).parents[2]
 SRC = ROOT / "src" / "loop"
 WORKFLOWS = ROOT / "workflows"
-FAKES = {"FakeGit", "FakeCopilotCli", "FakeAgentClient"}
-
-
-def test_prompt_substitutes_placeholders_and_runs_template_commands() -> None:
-    prompt = Prompt("A={{A}} B={{ B }} {A} ${A}\n!`echo {{A}}`\n", {"A": "1", "B": "2"})
-
-    text = prompt.render(lambda command: f"ran:{command}\n")
-
-    assert text == "A=1 B=2 {A} ${A}\nran:echo 1\n"
-
-
-def test_prompt_never_runs_commands_arriving_through_arguments() -> None:
-    ran: list[str] = []
-
-    text = Prompt("{{BODY}}", {"BODY": "!`rm -rf /`"}).render(lambda command: ran.append(command) or "")
-
-    assert ran == [] and text == "!`rm -rf /`"
-
-
-def test_prompt_rejects_a_missing_argument_and_warns_on_an_unused_one(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    with pytest.raises(PromptError, match="missing prompt argument: X"):
-        Prompt("{{X}}", {}).render(str)
-    with caplog.at_level(logging.WARNING, logger="loop"):
-        assert Prompt("plain", {"EXTRA": "1"}).render(str) == "plain"
-    assert "unused prompt argument: EXTRA" in caplog.text
-
-
-def test_extract_tag_and_json() -> None:
-    assert extract_tag("x <plan> {\"a\": 1} </plan> y", "plan") == '{"a": 1}'
-    assert extract_json("<plan>[1, 2]</plan>", "plan") == [1, 2]
-    with pytest.raises(ExtractionError):
-        extract_json("nothing", "plan")
-    with pytest.raises(ExtractionError):
-        extract_json("<plan>{</plan>", "plan")
-
-
-def test_parallel_settled_isolates_failures_and_keeps_order() -> None:
-    def worker(n: int) -> int:
-        if n == 2:
-            raise ValueError("boom")
-        return n * 10
-
-    outcomes = parallel_settled([1, 2, 3], worker, max_parallel=2)
-
-    assert [o.ok for o in outcomes] == [True, False, True]
-    assert [o.value for o in outcomes if o.ok] == [10, 30]
-    assert isinstance(outcomes[1].error, ValueError)
-    with pytest.raises(ValueError):
-        parallel_settled([1], worker, max_parallel=0)
-
-
-def test_public_api_exposes_no_fake_and_testing_exposes_every_fake() -> None:
-    assert not FAKES & set(loop.__all__)
-    assert FAKES <= set(loop.testing.__all__)
-
-
-def test_public_api_exposes_no_git_client() -> None:
-    assert "GitClient" not in loop.__all__
 
 
 def test_packaging_declares_no_scripts_and_ships_no_workflow_file() -> None:
@@ -95,11 +21,6 @@ def test_packaging_declares_no_scripts_and_ships_no_workflow_file() -> None:
 
 def test_import_linter_contracts_pass() -> None:
     lint_imports = Path(sys.executable).parent / "lint-imports"
-    result = subprocess.run(
-        [str(lint_imports)],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-    )
+    result = subprocess.run([str(lint_imports)], cwd=ROOT, capture_output=True, text=True)
 
     assert result.returncode == 0, result.stdout + result.stderr

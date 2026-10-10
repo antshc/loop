@@ -1,5 +1,7 @@
 # Pass the model and reasoning effort as run arguments, not agent options
 
+> Superseded by [Build agents with an agent builder over profiles, branch strategies, and session stores](build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md).
+
 One agent runner holds one agent client ([Run agents through an agent runner](run-agents-on-the-host-through-an-agent-runner-that-binds-one-agent-client.md)), yet Runs on the same worktree need different models and reasoning effort — for example, Opus at `max` to plan and Sonnet at `high` to implement. So `AgentRunner.run` and `AgentClient.run` take optional `model` and `reasoning_effort` strings, placed before the also-optional `options`, and `AgentOptions` no longer carries a model; omitting either leaves the provider default. The provider adapter maps them to its flags (`--model`, `--reasoning-effort` for Copilot CLI) and validates neither: the provider rejects an unknown model or an unsupported effort.
 
 ## Considered Options

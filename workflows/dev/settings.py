@@ -1,15 +1,15 @@
-"""Settings as code; --harness-root, --log-dir, and --log-level are the only CLI overrides."""
+"""Settings as code; --log-dir and --log-level are the only CLI overrides."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from loop import Hook
+from loop import LoopHook
 from workflows.platforms.work_tracking import RepositoryConfig
 
 LOG_DIR_NAME = ".loop"
 LOG_LEVEL = "INFO"
-HOOKS: tuple[Hook, ...] = ()
+LOOP_HOOKS: tuple[LoopHook, ...] = ()
 _HARNESS_PATH = Path(__file__).resolve().parents[2]
 # Single repo: this checkout is both the harness and the only target repository.
 REPOSITORIES: tuple[RepositoryConfig, ...] = (

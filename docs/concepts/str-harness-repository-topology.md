@@ -7,7 +7,7 @@ Ralph skills run against a **harness** (where docs, specs, instructions, and ski
 
 ## Concept
 
-The **harness repo** is the root from which the agent is executed; it supplies the agent's instructions and skills. The **codebase checkout** is the repository whose code is changed. Both are the same repository in the single-repo layout and different repositories in the multi-repo layout. Code is never changed in the checkout itself: every change happens in a **worktree** placed in the harness's `workspace` folder, in a folder named after the checkout with a `.worktrees` suffix, one subfolder per feature branch.
+The **harness repo** is the root from which the Workflow is run; it supplies the agent's instructions and skills. The **codebase checkout** is the repository whose code is changed. Both are the same repository in the single-repo layout and different repositories in the multi-repo layout. Code is never changed in the checkout itself: every change happens in a **worktree** placed in the harness's `workspace` folder, in a folder named after the checkout with a `.worktrees` suffix, one subfolder per feature branch.
 
 Workflows resolve the harness path first, then resolve the codebase checkout through a `RepositoryPool`: a per-developer list of `Repository` entries (checkout path, `owner/name`, and an `is_harness` flag marking exactly one entry as the harness) that the user declares once, after manually checking out and placing each repository themselves. The pool looks a Spec's target up by `owner/name`, case-insensitively, and hands back its configured path and `owner/name`-bound pull request client; there is no git check of the checkout's existence or its `origin` remote.
 
@@ -37,7 +37,7 @@ Work is split by repository: spec, issue, and documentation operations (and the 
 **Selected when:** the harness wraps one or more target repositories that are not the harness itself.
 
 - MUST keep each target repository as its own clone inside the harness's workspace folder, named after the repository, and its worktrees beside that clone inside the workspace folder.
-- MUST run the agent from the harness root so the harness `.github` customizations apply, while code changes land in the workspace repositories.
+- MUST run the Workflow from the harness root so the worktree root sits inside the process working directory; the agent's own working directory is the worktree, so harness `.github` customizations reach it only when the Workflow passes the harness as an additional directory.
 - MUST keep a VS Code multi-root workspace file in the harness listing the harness root and each workspace repository as folders.
 - MUST enable in that file the settings that load instruction files, load customizations from parent repositories, and allow multi-root agent sessions, so harness instructions apply to the workspace repositories.
 - MUST keep the workspace repositories out of the harness's version control.

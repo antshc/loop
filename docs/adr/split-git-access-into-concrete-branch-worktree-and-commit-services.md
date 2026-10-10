@@ -1,5 +1,7 @@
 # Split git access into concrete Branch, Worktree, and Commit services
 
+> Superseded by [Build agents with an agent builder over profiles, branch strategies, and session stores](build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md).
+
 `GitClient` had grown into a shallow wrapper whose callers (the `dev` Workflow and the run lifecycle) chose start refs, checked local and remote ref presence, and handled raw HEAD hashes. Git access is now three concrete deep modules on the public `loop` API — `BranchService` (fetch, prepare, delete, push, merge, ahead of remote), `WorktreeService` (create, list, remove, detach, clean/changes), and `CommitService` (head, since, find since, restore) — over self-locating `Branch`, `Worktree`, and `Commit` entities that carry their repository `path`. Callers state intent; ref selection, presence checks, and git command choice stay inside the services. `GitClient` stops being public and survives only as the internal command runner and lock.
 
 ## Considered Options

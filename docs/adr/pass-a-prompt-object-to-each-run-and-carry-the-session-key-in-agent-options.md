@@ -1,5 +1,7 @@
 # Pass a Prompt object to each run and carry the session key in agent options
 
+> Superseded by [Build agents with an agent builder over profiles, branch strategies, and session stores](build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md).
+
 Runs passed the template and its arguments as two parameters and the session id as a third, so a Workflow that already holds its final text still had it re-rendered, and a `{{X}}` or ``!`cmd` `` arriving in that text raised an error or ran on the host. So `AgentRunner.run` and `AgentClient.run` take one `Prompt` (template plus optional `args`) before the optional `model`, `reasoning_effort`, and `options`; a `Prompt` with no `args` is sent verbatim, with no placeholder substitution or command expansion; and the logical session key lives only in `AgentOptions.session_key`, which the runner reads, with `new_session=True` still creating one and `AgentRunResult` still returning it.
 
 ## Considered Options

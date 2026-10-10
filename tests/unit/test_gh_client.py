@@ -6,7 +6,7 @@ from unittest.mock import Mock
 import pytest
 
 from conftest import commit_file, git
-from loop.errors import CommandError
+from workflows.platforms.process import CommandError
 from workflows.platforms.work_tracking import GitHubClient
 from workflows.platforms.work_tracking.fake_gh_cli import FakeGhCli
 

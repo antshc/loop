@@ -8,37 +8,27 @@ from __future__ import annotations
 
 import argparse
 import logging
-import threading
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
-from loop import (
-    AgentClientFactory,
-    CommandExecutor,
-    ExecutionStore,
-    FileExecutionStore,
-    Git,
-    Hook,
-    InMemorySessionStore,
-    configure_logging,
-    copilot,
-)
-
+from loop import Agent, AgentBuilder, LoopHook
+from workflows.platforms.git import WorkflowGit
 from workflows.platforms.work_tracking import (
     GitHubClient,
     RepositoryConfig,
     RepositoryPool,
     RepositoryPoolError,
     TicketsTracker,
+    WorkIdentifier,
 )
 
-from workflows.platforms.work_tracking import WorkIdentifier
-
-from .workflow import DevWorkflow
 from .deps import DevDeps, GithubFactory, Prompts
+from .logging_config import configure_logging
 from .prompting import prompt_args
 from .result import DevResult, DevResultError, parse_dev_result
-from .settings import HOOKS, LOG_DIR_NAME, LOG_LEVEL, PROMPT, REPOSITORIES
+from .settings import LOG_DIR_NAME, LOG_LEVEL, LOOP_HOOKS, PROMPT, REPOSITORIES
+from .store import FileExecutionStore
+from .workflow import DevWorkflow
 
 __all__ = [
     "PROMPT",
@@ -55,59 +45,27 @@ logger = logging.getLogger("workflow.dev")
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="dev")
-    parser.add_argument("--harness-root", type=Path, default=None)
     parser.add_argument("--log-dir", type=Path, default=None)
     parser.add_argument("--log-level", default=LOG_LEVEL)
     return parser.parse_args(argv)
 
 
-def _build_deps(
-    harness_root: Path,
-    repository_pool: RepositoryPool,
-    log_dir: Path,
-    *,
-    git: Git,
-    github_factory: GithubFactory,
-    agent_factory: AgentClientFactory | None,
-    executor: CommandExecutor | None,
-    store: ExecutionStore | None,
-    hooks: Sequence[Hook],
-    cancel: threading.Event | None,
-) -> DevDeps:
-    return DevDeps(
-        harness_root=harness_root,
-        repository_pool=repository_pool,
-        tracker=TicketsTracker(github_factory(harness_root)),
-        store=store or FileExecutionStore(log_dir),
-        git=git,
-        agent_factory=agent_factory or copilot(InMemorySessionStore()),
-        executor=executor,
-        hooks=hooks,
-        prompts=Prompts(dev=PROMPT.read_text()),
-        cancel=cancel or threading.Event(),
-    )
-
-
 def main(
     argv: list[str] | None = None,
     *,
-    git: Git | None = None,
+    git: WorkflowGit | None = None,
     github_factory: GithubFactory | None = None,
     repositories: Sequence[RepositoryConfig] = REPOSITORIES,
-    agent_factory: AgentClientFactory | None = None,
-    executor: CommandExecutor | None = None,
-    store: ExecutionStore | None = None,
-    hooks: Sequence[Hook] = HOOKS,
-    cancel: threading.Event | None = None,
+    new_agent: Callable[[], AgentBuilder] = Agent,
+    store: FileExecutionStore | None = None,
+    loop_hooks: tuple[LoopHook, ...] = LOOP_HOOKS,
 ) -> int:
-    """Runs the dev Workflow once over every open Spec; returns the process exit code."""
+    """Runs the dev Workflow once over every open Spec from the current folder; returns the process exit code."""
     args = _parse_args(argv)
 
-    harness_root = (args.harness_root or Path.cwd()).resolve()
-    log_dir = (args.log_dir or harness_root / LOG_DIR_NAME).resolve()
+    log_dir = (args.log_dir or Path.cwd() / LOG_DIR_NAME).resolve()
     configure_logging(log_dir / "dev.log", args.log_level)
 
-    git = git or Git()
     github_factory = github_factory or (lambda checkout: GitHubClient.for_repo(checkout)[0])
     try:
         repository_pool = RepositoryPool(repositories, github_factory)
@@ -115,17 +73,14 @@ def main(
         logger.error("repository pool misconfigured: %s", exception)
         return 1
 
-    deps = _build_deps(
-        harness_root,
-        repository_pool,
-        log_dir,
-        git=git,
-        github_factory=github_factory,
-        agent_factory=agent_factory,
-        executor=executor,
-        store=store,
-        hooks=hooks,
-        cancel=cancel,
+    deps = DevDeps(
+        repository_pool=repository_pool,
+        tracker=TicketsTracker(github_factory(repository_pool.harness.path)),
+        store=store or FileExecutionStore(log_dir),
+        git=git or WorkflowGit(),
+        new_agent=new_agent,
+        loop_hooks=loop_hooks,
+        prompts=Prompts(dev=PROMPT.read_text()),
     )
 
     try:

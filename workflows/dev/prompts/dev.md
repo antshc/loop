@@ -1,8 +1,7 @@
 # Dev
 
-You start in the harness root, not in the worktree. First `cd` to the worktree at
-`{{WORKTREE_PATH}}`, on branch `{{FEATURE_BRANCH}}`, based on `{{TARGET_BRANCH}}`. Run every
-command and make every change there, and work only inside it.
+You start in the worktree at `{{WORKTREE_PATH}}`, on branch `{{FEATURE_BRANCH}}`, based on
+`{{TARGET_BRANCH}}`. Run every command and make every change there, and work only inside it.
 
 ## Task
 

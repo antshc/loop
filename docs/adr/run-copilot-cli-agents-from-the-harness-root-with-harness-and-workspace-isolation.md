@@ -1,5 +1,7 @@
 # Run Copilot CLI agents from the harness root with harness-and-workspace isolation
 
+> Superseded by [Build agents with an agent builder over profiles, branch strategies, and session stores](build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md).
+
 Copilot CLI agents need the harness `.github` skills/instructions and `docs` while changing code in isolated worktrees. Loop launches the agent from the harness repository and defines the run's isolation boundary to include the harness plus the relevant workspace repositories and worktrees, so harness context remains available in both single-repo and multi-repo layouts. The agent runs on the host with path-scoped permissions (`--allow-all-tools` with `--add-dir`), so its boundary stays the harness and the relevant repositories and worktrees.
 
 ## Considered Options

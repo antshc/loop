@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from loop import cli_runner, run_command
+from ..process import cli_runner, run_command
 
 _SLUG_REMOTE = re.compile(r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?/?$")
 _ISSUE_FIELDS = (

@@ -97,9 +97,9 @@ Actor: Copilot agent (one fresh headless run per attempt, following the `dev` pr
 %%{init: {'themeVariables': {'lineColor': '#8b949e'}}}%%
 %% diagram-id: deliver-ticket-flowchart
 flowchart TD
-    start(["Agent run starts in harness root"])
+    start(["Agent run starts in the worktree"])
     input[/"1 - Prompt: Ticket, Initiative commits, task id, contract"/]
-    cd["2 - cd to worktree, work only inside it"]
+    cd["2 - Work only inside the worktree"]
     explore["3 - Explore: read Ticket, trace behavior, find build boundary and test counterparts"]
     implement["4 - Implement smallest coherent change with tests at observable seams"]
     verify["5 - Run fastest relevant checks, then minimal integration tests and build"]
@@ -145,13 +145,13 @@ flowchart LR
 
 A solid edge is automatic; a dotted edge is a separately initiated step, labelled with its initiator.
 
-Decisions: [Run one fresh agent per Ticket](../adr/run-one-fresh-agent-per-ticket-from-python-and-let-the-agent-commit-it.md) (per-Ticket run, task commit, Git validation, Python owns push, pull request, and Ticket state), [Stream agent output live](../adr/stream-agent-output-live-and-parse-it-after-exit-with-a-per-agent-kind-output-parser.md) (response envelope and output parser).
+Decisions: [Run one fresh agent per Ticket](../adr/run-one-fresh-agent-per-ticket-from-python-and-let-the-agent-commit-it.md) (per-Ticket run, task commit, Git validation, Python owns push, pull request, and Ticket state), [Build agents with an agent builder](../adr/build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md) (the library returns raw output; the `dev` Workflow extracts the response envelope).
 
 ## Implementation Map
 | Concern | Stable anchor | Semantic locator |
 |---|---|---|
-| External contract | Operator-run service for one repository board | `workflows/dev/`: runnable package (`python -m workflows.dev`) `main(argv)`, options `--harness-root`, `--log-dir`, `--log-level` |
+| External contract | Operator-run service for one repository board | `workflows/dev/`: runnable package (`python -m workflows.dev`) `main(argv)`, options `--log-dir`, `--log-level`; run from the harness root |
 | Spec and Ticket selection | Open Specs; actionable Tickets | `workflows/platforms/work_tracking`: `TicketsTracker.specs`, `Spec.tickets` |
-| Execution | Fresh non-interactive Copilot run per Ticket | `loop`: `AgentClient`, `AgentRunner` |
-| Failure bound | Per-Ticket failure count across runs | `loop`: `ExecutionStore` |
-| Tests | Workflow scenarios against fakes | `tests/unit/test_workflows.py` (unit group, fast fakes seam); shared harness in `tests/workflow_harness.py`; `tests/integration/` (integration group) |
+| Execution | Fresh non-interactive Copilot run per Ticket | `loop`: `AgentBuilder`, `Worktree.agent`, `AgentClient`; `workflows/platforms/agent_response.py`: `extract_response` |
+| Failure bound | Per-Ticket failure count across runs | `workflows/dev/store.py`: `FileExecutionStore` |
+| Tests | Workflow scenarios against fakes | `tests/unit/test_dev_workflow.py`; shared harness in `tests/workflow_harness.py` |

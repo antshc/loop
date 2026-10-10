@@ -6,13 +6,21 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from loop import RepositoryData
-
 from .gh_client import GitHubClient
 from .tracker import Spec
 
 RepoTarget = str
 GithubFactory = Callable[[Path], GitHubClient]
+
+
+@dataclass(frozen=True)
+class RepositoryData:
+    """A repository's resolved location: its checkout path, `owner/name`, harness flag, and worktree root."""
+
+    path: Path
+    owner_repo: str
+    is_harness: bool
+    worktree_root: Path
 
 
 class PullRequests:

@@ -1,32 +1,47 @@
-"""Shared Workflow test-support: wires fakes at every process boundary around `dev.main` and `plan_implement.main`.
+"""Shared Workflow test-support: fakes at the loop library seams and the workflow Git/GitHub boundaries.
 
-Imported by both the unit and integration test groups; holds no tests of its own.
+`AgentBuilder` is built over a fake `CliRunner` and a fake git service, and `WorkflowGit` is an in-memory fake,
+so no test starts a process. Holds no tests of its own.
 """
 
 from __future__ import annotations
 
 import json
-import threading
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+import subprocess
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from pathlib import Path
 
-from conftest import commit_file, git
-from loop import AgentClientFactory, CommandExecutor, CommandResult, InMemoryExecutionStore
-from loop.testing import FakeAgentClient, FakeCopilotCli, FakeGit
-from workflows import dev, plan_implement
+from loop import (
+    AgentBuilder,
+    AgentContext,
+    AgentProfile,
+    AgentRequest,
+    CliOutcome,
+    DockerRuntime,
+    GitOptions,
+    LoopHookError,
+    LoopHookPoint,
+    NativeHandle,
+    RunContext,
+)
+from workflows import dev
+from workflows.dev.store import FileExecutionStore
+from workflows.platforms.git import Commit
 from workflows.platforms.work_tracking import GitHubClient, RepositoryConfig
 from workflows.platforms.work_tracking.fake_gh_cli import FakeGhCli
 
+Handler = Callable[[str], str]
 
-def _envelope(identifier: str = "Checkout|10", status: str = "completed", result: dict | None = None) -> str:
+
+def envelope(identifier: str = "Checkout|10", status: str = "completed", result: dict | None = None) -> str:
     return json.dumps({"identifier": identifier, "status": status, "result": result if result is not None else {}})
 
 
-_COMPLETED = {"commit": "abc", "summary": "done", "verification": "ran tests"}
+COMPLETED = {"commit": "abc", "summary": "done", "verification": "ran tests"}
 
 
-def _issue(number: int, title: str, *, state: str = "OPEN", labels: tuple[str, ...] = ()) -> dict:
+def issue(number: int, title: str, *, state: str = "OPEN", labels: tuple[str, ...] = ()) -> dict:
     return {
         "number": number,
         "title": title,
@@ -38,32 +53,104 @@ def _issue(number: int, title: str, *, state: str = "OPEN", labels: tuple[str, .
     }
 
 
-def _make_repo(path: Path, origin: str) -> Path:
-    path.mkdir(parents=True, exist_ok=True)
-    git(path, "init", "-b", "main")
-    git(path, "config", "user.email", "test@example.com")
-    git(path, "config", "user.name", "Test")
-    commit_file(path, "README.md", "hello\n", "initial")
-    git(path, "remote", "add", "origin", origin)
-    return path
+class FakeRunner:
+    """A `CliRunner` that answers every run with `handler(prompt)`; a handler may raise `CalledProcessError`."""
+
+    def __init__(self, handler: Handler | None = None) -> None:
+        self.handler: Handler = handler or (lambda prompt: "")
+        self.prompts: list[str] = []
+        self.profiles: list[AgentProfile] = []
+
+    def run(self, profile: AgentProfile, request: AgentRequest, turn: object, context: RunContext) -> CliOutcome:
+        self.prompts.append(request.prompt)
+        self.profiles.append(profile)
+        output = self.handler(request.prompt)
+        return CliOutcome(output, NativeHandle(profile.cli.name, f"session{len(self.prompts)}"), 0)
 
 
-def _commit_and_report(
-    harness: "DevHarness",
-    number: int,
-    *,
-    initiative: str = "Checkout",
-    summary: str = "done",
-    subject: str | None = None,
-) -> str:
-    commit = harness.git.commit(_only_worktree(harness.git), subject or f"ccode({initiative}|{number}): work")
-    return _envelope(
-        f"{initiative}|{number}", result={"commit": commit, "summary": summary, "verification": "ran tests"}
-    )
+class FakeGitService:
+    """A `GitService` whose worktree is a plain directory; records the options it was opened with."""
+
+    def __init__(self, worktree: Path) -> None:
+        self.worktree = worktree
+        self.opened: list[GitOptions] = []
+        self.closed = 0
+        self.open_error: Exception | None = None
+        self.on_open: Callable[[], None] = lambda: None
+
+    @contextmanager
+    def open(self, cwd: Path, options: GitOptions) -> Iterator[Path]:
+        self.opened.append(options)
+        self.on_open()
+        if self.open_error is not None:
+            raise self.open_error
+        self.worktree.mkdir(parents=True, exist_ok=True)
+        try:
+            yield self.worktree
+        finally:
+            self.closed += 1
+
+
+class FakeWorkflowGit:
+    """An in-memory `WorkflowGit` over one branch: a commit list, how much of it origin already holds, a dirty flag."""
+
+    def __init__(self) -> None:
+        self.commits = [Commit("base0000", "base")]
+        self.pushed_count = 1
+        self.remote_branches = {"main"}
+        self.dirty = False
+        self.fetched: list[Path] = []
+        self.pushes: list[tuple[Path, str]] = []
+        self.restores: list[str] = []
+
+    def commit(self, subject: str) -> str:
+        sha = f"c{len(self.commits):07d}"
+        self.commits.append(Commit(sha, subject))
+        return sha
+
+    def fetch(self, path: Path) -> None:
+        self.fetched.append(path)
+
+    def remote_branch_exists(self, path: Path, branch: str) -> bool:
+        return branch in self.remote_branches
+
+    def push_if_ahead(self, path: Path, branch: str, base: str) -> bool:
+        if len(self.commits) <= self.pushed_count:
+            return False
+        self.pushes.append((path, branch))
+        self.pushed_count = len(self.commits)
+        return True
+
+    def head(self, path: Path) -> Commit:
+        return self.commits[-1]
+
+    def commits_since(self, path: Path, sha: str) -> list[Commit]:
+        index = next(index for index, commit in enumerate(self.commits) if commit.sha == sha)
+        return self.commits[index + 1 :]
+
+    def initiative_commits(self, path: Path, base: str, prefix: str) -> list[Commit]:
+        return [commit for commit in self.commits[1:] if commit.subject.startswith(prefix)]
+
+    def restore(self, path: Path, sha: str) -> None:
+        index = next(index for index, commit in enumerate(self.commits) if commit.sha == sha)
+        del self.commits[index + 1 :]
+        self.dirty = False
+        self.restores.append(sha)
+
+    def is_clean(self, path: Path) -> bool:
+        return not self.dirty
+
+
+def new_agent_for(runner: FakeRunner, git_service: FakeGitService, cwd: Path) -> Callable[[], AgentBuilder]:
+    return lambda: AgentBuilder(runner, git_service, DockerRuntime(), AgentContext(cwd=cwd))
+
+
+def hook_error() -> LoopHookError:
+    return LoopHookError(LoopHookPoint.WORKTREE_READY, "setup.sh", "exit 1")
 
 
 class DevHarness:
-    """Wires `dev.main` to fakes at every process boundary; the harness is a real repo with a github.com origin."""
+    """Wires `dev.main` to fakes: a fake CLI runner, git service, workflow git and `gh`, and a real execution store."""
 
     def __init__(
         self,
@@ -74,214 +161,76 @@ class DevHarness:
         prs: list[dict] | None = None,
     ) -> None:
         self.tmp_path = tmp_path
-        self.harness_root = _make_repo(tmp_path / "harness", "git@github.com:owner/repo.git")
+        self.root = tmp_path / "harness"
         self.log_dir = tmp_path / "logs"
-        self.git = FakeGit()
-        self.git.remote_branches.add("main")
+        self.worktree = tmp_path / "worktree"
+        self.git = FakeWorkflowGit()
+        self.runner = FakeRunner()
+        self.git_service = FakeGitService(self.worktree)
         self.gh = FakeGhCli(
             specs=specs
             if specs is not None
-            else [_issue(1, "Checkout: Add login page", labels=("spec", "repo:target:owner/repo", "repo:base:main"))],
-            tickets=tickets if tickets is not None else {1: [_issue(10, "Add login form")]},
+            else [issue(1, "Checkout: Add login page", labels=("spec", "repo:target:owner/repo", "repo:base:main"))],
+            tickets=tickets if tickets is not None else {1: [issue(10, "Add login form")]},
             prs=prs,
         )
         self.github = GitHubClient("owner", "repo", gh=self.gh)
-        self.store = InMemoryExecutionStore()
-        self.agent_calls: list[tuple[str, object]] = []
+        self.store = FileExecutionStore(self.log_dir)
+
+    @property
+    def prompts(self) -> list[str]:
+        return self.runner.prompts
+
+    def commit_and_report(
+        self, number: int, *, initiative: str = "Checkout", summary: str = "done", subject: str | None = None
+    ) -> str:
+        sha = self.git.commit(subject or f"ccode({initiative}|{number}): work")
+        return envelope(f"{initiative}|{number}", result={**COMPLETED, "commit": sha, "summary": summary})
+
+    def commit_then(self, response: Callable[[str], str]) -> Handler:
+        return lambda prompt: response(self.git.commit("ccode(Checkout|10): work"))
+
+    def writes(self) -> list[tuple[str, ...]]:
+        return [call for call in self.gh.calls if call[0] in ("issue", "pr")]
+
+    def calls(self, *prefix: str) -> list[tuple[str, ...]]:
+        return [call for call in self.gh.calls if call[: len(prefix)] == prefix]
 
     def run(
         self,
+        handler: Handler | None = None,
         *,
-        handler=None,
-        agent_factory=None,
-        executor=None,
-        github_factory=None,
+        github_factory: Callable[[Path], object] | None = None,
         repositories: Sequence[RepositoryConfig] | None = None,
-        store=None,
-        hooks=(),
-        log_dir: Path | None = None,
-        cancel: threading.Event | None = None,
+        store: FileExecutionStore | None = None,
+        argv: list[str] | None = None,
     ) -> int:
-        def tracking_handler(prompt, options):
-            self.agent_calls.append((prompt, options))
-            return (handler or (lambda prompt, options: ""))(prompt, options)
-
-        def default_agent_factory(executor):
-            return FakeAgentClient(tracking_handler)
-
+        if handler is not None:
+            self.runner.handler = handler
         return dev.main(
-            ["--harness-root", str(self.harness_root), "--log-dir", str(log_dir or self.log_dir)],
-            git=self.git,
-            github_factory=github_factory or (lambda checkout: self.github),
+            argv if argv is not None else ["--log-dir", str(self.log_dir)],
+            git=self.git,  # type: ignore[arg-type]
+            github_factory=github_factory or (lambda checkout: self.github),  # type: ignore[arg-type,return-value]
             repositories=repositories
             if repositories is not None
-            else [RepositoryConfig(path=self.harness_root, owner_repo="owner/repo", is_harness=True)],
-            agent_factory=agent_factory or default_agent_factory,
-            executor=executor or FakeCopilotCli(),
-            store=store if store is not None else self.store,
-            hooks=hooks,
-            cancel=cancel,
+            else [RepositoryConfig(path=self.root, owner_repo="owner/repo", is_harness=True)],
+            new_agent=new_agent_for(self.runner, self.git_service, self.root),
+            store=store or self.store,
         )
 
 
-def _only_worktree(git_client: FakeGit) -> Path:
-    return next(iter(git_client.worktree_branches))
-
-
-def _writes(gh: FakeGhCli) -> list[tuple[str, ...]]:
-    return [call for call in gh.calls if call[0] in ("issue", "pr")]
-
-
-def _commit_then(harness: "DevHarness", response) -> object:
-    def handler(prompt, options):
-        commit = harness.git.commit(_only_worktree(harness.git), "ccode(Checkout|10): work")
-        return response(commit) if callable(response) else response
+def crash(output: str = "") -> Handler:
+    def handler(prompt: str) -> str:
+        raise subprocess.CalledProcessError(1, "copilot", output, "crashed")
 
     return handler
 
 
-def _completed(commit: str, **result: str) -> str:
-    return _envelope(result={"commit": commit, "summary": "done", "verification": "ran tests", **result})
-
-
-def _event(event_type: str, data: dict | None = None) -> str:
-    frame: dict = {"type": event_type}
-    if data is not None:
-        frame["data"] = data
-    return json.dumps(frame)
-
-
-def copilot_event_frames(identifier: str, status: str, result: dict | None = None) -> list[str]:
-    """JSON event lines shaped like a real `copilot -p --output-format json` run.
-
-    Modeled on docs/experiments/copilot-cli-json-output-events.md (a design source, never imported): unrelated
-    session/turn events, the response envelope split across many assistant.message_delta events, the closing
-    assistant.message, and the final result event.
-    """
-    envelope = json.dumps({"identifier": identifier, "status": status, "result": result if result is not None else {}})
-    chunk = 6
-    deltas = [envelope[index : index + chunk] for index in range(0, len(envelope), chunk)]
-    return [
-        _event("session.mcp_server_status_changed"),
-        _event("session.mcp_server_status_changed"),
-        _event("session.extensions_loaded"),
-        _event("session.tools_updated"),
-        _event("session.mcp_servers_loaded"),
-        _event("user.message"),
-        _event("assistant.turn_start"),
-        _event("model.call_start"),
-        _event("assistant.message_start"),
-        *[_event("assistant.message_delta", {"messageId": "m1", "deltaContent": part}) for part in deltas],
-        _event("model.call_finished"),
-        _event("assistant.message", {"content": envelope}),
-        _event("model.call_final_result"),
-        _event("assistant.turn_end"),
-        _event("session.usage_checkpoint"),
-        _event("assistant.idle"),
-        '{"type": "result", "sessionId": "fake-session", "exitCode": 0}',
-    ]
-
-
-def copilot_event_frames_with_leading_noise(
-    identifier: str, status: str, result: dict | None = None, *, noise_identifier: str = "Other|1"
-) -> list[str]:
-    """`copilot_event_frames`, preceded by an unrelated completed envelope the parser must look past."""
-    noise = json.dumps({"identifier": noise_identifier, "status": "completed", "result": {}})
-    return [
-        _event("assistant.message_delta", {"messageId": "noise", "deltaContent": noise}),
-        *copilot_event_frames(identifier, status, result),
-    ]
-
-
-def copilot_event_frames_without_response() -> list[str]:
-    """Assistant prose with no `{identifier, status}` object anywhere in the output."""
-    return [
-        _event("session.mcp_server_status_changed"),
-        _event("user.message"),
-        _event("assistant.turn_start"),
-        _event("assistant.message_delta", {"messageId": "m1", "deltaContent": "Still working through this, "}),
-        _event("assistant.message_delta", {"messageId": "m1", "deltaContent": "no final answer yet."}),
-        _event("assistant.message", {"content": "Still working through this, no final answer yet."}),
-        _event("assistant.turn_end"),
-        '{"type": "result", "sessionId": "fake-session", "exitCode": 0}',
-    ]
-
-
-def copilot_event_frames_with_malformed_response(identifier: str, status: str, result: dict | None = None) -> list[str]:
-    """The response JSON cut off mid-object, so no balanced top-level object can be parsed from it."""
-    envelope = json.dumps({"identifier": identifier, "status": status, "result": result if result is not None else {}})
-    truncated = envelope[: len(envelope) // 2]
-    return [
-        _event("assistant.turn_start"),
-        _event("assistant.message_delta", {"messageId": "m1", "deltaContent": truncated}),
-        _event("assistant.message", {"content": truncated}),
-        _event("assistant.turn_end"),
-        '{"type": "result", "sessionId": "fake-session", "exitCode": 0}',
-    ]
-
-
-@dataclass
-class RecordingExecutor:
-    """Wraps a CommandExecutor, recording every line delivered to on_line and whether the run ended early."""
-
-    inner: CommandExecutor
-    lines: list[str] = field(default_factory=list)
-    terminated: bool = False
-
-    def __call__(
-        self,
-        command: Sequence[str] | str,
-        *,
-        timeout_s: float | None = None,
-        on_line: Callable[[str], "bool | None"] | None = None,
-        cancel: threading.Event | None = None,
-    ) -> CommandResult:
-        def record(line: str) -> bool | None:
-            self.lines.append(line)
-            stop = on_line(line) if on_line is not None else None
-            if stop or (cancel is not None and cancel.is_set()):
-                self.terminated = True
-            return stop
-
-        return self.inner(command, timeout_s=timeout_s, on_line=record, cancel=cancel)
-
-
 def plan_envelope(status: str = "completed", plan: str = "do the work", reason: str = "stuck") -> str:
-    """A planning response envelope; `completed` carries `plan`, `failed` carries `reason`."""
     result = {"plan": plan} if status == "completed" else {"reason": reason}
     return json.dumps({"status": status, "result": result})
 
 
 def implement_envelope(status: str = "completed", reason: str = "stuck") -> str:
-    """An implementing response envelope; `failed` carries `reason`."""
     result = {} if status == "completed" else {"reason": reason}
     return json.dumps({"status": status, "result": result})
-
-
-class PlanImplementHarness:
-    """Wires `plan_implement.main` to fakes at every process boundary; `harness_root` is a real git repo."""
-
-    def __init__(self, tmp_path: Path) -> None:
-        self.harness_root = _make_repo(tmp_path / "harness", "git@github.com:owner/repo.git")
-        self.git = FakeGit()
-        self.git.remote_branches.add("main")
-
-    def run(
-        self,
-        task: str = "add a widget",
-        *,
-        handler: Callable[[str, object], "str"] | None = None,
-        agent_factory: AgentClientFactory | None = None,
-        git: FakeGit | None = None,
-        **kwargs: object,
-    ) -> int:
-        def default_agent_factory(binding):
-            return FakeAgentClient(handler)
-
-        return plan_implement.main(
-            [task],
-            harness_root=self.harness_root,
-            git=git if git is not None else self.git,
-            agent_factory=agent_factory or default_agent_factory,
-            **kwargs,
-        )

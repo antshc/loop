@@ -10,19 +10,18 @@ Loop ships no command and no built-in Workflows. You write each Workflow as a pl
 
 ## Features
 
-- **Agent runner** — creates a Git worktree, binds one agent client to it, and runs prompts on the host from the harness root, collecting each run's commits.
-- **Agent clients** — Copilot CLI client with live output streaming, per-run model and reasoning effort, and session resume.
-- **Git services** — branch, worktree, and commit services; the example Workflows use a GitHub client for draft pull requests and Ticket state, where Python owns push, pull requests, and Ticket state and the agent commits each task.
-- **Lifecycle hooks** — shell-command hooks run on the host before the agent starts.
-- **Stores** — file and in-memory stores for sessions and executions.
-- **Test doubles** — fakes for `gh`, `git`, and the Copilot CLI in `loop.testing`.
+- **Agent builder** — `Agent()` composes git, Docker, session, and hook options into agent clients and Git worktrees; agents run on the host with the worktree as working directory.
+- **Agent profiles** — Copilot CLI and Codex adapters with per-client model and reasoning effort, session resume, and raw stdout as the result.
+- **Branch strategies** — worktrees on a named branch, a merged temporary branch, or the repository head; the example Workflows add a GitHub client for draft pull requests and Ticket state, where Python owns push, pull requests, and Ticket state and the agent commits each task.
+- **Loop hooks** — shell commands run on the host at `worktree-ready`, `worktree-removing`, and `run-finished`.
+- **Dry run** — `python -m loop --dry-run` exercises the builder with logging-only adapters.
 
 ## Requirements
 
 - Python 3.12 or newer
 - `git`
 - GitHub CLI (`gh`) for the GitHub client
-- Copilot CLI for the Copilot agent client
+- Copilot CLI (or Codex CLI) for the agent client
 
 ## Install
 
@@ -53,29 +52,20 @@ python -m workflows.dev
 Write a Workflow as a script that imports only from `loop`:
 
 ```python
-from pathlib import Path
+from loop import Agent, AgentProfile, AgentRequest, BranchStrategy, GitOptions, copilot
 
-from loop import AgentRunnerProvider, Git, InMemorySessionStore, Prompt, RepositoryData, copilot
-
-harness_root = Path.cwd()
-repository = RepositoryData(
-    path=harness_root,
-    owner_repo="owner/my-repo",
-    is_harness=True,
-    worktree_root=harness_root / "workspace" / f"{harness_root.name}.worktrees",
-)
-provider = AgentRunnerProvider(Git(), harness_root, copilot(InMemorySessionStore()))
-
-with provider.create(repository, base="main") as runner:
-    run = runner.run(Prompt("Fix the failing tests and commit."), "claude-sonnet-5.5", "high")
-    print(run.result.response, run.commits)
+options = GitOptions(strategy=BranchStrategy("fix-tests", "main"))
+with Agent().with_git(options).open() as worktree:
+    agent = worktree.agent(AgentProfile(copilot, "claude-sonnet-5.5", "high"))
+    result = agent.run(AgentRequest("Fix the failing tests and commit."))
+    print(result.output)
 ```
 
 Run it through your own alias:
 
 ```sh
 alias dev='PYTHONPATH=/path/to/harness python -m workflows.dev'
-dev --harness-root . --log-level DEBUG
+dev --log-level DEBUG
 ```
 
 See [`workflows/dev/`](workflows/dev/) for a complete Workflow, [`workflows/plan_implement.py`](workflows/plan_implement.py) for two runs with different models on one worktree, and [`workflows/dev/prompts/dev.md`](workflows/dev/prompts/dev.md) for the `dev` prompt template.
@@ -85,9 +75,8 @@ See [`workflows/dev/`](workflows/dev/) for a complete Workflow, [`workflows/plan
 | Location | Contents |
 |---|---|
 | `src/loop/` | The `loop` library |
-| `src/loop/testing/` | Test doubles for every process boundary |
 | `workflows/` | Example `dev` and `plan_implement` Workflows and the `dev` prompt template |
-| `tests/` | Test suite: `tests/unit/` (unit group), `tests/integration/` (integration group), `tests/workflow_harness.py` (shared Workflow harness), and import-linter architecture checks |
+| `tests/` | Test suite: `tests/unit/` (unit tests against fakes), `tests/workflow_harness.py` (shared Workflow harness), and import-linter architecture checks |
 | `docs/` | ADRs, Crosscutting Concepts, and research notes |
 | `archive/` | Retired prototypes; parts source only |
 

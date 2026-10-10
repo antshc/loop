@@ -1,5 +1,7 @@
 # Run agents on the host through an agent runner that binds one agent client
 
+> Superseded by [Build agents with an agent builder over profiles, branch strategies, and session stores](build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md).
+
 A worktree serves one or more agent runs, and the worktree, its agent client, and their disposal need one owner. Loop runs every agent directly on the host, from the harness root, with the user's own permissions; there is no Sandbox, container, or isolation layer. An `AgentRunnerProvider` creates the worktree, runs the `worktree-ready` hooks, builds one `AgentClient` from the `AgentClientFactory` with the worktree-bound executor, and returns an `AgentRunner` that owns a `WorktreeLifecycle` and that client. `AgentRunner.run` runs the bound client; leaving the runner's `with` block calls `AgentClient.exit()` and then disposes the worktree, so the worktree lives until all tasks are processed.
 
 ## Considered Options

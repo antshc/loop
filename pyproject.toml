@@ -21,77 +21,40 @@ where = ["src"]
 pythonpath = ["src", ".", "tests"]
 testpaths = ["tests"]
 norecursedirs = ["archive", ".*"]
-addopts = "-m 'not live'"
-markers = ["live: opt-in test against the real Copilot CLI, run with -m live"]
 
 [tool.importlinter]
 root_packages = ["loop", "workflows"]
 
 [[tool.importlinter.contracts]]
-name = "Contracts and shared policy import no implementation"
-type = "forbidden"
-source_modules = [
-    "loop.contracts",
-    "loop.errors",
-    "loop.process",
-    "loop.prompt",
-    "loop.tags",
-    "loop.parallel",
+name = "The loop library is layered: builder over agents over clis, docker and git over run over hooks over sessions"
+type = "layers"
+layers = [
+    "__main__",
+    "factory",
+    "builder | dryrun",
+    "agents",
+    "clis | docker | git",
+    "run",
+    "hooks",
+    "sessions",
 ]
+containers = ["loop"]
+
+[[tool.importlinter.contracts]]
+name = "The workflows import only the public loop package"
+type = "forbidden"
+source_modules = ["workflows"]
 forbidden_modules = [
     "loop.agents",
-    "loop.runs",
-    "loop.platforms",
-    "loop.stores",
-    "loop.testing",
-]
-
-[[tool.importlinter.contracts]]
-name = "Adapters import no run code"
-type = "forbidden"
-source_modules = ["loop.agents", "loop.platforms", "loop.stores"]
-forbidden_modules = ["loop.runs"]
-
-[[tool.importlinter.contracts]]
-name = "The git platform module imports no workflow code"
-type = "forbidden"
-source_modules = ["loop.platforms.git"]
-forbidden_modules = ["workflows"]
-
-[[tool.importlinter.contracts]]
-name = "Only loop.testing imports loop.testing"
-type = "forbidden"
-source_modules = [
-    "loop.agents",
-    "loop.runs",
-    "loop.platforms",
-    "loop.stores",
-    "loop.contracts",
-    "loop.errors",
-    "loop.process",
-    "loop.prompt",
-    "loop.tags",
-    "loop.parallel",
-    "workflows",
-]
-forbidden_modules = ["loop.testing"]
-
-[[tool.importlinter.contracts]]
-name = "The dev workflow and shared workflow platforms import only the public loop API"
-type = "forbidden"
-source_modules = ["workflows.dev", "workflows.plan_implement", "workflows.platforms"]
-forbidden_modules = [
-    "loop.contracts",
-    "loop.agents",
-    "loop.runs",
-    "loop.platforms",
-    "loop.stores",
-    "loop.errors",
-    "loop.process",
-    "loop.prompt",
-    "loop.tags",
-    "loop.parallel",
-    "loop.testing",
+    "loop.builder",
+    "loop.clis",
+    "loop.docker",
+    "loop.dryrun",
+    "loop.factory",
+    "loop.git",
+    "loop.hooks",
+    "loop.run",
+    "loop.sessions",
 ]
 allow_indirect_imports = true
 
