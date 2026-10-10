@@ -29,7 +29,6 @@ root_packages = ["loop", "workflows"]
 name = "The loop library is layered: builder over agents over clis, docker and git over run over hooks over sessions"
 type = "layers"
 layers = [
-    "__main__",
     "factory",
     "builder | dryrun",
     "agents",

@@ -14,7 +14,7 @@ Loop ships no command and no built-in Workflows. You write each Workflow as a pl
 - **Agent profiles** — Copilot CLI and Codex adapters with per-client model and reasoning effort, session resume, and raw stdout as the result.
 - **Branch strategies** — worktrees on a named branch, a merged temporary branch, or the repository head; the example Workflows add a GitHub client for draft pull requests and Ticket state, where Python owns push, pull requests, and Ticket state and the agent commits each task.
 - **Loop hooks** — shell commands run on the host at `worktree-ready`, `worktree-removing`, and `run-finished`.
-- **Dry run** — `python -m loop --dry-run` exercises the builder with logging-only adapters.
+- **Dry run** — `AgentOptions(dry_run=True)` exercises the builder with logging-only adapters.
 
 ## Requirements
 
@@ -66,6 +66,73 @@ Run it through your own alias:
 ```sh
 alias dev='PYTHONPATH=/path/to/harness python -m workflows.dev'
 dev --log-level DEBUG
+```
+
+### Examples
+
+Every example uses `AgentOptions(dry_run=True)`, which only logs; drop it to run real git and agents.
+
+One-shot run: one git lifecycle per `run()`.
+
+```python
+from pathlib import Path
+
+from loop import Agent, AgentOptions, AgentRequest, GitOptions, MergeToHeadStrategy
+
+dry = AgentOptions(dry_run=True)
+root, repo = Path("workspace/repo1.worktrees"), Path("workspace/repo1")
+Agent(dry).with_git(GitOptions(root, repo, MergeToHeadStrategy())).create().run(
+    AgentRequest("Implement ticket #123 in repo1")
+)
+```
+
+Role profiles; which CLI and model fill a role is a Workflow choice.
+
+```python
+from loop import AgentProfile, CodexCli, copilot
+
+PLANNER = AgentProfile(copilot, "claude-opus-4.5", "high")
+DEVELOPER = AgentProfile(CodexCli(hook_trust_bypass=True), "gpt-5-codex", "high")
+REVIEWER = AgentProfile(copilot, "claude-sonnet-4.5")
+```
+
+Shared worktree: one git lifecycle, several CLIs, one named session kept per CLI.
+
+```python
+from loop import (
+    BranchStrategy,
+    SessionEndAgentCliHook,
+    SessionName,
+    SessionStartAgentCliHook,
+    WorktreeReadyLoopHook,
+)
+
+loop_hooks = (
+    WorktreeReadyLoopHook('cp "$LOOP_REPOSITORY/.env" .env'),
+    WorktreeReadyLoopHook("npm ci", timeout_sec=600),
+)
+shared = Agent(dry).with_git(
+    GitOptions(root, repo, BranchStrategy("loop/ticket-123", "main"), loop_hooks=loop_hooks)
+).with_session()
+shared.with_agent_cli_hooks(
+    SessionStartAgentCliHook("./scripts/session-start.sh"),
+    SessionEndAgentCliHook("notify-send", timeout_sec=3),
+)
+with shared.open(session=SessionName("ticket-123")) as wt:
+    plan = wt.agent(PLANNER).run(AgentRequest("Plan ticket #123 in repo1"))
+    developer = wt.agent(DEVELOPER)
+    developer.run(AgentRequest(f"Implement this plan:\n{plan.output}"))
+    developer.run(AgentRequest("Fix failing tests"))  # resumes the Codex session
+    # A fresh session gives an unbiased review.
+    wt.agent(REVIEWER, session=SessionName.new()).run(AgentRequest("Review the diff against the plan"))
+```
+
+Without `with_session()`, each run starts under a new `loop-<hex>` name.
+
+```python
+fresh = Agent(dry).with_git(GitOptions(root, repo, BranchStrategy("loop/ticket-123", "main"))).create()
+fresh.run(AgentRequest("Plan ticket #123 in repo1"))
+fresh.run(AgentRequest("Implement ticket #123 in repo1"))
 ```
 
 See [`workflows/dev/`](workflows/dev/) for a complete Workflow, [`workflows/plan_implement.py`](workflows/plan_implement.py) for two runs with different models on one worktree, and [`workflows/dev/prompts/dev.md`](workflows/dev/prompts/dev.md) for the `dev` prompt template.

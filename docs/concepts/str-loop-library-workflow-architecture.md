@@ -30,7 +30,7 @@ Loop is a library of an agent builder, agent CLI adapters, git, and hooks; a **w
 - MUST declare a workflow's settings and Loop hooks as code in the workflow module; a workflow MUST run with no command-line arguments and MUST NOT require a configuration file.
 - MUST treat command-line arguments as optional overrides of the workflow's coded settings, owned by that workflow.
 - MUST NOT let a workflow import another workflow.
-- MUST keep the library layered by import direction (`__main__` > `factory` > `builder` > `agents` > `clis | docker | git` > `run` > `hooks` > `sessions`), and `workflows/platforms` free of Workflow imports.
+- MUST keep the library layered by import direction (`factory` > `builder` > `agents` > `clis | docker | git` > `run` > `hooks` > `sessions`), and `workflows/platforms` free of Workflow imports.
 - MUST keep process execution (`git`, `gh`, agent CLIs) inside shipped implementations.
 - MUST NOT run a workflow file from outside the harness-root workflows folder; running it executes its code.
 - MUST place only logic whose business meaning is identical across workflows in the shared library; workflow-specific parsing, models, and rules (e.g. `dev`'s `result` model, response envelope, and Git validation) stay in the Workflow or `workflows/platforms`; the library returns the agent CLI's raw stdout ([Build agents with an agent builder](../adr/build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md)).

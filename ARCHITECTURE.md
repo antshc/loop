@@ -38,7 +38,7 @@ Loop is a single Deployable; Workflow scripts are user-owned and outside it.
 
 | Location | Contents |
 |----------|----------|
-| `src/loop/` | The `loop` library package: `builder.py` and `factory.py` (`Agent()` composition root), and the `agents/`, `clis/`, `git/`, `docker/`, `run/`, `hooks/`, `sessions/`, and `dryrun/` subpackages; `python -m loop --dry-run` runs a logging-only demo. |
+| `src/loop/` | The `loop` library package: `builder.py` and `factory.py` (`Agent()` composition root), and the `agents/`, `clis/`, `git/`, `docker/`, `run/`, `hooks/`, `sessions/`, and `dryrun/` subpackages. |
 | `workflows/` | The example `dev` Workflow (`dev/`, a package runnable with `python -m workflows.dev`) with its prompt template (`dev/prompts/dev.md`), result model, execution store, and orchestration; the example `plan_implement` Workflow (`plan_implement.py`, runnable with `python -m workflows.plan_implement`); the workflow-side platforms (`platforms/`: process helper, Git reads and publication, response extraction, GitHub client and Ticket tracker); not part of the `loop` package. |
 | `tests/` | The test suite: `tests/unit/` (library, Workflow, and platform tests against fakes), `tests/workflow_harness.py` (shared fakes and Workflow harness), and import-linter architecture checks. |
 | `archive/` | Retired prototypes kept as a parts source only; excluded from search and navigation, never edited or imported. |

@@ -25,7 +25,6 @@ Paths relative to `src/loop/`.
 
 ```text
 __init__.py     public API
-__main__.py     python -m loop --dry-run (logging-only demo)
 factory.py      Agent() composition root
 builder.py      AgentBuilder, Worktree
 dryrun/         logging-only adapters for the demo
@@ -38,7 +37,7 @@ hooks/          Loop hooks (worktree-ready, worktree-removing, run-finished), Ag
 sessions/       SessionStore and session values
 ```
 
-Dependency rule (enforced by import-linter in `pyproject.toml`): a strict layering `__main__` > `factory` > `builder | dryrun` > `agents` > `clis | docker | git` > `run` > `hooks` > `sessions`; `workflows` import only the public `loop` API and `workflows.platforms` import no Workflow.
+Dependency rule (enforced by import-linter in `pyproject.toml`): a strict layering `factory` > `builder | dryrun` > `agents` > `clis | docker | git` > `run` > `hooks` > `sessions`; `workflows` import only the public `loop` API and `workflows.platforms` import no Workflow.
 
 ## Container view
 
@@ -116,4 +115,4 @@ Likewise indexed in [ARCHITECTURE.md](../../ARCHITECTURE.md#architecture-decisio
 - **Agent builder:** `Agent()` composes git, Docker, session, and hook options into agent clients and worktrees; agents run on the host with the worktree as working directory ([Build agents with an agent builder](../adr/build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md)).
 - **Agent profiles:** the CLI (Copilot, Codex), model, and reasoning effort are chosen per client; the library returns the CLI's raw stdout and the Workflow parses it.
 - **Git worktrees and hooks:** `BranchStrategy`, `MergeToHeadStrategy`, and `HeadStrategy` choose the worktree branch; Loop hooks run at `worktree-ready`, `worktree-removing`, and `run-finished`. Push, pull requests, and Ticket state stay in Workflow Python, while the agent commits each task ([Run one fresh agent per Ticket](../adr/run-one-fresh-agent-per-ticket-from-python-and-let-the-agent-commit-it.md)).
-- **Dry run:** `python -m loop --dry-run` exercises the builder with logging-only adapters.
+- **Dry run:** `AgentOptions(dry_run=True)` exercises the builder with logging-only adapters.
