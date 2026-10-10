@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import unittest
 from contextlib import contextmanager, redirect_stdout
+from dataclasses import replace
 from io import StringIO
 from pathlib import Path
 from typing import Iterator
@@ -11,12 +12,16 @@ from typing import Iterator
 from agent import (
     Agent,
     AgentBuilder,
+    AgentCli,
     AgentContext,
     AgentOptions,
+    AgentProfile,
     AgentRequest,
     AgentResult,
     BranchStrategy,
-    CopilotAgentClient,
+    CliAgentClient,
+    CodexCli,
+    CopilotCli,
     DockerAgent,
     GitAgent,
     GitCli,
@@ -24,8 +29,12 @@ from agent import (
     GitRuntime,
     HeadStrategy,
     MergeToHeadStrategy,
+    ProcessCliRunner,
     RunContext,
     SessionAgent,
+    _parse_codex_events,
+    codex,
+    copilot,
 )
 
 
@@ -39,14 +48,18 @@ class RecordingRunner:
         self.fail = fail
         self.contexts: list[RunContext] = []
         self.requests: list[AgentRequest] = []
+        self.profiles: list[AgentProfile] = []
 
-    def run(self, request: AgentRequest, context: RunContext) -> AgentResult:
+    def run(self, profile: AgentProfile, request: AgentRequest, context: RunContext) -> AgentResult:
         self.events.append("cli.run")
+        self.profiles.append(profile)
         self.contexts.append(context)
         self.requests.append(request)
         if self.fail:
             raise RuntimeError("runner failed")
-        return AgentResult(f"done:{request.prompt}", request.session_id or f"s{len(self.requests)}", 0)
+        return AgentResult(
+            f"done:{request.prompt}", request.session_id or f"{profile.cli.name}{len(self.requests)}", 0
+        )
 
 
 class RecordingGit:
@@ -96,11 +109,11 @@ class AgentBuilderTests(unittest.TestCase):
 
     def test_default_client_has_no_wrappers(self) -> None:
         client = Agent().create()
-        self.assertIsInstance(client, CopilotAgentClient)
+        self.assertIsInstance(client, CliAgentClient)
 
     def test_run_returns_result_with_session_id(self) -> None:
         result = self.builder().create().run(AgentRequest("hello"), repo_context())
-        self.assertEqual(result, AgentResult("done:hello", "s1", 0))
+        self.assertEqual(result, AgentResult("done:hello", "copilot1", 0))
 
     def test_explicit_session_id_is_forwarded(self) -> None:
         result = self.builder().create().run(AgentRequest("hello", "abc"), repo_context())
@@ -141,7 +154,7 @@ class AgentBuilderTests(unittest.TestCase):
         self.assertIsInstance(client._inner, SessionAgent)
         client.run(AgentRequest("one"), repo_context())
         second = client.run(AgentRequest("two"), repo_context())
-        self.assertEqual(second.session_id, "s1")
+        self.assertEqual(second.session_id, "copilot1")
 
     def test_one_chain_creates_git_outer_and_docker_inner(self) -> None:
         builder = self.builder()
@@ -150,13 +163,13 @@ class AgentBuilderTests(unittest.TestCase):
         client = builder.create()
         self.assertIsInstance(client, GitAgent)
         self.assertIsInstance(client._inner, DockerAgent)
-        self.assertIsInstance(client._inner._inner, CopilotAgentClient)
+        self.assertIsInstance(client._inner._inner, CliAgentClient)
         self.assertEqual(client.run(AgentRequest("hello"), repo_context()).output, "done:hello")
         self.assertEqual(
             self.events,
             ["worktree.enter", "docker.configure", "cli.run", "worktree.exit"],
         )
-        self.assertEqual(self.runner.contexts[0].agent.cwd, Path("/repo"))
+        self.assertEqual(self.runner.contexts[0].agent.cwd, Path("/repo/worktree"))
         self.assertEqual(self.runner.contexts[0].agent.docker_image, "test-image")
 
     def test_worktree_is_released_on_failure(self) -> None:
@@ -175,6 +188,111 @@ class AgentBuilderTests(unittest.TestCase):
         wrapped = GitAgent(DockerAgent(inner, self.docker), self.git)
         wrapped.close()
         self.assertEqual(inner.close_count, 1)
+
+
+PLANNER = AgentProfile(copilot, "claude-opus-4.5", "high")
+DEVELOPER = AgentProfile(codex, "gpt-5-codex", "high")
+
+
+class WorktreeTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.events: list[str] = []
+        self.runner = RecordingRunner(self.events)
+        self.builder = AgentBuilder(self.runner, RecordingGit(self.events), RecordingDocker(self.events)).with_git()
+
+    def test_two_profiles_share_one_worktree(self) -> None:
+        with self.builder.open() as wt:
+            wt.agent(PLANNER).run(AgentRequest("plan"))
+            wt.agent(DEVELOPER).run(AgentRequest("implement"))
+        self.assertEqual(self.events, ["worktree.enter", "cli.run", "cli.run", "worktree.exit"])
+        self.assertEqual([c.agent.cwd for c in self.runner.contexts], [wt.path, wt.path])
+        self.assertEqual([p.cli.name for p in self.runner.profiles], ["copilot", "codex"])
+
+    def test_sessions_are_per_cli_inside_one_worktree(self) -> None:
+        with self.builder.with_session().open() as wt:
+            wt.agent(DEVELOPER).run(AgentRequest("one"))
+            wt.agent(PLANNER).run(AgentRequest("two"))
+            wt.agent(DEVELOPER).run(AgentRequest("three"))
+            wt.agent(PLANNER).run(AgentRequest("four"))
+        ids = [r.session_id for r in self.runner.requests]
+        self.assertEqual(ids, [None, None, "codex1", "copilot2"])
+
+    def test_exception_in_block_still_exits_worktree(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "boom"):
+            with self.builder.open():
+                raise RuntimeError("boom")
+        self.assertEqual(self.events, ["worktree.enter", "worktree.exit"])
+
+    def test_agent_after_block_raises(self) -> None:
+        with self.builder.open() as wt:
+            pass
+        with self.assertRaisesRegex(RuntimeError, "worktree closed"):
+            wt.agent()
+
+    def test_open_without_git_yields_cwd(self) -> None:
+        builder = AgentBuilder(self.runner, RecordingGit(self.events), RecordingDocker(self.events), AgentContext(cwd=Path("/repo")))
+        with builder.open() as wt:
+            self.assertEqual(wt.path, Path("/repo"))
+        self.assertEqual(self.events, [])
+
+
+class UserCli:
+    name = "user"
+
+    def new_session_id(self) -> str | None:
+        return "fixed"
+
+    def command(self, request: AgentRequest, profile: AgentProfile, session_id: str | None, context: RunContext) -> list[str]:
+        return ["user-cli", request.prompt, str(session_id), *profile.args]
+
+    def parse(self, stdout: str, session_id: str | None, exit_code: int) -> AgentResult:
+        return AgentResult(stdout.upper(), session_id or "", exit_code)
+
+
+class CliTests(unittest.TestCase):
+    def test_user_defined_cli_runs_through_process_runner(self) -> None:
+        calls: list[tuple[list[str], dict[str, object]]] = []
+
+        def fake(argv: list[str], **kwargs: object) -> object:
+            calls.append((argv, kwargs))
+            return type("P", (), {"stdout": "out", "returncode": 0})()
+
+        cli: AgentCli = UserCli()
+        result = ProcessCliRunner(run=fake).run(AgentProfile(cli, args=("-x",)), AgentRequest("hi"), repo_context())
+        self.assertEqual(result, AgentResult("OUT", "fixed", 0))
+        self.assertEqual(calls[0][0], ["user-cli", "hi", "fixed", "-x"])
+        self.assertEqual(calls[0][1]["cwd"], Path("/repo"))
+
+    def test_copilot_command(self) -> None:
+        profile = replace(PLANNER, args=("--x",))
+        command = CopilotCli().command(AgentRequest("p"), profile, "sid", repo_context())
+        self.assertEqual(
+            command,
+            ["copilot", "-p", "p", "--resume=sid", "--allow-all-tools", "--model", "claude-opus-4.5",
+             "--reasoning-effort", "high", "--x"],
+        )
+
+    def test_codex_command_new_and_resume(self) -> None:
+        profile = replace(DEVELOPER, args=("--x",))
+        new = CodexCli().command(AgentRequest("p"), profile, None, repo_context())
+        self.assertEqual(
+            new,
+            ["codex", "exec", "--json", "--sandbox", "workspace-write", "--model", "gpt-5-codex",
+             "-c", "model_reasoning_effort=high", "--x", "p"],
+        )
+        resumed = CodexCli().command(AgentRequest("p"), profile, "t1", repo_context())
+        self.assertEqual(resumed[:4], ["codex", "exec", "resume", "t1"])
+        self.assertEqual(resumed[-1], "p")
+
+    def test_parse_codex_events(self) -> None:
+        stdout = "\n".join([
+            '{"type":"thread.started","thread_id":"t1"}',
+            "not json",
+            '{"type":"item.completed","item":{"type":"agent_message","text":"first"}}',
+            '{"type":"item.completed","item":{"type":"agent_message","text":"last"}}',
+        ])
+        self.assertEqual(_parse_codex_events(stdout), ("t1", "last"))
+        self.assertEqual(CodexCli().parse(stdout, None, 0), AgentResult("last", "t1", 0))
 
 
 class FakeProcess:
@@ -251,7 +369,7 @@ class GitRuntimeTests(unittest.TestCase):
         branch = target.name
         self.assertEqual(
             [command[0] for command in git.commands],
-            ["check-ref-format", "show-ref", "show-ref", "branch", "worktree", "worktree", "merge", "branch"],
+            ["check-ref-format", "show-ref", "show-ref", "branch", "worktree", "add", "diff", "worktree", "merge", "branch"],
         )
         self.assertEqual(git.commands[3], ["branch", branch, "HEAD"])
         self.assertEqual(git.commands[-3], ["worktree", "remove", str(target)])
@@ -297,7 +415,7 @@ class GitRuntimeTests(unittest.TestCase):
         options = GitOptions(Path("wt"), Path("services/api"), BranchStrategy("loop/a"))
         with self.runtime(git).open(Path("/repo"), options):
             pass
-        self.assertEqual(git.repositories, {"/repo/services/api"})
+        self.assertEqual(git.repositories, {"/repo/services/api", "/repo/wt/loop/a"})
 
     def test_root_outside_cwd_is_rejected_for_worktree_strategies(self) -> None:
         for strategy in (MergeToHeadStrategy(), BranchStrategy("a")):
@@ -325,6 +443,18 @@ class DryRunTests(unittest.TestCase):
         text = self.dry_run(MergeToHeadStrategy())
         for expected in ("merge --ff-only tmp_", "branch -d tmp_"):
             self.assertIn(expected, text)
+
+    def test_open_logs_both_clis_between_one_worktree_pair(self) -> None:
+        builder = Agent(AgentOptions(dry_run=True)).with_git(GitOptions(Path("wt"), strategy=BranchStrategy("loop/a")))
+        output = StringIO()
+        with redirect_stdout(output), builder.open() as wt:
+            wt.agent(PLANNER).run(AgentRequest("plan"))
+            wt.agent(DEVELOPER).run(AgentRequest("implement"))
+        text = output.getvalue()
+        self.assertEqual(text.count("worktree add"), 1)
+        self.assertEqual(text.count("worktree remove"), 1)
+        self.assertLess(text.index("copilot -p plan"), text.index("codex exec --json"))
+        self.assertIn("--model gpt-5-codex", text)
 
     def test_head_logs_no_git_commands(self) -> None:
         self.assertNotIn("git -C", self.dry_run(HeadStrategy()))

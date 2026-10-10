@@ -5,6 +5,7 @@ No real Git worktree, Docker container, or Copilot process is started here.
 
 from __future__ import annotations
 
+import json
 import secrets
 import subprocess
 import sys
@@ -22,10 +23,6 @@ class AgentRequest:
 
     prompt: str
     session_id: str | None = None
-    # Per-run Copilot CLI settings; None adds no flag, so the provider default applies.
-    model: str | None = None
-    reasoning_effort: str | None = None
-    context: str | None = None
 
 
 @dataclass(frozen=True)
@@ -35,6 +32,36 @@ class AgentResult:
     output: str
     session_id: str
     exit_code: int
+
+
+class AgentCli(Protocol):
+    """Adapter for one agent CLI; the library runs the process, sessions, dry-run and Docker."""
+
+    # Unique per CLI: it scopes session keys.
+    name: str
+
+    def new_session_id(self) -> str | None:
+        """A caller-chosen id for a new session, or None when the CLI assigns its own."""
+        ...
+
+    def command(
+        self, request: AgentRequest, profile: AgentProfile, session_id: str | None, context: RunContext
+    ) -> list[str]: ...
+
+    def parse(self, stdout: str, session_id: str | None, exit_code: int) -> AgentResult:
+        """Must return the session id to resume."""
+        ...
+
+
+@dataclass(frozen=True)
+class AgentProfile:
+    """One CLI plus its settings; None adds no flag, so the CLI default applies."""
+
+    cli: AgentCli
+    model: str | None = None
+    reasoning_effort: str | None = None
+    context: str | None = None
+    args: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -53,11 +80,10 @@ class SessionOptions:
 
 @dataclass(frozen=True)
 class AgentContext:
-    """Agent-level settings; `cli_args` map straight onto the Copilot CLI."""
+    """Agent-level settings shared by every CLI."""
 
     cwd: Path = field(default_factory=Path.cwd)
     docker_image: str | None = None
-    cli_args: tuple[str, ...] = ("--allow-all-tools",)
     # Extra directories the agent may access (`--add-dir`); the cwd is always included by the CLI.
     add_dirs: tuple[Path, ...] = ()
 
@@ -67,8 +93,7 @@ class AgentOptions:
     """Optional caller overrides; unset (None) fields keep the AgentContext defaults."""
 
     docker_image: str | None = None
-    cli_args: tuple[str, ...] | None = None
-    # Runs stub adapters that only log to the console: no git, Docker or Copilot process.
+    # Runs stub adapters that only log to the console: no git, Docker or CLI process.
     dry_run: bool = False
 
 
@@ -148,7 +173,7 @@ class AgentClient(Protocol):
 
 
 class CliRunner(Protocol):
-    def run(self, request: AgentRequest, context: RunContext) -> AgentResult: ...
+    def run(self, profile: AgentProfile, request: AgentRequest, context: RunContext) -> AgentResult: ...
 
 
 class SessionStore(Protocol):
@@ -165,15 +190,16 @@ class DockerService(Protocol):
     def configure(self, context: RunContext) -> RunContext: ...
 
 
-class CopilotAgentClient:
-    """Core agent; delegates execution to its runner."""
+class CliAgentClient:
+    """Core agent bound to one CLI profile; delegates execution to its runner."""
 
-    def __init__(self, runner: CliRunner, defaults: RunContext | None = None) -> None:
+    def __init__(self, runner: CliRunner, profile: AgentProfile, defaults: RunContext | None = None) -> None:
         self._runner = runner
+        self._profile = profile
         self._defaults = defaults or RunContext()
 
     def run(self, request: AgentRequest, context: RunContext | None = None) -> AgentResult:
-        return self._runner.run(request, context or self._defaults)
+        return self._runner.run(self._profile, request, context or self._defaults)
 
     def close(self) -> None:
         pass
@@ -212,22 +238,24 @@ class GitAgent(AgentWrapper):
 
 
 class SessionAgent(AgentWrapper):
-    """Continues one session across runs that share a key; an explicit request session wins."""
+    """Continues one session per key and CLI across runs; an explicit request session wins."""
 
     def __init__(
         self,
         inner: AgentClient,
         sessions: SessionStore,
+        cli_name: str,
         options: SessionOptions | None = None,
         defaults: RunContext | None = None,
     ) -> None:
         super().__init__(inner, defaults)
         self._sessions = sessions
+        self._cli_name = cli_name
         self._options = options or SessionOptions()
 
     def run(self, request: AgentRequest, context: RunContext | None = None) -> AgentResult:
         effective = context or self._defaults
-        key = self._options.key or str(effective.agent.cwd)
+        key = f"{self._options.key or effective.agent.cwd}:{self._cli_name}"
         if request.session_id is None:
             known = self._sessions.get(key)
             if known is not None:
@@ -250,6 +278,21 @@ class DockerAgent(AgentWrapper):
     def run(self, request: AgentRequest, context: RunContext | None = None) -> AgentResult:
         configured = self._docker.configure(context or self._defaults)
         return self._inner.run(request, configured)
+
+
+class Worktree:
+    """One live worktree shared by clients of several CLIs; valid only inside `AgentBuilder.open()`."""
+
+    def __init__(self, path: Path, build: Callable[[AgentProfile, RunContext], AgentClient], defaults: RunContext) -> None:
+        self.path = path
+        self._build = build
+        self._defaults = replace(defaults, agent=replace(defaults.agent, cwd=path))
+        self._closed = False
+
+    def agent(self, profile: AgentProfile | None = None) -> AgentClient:
+        if self._closed:
+            raise RuntimeError("worktree closed")
+        return self._build(profile or DEFAULT, self._defaults)
 
 
 class AgentBuilder:
@@ -286,12 +329,33 @@ class AgentBuilder:
         self._session_options = options
         return self
 
-    def create(self) -> AgentClient:
-        client: AgentClient = CopilotAgentClient(self._runner, self._defaults)
+    def _stack(self, profile: AgentProfile, defaults: RunContext) -> AgentClient:
+        client: AgentClient = CliAgentClient(self._runner, profile, defaults)
         if self._use_docker:
-            client = DockerAgent(client, self._docker, self._defaults)
+            client = DockerAgent(client, self._docker, defaults)
         if self._use_session:
-            client = SessionAgent(client, self._sessions, self._session_options, self._defaults)
+            client = SessionAgent(client, self._sessions, profile.cli.name, self._session_options, defaults)
+        return client
+
+    @contextmanager
+    def open(self) -> Iterator[Worktree]:
+        """Run the git strategy once and share the worktree between clients of any CLI."""
+        worktree: Worktree | None = None
+        try:
+            if self._use_git:
+                with self._git.open(self._defaults.agent.cwd, self._git_options or GitOptions()) as path:
+                    worktree = Worktree(path, self._stack, self._defaults)
+                    yield worktree
+            else:
+                worktree = Worktree(self._defaults.agent.cwd, self._stack, self._defaults)
+                yield worktree
+        finally:
+            if worktree is not None:
+                worktree._closed = True
+
+    def create(self, profile: AgentProfile | None = None) -> AgentClient:
+        """One-shot client: a separate git lifecycle per run()."""
+        client = self._stack(profile or DEFAULT, self._defaults)
         if self._use_git:
             client = GitAgent(client, self._git, self._git_options, self._defaults)
         return client
@@ -314,26 +378,91 @@ class MemorySessionStore:
 
 
 class CopilotCli:
-    """Runs the Copilot CLI in the agent cwd; Docker is not launched yet."""
+    """Copilot CLI adapter."""
 
-    def command(self, request: AgentRequest, session_id: str, context: RunContext) -> list[str]:
-        agent = context.agent
-        dirs = [part for directory in agent.add_dirs for part in ("--add-dir", str(directory))]
-        settings = {"--model": request.model, "--reasoning-effort": request.reasoning_effort, "--context": request.context}
-        run_args = [part for flag, value in settings.items() if value is not None for part in (flag, value)]
-        return ["copilot", "-p", request.prompt, f"--resume={session_id}", *agent.cli_args, *run_args, *dirs]
+    name = "copilot"
 
-    def run(self, request: AgentRequest, context: RunContext) -> AgentResult:
+    def __init__(self, args: tuple[str, ...] = ("--allow-all-tools",)) -> None:
+        self._args = args
+
+    def new_session_id(self) -> str | None:
         # Assumption (unverified): the CLI accepts a caller-generated id on first use.
-        session_id = request.session_id or uuid.uuid4().hex
-        result = subprocess.run(
-            self.command(request, session_id, context),
-            cwd=context.agent.cwd,
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        return AgentResult(result.stdout, session_id, result.returncode)
+        return uuid.uuid4().hex
+
+    def command(
+        self, request: AgentRequest, profile: AgentProfile, session_id: str | None, context: RunContext
+    ) -> list[str]:
+        dirs = [part for directory in context.agent.add_dirs for part in ("--add-dir", str(directory))]
+        settings = {"--model": profile.model, "--reasoning-effort": profile.reasoning_effort, "--context": profile.context}
+        run_args = [part for flag, value in settings.items() if value is not None for part in (flag, value)]
+        return ["copilot", "-p", request.prompt, f"--resume={session_id}", *self._args, *run_args, *profile.args, *dirs]
+
+    def parse(self, stdout: str, session_id: str | None, exit_code: int) -> AgentResult:
+        return AgentResult(stdout, session_id or "", exit_code)
+
+
+def _parse_codex_events(stdout: str) -> tuple[str | None, str]:
+    """Return (thread id, last agent message) from `codex exec --json` JSONL output."""
+    thread_id: str | None = None
+    message = ""
+    for line in stdout.splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if event.get("type") == "thread.started":
+            thread_id = event.get("thread_id")
+        elif event.get("type") == "item.completed" and event.get("item", {}).get("type") == "agent_message":
+            message = event["item"].get("text", "")
+    return thread_id, message
+
+
+class CodexCli:
+    """Codex CLI adapter; Codex assigns its own thread id."""
+
+    name = "codex"
+
+    def __init__(self, args: tuple[str, ...] = ("--sandbox", "workspace-write")) -> None:
+        self._args = args
+
+    def new_session_id(self) -> str | None:
+        return None
+
+    def command(
+        self, request: AgentRequest, profile: AgentProfile, session_id: str | None, context: RunContext
+    ) -> list[str]:
+        dirs = [part for directory in context.agent.add_dirs for part in ("--add-dir", str(directory))]
+        run_args: list[str] = []
+        if profile.model is not None:
+            run_args += ["--model", profile.model]
+        if profile.reasoning_effort is not None:
+            run_args += ["-c", f"model_reasoning_effort={profile.reasoning_effort}"]
+        head = ["codex", "exec", "--json", *self._args, *run_args, *profile.args, *dirs]
+        if session_id is not None:
+            return [*head[:2], "resume", session_id, *head[2:], request.prompt]
+        return [*head, request.prompt]
+
+    def parse(self, stdout: str, session_id: str | None, exit_code: int) -> AgentResult:
+        thread_id, message = _parse_codex_events(stdout)
+        return AgentResult(message, thread_id or session_id or "", exit_code)
+
+
+copilot = CopilotCli()
+codex = CodexCli()
+DEFAULT = AgentProfile(copilot)
+
+
+class ProcessCliRunner:
+    """Runs any AgentCli as a process in the agent cwd; `run` is injectable for testing."""
+
+    def __init__(self, *, run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run) -> None:
+        self._run = run
+
+    def run(self, profile: AgentProfile, request: AgentRequest, context: RunContext) -> AgentResult:
+        session_id = request.session_id or profile.cli.new_session_id()
+        argv = profile.cli.command(request, profile, session_id, context)
+        result = self._run(argv, cwd=context.agent.cwd, check=True, capture_output=True, text=True)
+        return profile.cli.parse(result.stdout, session_id, result.returncode)
 
 
 class GitCli:
@@ -436,12 +565,11 @@ class LoggingGitCli(GitCli):
 class LoggingRunner:
     """Dry-run CliRunner: logs the command instead of running it."""
 
-    def __init__(self, inner: CopilotCli) -> None:
-        self._inner = inner
-
-    def run(self, request: AgentRequest, context: RunContext) -> AgentResult:
-        session_id = request.session_id or uuid.uuid4().hex
-        output = f"cwd={context.agent.cwd} cmd={' '.join(self._inner.command(request, session_id, context))}"
+    def run(self, profile: AgentProfile, request: AgentRequest, context: RunContext) -> AgentResult:
+        session_id = request.session_id or profile.cli.new_session_id()
+        command = profile.cli.command(request, profile, session_id, context)
+        output = f"cwd={context.agent.cwd} cmd={' '.join(command)}"
+        session_id = session_id or uuid.uuid4().hex
         _log(output)
         return AgentResult(output, session_id, 0)
 
@@ -463,13 +591,13 @@ def Agent(options: AgentOptions | None = None) -> AgentBuilder:
     agent_context = _apply_options(AgentContext(), options)
     if options is not None and options.dry_run:
         return AgentBuilder(
-            runner=LoggingRunner(CopilotCli()),
+            runner=LoggingRunner(),
             git=GitRuntime(LoggingGitCli()),
             docker=LoggingDocker(DockerRuntime()),
             agent_context=agent_context,
         )
     return AgentBuilder(
-        runner=CopilotCli(),
+        runner=ProcessCliRunner(),
         git=GitRuntime(GitCli()),
         docker=DockerRuntime(),
         agent_context=agent_context,
@@ -481,8 +609,6 @@ def _apply_options(context: AgentContext, options: AgentOptions | None) -> Agent
         return context
     if options.docker_image is not None:
         context = replace(context, docker_image=options.docker_image)
-    if options.cli_args is not None:
-        context = replace(context, cli_args=options.cli_args)
     return context
 
 
@@ -503,12 +629,20 @@ if __name__ == "__main__":
         _DRY = AgentOptions(dry_run=True)
         _root = Path("workspace/repo1.worktrees")
         _repo = Path("workspace/repo1")
-        # Agent(_DRY).with_git(GitOptions(_root, _repo, HeadStrategy())).create().run("Implement ticket #123 in repo1")
+        # One-shot: one git lifecycle per run().
         Agent(_DRY).with_git(GitOptions(_root, _repo, MergeToHeadStrategy())).create().run(AgentRequest("Implement ticket #123 in repo1"))
-        # Plan, then implement: the second run resumes the first run's session and builds on its output.
-        _client = Agent(_DRY).with_git(GitOptions(_root, _repo, BranchStrategy("loop/ticket-123", "main"))).with_session().create()
-        _plan = _client.run(AgentRequest("Plan ticket #123 in repo1", model="claude-sonnet-5.5", reasoning_effort="max", context="long_context"))
-        _client.run(AgentRequest(f"Implement this plan:\n{_plan.output}", _plan.session_id, model="claude-sonnet-5.5", reasoning_effort="high"))
+        # Role profiles; which CLI and model fill a role is a workflow choice.
+        PLANNER = AgentProfile(copilot, "claude-opus-4.5", "high")
+        DEVELOPER = AgentProfile(codex, "gpt-5-codex", "high")
+        REVIEWER = AgentProfile(copilot, "claude-sonnet-4.5")
+        # Shared worktree: one git lifecycle, several CLIs; sessions are kept per CLI.
+        _shared = Agent(_DRY).with_git(GitOptions(_root, _repo, BranchStrategy("loop/ticket-123", "main"))).with_session()
+        with _shared.open() as _wt:
+            _plan = _wt.agent(PLANNER).run(AgentRequest("Plan ticket #123 in repo1"))
+            _developer = _wt.agent(DEVELOPER)
+            _developer.run(AgentRequest(f"Implement this plan:\n{_plan.output}"))
+            _developer.run(AgentRequest("Fix failing tests"))  # resumes the Codex session
+            _wt.agent(REVIEWER).run(AgentRequest("Review the diff against the plan"))
         # Without with_session() and without a session_id, each run starts a new session.
         _fresh = Agent(_DRY).with_git(GitOptions(_root, _repo, BranchStrategy("loop/ticket-123", "main"))).create()
         _fresh.run(AgentRequest("Plan ticket #123 in repo1"))

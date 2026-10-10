@@ -5,55 +5,98 @@ A standalone Python sketch of a fluent agent composition API. `Agent()` register
 ## Usage
 
 ```python
-from agent import Agent
+from agent import Agent, AgentProfile, AgentRequest, GitOptions, BranchStrategy, codex, copilot
 
-# Default: concrete CopilotAgentClient (no wrappers)
-agent = Agent().create()
-
-# One fluent chain: GitAgent -> DockerAgent -> CopilotAgentClient
+# One-shot: default Copilot profile, one git lifecycle per run()
 agent = Agent().with_git().with_docker().create()
-
 try:
-    result = agent.run(AgentRequest("Implement ticket #123"))
-    print(result.output)
+    print(agent.run(AgentRequest("Implement ticket #123")).output)
 finally:
     agent.close()
+
+# Role profiles: which CLI and model fill a role is a workflow choice
+PLANNER = AgentProfile(copilot, "claude-opus-4.5", "high")
+DEVELOPER = AgentProfile(codex, "gpt-5-codex", "high")
+REVIEWER = AgentProfile(copilot, "claude-sonnet-4.5")
+
+# Shared worktree: one git lifecycle, several CLIs; sessions are kept per CLI
+builder = Agent().with_git(GitOptions(strategy=BranchStrategy("loop/ticket-123"))).with_session()
+with builder.open() as wt:
+    plan = wt.agent(PLANNER).run(AgentRequest("Plan ticket #123"))
+    developer = wt.agent(DEVELOPER)
+    developer.run(AgentRequest(f"Implement this plan:\n{plan.output}"))
+    developer.run(AgentRequest("Fix failing tests"))  # resumes the Codex session
+    wt.agent(REVIEWER).run(AgentRequest("Review the diff against the plan"))
 ```
 
-Session continuation: `with_session()` makes runs of one client share a session, unique per worktree (the run `cwd`, i.e. one per branch).
-
-```python
-agent = Agent().with_git(GitOptions(strategy=BranchStrategy("loop/ticket-123"))).with_session().create()
-first = agent.run(AgentRequest("Implement ticket #123"))
-agent.run(AgentRequest("Fix failing tests"))  # same session; or pass session_id=first.session_id explicitly
-```
+`with_session()` makes runs of one client share a session, unique per worktree and CLI. A client without it starts a new session each run; an explicit `session_id` always wins.
 
 Run locally from the prototype directory:
 
 ```sh
 cd docs/prototypes/agent-builder
-python agent.py
+python agent.py --dry-run
 python -m unittest discover -s . -p 'test_*.py'
 ```
 
-Python 3.12+, standard library only. No real Git, Docker, or Copilot installation required.
+Python 3.12+, standard library only. No real Git, Docker, Copilot or Codex installation required for the tests.
+
+## Extending
+
+Add a CLI by implementing `AgentCli`:
+
+- `name`: unique, because it scopes session keys.
+- `new_session_id()`: a caller-chosen id, or `None` when the CLI assigns its own.
+- `command(request, profile, session_id, context)`: the argv; read `profile.model`, `profile.reasoning_effort`, `profile.context` and append `profile.args`.
+- `parse(stdout, session_id, exit_code)`: an `AgentResult` carrying the session id to resume. A non-zero exit raises (the runner uses `check=True`).
+
+Then wrap the adapter in an `AgentProfile` and pass it to `wt.agent(...)`. The library runs the process in the worktree, keeps sessions per CLI, logs the command on dry-run and configures Docker, so the adapter does none of that.
+
+```python
+class ClaudeCodeCli:  # sketch, unverified flags
+    name = "claude"
+
+    def new_session_id(self) -> str | None:
+        return str(uuid.uuid4())
+
+    def command(self, request, profile, session_id, context):
+        model = ["--model", profile.model] if profile.model else []
+        return ["claude", "-p", request.prompt, "--session-id", session_id, *model, *profile.args]
+
+    def parse(self, stdout, session_id, exit_code):
+        return AgentResult(stdout, session_id or "", exit_code)
+
+claude = ClaudeCodeCli()
+REVIEWER = AgentProfile(claude, "sonnet")
+with builder.open() as wt:
+    wt.agent(REVIEWER).run(AgentRequest("Review the diff"))
+```
+
+Test a custom CLI with `ProcessCliRunner(run=fake)` and check its `command` and `parse`.
 
 ## Contracts
 
-- `Agent(options: AgentOptions | None = None) -> AgentBuilder`: *composition root*; registers `CopilotCli`, `GitRuntime(GitCli())`, and `DockerRuntime` internally.
+- `Agent(options: AgentOptions | None = None) -> AgentBuilder`: *composition root*; registers `ProcessCliRunner` (`LoggingRunner` on dry-run), `GitRuntime(GitCli())`, and `DockerRuntime` internally.
+- `AgentCli`: protocol with `name`, `new_session_id()`, `command(request, profile, session_id, context)` and `parse(stdout, session_id, exit_code)`. Implemented by `CopilotCli` (default args `--allow-all-tools`) and `CodexCli` (default args `--sandbox workspace-write`).
+- `AgentProfile(cli, model=None, reasoning_effort=None, context=None, args=())`: frozen; make variants with `dataclasses.replace`.
+- `copilot`, `codex`, `DEFAULT = AgentProfile(copilot)`: library instances; no model or role profiles are shipped.
+- `ProcessCliRunner(run=subprocess.run)`: `run(profile, request, context)` runs the CLI's argv in the agent cwd and returns `cli.parse(...)`.
+- `Worktree`: `path` and `agent(profile=DEFAULT) -> AgentClient`; raises `RuntimeError("worktree closed")` after the `open()` block.
+- `AgentBuilder.open() -> ContextManager[Worktree]`: runs the git strategy once; without git yields the agent cwd.
+- `AgentBuilder.create(profile=DEFAULT) -> AgentClient`: one-shot client with one git lifecycle per `run()`.
 - `GitOptions`: `root_path` (worktrees root, must resolve inside the cwd; worktree strategies only), `repository_path` (optional, default the agent `cwd`; relative paths resolve from it) sets `git -C` for multi-repository setups, and `strategy` (default `HeadStrategy()`). A worktree is created at `root_path/<branch>`.
 - `GitStrategy`: protocol with `open(git, cwd, repository, options)`, a context manager yielding the agent's working directory. Implemented by the frozen dataclasses `HeadStrategy`, `MergeToHeadStrategy` and `BranchStrategy`, each owning its git lifecycle; see [Strategies](#strategies).
 - `GitCli`: with `git -C <repository>`: `fetch` (`fetch --all --prune`), `add_worktree(repository, target, branch, base="HEAD")` (`check-ref-format --branch`; an existing local branch is reused as-is, otherwise `branch` from `origin/<branch>` if present else `base`; then `worktree add <target> <branch>`), `remove_worktree` (`worktree remove <target>`; git refuses with uncommitted changes), `merge_ff_only` (`merge --ff-only <branch>`) and `delete_branch` (`branch -d <branch>`).
 - `GitRuntime.open()`: resolves the repository and delegates to `options.strategy.open()`, which yields the directory the agent works in; a worktree is removed on exit, also on error.
-- `AgentOptions`: optional frozen caller overrides `docker_image` and `cli_args`; `Agent()` copies the set (non-`None`) values onto the `AgentContext`.
-- `AgentBuilder.with_git(options: GitOptions | None = None) -> Self`: enable the per-run git strategy; defaults to `GitOptions()` (`HeadStrategy`, no git calls).
+- `AgentOptions`: optional frozen caller overrides `docker_image` and `dry_run`; `Agent()` copies the set (non-`None`) values onto the `AgentContext`.
+- `AgentBuilder.with_git(options: GitOptions | None = None) -> Self`: enable the git strategy; defaults to `GitOptions()` (`HeadStrategy`, no git calls).
 - `AgentBuilder.with_docker() -> Self`: enable Docker execution configuration.
-- `AgentBuilder.create() -> AgentClient`: create a new composed client; no wrapper when no options enabled.
-- `AgentClient.run(request: AgentRequest, context: RunContext | None = None) -> AgentResult`: invariant public entry point. `AgentRequest(prompt, session_id=None)`, `AgentResult(output, session_id, exit_code)` and `AgentSession(id)` follow `docs/research/ai-agent-terms.md`; a set `session_id` resumes that session (`--resume=<id>`).
-- `AgentBuilder.with_session(options: SessionOptions | None = None) -> Self`: enable `SessionAgent`, which fills a missing `request.session_id` from a `SessionStore` (in-memory by default) keyed by `SessionOptions.key` or the run `cwd`, and saves the result's id. It sits inside `GitAgent`, so the key is the worktree; an explicit `session_id` wins.
-- `AgentContext`: frozen agent settings `cwd`, `docker_image`, `cli_args` (default `("--allow-all-tools",)`) and `add_dirs` (extra directories, each passed as `--add-dir`); the agent always starts in `cwd` (the harness dir), which already contains the worktree, so `GitAgent` does not add it to `add_dirs`. `Agent()` creates it and the builder seeds the default `RunContext` with it.
-- `RunContext`: per-run context; carries the `AgentContext` as `agent` (no `cwd`/`docker_image` of its own).
+- `AgentClient.run(request: AgentRequest, context: RunContext | None = None) -> AgentResult`: invariant public entry point. `AgentRequest(prompt, session_id=None)` is CLI-neutral, `AgentResult(output, session_id, exit_code)` and `AgentSession(id)` follow `docs/research/ai-agent-terms.md`; a set `session_id` resumes that session.
+- `AgentBuilder.with_session(options: SessionOptions | None = None) -> Self`: enable `SessionAgent`, which fills a missing `request.session_id` from a `SessionStore` (in-memory by default) keyed by `<SessionOptions.key or run cwd>:<cli.name>`, and saves the result's id. An explicit `session_id` wins.
+- `AgentContext`: frozen agent settings `cwd`, `docker_image` and `add_dirs` (extra directories, each passed as `--add-dir`); the agent always starts in `cwd`, which already contains the worktree. CLI flags come from the adapter defaults plus `profile.args`.
+- `RunContext`: per-run context; carries the `AgentContext` as `agent`.
 - `AgentClient.close() -> None`: lifecycle operation delegated through all wrappers.
+- `LoggingRunner`: dry-run `CliRunner` that logs `cwd` plus the profile CLI's command.
 - `CliRunner`, `GitService`, `DockerService`: narrow dependency protocols. The builder accepts their implementations; callers of `Agent()` do not see them.
 
 ## Class diagram
@@ -70,7 +113,13 @@ classDiagram
             +with_git(options) Self
             +with_docker() Self
             +with_session(options) Self
-            +create() AgentClient
+            +open() ContextManager~Worktree~
+            +create(profile) AgentClient
+        }
+        class Worktree {
+            +path : Path
+            -_closed : bool
+            +agent(profile) AgentClient
         }
     }
     namespace Abstractions {
@@ -81,7 +130,7 @@ classDiagram
         }
         class CliRunner {
             <<Interface>>
-            +run(request, context) AgentResult
+            +run(profile, request, context) AgentResult
         }
         class SessionStore {
             <<Interface>>
@@ -113,12 +162,31 @@ classDiagram
             <<frozen dataclass>>
             +id : str
         }
+        class AgentProfile {
+            <<frozen dataclass>>
+            +cli : AgentCli
+            +model : str | None
+            +reasoning_effort : str | None
+            +context : str | None
+            +args : tuple[str]
+        }
+    }
+    namespace Extension {
+        class AgentCli {
+            <<Interface>>
+            +name : str
+            +new_session_id() str | None
+            +command(request, profile, session_id, context) list~str~
+            +parse(stdout, session_id, exit_code) AgentResult
+        }
+        class CopilotCli
+        class CodexCli
+        class UserDefinedCli
     }
     namespace Configuration {
         class AgentOptions {
             <<frozen dataclass>>
             +docker_image : str | None
-            +cli_args : tuple[str] | None
         }
         class SessionOptions {
             <<frozen dataclass>>
@@ -129,7 +197,6 @@ classDiagram
             +cwd : Path
             +add_dirs : tuple[Path]
             +docker_image : str | None
-            +cli_args : tuple[str]
         }
         class RunContext {
             <<frozen dataclass>>
@@ -137,7 +204,9 @@ classDiagram
         }
     }
     namespace Agents {
-        class CopilotAgentClient
+        class CliAgentClient {
+            +run(request, context) AgentResult
+        }
         class AgentWrapper {
             +close() None
         }
@@ -176,8 +245,11 @@ classDiagram
         }
     }
     namespace StubAdapters {
-        class CopilotCli {
-            +command(request, session_id, context) list~str~
+        class ProcessCliRunner {
+            +run(profile, request, context) AgentResult
+        }
+        class LoggingRunner {
+            +run(profile, request, context) AgentResult
         }
         class MemorySessionStore
         class GitRuntime {
@@ -199,7 +271,7 @@ classDiagram
         class DockerRuntime
     }
 
-    CopilotAgentClient ..|> AgentClient
+    CliAgentClient ..|> AgentClient
     GitAgent ..|> AgentClient
     DockerAgent ..|> AgentClient
     SessionAgent ..|> AgentClient
@@ -208,7 +280,17 @@ classDiagram
     SessionAgent --|> AgentWrapper : Extends
 
     AgentWrapper o-- AgentClient : inner
-    CopilotAgentClient o-- CliRunner
+    CliAgentClient o-- CliRunner
+    CliAgentClient o-- AgentProfile
+    AgentProfile o-- AgentCli
+    CopilotCli ..|> AgentCli
+    CodexCli ..|> AgentCli
+    UserDefinedCli ..|> AgentCli
+    ProcessCliRunner ..> AgentCli : Use
+    LoggingRunner ..> AgentCli : Use
+    AgentBuilder ..> Worktree : Use
+    Worktree ..> CliAgentClient : Use
+    Worktree ..> SessionAgent : Use
     GitAgent o-- GitService
     DockerAgent o-- DockerService
     SessionAgent o-- SessionStore
@@ -222,7 +304,7 @@ classDiagram
     AgentBuilder o-- GitService
     AgentBuilder o-- DockerService
     AgentBuilder o-- SessionStore
-    AgentBuilder ..> CopilotAgentClient : Use
+    AgentBuilder ..> CliAgentClient : Use
     AgentBuilder ..> GitAgent : Use
     AgentBuilder ..> DockerAgent : Use
     AgentBuilder ..> SessionAgent : Use
@@ -234,7 +316,8 @@ classDiagram
     AgentBuilder ..> AgentContext : Use
     AgentOptions ..> AgentContext : Use
 
-    CopilotCli ..|> CliRunner
+    ProcessCliRunner ..|> CliRunner
+    LoggingRunner ..|> CliRunner
     GitRuntime ..|> GitService
     GitRuntime o-- GitCli
     GitRuntime ..> GitOptions : Use
@@ -339,7 +422,7 @@ The agent runs with `cwd=<harness>`; the worktree is inside it, so no `--add-dir
 
 ## Dry run
 
-`Agent(AgentOptions(dry_run=True))` registers stub adapters that only log to the console (lines prefixed `[dry-run]`): `LoggingGitCli` logs each git command instead of running it, and `LoggingRunner` / `LoggingDocker` log the stubbed CLI and Docker steps. No git, Docker or Copilot process starts and nothing is created on disk.
+`Agent(AgentOptions(dry_run=True))` registers stub adapters that only log to the console (lines prefixed `[dry-run]`): `LoggingGitCli` logs each git command instead of running it, and `LoggingRunner` / `LoggingDocker` log the CLI commands (for every CLI) and Docker steps. No git, Docker or agent CLI process starts and nothing is created on disk.
 
 ```sh
 python agent.py --dry-run   # run from the harness dir
@@ -349,16 +432,16 @@ python agent.py --dry-run   # run from the harness dir
 
 ```text
 Agent().create()
-  CopilotAgentClient.run()
-    -> CliRunner.run()
+  CliAgentClient.run()
+    -> CliRunner.run(profile, ...)
 
 Agent().with_git().with_docker().create()
   GitAgent.run()
     -> GitService.open() [enter]
     -> DockerAgent.run()
       -> DockerService.configure()
-      -> CopilotAgentClient.run()
-        -> CliRunner.run()
+      -> CliAgentClient.run()
+        -> CliRunner.run(profile, ...)
     -> GitService.open() [exit even on error]
 ```
 
@@ -366,6 +449,6 @@ Agent().with_git().with_docker().create()
 
 ## Prototype boundaries
 
-**`CopilotCli` and `DockerRuntime` are stubs, not real container or Copilot execution.** `GitRuntime` is real: it runs git through `GitCli` (fetch, branch, `worktree add`) against the repository at `repository_path` (default: the agent cwd) and removes the worktree when the run ends. `DockerRuntime.configure()` adds a Docker image to the context without running a container, and `CopilotCli.run()` returns descriptive text without invoking Copilot. Tests drive `GitCli` with a fake process runner, so no git is run; they verify composition and command contracts only.
+**`DockerRuntime` is a stub, not real container execution.** `ProcessCliRunner` really runs the CLI process (tests inject a fake `run`). `GitRuntime` is real: it runs git through `GitCli` (fetch, branch, `worktree add`) against the repository at `repository_path` (default: the agent cwd) and removes the worktree when the run ends. `DockerRuntime.configure()` adds a Docker image to the context without running a container. Tests drive `GitCli` with a fake process runner, so no git is run; they verify composition and command contracts only.
 
 Production integration with `loop` would replace these adapters and align the sketch's `run(str) -> str` / `close()` with the repository's actual `AgentClient.run(Prompt, model, reasoning_effort, AgentOptions) -> AgentResult` / `exit()` contract (`src/loop/contracts/agent_client.py`). In particular, a real Docker-capable runner must mount the newly created worktree and run the CLI inside the container. No production source files are changed by this prototype.
