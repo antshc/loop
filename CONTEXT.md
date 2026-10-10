@@ -65,3 +65,23 @@ _Avoid_: Worktree runner, Sandbox, container, environment
 **Run lifecycle**:  
 The ordered stages of one Workflow run on a worktree: worktree creation and `worktree-ready` Hooks, one or more agent runs, publication of the agent's work, and worktree removal.  
 _Avoid_: Sandbox lifecycle
+
+**Agent request**:  
+One request to an agent; it either starts a new Agent session or resumes an existing one.  
+_Avoid_: Prompt call, message
+
+**Agent result**:  
+The final response to an Agent request, including the Agent session's identity and the execution status.  
+_Avoid_: Output, reply
+
+**Agent session**:  
+The persistent context of an agent, identified independently of any container or CLI process.  
+_Avoid_: Conversation, process, container
+
+**Session lifecycle**:  
+The creation, persistence, resumption, and cleanup of Agent sessions, managed by the agent adapter.  
+_Avoid_: Process lifecycle
+
+**Stateless execution**:  
+An Agent request that omits a session id, and so starts a new Agent session.  
+_Avoid_: One-shot, ephemeral run
