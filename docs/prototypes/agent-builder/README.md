@@ -32,6 +32,20 @@ with builder.open(session=SessionName("ticket-123")) as wt:  # no name: loop-<he
 
 `with_session()` means "continue across runs" for `create()` and `open()`. Without it every run is stateless (`Start(SessionName.new())`, nothing stored) and passing a name raises `ValueError`. A `SessionName` is an independent session per CLI: the store is keyed by `(SessionName, cli.name)`.
 
+### Agent CLI hooks
+
+Native CLI hooks observe a run (session start/end, agent stop, prompts, tools, subagents, compaction). They are shell commands, applied builder-wide, and never steer the CLI: the shim `agent_cli_hook.py` normalises each payload, discards stdout and always exits 0.
+
+```python
+builder = Agent().with_git(GitOptions(strategy=BranchStrategy("loop/ticket-123"))).with_agent_cli_hooks(
+    AgentCliHook("./scripts/session-start.sh", frozenset({AgentCliHookPoint.SESSION_START})),
+    AgentCliHook("notify-send", frozenset({AgentCliHookPoint.SESSION_END}), timeout_sec=3),
+)
+DEVELOPER = AgentProfile(CodexCli(hook_trust_bypass=True), "gpt-5-codex")  # Codex skips hooks otherwise
+```
+
+Security: `--dangerously-bypass-hook-trust` (Codex) and `GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS=true` (Copilot) also enable any hook file the agent writes into the worktree. Keep the Codex bypass opt-in. Run one agent per worktree at a time: Copilot fires every `loop-*.json` in it.
+
 Run locally from the prototype directory:
 
 ```sh
@@ -50,6 +64,8 @@ Add a CLI by implementing `AgentCli`:
 - `handle_for_new(name)`: the `NativeHandle` the CLI uses for a session started under `name`, or `None` when the CLI assigns its own.
 - `command(request, profile, turn, context)`: the argv; `turn` is `Start(name)` or `Resume(name, handle)`. Read `profile.model`, `profile.reasoning_effort`, `profile.context` and append `profile.args`.
 - `parse(stdout, turn, exit_code)`: a `CliOutcome` carrying the handle to resume; raises `SessionHandleMissing` when none can be determined. A non-zero exit raises (the runner uses `check=True`).
+- `hook_points`: the `AgentCliHookPoint`s the CLI can fire (empty for none).
+- `hook_wiring(hooks, turn, workdir)`: pure `AgentCliHookWiring` (extra argv, files, git excludes, env); `native_point(point)`: the CLI's own event name.
 
 Then wrap the adapter in an `AgentProfile` and pass it to `wt.agent(...)`. The library runs the process in the worktree, keeps sessions per CLI, logs the command on dry-run and configures Docker, so the adapter does none of that.
 
@@ -101,7 +117,11 @@ Test a custom CLI with `ProcessCliRunner(run=fake)` and check its `command` and 
 - `AgentClient.run(request: AgentRequest, context: RunContext | None = None) -> AgentResult`: invariant public entry point. `AgentRequest(prompt)` is CLI-neutral; `AgentResult(output, session: SessionName, exit_code)` names the session the run used.
 - `AgentBuilder.with_session() -> Self`: continue sessions across runs through a `SessionStore` (in-memory by default) with `get(name, cli) -> NativeHandle | None` and `save(name, handle)`, keyed by `(SessionName, cli.name)`.
 - `AgentContext`: frozen agent settings `cwd`, `docker_image` and `add_dirs` (extra directories, each passed as `--add-dir`); the agent always starts in `cwd`, which already contains the worktree. CLI flags come from the adapter defaults plus `profile.args`.
-- `RunContext`: per-run context; carries the `AgentContext` as `agent`.
+- `RunContext`: per-run context; carries the `AgentContext` as `agent` and the declared `agent_cli_hooks`.
+- `AgentCliHookPoint` (`StrEnum`), `AgentCliHook(command, points=SESSION_LIFECYCLE, timeout_sec=30)`: frozen; empty command or points, or `timeout_sec <= 0`, raise `ValueError`.
+- `AgentBuilder.with_agent_cli_hooks(*hooks: AgentCliHook | str) -> Self`: no arguments raise `ValueError`; a `str` runs at session start and end. A point the profile's CLI cannot fire raises `UnsupportedAgentCliHookPoint` from `create()`/`wt.agent()`.
+- `AgentCliHookWiring(args, files, git_excludes, env)`: frozen; the runner writes `files` under the cwd, appends `git_excludes` to `info/exclude`, merges `env`, and deletes the files after the run (before the strategy's safety-net commit).
+- `CodexCli(args, *, hook_trust_bypass=False)`: without the bypass it reports no hook points.
 - `AgentClient.close() -> None`: lifecycle operation delegated through all wrappers.
 - `LoggingRunner`: dry-run `CliRunner` that logs `cwd` plus the profile CLI's command.
 - `CliRunner`, `GitService`, `DockerService`: narrow dependency protocols. The builder accepts their implementations; callers of `Agent()` do not see them.

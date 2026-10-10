@@ -13,7 +13,7 @@ A worktree serves one or more agent runs, and the worktree, its agent client, an
 
 - Agents have no isolation from the host; path-scoped permissions (`--allow-all-tools` with `--add-dir`, [Run Copilot CLI agents from the harness root](run-copilot-cli-agents-from-the-harness-root-with-harness-and-workspace-isolation.md)) are the only boundary.
 - `AgentClientFactory` takes an `AgentBinding` (executor and harness-root workspace); the executor defaults to running commands on the host in the harness root and can be injected for tests.
-- `worktree-ready` is the only Hook point; there is no `sandbox-ready` stage or `apply_to_host` step.
+- `worktree-ready` is the only Loop hook point; there is no `sandbox-ready` stage or `apply_to_host` step.
 - Crew agents (Codey, then Chorey) on one worktree need one runner each or a new worktree.
 - `run` returns the session key used; passing it back in the run options continues that conversation, `new_session=True` starts a resumable one, and no key keeps the run stateless.
 - Close-ticket and pull-request steps stay in the workflow.

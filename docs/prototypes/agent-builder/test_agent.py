@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import tempfile
 import unittest
 from contextlib import contextmanager, redirect_stdout
 from dataclasses import replace
@@ -10,9 +12,14 @@ from pathlib import Path
 from typing import Iterator
 
 from agent import (
+    SESSION_LIFECYCLE,
     Agent,
     AgentBuilder,
     AgentCli,
+    AgentCliHook,
+    AgentCliHookPoint,
+    AgentCliHookWiring,
+    UnsupportedAgentCliHookPoint,
     AgentContext,
     AgentOptions,
     AgentProfile,
@@ -286,6 +293,13 @@ class WorktreeTests(unittest.TestCase):
 
 class UserCli:
     name = "user"
+    hook_points: frozenset[AgentCliHookPoint] = frozenset()
+
+    def hook_wiring(self, hooks: tuple[AgentCliHook, ...], turn: Turn, workdir: Path) -> AgentCliHookWiring:
+        return AgentCliHookWiring()
+
+    def native_point(self, point: AgentCliHookPoint) -> str:
+        return point.value
 
     def handle_for_new(self, name: SessionName) -> NativeHandle | None:
         return NativeHandle("user", "fixed")
@@ -527,6 +541,175 @@ class DryRunTests(unittest.TestCase):
 
     def test_head_logs_no_git_commands(self) -> None:
         self.assertNotIn("git -C", self.dry_run(HeadStrategy()))
+
+
+class NoPointsCli(UserCli):
+    name = "nopoints"
+    hook_points = frozenset({AgentCliHookPoint.SESSION_START})
+
+
+class AgentCliHookTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.events: list[str] = []
+        self.runner = RecordingRunner(self.events)
+        self.builder = AgentBuilder(self.runner, RecordingGit(self.events), RecordingDocker(self.events), AgentContext(cwd=Path("/repo")))
+
+    def test_no_hooks_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            self.builder.with_agent_cli_hooks()
+
+    def test_str_becomes_session_lifecycle_hook(self) -> None:
+        self.builder.with_agent_cli_hooks("cmd").create().run(AgentRequest("x"))
+        self.assertEqual(self.runner.contexts[0].agent_cli_hooks, (AgentCliHook("cmd", SESSION_LIFECYCLE),))
+
+    def test_invalid_hook_raises(self) -> None:
+        for kwargs in ({"command": ""}, {"command": "x", "points": frozenset()}, {"command": "x", "timeout_sec": 0}):
+            with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
+                AgentCliHook(**kwargs)
+
+    def test_hooks_reach_runner_in_order_with_git_and_open(self) -> None:
+        first, second = AgentCliHook("a"), AgentCliHook("b")
+        builder = self.builder.with_git().with_agent_cli_hooks(first, second)
+        builder.create().run(AgentRequest("x"))
+        with builder.open() as wt:
+            wt.agent().run(AgentRequest("y"))
+        for context in self.runner.contexts:
+            self.assertEqual(context.agent_cli_hooks, (first, second))
+
+    def test_copilot_accepts_prompt_submitted(self) -> None:
+        hook = AgentCliHook("c", frozenset({AgentCliHookPoint.PROMPT_SUBMITTED}))
+        self.builder.with_agent_cli_hooks(hook).create(AgentProfile(copilot)).run(AgentRequest("x"))
+
+    def test_unsupported_point_fails_before_git(self) -> None:
+        builder = self.builder.with_git().with_agent_cli_hooks(AgentCliHook("c", frozenset({AgentCliHookPoint.PRE_TOOL})))
+        with self.assertRaises(UnsupportedAgentCliHookPoint):
+            builder.create(AgentProfile(NoPointsCli()))
+        self.assertEqual(self.events, [])
+
+    def test_codex_needs_trust_bypass(self) -> None:
+        builder = self.builder.with_agent_cli_hooks("c")
+        with self.assertRaises(UnsupportedAgentCliHookPoint):
+            builder.create(AgentProfile(codex))
+        builder.create(AgentProfile(CodexCli(hook_trust_bypass=True)))
+
+    def test_copilot_wiring(self) -> None:
+        hook = AgentCliHook("my cmd", frozenset({AgentCliHookPoint.PROMPT_SUBMITTED, AgentCliHookPoint.SESSION_END}), 7)
+        wiring = CopilotCli().hook_wiring((hook,), Start(SessionName("s1")), Path("/w"))
+        (path, content), = wiring.files.items()
+        self.assertEqual(path.parent, Path(".github/hooks"))
+        self.assertRegex(path.name, r"^loop-[0-9a-f]+\.json$")
+        self.assertEqual(wiring.env, {"GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS": "true"})
+        data = json.loads(content)
+        self.assertEqual(data["version"], 1)
+        self.assertEqual(set(data["hooks"]), {"userPromptSubmitted", "sessionEnd"})
+        entry = data["hooks"]["sessionEnd"][0]
+        self.assertEqual(entry["timeoutSec"], 7)
+        for part in ("agent_cli_hook.py", "--session s1", "'my cmd'"):
+            self.assertIn(part, entry["bash"])
+
+    def test_codex_command_with_hooks(self) -> None:
+        cli = CodexCli(hook_trust_bypass=True)
+        hooks = (AgentCliHook("start", frozenset({AgentCliHookPoint.SESSION_START})), AgentCliHook("end", timeout_sec=30))
+        context = RunContext(AgentContext(cwd=Path("/repo")), hooks)
+        name = SessionName("n")
+        argv = cli.command(AgentRequest("p"), AgentProfile(cli), Start(name), context)
+        text = " ".join(argv)
+        self.assertIn("hooks.SessionStart=", text)
+        self.assertIn('matcher="startup|resume"', text)
+        self.assertIn("timeout=3}", text)
+        self.assertLess(argv.index("--dangerously-bypass-hook-trust"), argv.index("p"))
+        resumed = cli.command(AgentRequest("p"), AgentProfile(cli), Resume(name, NativeHandle("codex", "t")), context)
+        self.assertEqual(resumed[:4], ["codex", "exec", "resume", "t"])
+        self.assertEqual(resumed[-1], "p")
+
+
+class HookFilesTests(unittest.TestCase):
+    def runner_with(self, cwd: Path, exclude: Path, seen: list[object], fail: bool = False) -> ProcessCliRunner:
+        def fake(argv: list[str], **kwargs: object) -> object:
+            if argv[:2] == ["git", "-C"]:
+                return type("P", (), {"stdout": f"{exclude}\n", "returncode": 0})()
+            seen.append(((cwd / ".github/hooks").exists() and list((cwd / ".github/hooks").glob("loop-*.json")), kwargs.get("env")))
+            if fail:
+                raise RuntimeError("boom")
+            return type("P", (), {"stdout": "", "returncode": 0})()
+
+        return ProcessCliRunner(run=fake)
+
+    def test_file_written_during_run_removed_after_and_excluded_once(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            cwd, exclude = Path(tmp), Path(tmp) / "info" / "exclude"
+            seen: list[object] = []
+            runner = self.runner_with(cwd, exclude, seen)
+            context = RunContext(AgentContext(cwd=cwd), (AgentCliHook("c"),))
+            for _ in range(2):
+                runner.run(AgentProfile(copilot), AgentRequest("x"), Start(SessionName("s")), context)
+            for files, env in seen:
+                self.assertTrue(files)
+                self.assertEqual(env["GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS"], "true")
+            self.assertEqual(list((cwd / ".github/hooks").glob("*")), [])
+            self.assertEqual(exclude.read_text().splitlines().count(".github/hooks/loop-*.json"), 1)
+
+    def test_file_removed_when_run_raises(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            cwd = Path(tmp)
+            runner = self.runner_with(cwd, cwd / "exclude", [], fail=True)
+            context = RunContext(AgentContext(cwd=cwd), (AgentCliHook("c"),))
+            with self.assertRaises(RuntimeError):
+                runner.run(AgentProfile(copilot), AgentRequest("x"), Start(SessionName("s")), context)
+            self.assertEqual(list((cwd / ".github/hooks").glob("*")), [])
+
+    def test_no_env_without_wiring_env(self) -> None:
+        calls: list[dict[str, object]] = []
+
+        def fake(argv: list[str], **kwargs: object) -> object:
+            calls.append(kwargs)
+            return type("P", (), {"stdout": "", "returncode": 0})()
+
+        ProcessCliRunner(run=fake).run(AgentProfile(UserCli()), AgentRequest("x"), Start(SessionName("s")), repo_context())
+        self.assertNotIn("env", calls[0])
+
+
+class ShimTests(unittest.TestCase):
+    def test_normalise_copilot_and_codex(self) -> None:
+        from agent_cli_hook import normalise
+
+        copilot_payload = normalise("copilot", "session-start", {"sessionId": "s", "cwd": "/w", "source": "resume"})
+        codex_payload = normalise("codex", "session-start", {"session_id": "s", "cwd": "/w", "source": "resume"})
+        for payload in (copilot_payload, codex_payload):
+            self.assertTrue(payload["resumed"])
+            self.assertEqual(payload["handle"], "s")
+        self.assertEqual(normalise("codex", "pre-tool", {"tool_name": "bash"})["tool"], "bash")
+
+    def test_main_with_failing_command_exits_zero_silently(self) -> None:
+        import sys
+        from agent_cli_hook import main
+
+        out = StringIO()
+        original = sys.stdin
+        sys.stdin = StringIO("{}")
+        try:
+            with redirect_stdout(out):
+                code = main(["--cli", "copilot", "--point", "session-end", "--session", "s", "--", "exit 3"])
+        finally:
+            sys.stdin = original
+        self.assertEqual(code, 0)
+        self.assertEqual(out.getvalue(), "")
+
+
+class HookDryRunTests(unittest.TestCase):
+    def test_logs_hooks_without_writing_files(self) -> None:
+        agent = Agent(AgentOptions(dry_run=True)).with_agent_cli_hooks(
+            AgentCliHook("start.sh", frozenset({AgentCliHookPoint.SESSION_START})),
+            AgentCliHook("notify", frozenset({AgentCliHookPoint.SESSION_END}), 3),
+        )
+        output = StringIO()
+        with redirect_stdout(output):
+            agent.create(AgentProfile(copilot)).run(AgentRequest("x"))
+            agent.create(AgentProfile(CodexCli(hook_trust_bypass=True))).run(AgentRequest("x"))
+        text = output.getvalue()
+        self.assertIn("hook copilot session-start -> sessionStart", text)
+        self.assertIn("hook codex session-end -> SessionEnd", text)
+        self.assertIn("timeout=3", text)
 
 
 if __name__ == "__main__":

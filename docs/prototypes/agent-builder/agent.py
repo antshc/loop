@@ -5,14 +5,18 @@ No real Git worktree, Docker container, or Copilot process is started here.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import secrets
+import shlex
 import subprocess
 import sys
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass, field, replace
+from enum import StrEnum
 from pathlib import Path
 from typing import Iterator, Protocol
 
@@ -91,11 +95,82 @@ class AgentResult:
     exit_code: int
 
 
+class AgentCliHookPoint(StrEnum):
+    """Moment in a CLI run at which a native hook fires."""
+
+    SESSION_START = "session-start"
+    SESSION_END = "session-end"
+    AGENT_STOP = "agent-stop"
+    PROMPT_SUBMITTED = "prompt-submitted"
+    PRE_TOOL = "pre-tool"
+    POST_TOOL = "post-tool"
+    SUBAGENT_START = "subagent-start"
+    SUBAGENT_STOP = "subagent-stop"
+    PRE_COMPACT = "pre-compact"
+
+
+SESSION_LIFECYCLE = frozenset({AgentCliHookPoint.SESSION_START, AgentCliHookPoint.SESSION_END})
+
+
+@dataclass(frozen=True)
+class AgentCliHook:
+    """Shell command run by the CLI's native hook at each of `points`; observe-only."""
+
+    command: str
+    points: frozenset[AgentCliHookPoint] = SESSION_LIFECYCLE
+    timeout_sec: int = 30
+
+    def __post_init__(self) -> None:
+        if not self.command:
+            raise ValueError("hook command must not be empty")
+        if not self.points:
+            raise ValueError("hook points must not be empty")
+        if self.timeout_sec <= 0:
+            raise ValueError("hook timeout_sec must be positive")
+
+
+class UnsupportedAgentCliHookPoint(Exception):
+    """A requested hook point cannot fire in the CLI."""
+
+
+@dataclass(frozen=True)
+class AgentCliHookWiring:
+    """What the runner applies around one CLI process; `files` paths are relative to the agent cwd."""
+
+    args: tuple[str, ...] = ()
+    files: Mapping[Path, str] = field(default_factory=dict)
+    git_excludes: tuple[str, ...] = ()
+    env: Mapping[str, str] = field(default_factory=dict)
+
+
+_SHIM = Path(__file__).with_name("agent_cli_hook.py").resolve()
+
+
+def _ordered(hooks: tuple[AgentCliHook, ...]) -> list[tuple[AgentCliHookPoint, AgentCliHook]]:
+    """(point, hook) pairs in point-enum order, then declaration order."""
+    return [(point, hook) for point in AgentCliHookPoint for hook in hooks if point in hook.points]
+
+
+def _shim_command(cli: str, point: AgentCliHookPoint, turn: Turn, hook: AgentCliHook) -> str:
+    return shlex.join(
+        [sys.executable, str(_SHIM), "--cli", cli, "--point", point.value, "--session", turn.name.value, "--", hook.command]
+    )
+
+
 class AgentCli(Protocol):
     """Adapter for one agent CLI; the library runs the process, sessions, dry-run and Docker."""
 
     # Unique per CLI: it scopes session keys.
     name: str
+    hook_points: frozenset[AgentCliHookPoint]
+
+    def hook_wiring(self, hooks: tuple[AgentCliHook, ...], turn: Turn, workdir: Path) -> AgentCliHookWiring:
+        """Pure translation of `hooks` into this CLI's native wiring; does no I/O."""
+        ...
+
+    def native_point(self, point: AgentCliHookPoint) -> str:
+        """The CLI's own name for `point`."""
+        ...
 
     def handle_for_new(self, name: SessionName) -> NativeHandle | None:
         """The handle the CLI uses for a session started under `name`, or None when the CLI assigns its own."""
@@ -205,6 +280,7 @@ class GitOptions:
 @dataclass(frozen=True)
 class RunContext:
     agent: AgentContext = field(default_factory=AgentContext)
+    agent_cli_hooks: tuple[AgentCliHook, ...] = ()
 
 
 class AgentClient(Protocol):
@@ -383,11 +459,27 @@ class AgentBuilder:
         self._use_session = True
         return self
 
+    def with_agent_cli_hooks(self, *hooks: AgentCliHook | str) -> AgentBuilder:
+        """Observe-only native CLI hooks for every run; a str runs at session start and end."""
+        if not hooks:
+            raise ValueError("with_agent_cli_hooks() needs at least one hook")
+        resolved = tuple(AgentCliHook(hook) if isinstance(hook, str) else hook for hook in hooks)
+        self._defaults = replace(self._defaults, agent_cli_hooks=resolved)
+        return self
+
     def _require_session_enabled(self, session: SessionName | None) -> None:
         if session is not None and not self._use_session:
             raise ValueError("session requires with_session()")
 
+    def _validate_agent_cli_hooks(self, profile: AgentProfile, defaults: RunContext) -> None:
+        requested = {point for hook in defaults.agent_cli_hooks for point in hook.points}
+        missing = requested - profile.cli.hook_points
+        if missing:
+            names = ", ".join(sorted(point.value for point in missing))
+            raise UnsupportedAgentCliHookPoint(f"{profile.cli.name} cannot fire {names}")
+
     def _stack(self, profile: AgentProfile, defaults: RunContext, session: SessionName | None) -> AgentClient:
+        self._validate_agent_cli_hooks(profile, defaults)
         store = self._sessions if self._use_session else None
         client: AgentClient = CliAgentClient(self._runner, profile, defaults, store=store, session=session)
         if self._use_docker:
@@ -441,9 +533,39 @@ class CopilotCli:
     """Copilot CLI adapter."""
 
     name = "copilot"
+    hook_points = frozenset(AgentCliHookPoint)
+    _EVENTS = {
+        AgentCliHookPoint.SESSION_START: "sessionStart",
+        AgentCliHookPoint.SESSION_END: "sessionEnd",
+        AgentCliHookPoint.AGENT_STOP: "agentStop",
+        AgentCliHookPoint.PROMPT_SUBMITTED: "userPromptSubmitted",
+        AgentCliHookPoint.PRE_TOOL: "preToolUse",
+        AgentCliHookPoint.POST_TOOL: "postToolUse",
+        AgentCliHookPoint.SUBAGENT_START: "subagentStart",
+        AgentCliHookPoint.SUBAGENT_STOP: "subagentStop",
+        AgentCliHookPoint.PRE_COMPACT: "preCompact",
+    }
 
     def __init__(self, args: tuple[str, ...] = ("--allow-all-tools",)) -> None:
         self._args = args
+
+    def native_point(self, point: AgentCliHookPoint) -> str:
+        return self._EVENTS[point]
+
+    def hook_wiring(self, hooks: tuple[AgentCliHook, ...], turn: Turn, workdir: Path) -> AgentCliHookWiring:
+        events: dict[str, list[dict[str, object]]] = {}
+        for point, hook in _ordered(hooks):
+            events.setdefault(self._EVENTS[point], []).append(
+                {"type": "command", "bash": _shim_command(self.name, point, turn, hook), "timeoutSec": hook.timeout_sec}
+            )
+        digest = hashlib.sha1(turn.name.value.encode()).hexdigest()[:8]
+        content = json.dumps({"version": 1, "hooks": events}, indent=2)
+        return AgentCliHookWiring(
+            files={Path(f".github/hooks/loop-{digest}.json"): content},
+            git_excludes=(".github/hooks/loop-*.json",),
+            # Without it `copilot -p` silently skips repo hook files in an untrusted worktree.
+            env={"GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS": "true"},
+        )
 
     def handle_for_new(self, name: SessionName) -> NativeHandle:
         return NativeHandle(self.name, name.value)
@@ -482,9 +604,43 @@ class CodexCli:
     """Codex CLI adapter; Codex assigns its own thread id."""
 
     name = "codex"
+    _EVENTS = {
+        AgentCliHookPoint.SESSION_START: "SessionStart",
+        AgentCliHookPoint.SESSION_END: "SessionEnd",
+        AgentCliHookPoint.AGENT_STOP: "Stop",
+        AgentCliHookPoint.PROMPT_SUBMITTED: "UserPromptSubmit",
+        AgentCliHookPoint.PRE_TOOL: "PreToolUse",
+        AgentCliHookPoint.POST_TOOL: "PostToolUse",
+        AgentCliHookPoint.SUBAGENT_START: "SubagentStart",
+        AgentCliHookPoint.SUBAGENT_STOP: "SubagentStop",
+        AgentCliHookPoint.PRE_COMPACT: "PreCompact",
+    }
+    _SESSION_END_MAX_TIMEOUT = 3
 
-    def __init__(self, args: tuple[str, ...] = ("--sandbox", "workspace-write")) -> None:
+    def __init__(self, args: tuple[str, ...] = ("--sandbox", "workspace-write"), *, hook_trust_bypass: bool = False) -> None:
         self._args = args
+        self._hook_trust_bypass = hook_trust_bypass
+        # Without the bypass Codex silently skips the hooks, so none are claimed.
+        self.hook_points = frozenset(AgentCliHookPoint) if hook_trust_bypass else frozenset()
+
+    def native_point(self, point: AgentCliHookPoint) -> str:
+        return self._EVENTS[point]
+
+    def hook_wiring(self, hooks: tuple[AgentCliHook, ...], turn: Turn, workdir: Path) -> AgentCliHookWiring:
+        events: dict[str, list[str]] = {}
+        for point, hook in _ordered(hooks):
+            timeout = hook.timeout_sec
+            if point is AgentCliHookPoint.SESSION_END:
+                timeout = min(timeout, self._SESSION_END_MAX_TIMEOUT)
+            command = json.dumps(_shim_command(self.name, point, turn, hook))
+            matcher = 'matcher="startup|resume",' if point is AgentCliHookPoint.SESSION_START else ""
+            events.setdefault(self._EVENTS[point], []).append(
+                f'{{{matcher}hooks=[{{type="command",command={command},timeout={timeout}}}]}}'
+            )
+        args: list[str] = []
+        for event, entries in events.items():
+            args += ["-c", f"hooks.{event}=[{','.join(entries)}]"]
+        return AgentCliHookWiring(args=(*args, "--dangerously-bypass-hook-trust"))
 
     def handle_for_new(self, name: SessionName) -> None:
         return None
@@ -499,6 +655,8 @@ class CodexCli:
         if profile.reasoning_effort is not None:
             run_args += ["-c", f"model_reasoning_effort={profile.reasoning_effort}"]
         head = ["codex", "exec", "--json", *self._args, *run_args, *profile.args, *dirs]
+        if context.agent_cli_hooks:
+            head += self.hook_wiring(context.agent_cli_hooks, turn, context.agent.cwd).args
         if isinstance(turn, Resume):
             return [*head[:2], "resume", turn.handle.value, *head[2:], request.prompt]
         return [*head, request.prompt]
@@ -525,8 +683,46 @@ class ProcessCliRunner:
 
     def run(self, profile: AgentProfile, request: AgentRequest, turn: Turn, context: RunContext) -> CliOutcome:
         argv = profile.cli.command(request, profile, turn, context)
-        result = self._run(argv, cwd=context.agent.cwd, check=True, capture_output=True, text=True)
+        wiring = (
+            profile.cli.hook_wiring(context.agent_cli_hooks, turn, context.agent.cwd)
+            if context.agent_cli_hooks
+            else AgentCliHookWiring()
+        )
+        extra = {"env": {**os.environ, **wiring.env}} if wiring.env else {}
+        with self._hook_files(wiring, context.agent.cwd):
+            result = self._run(argv, cwd=context.agent.cwd, check=True, capture_output=True, text=True, **extra)
         return profile.cli.parse(result.stdout, turn, result.returncode)
+
+    @contextmanager
+    def _hook_files(self, wiring: AgentCliHookWiring, cwd: Path) -> Iterator[None]:
+        written: list[Path] = []
+        try:
+            for relative, content in wiring.files.items():
+                path = cwd / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content)
+                written.append(path)
+            if wiring.git_excludes:
+                self._exclude(cwd, wiring.git_excludes)
+            yield
+        finally:
+            for path in written:
+                path.unlink(missing_ok=True)
+
+    def _exclude(self, cwd: Path, patterns: tuple[str, ...]) -> None:
+        found = self._run(
+            ["git", "-C", str(cwd), "rev-parse", "--git-path", "info/exclude"],
+            check=False, capture_output=True, text=True,
+        )
+        if found.returncode != 0 or not found.stdout.strip():
+            return
+        exclude = cwd / found.stdout.strip()
+        existing = exclude.read_text().splitlines() if exclude.exists() else []
+        missing = [pattern for pattern in patterns if pattern not in existing]
+        if missing:
+            exclude.parent.mkdir(parents=True, exist_ok=True)
+            with exclude.open("a") as handle:
+                handle.writelines(f"{pattern}\n" for pattern in missing)
 
 
 class GitCli:
@@ -633,7 +829,22 @@ class LoggingRunner:
         command = profile.cli.command(request, profile, turn, context)
         output = f"cwd={context.agent.cwd} cmd={' '.join(command)}"
         _log(output)
+        self._log_hooks(profile, turn, context)
         return CliOutcome(output, self._handle(profile.cli, turn), 0)
+
+    def _log_hooks(self, profile: AgentProfile, turn: Turn, context: RunContext) -> None:
+        if not context.agent_cli_hooks:
+            return
+        cli = profile.cli
+        for point, hook in _ordered(context.agent_cli_hooks):
+            _log(f"hook {cli.name} {point.value} -> {cli.native_point(point)}: {hook.command}")
+        wiring = cli.hook_wiring(context.agent_cli_hooks, turn, context.agent.cwd)
+        for path in wiring.files:
+            _log(f"hook file {context.agent.cwd / path}")
+        if wiring.args:
+            _log(f"hook args {' '.join(wiring.args)}")
+        if wiring.env:
+            _log(f"hook env {dict(wiring.env)}")
 
     def _handle(self, cli: AgentCli, turn: Turn) -> NativeHandle:
         if isinstance(turn, Resume):
@@ -701,10 +912,14 @@ if __name__ == "__main__":
         Agent(_DRY).with_git(GitOptions(_root, _repo, MergeToHeadStrategy())).create().run(AgentRequest("Implement ticket #123 in repo1"))
         # Role profiles; which CLI and model fill a role is a workflow choice.
         PLANNER = AgentProfile(copilot, "claude-opus-4.5", "high")
-        DEVELOPER = AgentProfile(codex, "gpt-5-codex", "high")
+        DEVELOPER = AgentProfile(CodexCli(hook_trust_bypass=True), "gpt-5-codex", "high")
         REVIEWER = AgentProfile(copilot, "claude-sonnet-4.5")
         # Shared worktree: one git lifecycle, several CLIs; one named session, kept per CLI.
         _shared = Agent(_DRY).with_git(GitOptions(_root, _repo, BranchStrategy("loop/ticket-123", "main"))).with_session()
+        _shared.with_agent_cli_hooks(
+            AgentCliHook("./scripts/session-start.sh", frozenset({AgentCliHookPoint.SESSION_START})),
+            AgentCliHook("notify-send", frozenset({AgentCliHookPoint.SESSION_END}), timeout_sec=3),
+        )
         with _shared.open(session=SessionName("ticket-123")) as _wt:
             _plan = _wt.agent(PLANNER).run(AgentRequest("Plan ticket #123 in repo1"))
             _developer = _wt.agent(DEVELOPER)

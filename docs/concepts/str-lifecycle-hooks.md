@@ -7,18 +7,18 @@ Let a repository prepare a fresh worktree (copy `.env`, install dependencies) be
 
 ## Concept
 
-A Hook is a user-declared shell command that Loop runs at a named Hook point in a run's lifecycle. Loop defines one Hook point, before the agent starts: `worktree-ready`, after the worktree is created. Hooks run on the host, so a hook that needs a different environment carries that in its own command.
+A Loop hook is a user-declared shell command that Loop runs at a named Loop hook point in a run's lifecycle. Loop defines one Loop hook point, before the agent starts: `worktree-ready`, after the worktree is created. Loop hooks run on the host, so a hook that needs a different environment carries that in its own command.
 
 The workflow declares its hooks as code and passes them to `AgentRunnerProvider.create(..., hooks=...)`, which runs them through `run_host_hooks` right after `WorktreeService.create`. `WorktreeService.run_hook` owns execution, timeout, and cancellation; a failing hook removes the worktree and raises `HookError`, so the caller gets a ready runner or none. Hooks exist only before the agent: post-iteration work is an explicit step of the workflow's use case, not a hook.
 
-Modelled on Sandcastle's host-side `onWorktreeReady` hook ([research](../research/sandcastle-agent-invocation-and-extension-points.md)); Loop has no agent-side hooks.
+Modelled on Sandcastle's host-side `onWorktreeReady` hook ([research](../research/sandcastle-agent-invocation-and-extension-points.md)); Loop has no agent-side setup hooks. Hooks that an agent CLI fires natively are Agent CLI hooks, a separate term.
 
 ## Rules
 
 - MUST declare a hook as a shell command with an optional per-hook timeout, and nothing else.
-- MUST run hooks only at a named Hook point before the agent starts; MUST NOT run hooks after the agent.
+- MUST run hooks only at a named Loop hook point before the agent starts; MUST NOT run hooks after the agent.
 - MUST run hooks on the host with the worktree as working directory.
-- MUST run the hooks of one Hook point sequentially in declared order.
+- MUST run the hooks of one Loop hook point sequentially in declared order.
 - MUST fail the run before the agent starts when a hook exits non-zero or times out, removing the worktree before raising.
 - MUST bound every hook with a default timeout that a hook can override.
 - MUST cancel in-flight hooks when the workflow-supplied `threading.Event` is set; the run then reports cancelled, not failed.

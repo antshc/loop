@@ -50,20 +50,28 @@ _Avoid_: Epic, parent issue
 One autonomous procedure, such as `dev`, written by the user as a Python script on the Loop library and run through the user's own shell alias.  
 _Avoid_: Slice, feature, template, plugin, built-in workflow
 
-**Hook**:  
-A user-declared shell command that Loop runs on the host at a Hook point, before the agent starts.  
-_Avoid_: Callback, script, setup step
+**Loop hook**:
+A user-declared shell command that Loop runs on the host at a Loop hook point, before the agent starts; a failing Loop hook fails the run.  
+_Avoid_: Hook (unqualified), Agent CLI hook, callback, script, setup step
 
-**Hook point**:  
-A named moment in the Run lifecycle at which Loop runs the Hooks declared for it, such as `worktree-ready`.  
-_Avoid_: Event, trigger, stage
+**Loop hook point**:
+A named moment in the Run lifecycle at which Loop runs the Loop hooks declared for it, such as `worktree-ready`.  
+_Avoid_: Hook point (unqualified), Agent CLI hook point, event, trigger, stage
+
+**Agent CLI hook**:
+A user-declared shell command that an agent CLI runs natively at an Agent CLI hook point during an agent run; it only observes and never fails or steers the run.  
+_Avoid_: Hook (unqualified), Loop hook, callback, event handler
+
+**Agent CLI hook point**:
+A named moment in an agent CLI's own lifecycle at which it runs the Agent CLI hooks declared for it, such as session start or agent stop.  
+_Avoid_: Hook point (unqualified), Loop hook point, event, trigger
 
 **Agent runner**:  
 The long-lived pairing of one worktree with one agent client that a Workflow runs prompts through; the agent runs directly on the host with the user's own permissions, with no isolation.  
 _Avoid_: Worktree runner, Sandbox, container, environment
 
 **Run lifecycle**:  
-The ordered stages of one Workflow run on a worktree: worktree creation and `worktree-ready` Hooks, one or more agent runs, publication of the agent's work, and worktree removal.  
+The ordered stages of one Workflow run on a worktree: worktree creation and `worktree-ready` Loop hooks, one or more agent runs, publication of the agent's work, and worktree removal.  
 _Avoid_: Sandbox lifecycle
 
 **Agent request**:  
