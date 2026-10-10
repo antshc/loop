@@ -287,6 +287,8 @@ class GitRuntime:
                 self._git.fetch(repository)
                 with self._worktree(cwd, repository, options, branch, base or "HEAD") as target:
                     yield target
+                    # Safety net: git refuses to remove a dirty worktree.
+                    self._git.commit_all(target, options.commit_message)
 
     @contextmanager
     def _worktree(
