@@ -18,19 +18,76 @@ from typing import Iterator, Protocol
 
 
 @dataclass(frozen=True)
+class SessionName:
+    """Caller-chosen name of a session; one name is an independent session per CLI."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        if not self.value or any(char.isspace() for char in self.value):
+            raise ValueError(f"invalid session name: {self.value!r}")
+
+    @classmethod
+    def new(cls) -> SessionName:
+        return cls(f"loop-{uuid.uuid4().hex}")
+
+
+@dataclass(frozen=True)
+class NativeHandle:
+    """The id one CLI resumes a session by; only adapters read `value`."""
+
+    cli: str
+    value: str
+
+
+@dataclass(frozen=True)
+class Start:
+    """Turn that starts a session under `name`."""
+
+    name: SessionName
+
+
+@dataclass(frozen=True)
+class Resume:
+    """Turn that continues the session behind `handle`."""
+
+    name: SessionName
+    handle: NativeHandle
+
+
+Turn = Start | Resume
+
+
+@dataclass(frozen=True)
+class CliOutcome:
+    """Parsed CLI output plus the handle to resume by."""
+
+    output: str
+    handle: NativeHandle
+    exit_code: int
+
+
+class SessionHandleMissing(Exception):
+    """The CLI output carried no handle to resume by."""
+
+
+class SessionCliMismatch(Exception):
+    """A stored handle belongs to a different CLI than the one running."""
+
+
+@dataclass(frozen=True)
 class AgentRequest:
-    """One agent execution; a set `session_id` resumes that session, None starts a new one."""
+    """One agent execution."""
 
     prompt: str
-    session_id: str | None = None
 
 
 @dataclass(frozen=True)
 class AgentResult:
-    """Final outcome of one execution, carrying the session to pass back for a follow-up."""
+    """Final outcome of one execution, carrying the session name it ran under."""
 
     output: str
-    session_id: str
+    session: SessionName
     exit_code: int
 
 
@@ -40,16 +97,16 @@ class AgentCli(Protocol):
     # Unique per CLI: it scopes session keys.
     name: str
 
-    def new_session_id(self) -> str | None:
-        """A caller-chosen id for a new session, or None when the CLI assigns its own."""
+    def handle_for_new(self, name: SessionName) -> NativeHandle | None:
+        """The handle the CLI uses for a session started under `name`, or None when the CLI assigns its own."""
         ...
 
     def command(
-        self, request: AgentRequest, profile: AgentProfile, session_id: str | None, context: RunContext
+        self, request: AgentRequest, profile: AgentProfile, turn: Turn, context: RunContext
     ) -> list[str]: ...
 
-    def parse(self, stdout: str, session_id: str | None, exit_code: int) -> AgentResult:
-        """Must return the session id to resume."""
+    def parse(self, stdout: str, turn: Turn, exit_code: int) -> CliOutcome:
+        """Raises SessionHandleMissing when no handle can be determined."""
         ...
 
 
@@ -62,20 +119,6 @@ class AgentProfile:
     reasoning_effort: str | None = None
     context: str | None = None
     args: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class AgentSession:
-    """Identifies persistent agent context, independent of Docker or CLI processes."""
-
-    id: str
-
-
-@dataclass(frozen=True)
-class SessionOptions:
-    """Workflow configuration: runs share one session per key; the default key is the run cwd (the worktree)."""
-
-    key: str | None = None
 
 
 @dataclass(frozen=True)
@@ -173,13 +216,13 @@ class AgentClient(Protocol):
 
 
 class CliRunner(Protocol):
-    def run(self, profile: AgentProfile, request: AgentRequest, context: RunContext) -> AgentResult: ...
+    def run(self, profile: AgentProfile, request: AgentRequest, turn: Turn, context: RunContext) -> CliOutcome: ...
 
 
 class SessionStore(Protocol):
-    def get(self, key: str) -> AgentSession | None: ...
+    def get(self, name: SessionName, cli: str) -> NativeHandle | None: ...
 
-    def save(self, key: str, session: AgentSession) -> None: ...
+    def save(self, name: SessionName, handle: NativeHandle) -> None: ...
 
 
 class GitService(Protocol):
@@ -191,15 +234,46 @@ class DockerService(Protocol):
 
 
 class CliAgentClient:
-    """Core agent bound to one CLI profile; delegates execution to its runner."""
+    """Core agent bound to one CLI profile; decides start or resume, then delegates to its runner."""
 
-    def __init__(self, runner: CliRunner, profile: AgentProfile, defaults: RunContext | None = None) -> None:
+    def __init__(
+        self,
+        runner: CliRunner,
+        profile: AgentProfile,
+        defaults: RunContext | None = None,
+        *,
+        store: SessionStore | None = None,
+        session: SessionName | None = None,
+    ) -> None:
+        if session is not None and store is None:
+            raise ValueError("session requires with_session()")
         self._runner = runner
         self._profile = profile
         self._defaults = defaults or RunContext()
+        self._store = store
+        self._session = session or (SessionName.new() if store is not None else None)
 
     def run(self, request: AgentRequest, context: RunContext | None = None) -> AgentResult:
-        return self._runner.run(self._profile, request, context or self._defaults)
+        turn = self._turn()
+        outcome = self._runner.run(self._profile, request, turn, context or self._defaults)
+        if self._store is not None:
+            self._store.save(turn.name, outcome.handle)
+        return AgentResult(outcome.output, turn.name, outcome.exit_code)
+
+    def _turn(self) -> Turn:
+        if self._store is None or self._session is None:
+            return Start(SessionName.new())
+        cli = self._profile.cli
+        handle = self._store.get(self._session, cli.name)
+        if handle is not None:
+            if handle.cli != cli.name:
+                raise SessionCliMismatch(f"handle for {handle.cli} found under {cli.name}")
+            return Resume(self._session, handle)
+        new_handle = cli.handle_for_new(self._session)
+        if new_handle is not None:
+            # Saved before the run so a retry resumes instead of colliding on the name.
+            self._store.save(self._session, new_handle)
+        return Start(self._session)
 
     def close(self) -> None:
         pass
@@ -237,34 +311,6 @@ class GitAgent(AgentWrapper):
             return self._inner.run(request, moved)
 
 
-class SessionAgent(AgentWrapper):
-    """Continues one session per key and CLI across runs; an explicit request session wins."""
-
-    def __init__(
-        self,
-        inner: AgentClient,
-        sessions: SessionStore,
-        cli_name: str,
-        options: SessionOptions | None = None,
-        defaults: RunContext | None = None,
-    ) -> None:
-        super().__init__(inner, defaults)
-        self._sessions = sessions
-        self._cli_name = cli_name
-        self._options = options or SessionOptions()
-
-    def run(self, request: AgentRequest, context: RunContext | None = None) -> AgentResult:
-        effective = context or self._defaults
-        key = f"{self._options.key or effective.agent.cwd}:{self._cli_name}"
-        if request.session_id is None:
-            known = self._sessions.get(key)
-            if known is not None:
-                request = replace(request, session_id=known.id)
-        result = self._inner.run(request, effective)
-        self._sessions.save(key, AgentSession(result.session_id))
-        return result
-
-
 class DockerAgent(AgentWrapper):
     def __init__(
         self,
@@ -283,16 +329,25 @@ class DockerAgent(AgentWrapper):
 class Worktree:
     """One live worktree shared by clients of several CLIs; valid only inside `AgentBuilder.open()`."""
 
-    def __init__(self, path: Path, build: Callable[[AgentProfile, RunContext], AgentClient], defaults: RunContext) -> None:
+    def __init__(
+        self,
+        path: Path,
+        build: Callable[[AgentProfile, RunContext, SessionName | None], AgentClient],
+        defaults: RunContext,
+        session: SessionName | None,
+    ) -> None:
         self.path = path
+        self.session = session
         self._build = build
         self._defaults = replace(defaults, agent=replace(defaults.agent, cwd=path))
         self._closed = False
 
-    def agent(self, profile: AgentProfile | None = None) -> AgentClient:
+    def agent(self, profile: AgentProfile | None = None, session: SessionName | None = None) -> AgentClient:
         if self._closed:
             raise RuntimeError("worktree closed")
-        return self._build(profile or DEFAULT, self._defaults)
+        if session is not None and self.session is None:
+            raise ValueError("session requires with_session()")
+        return self._build(profile or DEFAULT, self._defaults, session or self.session)
 
 
 class AgentBuilder:
@@ -313,7 +368,6 @@ class AgentBuilder:
         self._git_options: GitOptions | None = None
         self._use_docker = False
         self._use_session = False
-        self._session_options: SessionOptions | None = None
 
     def with_git(self, options: GitOptions | None = None) -> AgentBuilder:
         self._use_git = True
@@ -324,38 +378,44 @@ class AgentBuilder:
         self._use_docker = True
         return self
 
-    def with_session(self, options: SessionOptions | None = None) -> AgentBuilder:
+    def with_session(self) -> AgentBuilder:
+        """Continue sessions across runs; without it every run is stateless."""
         self._use_session = True
-        self._session_options = options
         return self
 
-    def _stack(self, profile: AgentProfile, defaults: RunContext) -> AgentClient:
-        client: AgentClient = CliAgentClient(self._runner, profile, defaults)
+    def _require_session_enabled(self, session: SessionName | None) -> None:
+        if session is not None and not self._use_session:
+            raise ValueError("session requires with_session()")
+
+    def _stack(self, profile: AgentProfile, defaults: RunContext, session: SessionName | None) -> AgentClient:
+        store = self._sessions if self._use_session else None
+        client: AgentClient = CliAgentClient(self._runner, profile, defaults, store=store, session=session)
         if self._use_docker:
             client = DockerAgent(client, self._docker, defaults)
-        if self._use_session:
-            client = SessionAgent(client, self._sessions, profile.cli.name, self._session_options, defaults)
         return client
 
     @contextmanager
-    def open(self) -> Iterator[Worktree]:
+    def open(self, session: SessionName | None = None) -> Iterator[Worktree]:
         """Run the git strategy once and share the worktree between clients of any CLI."""
+        self._require_session_enabled(session)
+        shared = (session or SessionName.new()) if self._use_session else None
         worktree: Worktree | None = None
         try:
             if self._use_git:
                 with self._git.open(self._defaults.agent.cwd, self._git_options or GitOptions()) as path:
-                    worktree = Worktree(path, self._stack, self._defaults)
+                    worktree = Worktree(path, self._stack, self._defaults, shared)
                     yield worktree
             else:
-                worktree = Worktree(self._defaults.agent.cwd, self._stack, self._defaults)
+                worktree = Worktree(self._defaults.agent.cwd, self._stack, self._defaults, shared)
                 yield worktree
         finally:
             if worktree is not None:
                 worktree._closed = True
 
-    def create(self, profile: AgentProfile | None = None) -> AgentClient:
+    def create(self, profile: AgentProfile | None = None, session: SessionName | None = None) -> AgentClient:
         """One-shot client: a separate git lifecycle per run()."""
-        client = self._stack(profile or DEFAULT, self._defaults)
+        self._require_session_enabled(session)
+        client = self._stack(profile or DEFAULT, self._defaults, session)
         if self._use_git:
             client = GitAgent(client, self._git, self._git_options, self._defaults)
         return client
@@ -368,13 +428,13 @@ class MemorySessionStore:
     """Process-local session store; sessions are not persisted across runs of the process."""
 
     def __init__(self) -> None:
-        self._sessions: dict[str, AgentSession] = {}
+        self._sessions: dict[tuple[SessionName, str], NativeHandle] = {}
 
-    def get(self, key: str) -> AgentSession | None:
-        return self._sessions.get(key)
+    def get(self, name: SessionName, cli: str) -> NativeHandle | None:
+        return self._sessions.get((name, cli))
 
-    def save(self, key: str, session: AgentSession) -> None:
-        self._sessions[key] = session
+    def save(self, name: SessionName, handle: NativeHandle) -> None:
+        self._sessions[(name, handle.cli)] = handle
 
 
 class CopilotCli:
@@ -385,20 +445,21 @@ class CopilotCli:
     def __init__(self, args: tuple[str, ...] = ("--allow-all-tools",)) -> None:
         self._args = args
 
-    def new_session_id(self) -> str | None:
-        # Assumption (unverified): the CLI accepts a caller-generated id on first use.
-        return uuid.uuid4().hex
+    def handle_for_new(self, name: SessionName) -> NativeHandle:
+        return NativeHandle(self.name, name.value)
 
     def command(
-        self, request: AgentRequest, profile: AgentProfile, session_id: str | None, context: RunContext
+        self, request: AgentRequest, profile: AgentProfile, turn: Turn, context: RunContext
     ) -> list[str]:
         dirs = [part for directory in context.agent.add_dirs for part in ("--add-dir", str(directory))]
         settings = {"--model": profile.model, "--reasoning-effort": profile.reasoning_effort, "--context": profile.context}
         run_args = [part for flag, value in settings.items() if value is not None for part in (flag, value)]
-        return ["copilot", "-p", request.prompt, f"--resume={session_id}", *self._args, *run_args, *profile.args, *dirs]
+        session_args = ["--name", turn.name.value] if isinstance(turn, Start) else [f"--resume={turn.handle.value}"]
+        return ["copilot", "-p", request.prompt, *session_args, *self._args, *run_args, *profile.args, *dirs]
 
-    def parse(self, stdout: str, session_id: str | None, exit_code: int) -> AgentResult:
-        return AgentResult(stdout, session_id or "", exit_code)
+    def parse(self, stdout: str, turn: Turn, exit_code: int) -> CliOutcome:
+        handle = turn.handle if isinstance(turn, Resume) else self.handle_for_new(turn.name)
+        return CliOutcome(stdout, handle, exit_code)
 
 
 def _parse_codex_events(stdout: str) -> tuple[str | None, str]:
@@ -425,11 +486,11 @@ class CodexCli:
     def __init__(self, args: tuple[str, ...] = ("--sandbox", "workspace-write")) -> None:
         self._args = args
 
-    def new_session_id(self) -> str | None:
+    def handle_for_new(self, name: SessionName) -> None:
         return None
 
     def command(
-        self, request: AgentRequest, profile: AgentProfile, session_id: str | None, context: RunContext
+        self, request: AgentRequest, profile: AgentProfile, turn: Turn, context: RunContext
     ) -> list[str]:
         dirs = [part for directory in context.agent.add_dirs for part in ("--add-dir", str(directory))]
         run_args: list[str] = []
@@ -438,13 +499,17 @@ class CodexCli:
         if profile.reasoning_effort is not None:
             run_args += ["-c", f"model_reasoning_effort={profile.reasoning_effort}"]
         head = ["codex", "exec", "--json", *self._args, *run_args, *profile.args, *dirs]
-        if session_id is not None:
-            return [*head[:2], "resume", session_id, *head[2:], request.prompt]
+        if isinstance(turn, Resume):
+            return [*head[:2], "resume", turn.handle.value, *head[2:], request.prompt]
         return [*head, request.prompt]
 
-    def parse(self, stdout: str, session_id: str | None, exit_code: int) -> AgentResult:
+    def parse(self, stdout: str, turn: Turn, exit_code: int) -> CliOutcome:
         thread_id, message = _parse_codex_events(stdout)
-        return AgentResult(message, thread_id or session_id or "", exit_code)
+        if thread_id is not None:
+            return CliOutcome(message, NativeHandle(self.name, thread_id), exit_code)
+        if isinstance(turn, Resume):
+            return CliOutcome(message, turn.handle, exit_code)
+        raise SessionHandleMissing("codex output had no thread.started event")
 
 
 copilot = CopilotCli()
@@ -458,11 +523,10 @@ class ProcessCliRunner:
     def __init__(self, *, run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run) -> None:
         self._run = run
 
-    def run(self, profile: AgentProfile, request: AgentRequest, context: RunContext) -> AgentResult:
-        session_id = request.session_id or profile.cli.new_session_id()
-        argv = profile.cli.command(request, profile, session_id, context)
+    def run(self, profile: AgentProfile, request: AgentRequest, turn: Turn, context: RunContext) -> CliOutcome:
+        argv = profile.cli.command(request, profile, turn, context)
         result = self._run(argv, cwd=context.agent.cwd, check=True, capture_output=True, text=True)
-        return profile.cli.parse(result.stdout, session_id, result.returncode)
+        return profile.cli.parse(result.stdout, turn, result.returncode)
 
 
 class GitCli:
@@ -565,13 +629,16 @@ class LoggingGitCli(GitCli):
 class LoggingRunner:
     """Dry-run CliRunner: logs the command instead of running it."""
 
-    def run(self, profile: AgentProfile, request: AgentRequest, context: RunContext) -> AgentResult:
-        session_id = request.session_id or profile.cli.new_session_id()
-        command = profile.cli.command(request, profile, session_id, context)
+    def run(self, profile: AgentProfile, request: AgentRequest, turn: Turn, context: RunContext) -> CliOutcome:
+        command = profile.cli.command(request, profile, turn, context)
         output = f"cwd={context.agent.cwd} cmd={' '.join(command)}"
-        session_id = session_id or uuid.uuid4().hex
         _log(output)
-        return AgentResult(output, session_id, 0)
+        return CliOutcome(output, self._handle(profile.cli, turn), 0)
+
+    def _handle(self, cli: AgentCli, turn: Turn) -> NativeHandle:
+        if isinstance(turn, Resume):
+            return turn.handle
+        return cli.handle_for_new(turn.name) or NativeHandle(cli.name, f"dry-{uuid.uuid4().hex}")
 
 
 class LoggingDocker:
@@ -612,15 +679,16 @@ def _apply_options(context: AgentContext, options: AgentOptions | None) -> Agent
     return context
 
 
-def repo_agent(repo: str, branch: str | None = None) -> AgentClient:
-    """One worktree-isolated agent for workspace/<repo>, with worktrees in workspace/<repo>.worktrees."""
+def repo_agent(repo: str, branch: str | None = None, session: SessionName | None = None) -> AgentClient:
+    """One worktree-isolated agent for workspace/<repo>, with worktrees in workspace/<repo>.worktrees; a `session` continues across runs."""
     workspace = Path("workspace")
     options = GitOptions(
         root_path=workspace / f"{repo}.worktrees",
         repository_path=workspace / repo,
         strategy=BranchStrategy(branch) if branch else MergeToHeadStrategy(),
     )
-    return Agent().with_git(options).with_docker().create()
+    builder = Agent().with_git(options).with_docker()
+    return builder.with_session().create(session=session) if session else builder.create()
 
 
 if __name__ == "__main__":
@@ -635,18 +703,23 @@ if __name__ == "__main__":
         PLANNER = AgentProfile(copilot, "claude-opus-4.5", "high")
         DEVELOPER = AgentProfile(codex, "gpt-5-codex", "high")
         REVIEWER = AgentProfile(copilot, "claude-sonnet-4.5")
-        # Shared worktree: one git lifecycle, several CLIs; sessions are kept per CLI.
+        # Shared worktree: one git lifecycle, several CLIs; one named session, kept per CLI.
         _shared = Agent(_DRY).with_git(GitOptions(_root, _repo, BranchStrategy("loop/ticket-123", "main"))).with_session()
-        with _shared.open() as _wt:
+        with _shared.open(session=SessionName("ticket-123")) as _wt:
             _plan = _wt.agent(PLANNER).run(AgentRequest("Plan ticket #123 in repo1"))
             _developer = _wt.agent(DEVELOPER)
             _developer.run(AgentRequest(f"Implement this plan:\n{_plan.output}"))
             _developer.run(AgentRequest("Fix failing tests"))  # resumes the Codex session
-            _wt.agent(REVIEWER).run(AgentRequest("Review the diff against the plan"))
-        # Without with_session() and without a session_id, each run starts a new session.
+            # A fresh session gives an unbiased review.
+            _wt.agent(REVIEWER, session=SessionName.new()).run(AgentRequest("Review the diff against the plan"))
+        # Without with_session(), each run starts under a new `loop-<hex>` name.
         _fresh = Agent(_DRY).with_git(GitOptions(_root, _repo, BranchStrategy("loop/ticket-123", "main"))).create()
         _fresh.run(AgentRequest("Plan ticket #123 in repo1"))
         _fresh.run(AgentRequest("Implement ticket #123 in repo1"))
         sys.exit()
     # print(repo_agent("repo1", "loop/ticket-123").run("Implement ticket #123 in repo1"))
     # print(repo_agent("repo2", "loop/ticket-123").run("Implement ticket #123 in repo2"))
+    # Named session: the second run resumes the first (the client is reused).
+    # _agent = repo_agent("repo1", "loop/ticket-123", session=SessionName("ticket-123"))
+    # _agent.run(AgentRequest("Plan ticket #123 in repo1"))
+    # _agent.run(AgentRequest("Implement the plan"))

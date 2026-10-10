@@ -5,7 +5,7 @@ A standalone Python sketch of a fluent agent composition API. `Agent()` register
 ## Usage
 
 ```python
-from agent import Agent, AgentProfile, AgentRequest, GitOptions, BranchStrategy, codex, copilot
+from agent import Agent, AgentProfile, AgentRequest, GitOptions, BranchStrategy, SessionName, codex, copilot
 
 # One-shot: default Copilot profile, one git lifecycle per run()
 agent = Agent().with_git().with_docker().create()
@@ -19,17 +19,18 @@ PLANNER = AgentProfile(copilot, "claude-opus-4.5", "high")
 DEVELOPER = AgentProfile(codex, "gpt-5-codex", "high")
 REVIEWER = AgentProfile(copilot, "claude-sonnet-4.5")
 
-# Shared worktree: one git lifecycle, several CLIs; sessions are kept per CLI
+# Shared worktree: one git lifecycle, several CLIs; one named session, kept per CLI
 builder = Agent().with_git(GitOptions(strategy=BranchStrategy("loop/ticket-123"))).with_session()
-with builder.open() as wt:
+with builder.open(session=SessionName("ticket-123")) as wt:  # no name: loop-<hex>
     plan = wt.agent(PLANNER).run(AgentRequest("Plan ticket #123"))
     developer = wt.agent(DEVELOPER)
     developer.run(AgentRequest(f"Implement this plan:\n{plan.output}"))
     developer.run(AgentRequest("Fix failing tests"))  # resumes the Codex session
-    wt.agent(REVIEWER).run(AgentRequest("Review the diff against the plan"))
+    # A new name gives a fresh session, e.g. an unbiased review
+    wt.agent(REVIEWER, session=SessionName.new()).run(AgentRequest("Review the diff against the plan"))
 ```
 
-`with_session()` makes runs of one client share a session, unique per worktree and CLI. A client without it starts a new session each run; an explicit `session_id` always wins.
+`with_session()` means "continue across runs" for `create()` and `open()`. Without it every run is stateless (`Start(SessionName.new())`, nothing stored) and passing a name raises `ValueError`. A `SessionName` is an independent session per CLI: the store is keyed by `(SessionName, cli.name)`.
 
 Run locally from the prototype directory:
 
@@ -46,9 +47,9 @@ Python 3.12+, standard library only. No real Git, Docker, Copilot or Codex insta
 Add a CLI by implementing `AgentCli`:
 
 - `name`: unique, because it scopes session keys.
-- `new_session_id()`: a caller-chosen id, or `None` when the CLI assigns its own.
-- `command(request, profile, session_id, context)`: the argv; read `profile.model`, `profile.reasoning_effort`, `profile.context` and append `profile.args`.
-- `parse(stdout, session_id, exit_code)`: an `AgentResult` carrying the session id to resume. A non-zero exit raises (the runner uses `check=True`).
+- `handle_for_new(name)`: the `NativeHandle` the CLI uses for a session started under `name`, or `None` when the CLI assigns its own.
+- `command(request, profile, turn, context)`: the argv; `turn` is `Start(name)` or `Resume(name, handle)`. Read `profile.model`, `profile.reasoning_effort`, `profile.context` and append `profile.args`.
+- `parse(stdout, turn, exit_code)`: a `CliOutcome` carrying the handle to resume; raises `SessionHandleMissing` when none can be determined. A non-zero exit raises (the runner uses `check=True`).
 
 Then wrap the adapter in an `AgentProfile` and pass it to `wt.agent(...)`. The library runs the process in the worktree, keeps sessions per CLI, logs the command on dry-run and configures Docker, so the adapter does none of that.
 
@@ -56,15 +57,18 @@ Then wrap the adapter in an `AgentProfile` and pass it to `wt.agent(...)`. The l
 class ClaudeCodeCli:  # sketch, unverified flags
     name = "claude"
 
-    def new_session_id(self) -> str | None:
-        return str(uuid.uuid4())
+    def handle_for_new(self, name):
+        return None  # Claude assigns its own id
 
-    def command(self, request, profile, session_id, context):
+    def command(self, request, profile, turn, context):
         model = ["--model", profile.model] if profile.model else []
-        return ["claude", "-p", request.prompt, "--session-id", session_id, *model, *profile.args]
+        # Never --session-id: it requires a UUID
+        session = ["-n", turn.name.value] if isinstance(turn, Start) else ["--resume", turn.handle.value]
+        return ["claude", "-p", request.prompt, "--output-format", "json", *session, *model, *profile.args]
 
-    def parse(self, stdout, session_id, exit_code):
-        return AgentResult(stdout, session_id or "", exit_code)
+    def parse(self, stdout, turn, exit_code):
+        data = json.loads(stdout)
+        return CliOutcome(data["result"], NativeHandle(self.name, data["session_id"]), exit_code)
 
 claude = ClaudeCodeCli()
 REVIEWER = AgentProfile(claude, "sonnet")
@@ -77,13 +81,16 @@ Test a custom CLI with `ProcessCliRunner(run=fake)` and check its `command` and 
 ## Contracts
 
 - `Agent(options: AgentOptions | None = None) -> AgentBuilder`: *composition root*; registers `ProcessCliRunner` (`LoggingRunner` on dry-run), `GitRuntime(GitCli())`, and `DockerRuntime` internally.
-- `AgentCli`: protocol with `name`, `new_session_id()`, `command(request, profile, session_id, context)` and `parse(stdout, session_id, exit_code)`. Implemented by `CopilotCli` (default args `--allow-all-tools`) and `CodexCli` (default args `--sandbox workspace-write`).
+- `SessionName(value)`: frozen; empty or whitespace-containing values raise `ValueError`; `SessionName.new()` returns `loop-<uuid4 hex>`.
+- `NativeHandle(cli, value)`, `Start(name)`, `Resume(name, handle)`, `Turn = Start | Resume`, `CliOutcome(output, handle, exit_code)`: frozen session values; only adapters read handles. `SessionHandleMissing` and `SessionCliMismatch` are the session exceptions.
+- `AgentCli`: protocol with `name`, `handle_for_new(name)`, `command(request, profile, turn, context)` and `parse(stdout, turn, exit_code)`. Implemented by `CopilotCli` (default args `--allow-all-tools`) and `CodexCli` (default args `--sandbox workspace-write`).
 - `AgentProfile(cli, model=None, reasoning_effort=None, context=None, args=())`: frozen; make variants with `dataclasses.replace`.
 - `copilot`, `codex`, `DEFAULT = AgentProfile(copilot)`: library instances; no model or role profiles are shipped.
-- `ProcessCliRunner(run=subprocess.run)`: `run(profile, request, context)` runs the CLI's argv in the agent cwd and returns `cli.parse(...)`.
-- `Worktree`: `path` and `agent(profile=DEFAULT) -> AgentClient`; raises `RuntimeError("worktree closed")` after the `open()` block.
-- `AgentBuilder.open() -> ContextManager[Worktree]`: runs the git strategy once; without git yields the agent cwd.
-- `AgentBuilder.create(profile=DEFAULT) -> AgentClient`: one-shot client with one git lifecycle per `run()`.
+- `ProcessCliRunner(run=subprocess.run)`: `run(profile, request, turn, context)` runs the CLI's argv in the agent cwd and returns `cli.parse(...)`.
+- `CliAgentClient(runner, profile, defaults=None, *, store=None, session=None)`: makes the start-or-resume decision. Without a store every run is `Start(SessionName.new())`; `session` without a store raises `ValueError`. With a store it resumes the handle for `(session, cli.name)`, raises `SessionCliMismatch` for a foreign handle, and otherwise starts, saving `handle_for_new(name)` before the run so a retry resumes. It saves the outcome's handle after the run.
+- `Worktree`: `path`, `session` and `agent(profile=DEFAULT, session=None) -> AgentClient`; raises `ValueError` when `session` is set but sessions are off, and `RuntimeError("worktree closed")` after the `open()` block.
+- `AgentBuilder.open(session=None) -> ContextManager[Worktree]`: runs the git strategy once; without git yields the agent cwd. With sessions on, the worktree session is `session` or a generated name; `session` without `with_session()` raises `ValueError`.
+- `AgentBuilder.create(profile=DEFAULT, session=None) -> AgentClient`: one-shot client with one git lifecycle per `run()`; same `session` rule as `open()`.
 - `GitOptions`: `root_path` (worktrees root, must resolve inside the cwd; worktree strategies only), `repository_path` (optional, default the agent `cwd`; relative paths resolve from it) sets `git -C` for multi-repository setups, and `strategy` (default `HeadStrategy()`). A worktree is created at `root_path/<branch>`.
 - `GitStrategy`: protocol with `open(git, cwd, repository, options)`, a context manager yielding the agent's working directory. Implemented by the frozen dataclasses `HeadStrategy`, `MergeToHeadStrategy` and `BranchStrategy`, each owning its git lifecycle; see [Strategies](#strategies).
 - `GitCli`: with `git -C <repository>`: `fetch` (`fetch --all --prune`), `add_worktree(repository, target, branch, base="HEAD")` (`check-ref-format --branch`; an existing local branch is reused as-is, otherwise `branch` from `origin/<branch>` if present else `base`; then `worktree add <target> <branch>`), `remove_worktree` (`worktree remove <target>`; git refuses with uncommitted changes), `merge_ff_only` (`merge --ff-only <branch>`) and `delete_branch` (`branch -d <branch>`).
@@ -91,8 +98,8 @@ Test a custom CLI with `ProcessCliRunner(run=fake)` and check its `command` and 
 - `AgentOptions`: optional frozen caller overrides `docker_image` and `dry_run`; `Agent()` copies the set (non-`None`) values onto the `AgentContext`.
 - `AgentBuilder.with_git(options: GitOptions | None = None) -> Self`: enable the git strategy; defaults to `GitOptions()` (`HeadStrategy`, no git calls).
 - `AgentBuilder.with_docker() -> Self`: enable Docker execution configuration.
-- `AgentClient.run(request: AgentRequest, context: RunContext | None = None) -> AgentResult`: invariant public entry point. `AgentRequest(prompt, session_id=None)` is CLI-neutral, `AgentResult(output, session_id, exit_code)` and `AgentSession(id)` follow `docs/research/ai-agent-terms.md`; a set `session_id` resumes that session.
-- `AgentBuilder.with_session(options: SessionOptions | None = None) -> Self`: enable `SessionAgent`, which fills a missing `request.session_id` from a `SessionStore` (in-memory by default) keyed by `<SessionOptions.key or run cwd>:<cli.name>`, and saves the result's id. An explicit `session_id` wins.
+- `AgentClient.run(request: AgentRequest, context: RunContext | None = None) -> AgentResult`: invariant public entry point. `AgentRequest(prompt)` is CLI-neutral; `AgentResult(output, session: SessionName, exit_code)` names the session the run used.
+- `AgentBuilder.with_session() -> Self`: continue sessions across runs through a `SessionStore` (in-memory by default) with `get(name, cli) -> NativeHandle | None` and `save(name, handle)`, keyed by `(SessionName, cli.name)`.
 - `AgentContext`: frozen agent settings `cwd`, `docker_image` and `add_dirs` (extra directories, each passed as `--add-dir`); the agent always starts in `cwd`, which already contains the worktree. CLI flags come from the adapter defaults plus `profile.args`.
 - `RunContext`: per-run context; carries the `AgentContext` as `agent`.
 - `AgentClient.close() -> None`: lifecycle operation delegated through all wrappers.
@@ -112,14 +119,15 @@ classDiagram
             -_use_session : bool
             +with_git(options) Self
             +with_docker() Self
-            +with_session(options) Self
-            +open() ContextManager~Worktree~
-            +create(profile) AgentClient
+            +with_session() Self
+            +open(session) ContextManager~Worktree~
+            +create(profile, session) AgentClient
         }
         class Worktree {
             +path : Path
+            +session : SessionName | None
             -_closed : bool
-            +agent(profile) AgentClient
+            +agent(profile, session) AgentClient
         }
     }
     namespace Abstractions {
@@ -130,12 +138,12 @@ classDiagram
         }
         class CliRunner {
             <<Interface>>
-            +run(profile, request, context) AgentResult
+            +run(profile, request, turn, context) CliOutcome
         }
         class SessionStore {
             <<Interface>>
-            +get(key) AgentSession | None
-            +save(key, session) None
+            +get(name, cli) NativeHandle | None
+            +save(name, handle) None
         }
         class GitService {
             <<Interface>>
@@ -150,18 +158,40 @@ classDiagram
         class AgentRequest {
             <<frozen dataclass>>
             +prompt : str
-            +session_id : str | None
         }
         class AgentResult {
             <<frozen dataclass>>
             +output : str
-            +session_id : str
+            +session : SessionName
             +exit_code : int
         }
-        class AgentSession {
+        class SessionName {
             <<frozen dataclass>>
-            +id : str
+            +value : str
+            +new()$ SessionName
         }
+        class NativeHandle {
+            <<frozen dataclass>>
+            +cli : str
+            +value : str
+        }
+        class Start {
+            <<frozen dataclass>>
+            +name : SessionName
+        }
+        class Resume {
+            <<frozen dataclass>>
+            +name : SessionName
+            +handle : NativeHandle
+        }
+        class CliOutcome {
+            <<frozen dataclass>>
+            +output : str
+            +handle : NativeHandle
+            +exit_code : int
+        }
+        class SessionHandleMissing
+        class SessionCliMismatch
         class AgentProfile {
             <<frozen dataclass>>
             +cli : AgentCli
@@ -175,9 +205,9 @@ classDiagram
         class AgentCli {
             <<Interface>>
             +name : str
-            +new_session_id() str | None
-            +command(request, profile, session_id, context) list~str~
-            +parse(stdout, session_id, exit_code) AgentResult
+            +handle_for_new(name) NativeHandle | None
+            +command(request, profile, turn, context) list~str~
+            +parse(stdout, turn, exit_code) CliOutcome
         }
         class CopilotCli
         class CodexCli
@@ -187,10 +217,6 @@ classDiagram
         class AgentOptions {
             <<frozen dataclass>>
             +docker_image : str | None
-        }
-        class SessionOptions {
-            <<frozen dataclass>>
-            +key : str | None
         }
         class AgentContext {
             <<frozen dataclass>>
@@ -205,15 +231,15 @@ classDiagram
     }
     namespace Agents {
         class CliAgentClient {
+            -_store : SessionStore | None
+            -_session : SessionName | None
+            -_turn() Start | Resume
             +run(request, context) AgentResult
         }
         class AgentWrapper {
             +close() None
         }
         class GitAgent {
-            +run(request, context) AgentResult
-        }
-        class SessionAgent {
             +run(request, context) AgentResult
         }
         class DockerAgent {
@@ -246,10 +272,10 @@ classDiagram
     }
     namespace StubAdapters {
         class ProcessCliRunner {
-            +run(profile, request, context) AgentResult
+            +run(profile, request, turn, context) CliOutcome
         }
         class LoggingRunner {
-            +run(profile, request, context) AgentResult
+            +run(profile, request, turn, context) CliOutcome
         }
         class MemorySessionStore
         class GitRuntime {
@@ -274,10 +300,8 @@ classDiagram
     CliAgentClient ..|> AgentClient
     GitAgent ..|> AgentClient
     DockerAgent ..|> AgentClient
-    SessionAgent ..|> AgentClient
     GitAgent --|> AgentWrapper : Extends
     DockerAgent --|> AgentWrapper : Extends
-    SessionAgent --|> AgentWrapper : Extends
 
     AgentWrapper o-- AgentClient : inner
     CliAgentClient o-- CliRunner
@@ -290,13 +314,22 @@ classDiagram
     LoggingRunner ..> AgentCli : Use
     AgentBuilder ..> Worktree : Use
     Worktree ..> CliAgentClient : Use
-    Worktree ..> SessionAgent : Use
+    Worktree o-- SessionName
     GitAgent o-- GitService
     DockerAgent o-- DockerService
-    SessionAgent o-- SessionStore
-    SessionAgent o-- SessionOptions
+    CliAgentClient o-- SessionStore
+    CliAgentClient ..> Start : Use
+    CliAgentClient ..> Resume : Use
+    CliAgentClient ..> SessionCliMismatch : Use
+    Start *-- SessionName
+    Resume *-- SessionName
+    Resume *-- NativeHandle
+    CliOutcome *-- NativeHandle
+    AgentResult *-- SessionName
+    CodexCli ..> SessionHandleMissing : Use
     MemorySessionStore ..|> SessionStore
-    SessionStore ..> AgentSession : Use
+    SessionStore ..> NativeHandle : Use
+    CliRunner ..> CliOutcome : Use
     AgentClient ..> AgentRequest : Use
     AgentClient ..> AgentResult : Use
 
@@ -307,7 +340,6 @@ classDiagram
     AgentBuilder ..> CliAgentClient : Use
     AgentBuilder ..> GitAgent : Use
     AgentBuilder ..> DockerAgent : Use
-    AgentBuilder ..> SessionAgent : Use
 
     AgentClient ..> RunContext : Use
     CliRunner ..> RunContext : Use
@@ -334,8 +366,8 @@ classDiagram
     worktreeHelper ..> GitCli : Use
     DockerRuntime ..|> DockerService
 
-    note for AgentBuilder "Agent() registers the stub adapters; create() wraps git (outer) > session > docker > core"
-    note for SessionAgent "Key = run cwd (the worktree) unless SessionOptions.key is set; explicit request.session_id wins"
+    note for AgentBuilder "Agent() registers the stub adapters; create() wraps git (outer) > docker > core; the core decides start or resume"
+    note for CliAgentClient "Store key = (SessionName, cli.name); without a store every run is Start(SessionName.new())"
     note for GitRuntime "Delegates to options.strategy.open(); each strategy owns its git lifecycle"
     note for GitStrategy "head = no git; merge-to-head = tmp_hex worktree, ff-only merge, branch -d; branch = fetch, reuse or create, worktree"
 

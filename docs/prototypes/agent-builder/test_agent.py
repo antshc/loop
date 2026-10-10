@@ -20,6 +20,7 @@ from agent import (
     AgentResult,
     BranchStrategy,
     CliAgentClient,
+    CliOutcome,
     CodexCli,
     CopilotCli,
     DockerAgent,
@@ -28,10 +29,17 @@ from agent import (
     GitOptions,
     GitRuntime,
     HeadStrategy,
+    MemorySessionStore,
     MergeToHeadStrategy,
+    NativeHandle,
     ProcessCliRunner,
+    Resume,
     RunContext,
-    SessionAgent,
+    SessionCliMismatch,
+    SessionHandleMissing,
+    SessionName,
+    Start,
+    Turn,
     _parse_codex_events,
     codex,
     copilot,
@@ -49,17 +57,18 @@ class RecordingRunner:
         self.contexts: list[RunContext] = []
         self.requests: list[AgentRequest] = []
         self.profiles: list[AgentProfile] = []
+        self.turns: list[Turn] = []
 
-    def run(self, profile: AgentProfile, request: AgentRequest, context: RunContext) -> AgentResult:
+    def run(self, profile: AgentProfile, request: AgentRequest, turn: Turn, context: RunContext) -> CliOutcome:
         self.events.append("cli.run")
         self.profiles.append(profile)
         self.contexts.append(context)
         self.requests.append(request)
+        self.turns.append(turn)
         if self.fail:
             raise RuntimeError("runner failed")
-        return AgentResult(
-            f"done:{request.prompt}", request.session_id or f"{profile.cli.name}{len(self.requests)}", 0
-        )
+        handle = turn.handle if isinstance(turn, Resume) else NativeHandle(profile.cli.name, f"{profile.cli.name}{len(self.requests)}")
+        return CliOutcome(f"done:{request.prompt}", handle, 0)
 
 
 class RecordingGit:
@@ -91,7 +100,7 @@ class ClosingClient:
         self.close_count = 0
 
     def run(self, request: AgentRequest, context: RunContext | None = None) -> AgentResult:
-        return AgentResult(request.prompt, "s", 0)
+        return AgentResult(request.prompt, SessionName("s"), 0)
 
     def close(self) -> None:
         self.close_count += 1
@@ -111,50 +120,76 @@ class AgentBuilderTests(unittest.TestCase):
         client = Agent().create()
         self.assertIsInstance(client, CliAgentClient)
 
-    def test_run_returns_result_with_session_id(self) -> None:
+    def test_run_returns_result_with_session_name(self) -> None:
         result = self.builder().create().run(AgentRequest("hello"), repo_context())
-        self.assertEqual(result, AgentResult("done:hello", "copilot1", 0))
-
-    def test_explicit_session_id_is_forwarded(self) -> None:
-        result = self.builder().create().run(AgentRequest("hello", "abc"), repo_context())
-        self.assertEqual(self.runner.requests[0].session_id, "abc")
-        self.assertEqual(result.session_id, "abc")
+        self.assertEqual(result.output, "done:hello")
+        self.assertTrue(result.session.value.startswith("loop-"))
 
     def test_runs_are_stateless_without_session(self) -> None:
         client = self.builder().create()
         client.run(AgentRequest("one"), repo_context())
         client.run(AgentRequest("two"), repo_context())
-        self.assertEqual([r.session_id for r in self.runner.requests], [None, None])
+        first, second = self.runner.turns
+        self.assertIsInstance(first, Start)
+        self.assertIsInstance(second, Start)
+        self.assertNotEqual(first.name, second.name)
+        self.assertTrue(first.name.value.startswith("loop-"))
 
     def test_session_is_shared_between_runs_in_one_cwd(self) -> None:
         client = self.builder().with_session().create()
-        self.assertIsInstance(client, SessionAgent)
         first = client.run(AgentRequest("one"), repo_context())
         second = client.run(AgentRequest("two"), repo_context())
-        self.assertEqual(second.session_id, first.session_id)
-        self.assertEqual(self.runner.requests[1].session_id, first.session_id)
+        self.assertEqual(second.session, first.session)
+        self.assertIsInstance(self.runner.turns[0], Start)
+        self.assertEqual(self.runner.turns[1], Resume(first.session, NativeHandle("copilot", "copilot1")))
 
-    def test_explicit_session_overrides_stored_session(self) -> None:
-        client = self.builder().with_session().create()
-        client.run(AgentRequest("one"), repo_context())
-        result = client.run(AgentRequest("two", "other"), repo_context())
-        self.assertEqual(result.session_id, "other")
+    def test_named_session(self) -> None:
+        result = self.builder().with_session().create(session=SessionName("feat")).run(AgentRequest("x"), repo_context())
+        self.assertEqual(result.session, SessionName("feat"))
 
-    def test_sessions_are_unique_per_worktree(self) -> None:
-        client = self.builder().with_session().create()
-        a = client.run(AgentRequest("one"), RunContext(AgentContext(cwd=Path("/wt/a"))))
-        b = client.run(AgentRequest("one"), RunContext(AgentContext(cwd=Path("/wt/b"))))
-        again = client.run(AgentRequest("two"), RunContext(AgentContext(cwd=Path("/wt/a"))))
-        self.assertNotEqual(a.session_id, b.session_id)
-        self.assertEqual(again.session_id, a.session_id)
+    def test_session_without_with_session_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            self.builder().create(session=SessionName("a"))
+        with self.assertRaises(ValueError):
+            with self.builder().open(session=SessionName("a")):
+                pass
+        with self.builder().open() as wt:
+            with self.assertRaises(ValueError):
+                wt.agent(session=SessionName("a"))
+
+    def test_copilot_saves_handle_before_run(self) -> None:
+        store = MemorySessionStore()
+        self.runner.fail = True
+        name = SessionName("n")
+        client = AgentBuilder(self.runner, self.git, self.docker, sessions=store).with_session().create(session=name)
+        with self.assertRaises(RuntimeError):
+            client.run(AgentRequest("x"), repo_context())
+        self.assertEqual(store.get(name, "copilot"), NativeHandle("copilot", "n"))
+        self.runner.fail = False
+        client.run(AgentRequest("x"), repo_context())
+        self.assertIsInstance(self.runner.turns[-1], Resume)
+
+    def test_cli_mismatch_raises(self) -> None:
+        store = MemorySessionStore()
+        name = SessionName("n")
+        store._sessions[(name, "copilot")] = NativeHandle("codex", "t")
+        client = AgentBuilder(self.runner, self.git, self.docker, sessions=store).with_session().create(session=name)
+        with self.assertRaises(SessionCliMismatch):
+            client.run(AgentRequest("x"), repo_context())
 
     def test_session_sees_the_git_worktree(self) -> None:
         client = self.builder().with_git().with_session().create()
         self.assertIsInstance(client, GitAgent)
-        self.assertIsInstance(client._inner, SessionAgent)
+        self.assertIsInstance(client._inner, CliAgentClient)
         client.run(AgentRequest("one"), repo_context())
-        second = client.run(AgentRequest("two"), repo_context())
-        self.assertEqual(second.session_id, "copilot1")
+        client.run(AgentRequest("two"), repo_context())
+        self.assertIsInstance(self.runner.turns[1], Resume)
+
+    def test_session_name_validation(self) -> None:
+        for bad in ("", "a b"):
+            with self.assertRaises(ValueError):
+                SessionName(bad)
+        self.assertTrue(SessionName.new().value.startswith("loop-"))
 
     def test_one_chain_creates_git_outer_and_docker_inner(self) -> None:
         builder = self.builder()
@@ -209,13 +244,26 @@ class WorktreeTests(unittest.TestCase):
         self.assertEqual([p.cli.name for p in self.runner.profiles], ["copilot", "codex"])
 
     def test_sessions_are_per_cli_inside_one_worktree(self) -> None:
-        with self.builder.with_session().open() as wt:
+        name = SessionName("n")
+        with self.builder.with_session().open(session=name) as wt:
             wt.agent(DEVELOPER).run(AgentRequest("one"))
             wt.agent(PLANNER).run(AgentRequest("two"))
             wt.agent(DEVELOPER).run(AgentRequest("three"))
             wt.agent(PLANNER).run(AgentRequest("four"))
-        ids = [r.session_id for r in self.runner.requests]
-        self.assertEqual(ids, [None, None, "codex1", "copilot2"])
+        one, two, three, four = self.runner.turns
+        self.assertEqual(one, Start(name))
+        self.assertEqual(two, Start(name))
+        self.assertEqual(three, Resume(name, NativeHandle("codex", "codex1")))
+        self.assertEqual(four, Resume(name, NativeHandle("copilot", "copilot2")))
+
+    def test_agent_session_override_starts_fresh(self) -> None:
+        with self.builder.with_session().open(session=SessionName("n")) as wt:
+            wt.agent(PLANNER).run(AgentRequest("one"))
+            wt.agent(PLANNER, session=SessionName.new()).run(AgentRequest("review"))
+            wt.agent(PLANNER).run(AgentRequest("two"))
+        self.assertIsInstance(self.runner.turns[1], Start)
+        self.assertNotEqual(self.runner.turns[1].name, SessionName("n"))
+        self.assertIsInstance(self.runner.turns[2], Resume)
 
     def test_exception_in_block_still_exits_worktree(self) -> None:
         with self.assertRaisesRegex(RuntimeError, "boom"):
@@ -239,14 +287,14 @@ class WorktreeTests(unittest.TestCase):
 class UserCli:
     name = "user"
 
-    def new_session_id(self) -> str | None:
-        return "fixed"
+    def handle_for_new(self, name: SessionName) -> NativeHandle | None:
+        return NativeHandle("user", "fixed")
 
-    def command(self, request: AgentRequest, profile: AgentProfile, session_id: str | None, context: RunContext) -> list[str]:
-        return ["user-cli", request.prompt, str(session_id), *profile.args]
+    def command(self, request: AgentRequest, profile: AgentProfile, turn: Turn, context: RunContext) -> list[str]:
+        return ["user-cli", request.prompt, turn.name.value, *profile.args]
 
-    def parse(self, stdout: str, session_id: str | None, exit_code: int) -> AgentResult:
-        return AgentResult(stdout.upper(), session_id or "", exit_code)
+    def parse(self, stdout: str, turn: Turn, exit_code: int) -> CliOutcome:
+        return CliOutcome(stdout.upper(), NativeHandle("user", "fixed"), exit_code)
 
 
 class CliTests(unittest.TestCase):
@@ -258,29 +306,32 @@ class CliTests(unittest.TestCase):
             return type("P", (), {"stdout": "out", "returncode": 0})()
 
         cli: AgentCli = UserCli()
-        result = ProcessCliRunner(run=fake).run(AgentProfile(cli, args=("-x",)), AgentRequest("hi"), repo_context())
-        self.assertEqual(result, AgentResult("OUT", "fixed", 0))
-        self.assertEqual(calls[0][0], ["user-cli", "hi", "fixed", "-x"])
+        turn = Start(SessionName("s"))
+        result = ProcessCliRunner(run=fake).run(AgentProfile(cli, args=("-x",)), AgentRequest("hi"), turn, repo_context())
+        self.assertEqual(result, CliOutcome("OUT", NativeHandle("user", "fixed"), 0))
+        self.assertEqual(calls[0][0], ["user-cli", "hi", "s", "-x"])
         self.assertEqual(calls[0][1]["cwd"], Path("/repo"))
 
     def test_copilot_command(self) -> None:
         profile = replace(PLANNER, args=("--x",))
-        command = CopilotCli().command(AgentRequest("p"), profile, "sid", repo_context())
-        self.assertEqual(
-            command,
-            ["copilot", "-p", "p", "--resume=sid", "--allow-all-tools", "--model", "claude-opus-4.5",
-             "--reasoning-effort", "high", "--x"],
+        tail = ["--allow-all-tools", "--model", "claude-opus-4.5", "--reasoning-effort", "high", "--x"]
+        start = CopilotCli().command(AgentRequest("p"), profile, Start(SessionName("n")), repo_context())
+        self.assertEqual(start, ["copilot", "-p", "p", "--name", "n", *tail])
+        resume = CopilotCli().command(
+            AgentRequest("p"), profile, Resume(SessionName("n"), NativeHandle("copilot", "h")), repo_context()
         )
+        self.assertEqual(resume, ["copilot", "-p", "p", "--resume=h", *tail])
 
     def test_codex_command_new_and_resume(self) -> None:
         profile = replace(DEVELOPER, args=("--x",))
-        new = CodexCli().command(AgentRequest("p"), profile, None, repo_context())
+        name = SessionName("n")
+        new = CodexCli().command(AgentRequest("p"), profile, Start(name), repo_context())
         self.assertEqual(
             new,
             ["codex", "exec", "--json", "--sandbox", "workspace-write", "--model", "gpt-5-codex",
              "-c", "model_reasoning_effort=high", "--x", "p"],
         )
-        resumed = CodexCli().command(AgentRequest("p"), profile, "t1", repo_context())
+        resumed = CodexCli().command(AgentRequest("p"), profile, Resume(name, NativeHandle("codex", "t1")), repo_context())
         self.assertEqual(resumed[:4], ["codex", "exec", "resume", "t1"])
         self.assertEqual(resumed[-1], "p")
 
@@ -292,7 +343,14 @@ class CliTests(unittest.TestCase):
             '{"type":"item.completed","item":{"type":"agent_message","text":"last"}}',
         ])
         self.assertEqual(_parse_codex_events(stdout), ("t1", "last"))
-        self.assertEqual(CodexCli().parse(stdout, None, 0), AgentResult("last", "t1", 0))
+        outcome = CodexCli().parse(stdout, Start(SessionName("n")), 0)
+        self.assertEqual(outcome, CliOutcome("last", NativeHandle("codex", "t1"), 0))
+
+    def test_codex_parse_without_thread_id(self) -> None:
+        with self.assertRaises(SessionHandleMissing):
+            CodexCli().parse("", Start(SessionName("n")), 0)
+        handle = NativeHandle("codex", "t1")
+        self.assertEqual(CodexCli().parse("", Resume(SessionName("n"), handle), 0).handle, handle)
 
 
 class FakeProcess:
@@ -455,6 +513,17 @@ class DryRunTests(unittest.TestCase):
         self.assertEqual(text.count("worktree remove"), 1)
         self.assertLess(text.index("copilot -p plan"), text.index("codex exec --json"))
         self.assertIn("--model gpt-5-codex", text)
+
+    def test_open_with_session_logs_name_and_resume(self) -> None:
+        builder = Agent(AgentOptions(dry_run=True)).with_session()
+        output = StringIO()
+        with redirect_stdout(output), builder.open(session=SessionName("ticket-123")) as wt:
+            wt.agent(PLANNER).run(AgentRequest("plan"))
+            wt.agent(DEVELOPER).run(AgentRequest("a"))
+            wt.agent(DEVELOPER).run(AgentRequest("b"))
+        text = output.getvalue()
+        self.assertIn("--name ticket-123", text)
+        self.assertIn("codex exec resume dry-", text)
 
     def test_head_logs_no_git_commands(self) -> None:
         self.assertNotIn("git -C", self.dry_run(HeadStrategy()))
