@@ -66,6 +66,8 @@ class GitOptions:
     # Repository that git -C targets (multi-repository setups); None uses the agent cwd.
     repository_path: Path | None = None
     strategy: GitStrategy = HeadStrategy()
+    # Message for the safety-net commit of changes the agent left uncommitted.
+    commit_message: str = "agent: commit uncommitted changes"
 
 
 @dataclass(frozen=True)
@@ -276,8 +278,8 @@ class GitRuntime:
                 branch = f"tmp_{secrets.token_hex(4)}"
                 with self._worktree(cwd, repository, options, branch, "HEAD") as target:
                     yield target
-                    # Commit before the worktree is removed so the merge carries the agent's edits.
-                    self._git.commit_all(target, "Agent changes")
+                    # Safety net: the prompt normally commits; this catches edits it left behind before the worktree is removed.
+                    self._git.commit_all(target, options.commit_message)
                 # Reached only when the run succeeded; on failure the temp branch is kept unmerged.
                 self._git.merge_ff_only(repository, branch)
                 self._git.delete_branch(repository, branch)
