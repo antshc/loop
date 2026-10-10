@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 
 from workflows.dev.errors import ExecutionStoreError, PromptError
-from workflows.dev.logging_config import configure_logging
 from workflows.dev.prompting import render_prompt
 from workflows.dev.result import DevResult, DevResultError, parse_dev_result, parse_response
 from workflows.dev.store import FileExecutionStore
@@ -121,21 +120,3 @@ def test_the_store_rejects_a_corrupt_log(tmp_path: Path, content: str) -> None:
 
     with pytest.raises(ExecutionStoreError):
         _store(tmp_path).failed_attempts("t1")
-
-
-def test_configure_logging_writes_json_lines_at_the_given_level(tmp_path: Path) -> None:
-    log_file = tmp_path / "nested" / "dev.log"
-    root = logging.getLogger()
-    saved_handlers, saved_level = list(root.handlers), root.level
-    try:
-        configure_logging(log_file, "WARNING")
-        logging.getLogger("x").info("hidden")
-        logging.getLogger("x").warning("shown")
-        for handler in root.handlers:
-            handler.flush()
-    finally:
-        root.handlers[:] = saved_handlers
-        root.setLevel(saved_level)
-
-    records = [json.loads(line) for line in log_file.read_text().splitlines()]
-    assert [record["message"] for record in records] == ["shown"]

@@ -5,6 +5,8 @@ No real Git worktree, Docker container, or Copilot process is started by default
 
 from __future__ import annotations
 
+import logging
+
 from .agents import AgentClient, AgentWrapper, CliAgentClient, DockerAgent, GitAgent
 from .builder import AgentBuilder, Worktree
 from .clis import (
@@ -52,6 +54,7 @@ from .hooks import (
     WorktreeReadyLoopHook,
     WorktreeRemovingLoopHook,
 )
+from .log import configure_logging
 from .run import AgentContext, AgentOptions, AgentRequest, AgentResult, RunContext
 from .sessions import (
     CliOutcome,
@@ -65,6 +68,9 @@ from .sessions import (
     Start,
     Turn,
 )
+
+# Silent until the host calls configure_logging() or sets up its own handlers.
+logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 __all__ = [
     "DEFAULT",
@@ -130,6 +136,7 @@ __all__ = [
     "WorktreeReadyLoopHook",
     "WorktreeRemovingLoopHook",
     "codex",
+    "configure_logging",
     "copilot",
     "repo_agent",
 ]

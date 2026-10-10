@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
 from collections.abc import Callable
@@ -11,6 +12,8 @@ from ..hooks import AgentCliHookWiring
 from ..run import AgentRequest, RunContext
 from ..sessions import CliOutcome, Turn
 from .base import AgentProfile
+
+logger = logging.getLogger(__name__)
 
 
 class CliRunner(Protocol):
@@ -31,8 +34,12 @@ class ProcessCliRunner:
             else AgentCliHookWiring()
         )
         extra = {"env": {**os.environ, **wiring.env}} if wiring.env else {}
+        logger.info("agent run started: cli=%s session=%s cwd=%s", profile.cli.name, turn.name.value, context.agent.cwd)
+        logger.debug("agent command: %s", argv)
         with self._hook_files(wiring, context.agent.cwd):
             result = self._run(argv, cwd=context.agent.cwd, check=True, capture_output=True, text=True, **extra)
+        logger.info("agent run finished: cli=%s exit_code=%s", profile.cli.name, result.returncode)
+        logger.debug("agent stdout: %s chars", len(result.stdout or ""))
         return profile.cli.parse(result.stdout, turn, result.returncode)
 
     @contextmanager
@@ -44,6 +51,7 @@ class ProcessCliRunner:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(content)
                 written.append(path)
+                logger.debug("hook file written: %s", path)
             if wiring.git_excludes:
                 self._exclude(cwd, wiring.git_excludes)
             yield

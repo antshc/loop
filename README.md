@@ -68,6 +68,24 @@ alias dev='PYTHONPATH=/path/to/harness python -m workflows.dev'
 dev --log-level DEBUG
 ```
 
+### Logging
+
+The library logs under the `loop` logger and is silent until you call `configure_logging`:
+
+```python
+from pathlib import Path
+from loop import configure_logging
+
+configure_logging()                                        # INFO: console only
+configure_logging("DEBUG")                                 # DEBUG: console + JSON lines in ./loop.log
+configure_logging("DEBUG", log_file=Path("logs/run.log"))  # custom file
+configure_logging("DEBUG", log_file=None)                  # DEBUG without a file
+```
+
+It configures only the `loop` logger; pass `logger=""` to configure the root logger for your whole application.
+
+`dev` writes its file to `<log-dir>/dev.log`, and only with `--log-level DEBUG`.
+
 ### Examples
 
 Every example uses `AgentOptions(dry_run=True)`, which only logs; drop it to run real git and agents.

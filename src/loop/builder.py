@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import replace
@@ -18,6 +19,8 @@ from .hooks import (
 )
 from .run import AgentContext, RunContext
 from .sessions import MemorySessionStore, SessionName, SessionStore
+
+logger = logging.getLogger(__name__)
 
 
 class Worktree:
@@ -120,13 +123,16 @@ class AgentBuilder:
             if self._use_git:
                 with self._git.open(self._defaults.agent.cwd, self._git_options or GitOptions()) as path:
                     worktree = Worktree(path, self._stack, self._defaults, shared)
+                    logger.info("worktree opened: %s", path)
                     yield worktree
             else:
                 worktree = Worktree(self._defaults.agent.cwd, self._stack, self._defaults, shared)
+                logger.info("worktree opened: %s", worktree.path)
                 yield worktree
         finally:
             if worktree is not None:
                 worktree._closed = True
+                logger.info("worktree closed: %s", worktree.path)
 
     def create(self, profile: AgentProfile | None = None, session: SessionName | None = None) -> AgentClient:
         """One-shot client: a separate git lifecycle per run()."""

@@ -69,7 +69,7 @@ def test_a_log_dir_override_writes_logs_to_that_folder(tmp_path: Path) -> None:
     harness = DevHarness(tmp_path, specs=[], tickets={})
     custom = tmp_path / "custom-logs"
 
-    code = harness.run(argv=["--log-dir", str(custom)])
+    code = harness.run(argv=["--log-dir", str(custom), "--log-level", "DEBUG"])
 
     assert code == 0 and (custom / "dev.log").is_file()
 
@@ -94,7 +94,10 @@ def test_an_unexpected_error_is_logged_and_the_process_exits_non_zero(tmp_path: 
         def spec_issues(self):
             raise RuntimeError("boom")
 
-    code = harness.run(github_factory=lambda checkout: RaisingGithub())
+    code = harness.run(
+        github_factory=lambda checkout: RaisingGithub(),
+        argv=["--log-dir", str(harness.log_dir), "--log-level", "DEBUG"],
+    )
 
     assert code == 1
     assert "boom" in (harness.log_dir / "dev.log").read_text()

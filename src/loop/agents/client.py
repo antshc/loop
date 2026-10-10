@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import replace
 from typing import Protocol
 
 from ..clis import AgentProfile, CliRunner
 from ..run import AgentContext, AgentRequest, AgentResult, RunContext
 from ..sessions import Resume, SessionCliMismatch, SessionName, SessionStore, Start, Turn
+
+logger = logging.getLogger(__name__)
 
 
 class AgentClient(Protocol):
@@ -52,11 +55,14 @@ class CliAgentClient:
         if handle is not None:
             if handle.cli != cli.name:
                 raise SessionCliMismatch(f"handle for {handle.cli} found under {cli.name}")
+            logger.info("resuming session %s on %s", self._session.value, cli.name)
+            logger.debug("native handle: %s", handle)
             return Resume(self._session, handle)
         new_handle = cli.handle_for_new(self._session)
         if new_handle is not None:
             # Saved before the run so a retry resumes instead of colliding on the name.
             self._store.save(self._session, new_handle)
+        logger.info("starting session %s on %s", self._session.value, cli.name)
         return Start(self._session)
 
     def close(self) -> None:

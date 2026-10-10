@@ -11,7 +11,7 @@ import logging
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
-from loop import Agent, AgentBuilder, LoopHook
+from loop import Agent, AgentBuilder, LoopHook, configure_logging
 from workflows.platforms.git import WorkflowGit
 from workflows.platforms.work_tracking import (
     GitHubClient,
@@ -23,7 +23,6 @@ from workflows.platforms.work_tracking import (
 )
 
 from .deps import DevDeps, GithubFactory, Prompts
-from .logging_config import configure_logging
 from .prompting import prompt_args
 from .result import DevResult, DevResultError, parse_dev_result
 from .settings import LOG_DIR_NAME, LOG_LEVEL, LOOP_HOOKS, PROMPT, REPOSITORIES
@@ -64,7 +63,8 @@ def main(
     args = _parse_args(argv)
 
     log_dir = (args.log_dir or Path.cwd() / LOG_DIR_NAME).resolve()
-    configure_logging(log_dir / "dev.log", args.log_level)
+    # The workflow is the application: it owns the root logger so its own records land in the same file.
+    configure_logging(args.log_level, log_file=log_dir / "dev.log", logger="")
 
     github_factory = github_factory or (lambda checkout: GitHubClient.for_repo(checkout)[0])
     try:
