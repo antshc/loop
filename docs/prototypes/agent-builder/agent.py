@@ -12,7 +12,7 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Iterator, Protocol, Self
+from typing import Iterator, Protocol
 
 
 @dataclass(frozen=True)
@@ -133,9 +133,10 @@ class GitAgent(AgentWrapper):
     def run(self, prompt: str, context: RunContext | None = None) -> str:
         original = context or self._defaults
         # The strategy's git lifecycle surrounds the entire delegated execution.
-        with self._git.open(original.agent.cwd, self._options):
+        with self._git.open(original.agent.cwd, self._options) as workdir:
             # The worktree is inside cwd, so the CLI already has access to it.
-            return self._inner.run(prompt, original)
+            moved = replace(original, agent=replace(original.agent, cwd=workdir))
+            return self._inner.run(prompt, moved)
 
 
 class DockerAgent(AgentWrapper):
@@ -169,12 +170,12 @@ class AgentBuilder:
         self._git_options: GitOptions | None = None
         self._use_docker = False
 
-    def with_git(self, options: GitOptions | None = None) -> Self:
+    def with_git(self, options: GitOptions | None = None) -> AgentBuilder:
         self._use_git = True
         self._git_options = options
         return self
 
-    def with_docker(self) -> Self:
+    def with_docker(self) -> AgentBuilder:
         self._use_docker = True
         return self
 
@@ -191,13 +192,22 @@ class AgentBuilder:
 
 
 class CopilotCli:
-    def run(self, prompt: str, context: RunContext) -> str:
-        # Demonstration only: a real adapter would invoke the Copilot CLI.
+    """Runs the Copilot CLI in the agent cwd; Docker is not launched yet."""
+
+    def command(self, prompt: str, context: RunContext) -> list[str]:
         agent = context.agent
-        mode = f"docker:{agent.docker_image}" if agent.docker_image else "local"
         dirs = [part for directory in agent.add_dirs for part in ("--add-dir", str(directory))]
-        args = " ".join(("copilot", "-p", prompt, *agent.cli_args, *dirs))
-        return f"[{mode}] cwd={agent.cwd} cmd={args}"
+        return ["copilot", "-p", prompt, *agent.cli_args, *dirs]
+
+    def run(self, prompt: str, context: RunContext) -> str:
+        result = subprocess.run(
+            self.command(prompt, context),
+            cwd=context.agent.cwd,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout
 
 
 class GitCli:
@@ -224,6 +234,12 @@ class GitCli:
     def remove_worktree(self, repository: Path, target: Path) -> None:
         """Detach the worktree at `target`; git refuses when it has uncommitted changes. The branch is kept."""
         self._git(repository, "worktree", "remove", str(target))
+
+    def commit_all(self, worktree: Path, message: str) -> None:
+        """Commit every change in the worktree; no-op when there is nothing to commit."""
+        self._git(worktree, "add", "-A")
+        if not self._succeeds(worktree, "diff", "--cached", "--quiet"):
+            self._git(worktree, "commit", "-m", message)
 
     def merge_ff_only(self, repository: Path, branch: str) -> None:
         self._git(repository, "merge", "--ff-only", branch)
@@ -260,6 +276,8 @@ class GitRuntime:
                 branch = f"tmp_{secrets.token_hex(4)}"
                 with self._worktree(cwd, repository, options, branch, "HEAD") as target:
                     yield target
+                    # Commit before the worktree is removed so the merge carries the agent's edits.
+                    self._git.commit_all(target, "Agent changes")
                 # Reached only when the run succeeded; on failure the temp branch is kept unmerged.
                 self._git.merge_ff_only(repository, branch)
                 self._git.delete_branch(repository, branch)
@@ -305,13 +323,13 @@ class LoggingGitCli(GitCli):
 
 
 class LoggingRunner:
-    """Dry-run CliRunner: delegates to the stub and logs its result."""
+    """Dry-run CliRunner: logs the command instead of running it."""
 
-    def __init__(self, inner: CliRunner) -> None:
+    def __init__(self, inner: CopilotCli) -> None:
         self._inner = inner
 
     def run(self, prompt: str, context: RunContext) -> str:
-        result = self._inner.run(prompt, context)
+        result = f"cwd={context.agent.cwd} cmd={' '.join(self._inner.command(prompt, context))}"
         _log(result)
         return result
 
