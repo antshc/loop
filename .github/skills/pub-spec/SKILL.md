@@ -13,4 +13,5 @@ Input: a Markdown file path, or none → the session's plan.
 4. **Ensure label.** `gh label list --search spec`; absent → `gh label create spec`.
 5. **Dedupe.** `gh issue list --label spec --search "<title>" --state all`; same title exists → ask whether to update (`gh issue edit`) or create.
 6. **Publish.** Write the body to a temp file, then `gh issue create --title "<title>" --label spec --body-file <file>`. Body verbatim; no rewording.
-7. **Report** the issue URL. Done when the URL is returned.
+7. **Remove plan.** Only after `gh issue create`/`edit` succeeded: delete the source file (given path, or the session plan file). Failure → keep it. Done when the source is gone.
+8. **Report** the issue URL. Done when the URL is returned.
