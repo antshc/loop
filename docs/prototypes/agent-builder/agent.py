@@ -36,14 +36,37 @@ class AgentOptions:
     dry_run: bool = False
 
 
+class GitStrategy(Protocol):
+    """Owns one git lifecycle around a run and yields the directory the agent works in."""
+
+    def open(
+        self, git: GitCli, cwd: Path, repository: Path, options: GitOptions
+    ) -> AbstractContextManager[Path]: ...
+
+
 @dataclass(frozen=True)
 class HeadStrategy:
     """No worktree or branch: the agent works directly in the repository directory."""
+
+    @contextmanager
+    def open(self, git: GitCli, cwd: Path, repository: Path, options: GitOptions) -> Iterator[Path]:
+        yield repository
 
 
 @dataclass(frozen=True)
 class MergeToHeadStrategy:
     """Temp-branch worktree, fast-forward merged into the current HEAD on success, then the temp branch is deleted."""
+
+    @contextmanager
+    def open(self, git: GitCli, cwd: Path, repository: Path, options: GitOptions) -> Iterator[Path]:
+        branch = f"tmp_{secrets.token_hex(4)}"
+        with _worktree(git, cwd, repository, options, branch, "HEAD") as target:
+            yield target
+            # Safety net: the prompt normally commits; this catches edits it left behind before the worktree is removed.
+            git.commit_all(target, options.commit_message)
+        # Reached only when the run succeeded; on failure the temp branch is kept unmerged.
+        git.merge_ff_only(repository, branch)
+        git.delete_branch(repository, branch)
 
 
 @dataclass(frozen=True)
@@ -53,8 +76,13 @@ class BranchStrategy:
     branch: str
     base_branch: str | None = None
 
-
-GitStrategy = HeadStrategy | MergeToHeadStrategy | BranchStrategy
+    @contextmanager
+    def open(self, git: GitCli, cwd: Path, repository: Path, options: GitOptions) -> Iterator[Path]:
+        git.fetch(repository)
+        with _worktree(git, cwd, repository, options, self.branch, self.base_branch or "HEAD") as target:
+            yield target
+            # Safety net: git refuses to remove a dirty worktree.
+            git.commit_all(target, options.commit_message)
 
 
 @dataclass(frozen=True)
@@ -262,47 +290,30 @@ class GitCli:
         return self._run(command, check=check, capture_output=True, text=True)
 
 
+@contextmanager
+def _worktree(
+    git: GitCli, cwd: Path, repository: Path, options: GitOptions, branch: str, base: str
+) -> Iterator[Path]:
+    root = (cwd / options.root_path).resolve()
+    if not root.is_relative_to(cwd.resolve()):
+        raise ValueError(f"worktrees root {root} must be inside {cwd}")
+    target = root / branch
+    git.add_worktree(repository, target, branch, base)
+    try:
+        yield target
+    finally:
+        git.remove_worktree(repository, target)
+
+
 class GitRuntime:
-    """Applies the options' strategy through git and yields the directory the agent works in."""
+    """Delegates to the options' strategy and yields the directory the agent works in."""
 
     def __init__(self, git: GitCli) -> None:
         self._git = git
 
-    @contextmanager
-    def open(self, cwd: Path, options: GitOptions) -> Iterator[Path]:
+    def open(self, cwd: Path, options: GitOptions) -> AbstractContextManager[Path]:
         repository = (cwd / options.repository_path) if options.repository_path else cwd
-        match options.strategy:
-            case HeadStrategy():
-                yield repository
-            case MergeToHeadStrategy():
-                branch = f"tmp_{secrets.token_hex(4)}"
-                with self._worktree(cwd, repository, options, branch, "HEAD") as target:
-                    yield target
-                    # Safety net: the prompt normally commits; this catches edits it left behind before the worktree is removed.
-                    self._git.commit_all(target, options.commit_message)
-                # Reached only when the run succeeded; on failure the temp branch is kept unmerged.
-                self._git.merge_ff_only(repository, branch)
-                self._git.delete_branch(repository, branch)
-            case BranchStrategy(branch=branch, base_branch=base):
-                self._git.fetch(repository)
-                with self._worktree(cwd, repository, options, branch, base or "HEAD") as target:
-                    yield target
-                    # Safety net: git refuses to remove a dirty worktree.
-                    self._git.commit_all(target, options.commit_message)
-
-    @contextmanager
-    def _worktree(
-        self, cwd: Path, repository: Path, options: GitOptions, branch: str, base: str
-    ) -> Iterator[Path]:
-        root = (cwd / options.root_path).resolve()
-        if not root.is_relative_to(cwd.resolve()):
-            raise ValueError(f"worktrees root {root} must be inside {cwd}")
-        target = root / branch
-        self._git.add_worktree(repository, target, branch, base)
-        try:
-            yield target
-        finally:
-            self._git.remove_worktree(repository, target)
+        return options.strategy.open(self._git, cwd, repository, options)
 
 
 class DockerRuntime:

@@ -34,9 +34,9 @@ Python 3.12+, standard library only. No real Git, Docker, or Copilot installatio
 
 - `Agent(options: AgentOptions | None = None) -> AgentBuilder`: *composition root*; registers `CopilotCli`, `GitRuntime(GitCli())`, and `DockerRuntime` internally.
 - `GitOptions`: `root_path` (worktrees root, must resolve inside the cwd; worktree strategies only), `repository_path` (optional, default the agent `cwd`; relative paths resolve from it) sets `git -C` for multi-repository setups, and `strategy` (default `HeadStrategy()`). A worktree is created at `root_path/<branch>`.
-- `GitStrategy = HeadStrategy | MergeToHeadStrategy | BranchStrategy`: frozen dataclasses, see [Strategies](#strategies).
+- `GitStrategy`: protocol with `open(git, cwd, repository, options)`, a context manager yielding the agent's working directory. Implemented by the frozen dataclasses `HeadStrategy`, `MergeToHeadStrategy` and `BranchStrategy`, each owning its git lifecycle; see [Strategies](#strategies).
 - `GitCli`: with `git -C <repository>`: `fetch` (`fetch --all --prune`), `add_worktree(repository, target, branch, base="HEAD")` (`check-ref-format --branch`; an existing local branch is reused as-is, otherwise `branch` from `origin/<branch>` if present else `base`; then `worktree add <target> <branch>`), `remove_worktree` (`worktree remove <target>`; git refuses with uncommitted changes), `merge_ff_only` (`merge --ff-only <branch>`) and `delete_branch` (`branch -d <branch>`).
-- `GitRuntime.open()`: runs the strategy and yields the directory the agent works in; a worktree is removed on exit, also on error.
+- `GitRuntime.open()`: resolves the repository and delegates to `options.strategy.open()`, which yields the directory the agent works in; a worktree is removed on exit, also on error.
 - `AgentOptions`: optional frozen caller overrides `docker_image` and `cli_args`; `Agent()` copies the set (non-`None`) values onto the `AgentContext`.
 - `AgentBuilder.with_git(options: GitOptions | None = None) -> Self`: enable the per-run git strategy; defaults to `GitOptions()` (`HeadStrategy`, no git calls).
 - `AgentBuilder.with_docker() -> Self`: enable Docker execution configuration.
@@ -113,19 +113,26 @@ classDiagram
     }
     namespace GitStrategies {
         class GitStrategy {
-            <<type alias>>
-            HeadStrategy | MergeToHeadStrategy | BranchStrategy
+            <<Interface>>
+            +open(git, cwd, repository, options) ContextManager~Path~
         }
         class HeadStrategy {
             <<frozen dataclass>>
+            +open(git, cwd, repository, options) Iterator~Path~
         }
         class MergeToHeadStrategy {
             <<frozen dataclass>>
+            +open(git, cwd, repository, options) Iterator~Path~
         }
         class BranchStrategy {
             <<frozen dataclass>>
             +branch : str
             +base_branch : str | None
+            +open(git, cwd, repository, options) Iterator~Path~
+        }
+        class worktreeHelper {
+            <<module function>>
+            +_worktree(git, cwd, repository, options, branch, base) Iterator~Path~
         }
     }
     namespace StubAdapters {
@@ -180,13 +187,20 @@ classDiagram
     GitRuntime ..> GitOptions : Use
     GitAgent o-- GitOptions
     GitOptions *-- GitStrategy
+    GitRuntime ..> GitStrategy : Use
     HeadStrategy ..|> GitStrategy
     MergeToHeadStrategy ..|> GitStrategy
     BranchStrategy ..|> GitStrategy
+    MergeToHeadStrategy ..> worktreeHelper : Use
+    BranchStrategy ..> worktreeHelper : Use
+    MergeToHeadStrategy ..> GitCli : Use
+    BranchStrategy ..> GitCli : Use
+    worktreeHelper ..> GitCli : Use
     DockerRuntime ..|> DockerService
 
     note for AgentBuilder "Agent() registers the stub adapters; create() wraps git (outer) > docker > core"
-    note for GitRuntime "match strategy: head = no git; merge-to-head = tmp_hex worktree, ff-only merge, branch -d; branch = fetch, reuse or create, worktree"
+    note for GitRuntime "Delegates to options.strategy.open(); each strategy owns its git lifecycle"
+    note for GitStrategy "head = no git; merge-to-head = tmp_hex worktree, ff-only merge, branch -d; branch = fetch, reuse or create, worktree"
 
     classDef default fill:#242424,stroke:#8b949e,color:#c9d1d9,stroke-width:1px
 ```
