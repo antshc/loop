@@ -38,8 +38,8 @@ Native CLI hooks observe a run (session start/end, agent stop, prompts, tools, s
 
 ```python
 builder = Agent().with_git(GitOptions(strategy=BranchStrategy("loop/ticket-123"))).with_agent_cli_hooks(
-    AgentCliHook("./scripts/session-start.sh", frozenset({AgentCliHookPoint.SESSION_START})),
-    AgentCliHook("notify-send", frozenset({AgentCliHookPoint.SESSION_END}), timeout_sec=3),
+    SessionStartAgentCliHook("./scripts/session-start.sh"),
+    SessionEndAgentCliHook("notify-send", timeout_sec=3),
 )
 DEVELOPER = AgentProfile(CodexCli(hook_trust_bypass=True), "gpt-5-codex")  # Codex skips hooks otherwise
 ```
@@ -48,12 +48,18 @@ Security: `--dangerously-bypass-hook-trust` (Codex) and `GITHUB_COPILOT_PROMPT_M
 
 ### Loop hooks
 
-`worktree-ready` Loop hooks are shell commands run in a fresh worktree (`cwd` = the worktree) before the agent starts, in declared order. A failing or timed-out hook force-removes the worktree and raises `LoopHookError`; the agent never starts. `create()` runs them on every `run()`; `open()` runs them once. They receive `LOOP_REPOSITORY` and `LOOP_WORKTREE`.
+Loop hooks are shell commands, one class per point, run by Loop in declared order. A failing or timed-out hook raises `LoopHookError(point, ...)`.
+
+- `WorktreeReadyLoopHook`: in a fresh worktree (`cwd` = the worktree) before the agent starts; failure force-removes the worktree and the agent never starts. `create()` runs it on every `run()`; `open()` once.
+- `WorktreeRemovingLoopHook`: in the worktree after the safety-net commit and before removal, on success and failure; the worktree is removed even when the hook fails.
+- `RunFinishedLoopHook`: in the repository after the worktree is removed (and merged, for `MergeToHeadStrategy`); only when the run succeeded.
+
+They receive `LOOP_REPOSITORY`, `LOOP_WORKTREE` and `LOOP_HOOK_POINT`.
 
 ```python
 GitOptions(
     strategy=BranchStrategy("loop/ticket-123"),
-    loop_hooks=(LoopHook('cp "$LOOP_REPOSITORY/.env" .env'), LoopHook("npm ci", timeout_sec=600)),
+    loop_hooks=(WorktreeReadyLoopHook('cp "$LOOP_REPOSITORY/.env" .env'), WorktreeReadyLoopHook("npm ci", timeout_sec=600)),
 )
 ```
 
@@ -120,12 +126,12 @@ Test a custom CLI with `ProcessCliRunner(run=fake)` and check its `command` and 
 - `Worktree`: `path`, `session` and `agent(profile=DEFAULT, session=None) -> AgentClient`; raises `ValueError` when `session` is set but sessions are off, and `RuntimeError("worktree closed")` after the `open()` block.
 - `AgentBuilder.open(session=None) -> ContextManager[Worktree]`: runs the git strategy once; without git yields the agent cwd. With sessions on, the worktree session is `session` or a generated name; `session` without `with_session()` raises `ValueError`.
 - `AgentBuilder.create(profile=DEFAULT, session=None) -> AgentClient`: one-shot client with one git lifecycle per `run()`; same `session` rule as `open()`.
-- `GitOptions`: `root_path` (worktrees root, must resolve inside the cwd; worktree strategies only), `repository_path` (optional, default the agent `cwd`; relative paths resolve from it) sets `git -C` for multi-repository setups, `strategy` (default `HeadStrategy()`), and `loop_hooks` (tuple of `LoopHook`, default empty; rejected with `HeadStrategy`). A worktree is created at `root_path/<branch>`.
-- `LoopHook(command, timeout_sec=120.0)`: frozen; `ValueError` on an empty command or `timeout_sec <= 0`.
-- `LoopHookError(command, output)`: raised when a hook exits non-zero or times out; a failed forced removal is attached with `add_note`.
+- `GitOptions`: `root_path` (worktrees root, must resolve inside the cwd; worktree strategies only), `repository_path` (optional, default the agent `cwd`; relative paths resolve from it) sets `git -C` for multi-repository setups, `strategy` (default `HeadStrategy()`), and `loop_hooks` (tuple of any `LoopHook`, default empty; rejected with `HeadStrategy`; `hooks_at(point)` returns those of one point in declared order). A worktree is created at `root_path/<branch>`.
+- `LoopHookPoint` (`StrEnum`: `worktree-ready`, `worktree-removing`, `run-finished`); `LoopHook(command, timeout_sec=120.0)` is the frozen base with `point: ClassVar`; instantiate `WorktreeReadyLoopHook`, `WorktreeRemovingLoopHook` or `RunFinishedLoopHook`. The base raises `TypeError`; `ValueError` on an empty command or `timeout_sec <= 0`.
+- `LoopHookError(point, command, output)`: raised when a hook exits non-zero or times out; a failed forced removal is attached with `add_note`.
 - `GitStrategy`: protocol with `open(git, cwd, repository, options)`, a context manager yielding the agent's working directory. Implemented by the frozen dataclasses `HeadStrategy`, `MergeToHeadStrategy` and `BranchStrategy`, each owning its git lifecycle; see [Strategies](#strategies).
-- `GitCli`: with `git -C <repository>`: `fetch` (`fetch --all --prune`), `add_worktree(repository, target, branch, base="HEAD")` (`check-ref-format --branch`; an existing local branch is reused as-is, otherwise `branch` from `origin/<branch>` if present else `base`; then `worktree add <target> <branch>`), `run_hook(hook, worktree, repository)` (shell command in the worktree with a timeout), `remove_worktree(repository, target, *, force=False)` (`worktree remove [--force] <target>`; git refuses with uncommitted changes unless forced), `merge_ff_only` (`merge --ff-only <branch>`) and `delete_branch` (`branch -d <branch>`).
-- `GitRuntime.open()`: resolves the repository and delegates to `options.strategy.open()`, which yields the directory the agent works in; a worktree is removed on exit, also on error.
+- `GitCli`: with `git -C <repository>`: `fetch` (`fetch --all --prune`), `add_worktree(repository, target, branch, base="HEAD")` (`check-ref-format --branch`; an existing local branch is reused as-is, otherwise `branch` from `origin/<branch>` if present else `base`; then `worktree add <target> <branch>`), `run_hook(hook, cwd, repository, worktree)` (shell command in `cwd` with a timeout; env `LOOP_REPOSITORY`, `LOOP_WORKTREE`, `LOOP_HOOK_POINT`), `remove_worktree(repository, target, *, force=False)` (`worktree remove [--force] <target>`; git refuses with uncommitted changes unless forced), `merge_ff_only` (`merge --ff-only <branch>`) and `delete_branch` (`branch -d <branch>`).
+- `GitRuntime.open()`: resolves the repository and delegates to `options.strategy.open()`, which yields the directory the agent works in; a worktree is removed on exit, also on error. After the strategy exits successfully it runs `run-finished` hooks.
 - `AgentOptions`: optional frozen caller overrides `docker_image` and `dry_run`; `Agent()` copies the set (non-`None`) values onto the `AgentContext`.
 - `AgentBuilder.with_git(options: GitOptions | None = None) -> Self`: enable the git strategy; defaults to `GitOptions()` (`HeadStrategy`, no git calls).
 - `AgentBuilder.with_docker() -> Self`: enable Docker execution configuration.
@@ -133,8 +139,8 @@ Test a custom CLI with `ProcessCliRunner(run=fake)` and check its `command` and 
 - `AgentBuilder.with_session() -> Self`: continue sessions across runs through a `SessionStore` (in-memory by default) with `get(name, cli) -> NativeHandle | None` and `save(name, handle)`, keyed by `(SessionName, cli.name)`.
 - `AgentContext`: frozen agent settings `cwd`, `docker_image` and `add_dirs` (extra directories, each passed as `--add-dir`); the agent always starts in `cwd`, which already contains the worktree. CLI flags come from the adapter defaults plus `profile.args`.
 - `RunContext`: per-run context; carries the `AgentContext` as `agent` and the declared `agent_cli_hooks`.
-- `AgentCliHookPoint` (`StrEnum`), `AgentCliHook(command, points=SESSION_LIFECYCLE, timeout_sec=30)`: frozen; empty command or points, or `timeout_sec <= 0`, raise `ValueError`.
-- `AgentBuilder.with_agent_cli_hooks(*hooks: AgentCliHook | str) -> Self`: no arguments raise `ValueError`; a `str` runs at session start and end. A point the profile's CLI cannot fire raises `UnsupportedAgentCliHookPoint` from `create()`/`wt.agent()`.
+- `AgentCliHookPoint` (`StrEnum`), `AgentCliHook(command, timeout_sec=30)`: frozen base with `point: ClassVar`; instantiate one of the nine `{Point}AgentCliHook` subclasses (e.g. `SessionStartAgentCliHook`). The base raises `TypeError`; empty command or `timeout_sec <= 0` raise `ValueError`.
+- `AgentBuilder.with_agent_cli_hooks(*hooks: AgentCliHook | str) -> Self`: no arguments raise `ValueError`; a `str` becomes a `SessionStartAgentCliHook` and a `SessionEndAgentCliHook`. A point the profile's CLI cannot fire raises `UnsupportedAgentCliHookPoint` from `create()`/`wt.agent()`.
 - `AgentCliHookWiring(args, files, git_excludes, env)`: frozen; the runner writes `files` under the cwd, appends `git_excludes` to `info/exclude`, merges `env`, and deletes the files after the run (before the strategy's safety-net commit).
 - `CodexCli(args, *, hook_trust_bypass=False)`: without the bypass it reports no hook points.
 - `AgentClient.close() -> None`: lifecycle operation delegated through all wrappers.
@@ -322,20 +328,32 @@ classDiagram
             +repository_path : Path | None
             +strategy : GitStrategy
             +loop_hooks : tuple~LoopHook~
+            +hooks_at(point) tuple~LoopHook~
+        }
+        class LoopHookPoint {
+            <<Enumeration>>
+            WORKTREE_READY
+            WORKTREE_REMOVING
+            RUN_FINISHED
         }
         class LoopHook {
             <<frozen dataclass>>
             +command : str
             +timeout_sec : float
+            +point : ClassVar~LoopHookPoint~
         }
+        class WorktreeReadyLoopHook
+        class WorktreeRemovingLoopHook
+        class RunFinishedLoopHook
         class LoopHookError {
+            +point : LoopHookPoint
             +command : str
             +output : str
         }
         class GitCli {
             +fetch(repository) None
             +add_worktree(repository, target, branch, base) None
-            +run_hook(hook, worktree, repository) None
+            +run_hook(hook, cwd, repository, worktree) None
             +remove_worktree(repository, target, force) None
             +merge_ff_only(repository, branch) None
             +delete_branch(repository, branch) None
@@ -402,6 +420,10 @@ classDiagram
     GitAgent o-- GitOptions
     GitOptions *-- GitStrategy
     GitOptions o-- LoopHook
+    LoopHook --> LoopHookPoint
+    WorktreeReadyLoopHook --|> LoopHook
+    WorktreeRemovingLoopHook --|> LoopHook
+    RunFinishedLoopHook --|> LoopHook
     GitCli ..> LoopHookError : Use
     GitRuntime ..> GitStrategy : Use
     HeadStrategy ..|> GitStrategy

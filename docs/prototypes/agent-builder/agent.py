@@ -18,7 +18,7 @@ from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
-from typing import Iterator, Protocol
+from typing import ClassVar, Iterator, Protocol
 
 
 @dataclass(frozen=True)
@@ -109,24 +109,57 @@ class AgentCliHookPoint(StrEnum):
     PRE_COMPACT = "pre-compact"
 
 
-SESSION_LIFECYCLE = frozenset({AgentCliHookPoint.SESSION_START, AgentCliHookPoint.SESSION_END})
-
-
 @dataclass(frozen=True)
 class AgentCliHook:
-    """Shell command run by the CLI's native hook at each of `points`; observe-only."""
+    """Base of shell commands run by the CLI's native hook at one fixed `point`; observe-only. Use a subclass."""
 
     command: str
-    points: frozenset[AgentCliHookPoint] = SESSION_LIFECYCLE
     timeout_sec: int = 30
+    point: ClassVar[AgentCliHookPoint]
 
     def __post_init__(self) -> None:
+        if not hasattr(type(self), "point"):
+            raise TypeError(f"{type(self).__name__} fixes no hook point; use a point subclass")
         if not self.command:
             raise ValueError("hook command must not be empty")
-        if not self.points:
-            raise ValueError("hook points must not be empty")
         if self.timeout_sec <= 0:
             raise ValueError("hook timeout_sec must be positive")
+
+
+class SessionStartAgentCliHook(AgentCliHook):
+    point = AgentCliHookPoint.SESSION_START
+
+
+class SessionEndAgentCliHook(AgentCliHook):
+    point = AgentCliHookPoint.SESSION_END
+
+
+class AgentStopAgentCliHook(AgentCliHook):
+    point = AgentCliHookPoint.AGENT_STOP
+
+
+class PromptSubmittedAgentCliHook(AgentCliHook):
+    point = AgentCliHookPoint.PROMPT_SUBMITTED
+
+
+class PreToolAgentCliHook(AgentCliHook):
+    point = AgentCliHookPoint.PRE_TOOL
+
+
+class PostToolAgentCliHook(AgentCliHook):
+    point = AgentCliHookPoint.POST_TOOL
+
+
+class SubagentStartAgentCliHook(AgentCliHook):
+    point = AgentCliHookPoint.SUBAGENT_START
+
+
+class SubagentStopAgentCliHook(AgentCliHook):
+    point = AgentCliHookPoint.SUBAGENT_STOP
+
+
+class PreCompactAgentCliHook(AgentCliHook):
+    point = AgentCliHookPoint.PRE_COMPACT
 
 
 class UnsupportedAgentCliHookPoint(Exception):
@@ -148,7 +181,7 @@ _SHIM = Path(__file__).with_name("agent_cli_hook.py").resolve()
 
 def _ordered(hooks: tuple[AgentCliHook, ...]) -> list[tuple[AgentCliHookPoint, AgentCliHook]]:
     """(point, hook) pairs in point-enum order, then declaration order."""
-    return [(point, hook) for point in AgentCliHookPoint for hook in hooks if point in hook.points]
+    return [(point, hook) for point in AgentCliHookPoint for hook in hooks if hook.point is point]
 
 
 def _shim_command(cli: str, point: AgentCliHookPoint, turn: Turn, hook: AgentCliHook) -> str:
@@ -267,23 +300,53 @@ class BranchStrategy:
 DEFAULT_LOOP_HOOK_TIMEOUT_SEC = 120.0
 
 
+class LoopHookPoint(StrEnum):
+    """Moment in a Loop run at which a Loop hook runs."""
+
+    WORKTREE_READY = "worktree-ready"
+    WORKTREE_REMOVING = "worktree-removing"
+    RUN_FINISHED = "run-finished"
+
+
 @dataclass(frozen=True)
 class LoopHook:
-    """Shell command run in a fresh worktree before the agent starts; may write only gitignored paths."""
+    """Base of shell commands run by Loop at one fixed `point`. Use a subclass."""
 
     command: str
     timeout_sec: float = DEFAULT_LOOP_HOOK_TIMEOUT_SEC
+    point: ClassVar[LoopHookPoint]
 
     def __post_init__(self) -> None:
+        if not hasattr(type(self), "point"):
+            raise TypeError(f"{type(self).__name__} fixes no hook point; use a point subclass")
         if not self.command:
             raise ValueError("Loop hook command must not be empty")
         if self.timeout_sec <= 0:
             raise ValueError("Loop hook timeout_sec must be positive")
 
 
+class WorktreeReadyLoopHook(LoopHook):
+    """Runs in a fresh worktree before the agent starts; may write only gitignored paths."""
+
+    point = LoopHookPoint.WORKTREE_READY
+
+
+class WorktreeRemovingLoopHook(LoopHook):
+    """Runs in the worktree after the safety-net commit and before its removal, on success and failure."""
+
+    point = LoopHookPoint.WORKTREE_REMOVING
+
+
+class RunFinishedLoopHook(LoopHook):
+    """Runs in the repository after the worktree is removed and merged; only when the run succeeded."""
+
+    point = LoopHookPoint.RUN_FINISHED
+
+
 class LoopHookError(Exception):
-    def __init__(self, command: str, output: str) -> None:
-        super().__init__(f"worktree-ready hook failed: {command}\n{output}")
+    def __init__(self, point: LoopHookPoint, command: str, output: str) -> None:
+        super().__init__(f"{point.value} hook failed: {command}\n{output}")
+        self.point = point
         self.command = command
         self.output = output
 
@@ -299,12 +362,15 @@ class GitOptions:
     strategy: GitStrategy = HeadStrategy()
     # Message for the safety-net commit of changes the agent left uncommitted.
     commit_message: str = "agent: commit uncommitted changes"
-    # worktree-ready Loop hooks, run in order after the worktree is created.
+    # Loop hooks of any point; each runs at its own point, in declared order.
     loop_hooks: tuple[LoopHook, ...] = ()
 
     def __post_init__(self) -> None:
         if self.loop_hooks and isinstance(self.strategy, HeadStrategy):
             raise ValueError("Loop hooks need a worktree strategy")
+
+    def hooks_at(self, point: LoopHookPoint) -> tuple[LoopHook, ...]:
+        return tuple(hook for hook in self.loop_hooks if hook.point is point)
 
 
 @dataclass(frozen=True)
@@ -493,7 +559,13 @@ class AgentBuilder:
         """Observe-only native CLI hooks for every run; a str runs at session start and end."""
         if not hooks:
             raise ValueError("with_agent_cli_hooks() needs at least one hook")
-        resolved = tuple(AgentCliHook(hook) if isinstance(hook, str) else hook for hook in hooks)
+        resolved = tuple(
+            hook
+            for item in hooks
+            for hook in (
+                (SessionStartAgentCliHook(item), SessionEndAgentCliHook(item)) if isinstance(item, str) else (item,)
+            )
+        )
         self._defaults = replace(self._defaults, agent_cli_hooks=resolved)
         return self
 
@@ -502,7 +574,7 @@ class AgentBuilder:
             raise ValueError("session requires with_session()")
 
     def _validate_agent_cli_hooks(self, profile: AgentProfile, defaults: RunContext) -> None:
-        requested = {point for hook in defaults.agent_cli_hooks for point in hook.points}
+        requested = {hook.point for hook in defaults.agent_cli_hooks}
         missing = requested - profile.cli.hook_points
         if missing:
             names = ", ".join(sorted(point.value for point in missing))
@@ -781,22 +853,27 @@ class GitCli:
         flags = ["--force"] if force else []
         self._git(repository, "worktree", "remove", *flags, str(target))
 
-    def run_hook(self, hook: LoopHook, worktree: Path, repository: Path) -> None:
+    def run_hook(self, hook: LoopHook, cwd: Path, repository: Path, worktree: Path) -> None:
         try:
             result = self._run(
                 hook.command,
                 shell=True,
-                cwd=worktree,
+                cwd=cwd,
                 timeout=hook.timeout_sec,
-                env={**os.environ, "LOOP_REPOSITORY": str(repository), "LOOP_WORKTREE": str(worktree)},
+                env={
+                    **os.environ,
+                    "LOOP_REPOSITORY": str(repository),
+                    "LOOP_WORKTREE": str(worktree),
+                    "LOOP_HOOK_POINT": hook.point.value,
+                },
                 capture_output=True,
                 text=True,
                 check=False,
             )
         except subprocess.TimeoutExpired:
-            raise LoopHookError(hook.command, f"timed out after {hook.timeout_sec}s") from None
+            raise LoopHookError(hook.point, hook.command, f"timed out after {hook.timeout_sec}s") from None
         if result.returncode != 0:
-            raise LoopHookError(hook.command, (result.stdout or "") + (result.stderr or ""))
+            raise LoopHookError(hook.point, hook.command, (result.stdout or "") + (result.stderr or ""))
 
     def commit_all(self, worktree: Path, message: str) -> None:
         """Commit every change in the worktree; no-op when there is nothing to commit."""
@@ -833,8 +910,8 @@ def _worktree(
     target = root / branch
     git.add_worktree(repository, target, branch, base)
     try:
-        for hook in options.loop_hooks:
-            git.run_hook(hook, target, repository)
+        for hook in options.hooks_at(LoopHookPoint.WORKTREE_READY):
+            git.run_hook(hook, target, repository, target)
     except BaseException as error:
         try:
             git.remove_worktree(repository, target, force=True)
@@ -843,6 +920,8 @@ def _worktree(
         raise
     try:
         yield target
+        for hook in options.hooks_at(LoopHookPoint.WORKTREE_REMOVING):
+            git.run_hook(hook, target, repository, target)
     finally:
         git.remove_worktree(repository, target)
 
@@ -853,9 +932,14 @@ class GitRuntime:
     def __init__(self, git: GitCli) -> None:
         self._git = git
 
-    def open(self, cwd: Path, options: GitOptions) -> AbstractContextManager[Path]:
+    @contextmanager
+    def open(self, cwd: Path, options: GitOptions) -> Iterator[Path]:
         repository = (cwd / options.repository_path) if options.repository_path else cwd
-        return options.strategy.open(self._git, cwd, repository, options)
+        with options.strategy.open(self._git, cwd, repository, options) as target:
+            yield target
+        # Reached only when the strategy exited successfully.
+        for hook in options.hooks_at(LoopHookPoint.RUN_FINISHED):
+            self._git.run_hook(hook, repository, repository, target)
 
 
 class DockerRuntime:
@@ -878,8 +962,8 @@ class LoggingGitCli(GitCli):
         _log(" ".join(command))
         return subprocess.CompletedProcess(command, 1 if "show-ref" in args else 0, "", "")
 
-    def run_hook(self, hook: LoopHook, worktree: Path, repository: Path) -> None:
-        _log(f"loop-hook worktree-ready cwd={worktree} timeout={hook.timeout_sec}: {hook.command}")
+    def run_hook(self, hook: LoopHook, cwd: Path, repository: Path, worktree: Path) -> None:
+        _log(f"loop-hook {hook.point.value} cwd={cwd} timeout={hook.timeout_sec}: {hook.command}")
 
 
 class LoggingRunner:
@@ -975,13 +1059,16 @@ if __name__ == "__main__":
         DEVELOPER = AgentProfile(CodexCli(hook_trust_bypass=True), "gpt-5-codex", "high")
         REVIEWER = AgentProfile(copilot, "claude-sonnet-4.5")
         # Shared worktree: one git lifecycle, several CLIs; one named session, kept per CLI.
-        _loop_hooks = (LoopHook('cp "$LOOP_REPOSITORY/.env" .env'), LoopHook("npm ci", timeout_sec=600))
+        _loop_hooks = (
+            WorktreeReadyLoopHook('cp "$LOOP_REPOSITORY/.env" .env'),
+            WorktreeReadyLoopHook("npm ci", timeout_sec=600),
+        )
         _shared = Agent(_DRY).with_git(
             GitOptions(_root, _repo, BranchStrategy("loop/ticket-123", "main"), loop_hooks=_loop_hooks)
         ).with_session()
         _shared.with_agent_cli_hooks(
-            AgentCliHook("./scripts/session-start.sh", frozenset({AgentCliHookPoint.SESSION_START})),
-            AgentCliHook("notify-send", frozenset({AgentCliHookPoint.SESSION_END}), timeout_sec=3),
+            SessionStartAgentCliHook("./scripts/session-start.sh"),
+            SessionEndAgentCliHook("notify-send", timeout_sec=3),
         )
         with _shared.open(session=SessionName("ticket-123")) as _wt:
             _plan = _wt.agent(PLANNER).run(AgentRequest("Plan ticket #123 in repo1"))

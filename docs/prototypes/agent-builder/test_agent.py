@@ -13,13 +13,20 @@ from pathlib import Path
 from typing import Iterator
 
 from agent import (
-    SESSION_LIFECYCLE,
     Agent,
     AgentBuilder,
     AgentCli,
     AgentCliHook,
     AgentCliHookPoint,
     AgentCliHookWiring,
+    PromptSubmittedAgentCliHook,
+    PreToolAgentCliHook,
+    SessionEndAgentCliHook,
+    SessionStartAgentCliHook,
+    RunFinishedLoopHook,
+    WorktreeReadyLoopHook,
+    WorktreeRemovingLoopHook,
+    LoopHookPoint,
     UnsupportedAgentCliHookPoint,
     AgentContext,
     AgentOptions,
@@ -524,11 +531,14 @@ class GitRuntimeTests(unittest.TestCase):
 
 
 class LoopHookTests(unittest.TestCase):
-    def options(self, *commands: str, strategy: object | None = None) -> GitOptions:
+    def options(self, *commands: str | LoopHook, strategy: object | None = None) -> GitOptions:
         return GitOptions(
             Path("wt"),
             strategy=strategy or BranchStrategy("loop/a"),
-            loop_hooks=tuple(LoopHook(command, timeout_sec=5) for command in commands),
+            loop_hooks=tuple(
+                WorktreeReadyLoopHook(command, timeout_sec=5) if isinstance(command, str) else command
+                for command in commands
+            ),
         )
 
     def open(self, git: GitFixture, options: GitOptions):
@@ -536,13 +546,13 @@ class LoopHookTests(unittest.TestCase):
 
     def test_hook_validation(self) -> None:
         with self.assertRaises(ValueError):
-            LoopHook("")
+            WorktreeReadyLoopHook("")
         with self.assertRaises(ValueError):
-            LoopHook("x", timeout_sec=0)
+            WorktreeReadyLoopHook("x", timeout_sec=0)
 
     def test_head_rejects_hooks_but_worktree_strategies_accept(self) -> None:
         with self.assertRaisesRegex(ValueError, "need a worktree strategy"):
-            GitOptions(loop_hooks=(LoopHook("x"),))
+            GitOptions(loop_hooks=(WorktreeReadyLoopHook("x"),))
         self.options("x")
         self.options("x", strategy=MergeToHeadStrategy())
 
@@ -560,6 +570,7 @@ class LoopHookTests(unittest.TestCase):
             self.assertEqual(kwargs["timeout"], 5)
             self.assertEqual(kwargs["env"]["LOOP_REPOSITORY"], "/repo")
             self.assertEqual(kwargs["env"]["LOOP_WORKTREE"], "/repo/wt/loop/a")
+            self.assertEqual(kwargs["env"]["LOOP_HOOK_POINT"], "worktree-ready")
 
     def test_failing_hook_force_removes_and_skips_body(self) -> None:
         git = GitFixture(missing=("refs/",), failing=("one",))
@@ -569,6 +580,8 @@ class LoopHookTests(unittest.TestCase):
                 entered = True
         self.assertFalse(entered)
         self.assertEqual(caught.exception.command, "one")
+        self.assertEqual(caught.exception.point, LoopHookPoint.WORKTREE_READY)
+        self.assertIn("worktree-ready hook failed", str(caught.exception))
         self.assertEqual(caught.exception.output, "out-err")
         self.assertEqual([hook for hook, _ in git.hooks], ["one"])
         self.assertEqual(git.commands[-1], ["worktree", "remove", "--force", "/repo/wt/loop/a"])
@@ -628,6 +641,88 @@ class LoopHookTests(unittest.TestCase):
             wt.agent().run(AgentRequest("a"))
             wt.agent().run(AgentRequest("b"))
         self.assertEqual([hook for hook, _ in git.hooks], ["one", "two"])
+
+
+class HookPointClassTests(unittest.TestCase):
+    def check_one_to_one(self, base: type, points: type, suffix: str) -> None:
+        subclasses = base.__subclasses__()
+        self.assertEqual(sorted(cls.point for cls in subclasses), sorted(points))
+        for cls in subclasses:
+            words = cls.point.name.title().replace("_", "")
+            self.assertEqual(cls.__name__, f"{words}{suffix}")
+
+    def test_agent_cli_hook_classes_match_points(self) -> None:
+        self.check_one_to_one(AgentCliHook, AgentCliHookPoint, "AgentCliHook")
+
+    def test_loop_hook_classes_match_points(self) -> None:
+        self.check_one_to_one(LoopHook, LoopHookPoint, "LoopHook")
+
+    def test_bases_are_not_instantiable(self) -> None:
+        for base in (AgentCliHook, LoopHook):
+            with self.assertRaises(TypeError):
+                base("x")
+
+    def test_hooks_at_keeps_declared_order(self) -> None:
+        a, b, c = WorktreeReadyLoopHook("a"), RunFinishedLoopHook("b"), WorktreeReadyLoopHook("c")
+        options = GitOptions(strategy=MergeToHeadStrategy(), loop_hooks=(a, b, c))
+        self.assertEqual(options.hooks_at(LoopHookPoint.WORKTREE_READY), (a, c))
+        self.assertEqual(options.hooks_at(LoopHookPoint.WORKTREE_REMOVING), ())
+
+
+class LoopHookLifecycleTests(unittest.TestCase):
+    def options(self, *hooks: LoopHook) -> GitOptions:
+        return GitOptions(Path("wt"), strategy=MergeToHeadStrategy(), loop_hooks=hooks)
+
+    def open(self, git: GitFixture, options: GitOptions):
+        return GitRuntime(GitCli(run=git)).open(Path("/repo"), options)
+
+    def names(self, git: GitFixture) -> list[str]:
+        return [" ".join(command[:2]) for command in git.commands]
+
+    def test_removing_runs_after_commit_before_remove(self) -> None:
+        git = GitFixture(missing=("refs/",))
+        with self.open(git, self.options(WorktreeRemovingLoopHook("bye"))) as target:
+            pass
+        names = self.names(git)
+        self.assertLess(names.index("diff --cached"), names.index("hook bye"))
+        self.assertLess(names.index("hook bye"), names.index("worktree remove"))
+        _, kwargs = git.hooks[0]
+        self.assertEqual(kwargs["cwd"], target)
+        self.assertEqual(kwargs["env"]["LOOP_HOOK_POINT"], "worktree-removing")
+
+    def test_removing_hook_failure_still_removes_worktree(self) -> None:
+        git = GitFixture(missing=("refs/",), failing=("bye",))
+        with self.assertRaises(LoopHookError) as caught:
+            with self.open(git, self.options(WorktreeRemovingLoopHook("bye"))):
+                pass
+        self.assertEqual(caught.exception.point, LoopHookPoint.WORKTREE_REMOVING)
+        self.assertIn("worktree remove", self.names(git))
+        self.assertNotIn("merge --ff-only", self.names(git))
+
+    def test_removing_runs_when_body_fails(self) -> None:
+        git = GitFixture(missing=("refs/",))
+        with self.assertRaisesRegex(RuntimeError, "boom"):
+            with self.open(git, self.options(WorktreeRemovingLoopHook("bye"))):
+                raise RuntimeError("boom")
+        self.assertEqual(git.hooks, [])
+
+    def test_run_finished_runs_after_merge_in_repository(self) -> None:
+        git = GitFixture(missing=("refs/",))
+        with self.open(git, self.options(RunFinishedLoopHook("done"))) as target:
+            pass
+        names = self.names(git)
+        self.assertGreater(names.index("hook done"), names.index("branch -d"))
+        _, kwargs = git.hooks[0]
+        self.assertEqual(kwargs["cwd"], Path("/repo"))
+        self.assertEqual(kwargs["env"]["LOOP_WORKTREE"], str(target))
+        self.assertEqual(kwargs["env"]["LOOP_HOOK_POINT"], "run-finished")
+
+    def test_run_finished_skipped_when_body_fails(self) -> None:
+        git = GitFixture(missing=("refs/",))
+        with self.assertRaisesRegex(RuntimeError, "boom"):
+            with self.open(git, self.options(RunFinishedLoopHook("done"))):
+                raise RuntimeError("boom")
+        self.assertEqual(git.hooks, [])
 
 
 class DryRunTests(unittest.TestCase):
@@ -691,17 +786,19 @@ class AgentCliHookTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.builder.with_agent_cli_hooks()
 
-    def test_str_becomes_session_lifecycle_hook(self) -> None:
+    def test_str_becomes_session_lifecycle_hooks(self) -> None:
         self.builder.with_agent_cli_hooks("cmd").create().run(AgentRequest("x"))
-        self.assertEqual(self.runner.contexts[0].agent_cli_hooks, (AgentCliHook("cmd", SESSION_LIFECYCLE),))
+        self.assertEqual(
+            self.runner.contexts[0].agent_cli_hooks, (SessionStartAgentCliHook("cmd"), SessionEndAgentCliHook("cmd"))
+        )
 
     def test_invalid_hook_raises(self) -> None:
-        for kwargs in ({"command": ""}, {"command": "x", "points": frozenset()}, {"command": "x", "timeout_sec": 0}):
-            with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
-                AgentCliHook(**kwargs)
+        for args in (("",), ("x", 0)):
+            with self.subTest(args=args), self.assertRaises(ValueError):
+                SessionStartAgentCliHook(*args)
 
     def test_hooks_reach_runner_in_order_with_git_and_open(self) -> None:
-        first, second = AgentCliHook("a"), AgentCliHook("b")
+        first, second = SessionStartAgentCliHook("a"), SessionEndAgentCliHook("b")
         builder = self.builder.with_git().with_agent_cli_hooks(first, second)
         builder.create().run(AgentRequest("x"))
         with builder.open() as wt:
@@ -710,11 +807,11 @@ class AgentCliHookTests(unittest.TestCase):
             self.assertEqual(context.agent_cli_hooks, (first, second))
 
     def test_copilot_accepts_prompt_submitted(self) -> None:
-        hook = AgentCliHook("c", frozenset({AgentCliHookPoint.PROMPT_SUBMITTED}))
+        hook = PromptSubmittedAgentCliHook("c")
         self.builder.with_agent_cli_hooks(hook).create(AgentProfile(copilot)).run(AgentRequest("x"))
 
     def test_unsupported_point_fails_before_git(self) -> None:
-        builder = self.builder.with_git().with_agent_cli_hooks(AgentCliHook("c", frozenset({AgentCliHookPoint.PRE_TOOL})))
+        builder = self.builder.with_git().with_agent_cli_hooks(PreToolAgentCliHook("c"))
         with self.assertRaises(UnsupportedAgentCliHookPoint):
             builder.create(AgentProfile(NoPointsCli()))
         self.assertEqual(self.events, [])
@@ -726,8 +823,11 @@ class AgentCliHookTests(unittest.TestCase):
         builder.create(AgentProfile(CodexCli(hook_trust_bypass=True)))
 
     def test_copilot_wiring(self) -> None:
-        hook = AgentCliHook("my cmd", frozenset({AgentCliHookPoint.PROMPT_SUBMITTED, AgentCliHookPoint.SESSION_END}), 7)
-        wiring = CopilotCli().hook_wiring((hook,), Start(SessionName("s1")), Path("/w"))
+        hooks = (
+            PromptSubmittedAgentCliHook("my cmd", 7),
+            SessionEndAgentCliHook("my cmd", 7),
+        )
+        wiring = CopilotCli().hook_wiring(hooks, Start(SessionName("s1")), Path("/w"))
         (path, content), = wiring.files.items()
         self.assertEqual(path.parent, Path(".github/hooks"))
         self.assertRegex(path.name, r"^loop-[0-9a-f]+\.json$")
@@ -742,7 +842,7 @@ class AgentCliHookTests(unittest.TestCase):
 
     def test_codex_command_with_hooks(self) -> None:
         cli = CodexCli(hook_trust_bypass=True)
-        hooks = (AgentCliHook("start", frozenset({AgentCliHookPoint.SESSION_START})), AgentCliHook("end", timeout_sec=30))
+        hooks = (SessionStartAgentCliHook("start"), SessionEndAgentCliHook("end"))
         context = RunContext(AgentContext(cwd=Path("/repo")), hooks)
         name = SessionName("n")
         argv = cli.command(AgentRequest("p"), AgentProfile(cli), Start(name), context)
@@ -773,7 +873,7 @@ class HookFilesTests(unittest.TestCase):
             cwd, exclude = Path(tmp), Path(tmp) / "info" / "exclude"
             seen: list[object] = []
             runner = self.runner_with(cwd, exclude, seen)
-            context = RunContext(AgentContext(cwd=cwd), (AgentCliHook("c"),))
+            context = RunContext(AgentContext(cwd=cwd), (SessionStartAgentCliHook("c"),))
             for _ in range(2):
                 runner.run(AgentProfile(copilot), AgentRequest("x"), Start(SessionName("s")), context)
             for files, env in seen:
@@ -786,7 +886,7 @@ class HookFilesTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             cwd = Path(tmp)
             runner = self.runner_with(cwd, cwd / "exclude", [], fail=True)
-            context = RunContext(AgentContext(cwd=cwd), (AgentCliHook("c"),))
+            context = RunContext(AgentContext(cwd=cwd), (SessionStartAgentCliHook("c"),))
             with self.assertRaises(RuntimeError):
                 runner.run(AgentProfile(copilot), AgentRequest("x"), Start(SessionName("s")), context)
             self.assertEqual(list((cwd / ".github/hooks").glob("*")), [])
@@ -832,8 +932,8 @@ class ShimTests(unittest.TestCase):
 class HookDryRunTests(unittest.TestCase):
     def test_logs_hooks_without_writing_files(self) -> None:
         agent = Agent(AgentOptions(dry_run=True)).with_agent_cli_hooks(
-            AgentCliHook("start.sh", frozenset({AgentCliHookPoint.SESSION_START})),
-            AgentCliHook("notify", frozenset({AgentCliHookPoint.SESSION_END}), 3),
+            SessionStartAgentCliHook("start.sh"),
+            SessionEndAgentCliHook("notify", 3),
         )
         output = StringIO()
         with redirect_stdout(output):
