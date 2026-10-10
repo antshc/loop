@@ -65,6 +65,8 @@ The plan should reflect:
 
 *Use `doc-code-diagram` skill in delta mode to draw the class diagram — class responsibilities, interfaces, dependencies, composition, and class-level deltas.* Read its `SKILL.md` and `templates/class-diagram-template.md`; follow the template's dark palette, `added`/`removed`/`memberChanged` classDefs, `[add]`/`[rem]` member prefixes, relationship semantics, and `%% diagram-id` line. Ground unchanged classes in code found during Discovery; do not invent members. Skip the diagram only when the plan changes no classes, and say so.
 
+*Optional flow view:* include only when the plan's essential behavior is a lifecycle or process (transient resource, job, multi-step handoff) that the class diagram cannot show. *Use `doc-behavior-diagram` skill to draw a flowchart — process flows, decision paths, responsibility handoffs, failure branching, deltas.* Orientation `LR`, delta mode, in the class diagram's class names, one diagram per plan. Omit for plans whose structure the class diagram already explains.
+
 Save the comprehensive plan document to `docs/plans/{{slug}}.md`, then show the scannable plan to the user for review. You MUST show plan to the user, as the plan file is for persistence only, not a substitute for showing it to the user.
 
 ## 4. Refinement
@@ -91,6 +93,9 @@ Keep iterating until explicit approval or handoff.
 **Class diagram**
 {Mermaid `classDiagram` in a ```mermaid block, drawn per the `doc-code-diagram` skill delta-mode template}
 
+**Flow view** (optional)
+{Mermaid `flowchart LR` in a ```mermaid block, drawn per the `doc-behavior-diagram` skill; only when the plan's essential behavior is a lifecycle or process}
+
 **Relevant files**
 - `{full/path/to/file}` — {what to modify or reuse, referencing specific functions/patterns}
 
@@ -106,7 +111,7 @@ Keep iterating until explicit approval or handoff.
 ```
 
 Rules:
-- NO code blocks except the **Class diagram** ```mermaid block — describe changes, link to files and specific symbols/functions
+- NO code blocks except the **Class diagram** and **Flow view** ```mermaid blocks — describe changes, link to files and specific symbols/functions
 - NO blocking questions at the end — ask during workflow via #tool:vscode/askQuestions
 - The plan MUST be presented to the user, don't just mention the plan file.
 </plan_style_guide>
