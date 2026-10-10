@@ -22,6 +22,10 @@ class AgentRequest:
 
     prompt: str
     session_id: str | None = None
+    # Per-run Copilot CLI settings; None adds no flag, so the provider default applies.
+    model: str | None = None
+    reasoning_effort: str | None = None
+    context: str | None = None
 
 
 @dataclass(frozen=True)
@@ -315,7 +319,9 @@ class CopilotCli:
     def command(self, request: AgentRequest, session_id: str, context: RunContext) -> list[str]:
         agent = context.agent
         dirs = [part for directory in agent.add_dirs for part in ("--add-dir", str(directory))]
-        return ["copilot", "-p", request.prompt, f"--resume={session_id}", *agent.cli_args, *dirs]
+        settings = {"--model": request.model, "--reasoning-effort": request.reasoning_effort, "--context": request.context}
+        run_args = [part for flag, value in settings.items() if value is not None for part in (flag, value)]
+        return ["copilot", "-p", request.prompt, f"--resume={session_id}", *agent.cli_args, *run_args, *dirs]
 
     def run(self, request: AgentRequest, context: RunContext) -> AgentResult:
         # Assumption (unverified): the CLI accepts a caller-generated id on first use.
@@ -501,8 +507,8 @@ if __name__ == "__main__":
         Agent(_DRY).with_git(GitOptions(_root, _repo, MergeToHeadStrategy())).create().run(AgentRequest("Implement ticket #123 in repo1"))
         # Plan, then implement: the second run resumes the first run's session and builds on its output.
         _client = Agent(_DRY).with_git(GitOptions(_root, _repo, BranchStrategy("loop/ticket-123", "main"))).with_session().create()
-        _plan = _client.run(AgentRequest("Plan ticket #123 in repo1"))
-        _client.run(AgentRequest(f"Implement this plan:\n{_plan.output}", _plan.session_id))
+        _plan = _client.run(AgentRequest("Plan ticket #123 in repo1", model="claude-sonnet-5.5", reasoning_effort="max", context="long_context"))
+        _client.run(AgentRequest(f"Implement this plan:\n{_plan.output}", _plan.session_id, model="claude-sonnet-5.5", reasoning_effort="high"))
         # Without with_session() and without a session_id, each run starts a new session.
         _fresh = Agent(_DRY).with_git(GitOptions(_root, _repo, BranchStrategy("loop/ticket-123", "main"))).create()
         _fresh.run(AgentRequest("Plan ticket #123 in repo1"))
