@@ -13,6 +13,8 @@ from agent import (
     AgentBuilder,
     AgentContext,
     AgentOptions,
+    AgentRequest,
+    AgentResult,
     BranchStrategy,
     CopilotAgentClient,
     DockerAgent,
@@ -23,6 +25,7 @@ from agent import (
     HeadStrategy,
     MergeToHeadStrategy,
     RunContext,
+    SessionAgent,
 )
 
 
@@ -35,13 +38,15 @@ class RecordingRunner:
         self.events = events
         self.fail = fail
         self.contexts: list[RunContext] = []
+        self.requests: list[AgentRequest] = []
 
-    def run(self, prompt: str, context: RunContext) -> str:
+    def run(self, request: AgentRequest, context: RunContext) -> AgentResult:
         self.events.append("cli.run")
         self.contexts.append(context)
+        self.requests.append(request)
         if self.fail:
             raise RuntimeError("runner failed")
-        return f"done:{prompt}"
+        return AgentResult(f"done:{request.prompt}", request.session_id or f"s{len(self.requests)}", 0)
 
 
 class RecordingGit:
@@ -72,8 +77,8 @@ class ClosingClient:
     def __init__(self) -> None:
         self.close_count = 0
 
-    def run(self, prompt: str, context: RunContext | None = None) -> str:
-        return prompt
+    def run(self, request: AgentRequest, context: RunContext | None = None) -> AgentResult:
+        return AgentResult(request.prompt, "s", 0)
 
     def close(self) -> None:
         self.close_count += 1
@@ -92,8 +97,51 @@ class AgentBuilderTests(unittest.TestCase):
     def test_default_client_has_no_wrappers(self) -> None:
         client = Agent().create()
         self.assertIsInstance(client, CopilotAgentClient)
-        self.assertIn("[local]", client.run("hello"))
-        self.assertIn("--allow-all-tools", client.run("hello"))
+
+    def test_run_returns_result_with_session_id(self) -> None:
+        result = self.builder().create().run(AgentRequest("hello"), repo_context())
+        self.assertEqual(result, AgentResult("done:hello", "s1", 0))
+
+    def test_explicit_session_id_is_forwarded(self) -> None:
+        result = self.builder().create().run(AgentRequest("hello", "abc"), repo_context())
+        self.assertEqual(self.runner.requests[0].session_id, "abc")
+        self.assertEqual(result.session_id, "abc")
+
+    def test_runs_are_stateless_without_session(self) -> None:
+        client = self.builder().create()
+        client.run(AgentRequest("one"), repo_context())
+        client.run(AgentRequest("two"), repo_context())
+        self.assertEqual([r.session_id for r in self.runner.requests], [None, None])
+
+    def test_session_is_shared_between_runs_in_one_cwd(self) -> None:
+        client = self.builder().with_session().create()
+        self.assertIsInstance(client, SessionAgent)
+        first = client.run(AgentRequest("one"), repo_context())
+        second = client.run(AgentRequest("two"), repo_context())
+        self.assertEqual(second.session_id, first.session_id)
+        self.assertEqual(self.runner.requests[1].session_id, first.session_id)
+
+    def test_explicit_session_overrides_stored_session(self) -> None:
+        client = self.builder().with_session().create()
+        client.run(AgentRequest("one"), repo_context())
+        result = client.run(AgentRequest("two", "other"), repo_context())
+        self.assertEqual(result.session_id, "other")
+
+    def test_sessions_are_unique_per_worktree(self) -> None:
+        client = self.builder().with_session().create()
+        a = client.run(AgentRequest("one"), RunContext(AgentContext(cwd=Path("/wt/a"))))
+        b = client.run(AgentRequest("one"), RunContext(AgentContext(cwd=Path("/wt/b"))))
+        again = client.run(AgentRequest("two"), RunContext(AgentContext(cwd=Path("/wt/a"))))
+        self.assertNotEqual(a.session_id, b.session_id)
+        self.assertEqual(again.session_id, a.session_id)
+
+    def test_session_sees_the_git_worktree(self) -> None:
+        client = self.builder().with_git().with_session().create()
+        self.assertIsInstance(client, GitAgent)
+        self.assertIsInstance(client._inner, SessionAgent)
+        client.run(AgentRequest("one"), repo_context())
+        second = client.run(AgentRequest("two"), repo_context())
+        self.assertEqual(second.session_id, "s1")
 
     def test_one_chain_creates_git_outer_and_docker_inner(self) -> None:
         builder = self.builder()
@@ -103,7 +151,7 @@ class AgentBuilderTests(unittest.TestCase):
         self.assertIsInstance(client, GitAgent)
         self.assertIsInstance(client._inner, DockerAgent)
         self.assertIsInstance(client._inner._inner, CopilotAgentClient)
-        self.assertEqual(client.run("hello", repo_context()), "done:hello")
+        self.assertEqual(client.run(AgentRequest("hello"), repo_context()).output, "done:hello")
         self.assertEqual(
             self.events,
             ["worktree.enter", "docker.configure", "cli.run", "worktree.exit"],
@@ -114,11 +162,11 @@ class AgentBuilderTests(unittest.TestCase):
     def test_worktree_is_released_on_failure(self) -> None:
         self.runner.fail = True
         with self.assertRaisesRegex(RuntimeError, "runner failed"):
-            self.builder().with_git().create().run("broken")
+            self.builder().with_git().create().run(AgentRequest("broken"))
         self.assertEqual(self.events, ["worktree.enter", "cli.run", "worktree.exit"])
 
     def test_docker_only_keeps_original_workspace(self) -> None:
-        self.builder().with_docker().create().run("hello", repo_context())
+        self.builder().with_docker().create().run(AgentRequest("hello"), repo_context())
         self.assertEqual(self.events, ["docker.configure", "cli.run"])
         self.assertEqual(self.runner.contexts[0].agent.cwd, Path("/repo"))
 
@@ -264,7 +312,7 @@ class DryRunTests(unittest.TestCase):
         agent = Agent(AgentOptions(dry_run=True)).with_git(GitOptions(Path("wt"), strategy=strategy)).with_docker()
         output = StringIO()
         with redirect_stdout(output):
-            agent.create().run("hello")
+            agent.create().run(AgentRequest("hello"))
         self.assertTrue(all(line.startswith("[dry-run] ") for line in output.getvalue().splitlines()))
         return output.getvalue()
 

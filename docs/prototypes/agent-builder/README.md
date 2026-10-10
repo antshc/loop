@@ -14,10 +14,18 @@ agent = Agent().create()
 agent = Agent().with_git().with_docker().create()
 
 try:
-    result = agent.run("Implement ticket #123")
-    print(result)
+    result = agent.run(AgentRequest("Implement ticket #123"))
+    print(result.output)
 finally:
     agent.close()
+```
+
+Session continuation: `with_session()` makes runs of one client share a session, unique per worktree (the run `cwd`, i.e. one per branch).
+
+```python
+agent = Agent().with_git(GitOptions(strategy=BranchStrategy("loop/ticket-123"))).with_session().create()
+first = agent.run(AgentRequest("Implement ticket #123"))
+agent.run(AgentRequest("Fix failing tests"))  # same session; or pass session_id=first.session_id explicitly
 ```
 
 Run locally from the prototype directory:
@@ -41,7 +49,8 @@ Python 3.12+, standard library only. No real Git, Docker, or Copilot installatio
 - `AgentBuilder.with_git(options: GitOptions | None = None) -> Self`: enable the per-run git strategy; defaults to `GitOptions()` (`HeadStrategy`, no git calls).
 - `AgentBuilder.with_docker() -> Self`: enable Docker execution configuration.
 - `AgentBuilder.create() -> AgentClient`: create a new composed client; no wrapper when no options enabled.
-- `AgentClient.run(prompt: str, context: RunContext | None = None) -> str`: invariant public entry point.
+- `AgentClient.run(request: AgentRequest, context: RunContext | None = None) -> AgentResult`: invariant public entry point. `AgentRequest(prompt, session_id=None)`, `AgentResult(output, session_id, exit_code)` and `AgentSession(id)` follow `docs/research/ai-agent-terms.md`; a set `session_id` resumes that session (`--resume=<id>`).
+- `AgentBuilder.with_session(options: SessionOptions | None = None) -> Self`: enable `SessionAgent`, which fills a missing `request.session_id` from a `SessionStore` (in-memory by default) keyed by `SessionOptions.key` or the run `cwd`, and saves the result's id. It sits inside `GitAgent`, so the key is the worktree; an explicit `session_id` wins.
 - `AgentContext`: frozen agent settings `cwd`, `docker_image`, `cli_args` (default `("--allow-all-tools",)`) and `add_dirs` (extra directories, each passed as `--add-dir`); the agent always starts in `cwd` (the harness dir), which already contains the worktree, so `GitAgent` does not add it to `add_dirs`. `Agent()` creates it and the builder seeds the default `RunContext` with it.
 - `RunContext`: per-run context; carries the `AgentContext` as `agent` (no `cwd`/`docker_image` of its own).
 - `AgentClient.close() -> None`: lifecycle operation delegated through all wrappers.
@@ -57,20 +66,27 @@ classDiagram
         class AgentBuilder {
             -_use_git : bool
             -_use_docker : bool
+            -_use_session : bool
             +with_git(options) Self
             +with_docker() Self
+            +with_session(options) Self
             +create() AgentClient
         }
     }
     namespace Abstractions {
         class AgentClient {
             <<Interface>>
-            +run(prompt, context) str
+            +run(request, context) AgentResult
             +close() None
         }
         class CliRunner {
             <<Interface>>
-            +run(prompt, context) str
+            +run(request, context) AgentResult
+        }
+        class SessionStore {
+            <<Interface>>
+            +get(key) AgentSession | None
+            +save(key, session) None
         }
         class GitService {
             <<Interface>>
@@ -81,11 +97,32 @@ classDiagram
             +configure(context) RunContext
         }
     }
+    namespace Contracts {
+        class AgentRequest {
+            <<frozen dataclass>>
+            +prompt : str
+            +session_id : str | None
+        }
+        class AgentResult {
+            <<frozen dataclass>>
+            +output : str
+            +session_id : str
+            +exit_code : int
+        }
+        class AgentSession {
+            <<frozen dataclass>>
+            +id : str
+        }
+    }
     namespace Configuration {
         class AgentOptions {
             <<frozen dataclass>>
             +docker_image : str | None
             +cli_args : tuple[str] | None
+        }
+        class SessionOptions {
+            <<frozen dataclass>>
+            +key : str | None
         }
         class AgentContext {
             <<frozen dataclass>>
@@ -105,10 +142,13 @@ classDiagram
             +close() None
         }
         class GitAgent {
-            +run(prompt, context) str
+            +run(request, context) AgentResult
+        }
+        class SessionAgent {
+            +run(request, context) AgentResult
         }
         class DockerAgent {
-            +run(prompt, context) str
+            +run(request, context) AgentResult
         }
     }
     namespace GitStrategies {
@@ -136,7 +176,10 @@ classDiagram
         }
     }
     namespace StubAdapters {
-        class CopilotCli
+        class CopilotCli {
+            +command(request, session_id, context) list~str~
+        }
+        class MemorySessionStore
         class GitRuntime {
             +open(cwd, options) ContextManager~Path~
         }
@@ -159,20 +202,30 @@ classDiagram
     CopilotAgentClient ..|> AgentClient
     GitAgent ..|> AgentClient
     DockerAgent ..|> AgentClient
+    SessionAgent ..|> AgentClient
     GitAgent --|> AgentWrapper : Extends
     DockerAgent --|> AgentWrapper : Extends
+    SessionAgent --|> AgentWrapper : Extends
 
     AgentWrapper o-- AgentClient : inner
     CopilotAgentClient o-- CliRunner
     GitAgent o-- GitService
     DockerAgent o-- DockerService
+    SessionAgent o-- SessionStore
+    SessionAgent o-- SessionOptions
+    MemorySessionStore ..|> SessionStore
+    SessionStore ..> AgentSession : Use
+    AgentClient ..> AgentRequest : Use
+    AgentClient ..> AgentResult : Use
 
     AgentBuilder o-- CliRunner
     AgentBuilder o-- GitService
     AgentBuilder o-- DockerService
+    AgentBuilder o-- SessionStore
     AgentBuilder ..> CopilotAgentClient : Use
     AgentBuilder ..> GitAgent : Use
     AgentBuilder ..> DockerAgent : Use
+    AgentBuilder ..> SessionAgent : Use
 
     AgentClient ..> RunContext : Use
     CliRunner ..> RunContext : Use
@@ -198,7 +251,8 @@ classDiagram
     worktreeHelper ..> GitCli : Use
     DockerRuntime ..|> DockerService
 
-    note for AgentBuilder "Agent() registers the stub adapters; create() wraps git (outer) > docker > core"
+    note for AgentBuilder "Agent() registers the stub adapters; create() wraps git (outer) > session > docker > core"
+    note for SessionAgent "Key = run cwd (the worktree) unless SessionOptions.key is set; explicit request.session_id wins"
     note for GitRuntime "Delegates to options.strategy.open(); each strategy owns its git lifecycle"
     note for GitStrategy "head = no git; merge-to-head = tmp_hex worktree, ff-only merge, branch -d; branch = fetch, reuse or create, worktree"
 
