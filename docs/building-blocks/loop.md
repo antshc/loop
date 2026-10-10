@@ -4,7 +4,7 @@ The `loop` Python library: a single installable package (`pip install` from this
 
 ## Dependencies
 
-- **Called by:** Workflow scripts (user-owned; the `workflows/dev/` package is the example) through the public `loop` API only.
+- **Called by:** Workflow scripts (user-owned; `workflows/dev.py` is the example) through the public `loop` API only.
 - **Calls (via subprocess):** `git`, the `copilot` and `codex` CLIs, and optionally `docker`. No Python dependency beyond `python-json-logger`.
 
 ## Interfaces

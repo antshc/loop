@@ -10,7 +10,7 @@ import pytest
 from loop import BranchStrategy
 from workflow_harness import COMPLETED, DevHarness, crash, envelope, hook_error, issue
 from workflows import dev
-from workflows.dev.store import FileExecutionStore
+from workflows.dev import FileExecutionStore
 from workflows.platforms.work_tracking import GitHubClient, RepositoryConfig, Spec, TicketsTracker
 from workflows.platforms.work_tracking.fake_gh_cli import FakeGhCli
 

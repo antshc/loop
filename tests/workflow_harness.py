@@ -26,7 +26,7 @@ from loop import (
     RunContext,
 )
 from workflows import dev
-from workflows.dev.store import FileExecutionStore
+from workflows.dev import FileExecutionStore
 from workflows.platforms.git import Commit
 from workflows.platforms.work_tracking import GitHubClient, RepositoryConfig
 from workflows.platforms.work_tracking.fake_gh_cli import FakeGhCli

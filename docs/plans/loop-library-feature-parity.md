@@ -19,13 +19,13 @@ Legend: Covered (prototype equivalent), Replaced (different solution), Missing -
 | [x] | `AgentClient` ABC + `AgentClientFactory` | Replaced | `AgentCli` protocol + `AgentProfile` + `CliAgentClient` |
 | [x] | `CopilotClient` command flags (`-p`, `--allow-all-tools`, `--model`, `--reasoning-effort`, `--add-dir`, `--name`/`--resume`) | Covered | `CopilotCli.command` |
 | [x] | Copilot `--output-format json` + `assistant.message_delta` reassembly | Missing -> workflow | Prototype returns raw stdout; workflow extracts the envelope from text |
-| [x] | `CopilotOutputParser` (last `{status,...}` object, success from exit code + status) | Missing -> workflow | `workflows/dev/result.py`; non-zero exit raises `CalledProcessError` |
+| [x] | `CopilotOutputParser` (last `{status,...}` object, success from exit code + status) | Missing -> workflow | `workflows/dev.py`; non-zero exit raises `CalledProcessError` |
 | [x] | `AgentOptions.agent`, `deny_tools`, `extra_args` (`--no-color`) | Replaced | `AgentProfile.args` |
 | [x] | `AgentOptions.add_dirs` | Covered | `AgentContext.add_dirs` (not reachable through `Agent()`) |
 | [x] | Harness-root agent cwd | Dropped | Agent cwd is the worktree (ADR records it) |
 | [x] | `SessionStore`, `FileSessionStore`, `InMemorySessionStore` | Replaced | `SessionStore` keyed by `(SessionName, cli)`, `MemorySessionStore`; no file-backed store |
 | [x] | `session_name_prefix`, `new_session=True` | Replaced | `SessionName.new()`, `with_session()` |
-| [x] | `Prompt` (placeholders, warnings, errors, `` !`cmd` ``) | Missing -> workflow | `workflows/dev/prompting.py`; `` !`cmd` `` dropped |
+| [x] | `Prompt` (placeholders, warnings, errors, `` !`cmd` ``) | Missing -> workflow | `workflows/dev.py`; `` !`cmd` `` dropped |
 | [x] | `extract_tag`, `extract_json` | Dropped | Unused by workflows; envelope scanner replaces them |
 | [x] | `Git` facade, `BranchService`, `WorktreeService`, `CommitService`, `GitClient` | Replaced | `GitCli` + strategies in `loop.git` |
 | [x] | `BranchService.prepare`, `fetch` | Covered | `BranchStrategy` (`fetch`, `add_worktree`) |
@@ -42,8 +42,8 @@ Legend: Covered (prototype equivalent), Replaced (different solution), Missing -
 | [x] | `Hook(command, timeout_s)` at `worktree-ready` | Replaced | `WorktreeReadyLoopHook` (+ `WorktreeRemovingLoopHook`, `RunFinishedLoopHook`) |
 | [x] | `run_host_hooks`, `HookError` | Replaced | `GitCli.run_hook`, `LoopHookError` |
 | [x] | `run_command`, `cli_runner`, `CommandResult`, `CommandError` | Missing -> workflow | `workflows/platforms/process.py` |
-| [x] | `ExecutionStore`, `FileExecutionStore`, `InMemoryExecutionStore` | Missing -> workflow | `workflows/dev/store.py`; partial-ticket counters dropped |
-| [x] | `configure_logging` | Missing -> workflow | `workflows/dev/logging_config.py` |
+| [x] | `ExecutionStore`, `FileExecutionStore`, `InMemoryExecutionStore` | Missing -> workflow | `workflows/dev.py`; partial-ticket counters dropped |
+| [x] | `configure_logging` | Covered | `loop.configure_logging` in `src/loop/log.py` |
 | [x] | `parallel_settled`, `Settled` | Dropped | Unused by workflows |
 | [x] | `LoopError`, `AgentError`, `ExtractionError`, `PromptError`, `ExecutionStoreError` | Replaced | Local `DevError` family; prototype adds `SessionCliMismatch`, `SessionHandleMissing`, `UnsupportedAgentCliHookPoint` |
 | [x] | `loop.testing` fakes (`FakeGit`, `FakeAgentClient`, `FakeCopilotCli`) | Dropped | Fake `CliRunner`, fake `GitService`, fake `WorkflowGit` in tests |

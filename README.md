@@ -6,7 +6,7 @@
 
 Python library for composing autonomous agent Workflows on Git worktrees.
 
-Loop ships no command and no built-in Workflows. You write each Workflow as a plain Python script on the public `loop` API and run it through your own shell alias. The repository's [`workflows/dev/`](workflows/dev/) package is an example only.
+Loop ships no command and no built-in Workflows. You write each Workflow as a plain Python script on the public `loop` API and run it through your own shell alias. The repository's [`workflows/dev.py`](workflows/dev.py) module is an example only.
 
 ## Features
 
@@ -153,7 +153,7 @@ fresh.run(AgentRequest("Plan ticket #123 in repo1"))
 fresh.run(AgentRequest("Implement ticket #123 in repo1"))
 ```
 
-See [`workflows/dev/`](workflows/dev/) for a complete Workflow, [`workflows/plan_implement.py`](workflows/plan_implement.py) for two runs with different models on one worktree, and [`workflows/dev/prompts/dev.md`](workflows/dev/prompts/dev.md) for the `dev` prompt template.
+See [`workflows/dev.py`](workflows/dev.py) for a complete Workflow, [`workflows/plan_implement.py`](workflows/plan_implement.py) for two runs with different models on one worktree, and [`workflows/prompts/dev.md`](workflows/prompts/dev.md) for the `dev` prompt template.
 
 ## Repository layout
 
