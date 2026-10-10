@@ -1,16 +1,17 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Protocol
 
 from ..clis import AgentProfile, CliRunner
-from ..run import AgentRequest, AgentResult, RunContext
+from ..run import AgentContext, AgentRequest, AgentResult, RunContext
 from ..sessions import Resume, SessionCliMismatch, SessionName, SessionStore, Start, Turn
 
 
 class AgentClient(Protocol):
     """Stable public interface, regardless of enabled wrappers."""
 
-    def run(self, request: AgentRequest, context: RunContext | None = None) -> AgentResult: ...
+    def run(self, request: AgentRequest, context: AgentContext | None = None) -> AgentResult: ...
 
     def close(self) -> None: ...
 
@@ -35,9 +36,10 @@ class CliAgentClient:
         self._store = store
         self._session = session or (SessionName.new() if store is not None else None)
 
-    def run(self, request: AgentRequest, context: RunContext | None = None) -> AgentResult:
+    def run(self, request: AgentRequest, context: AgentContext | None = None) -> AgentResult:
         turn = self._turn()
-        outcome = self._runner.run(self._profile, request, turn, context or self._defaults)
+        run_context = self._defaults if context is None else replace(self._defaults, agent=context)
+        outcome = self._runner.run(self._profile, request, turn, run_context)
         if self._store is not None:
             self._store.save(turn.name, outcome.handle)
         return AgentResult(outcome.output, turn.name, outcome.exit_code)

@@ -155,7 +155,7 @@ Test a custom CLI with `ProcessCliRunner(run=fake)` and check its `command` and 
 - `AgentOptions`: optional frozen caller overrides `docker_image` and `dry_run`; `Agent()` copies the set (non-`None`) values onto the `AgentContext`.
 - `AgentBuilder.with_git(options: GitOptions | None = None) -> Self`: enable the git strategy; defaults to `GitOptions()` (`HeadStrategy`, no git calls).
 - `AgentBuilder.with_docker() -> Self`: enable Docker execution configuration.
-- `AgentClient.run(request: AgentRequest, context: RunContext | None = None) -> AgentResult`: invariant public entry point. `AgentRequest(prompt)` is CLI-neutral; `AgentResult(output, session: SessionName, exit_code)` names the session the run used.
+- `AgentClient.run(request: AgentRequest, context: AgentContext | None = None) -> AgentResult`: invariant public entry point. `AgentRequest(prompt)` is CLI-neutral; `AgentResult(output, session: SessionName, exit_code)` names the session the run used.
 - `AgentBuilder.with_session() -> Self`: continue sessions across runs through a `SessionStore` (in-memory by default) with `get(name, cli) -> NativeHandle | None` and `save(name, handle)`, keyed by `(SessionName, cli.name)`.
 - `AgentContext`: frozen agent settings `cwd`, `docker_image` and `add_dirs` (extra directories, each passed as `--add-dir`); the agent always starts in `cwd`, which already contains the worktree. CLI flags come from the adapter defaults plus `profile.args`.
 - `RunContext`: per-run context; carries the `AgentContext` as `agent` and the declared `agent_cli_hooks`.
@@ -304,7 +304,7 @@ classDiagram
     namespace Docker {
         class DockerService {
             <<Interface>>
-            +configure(context) RunContext
+            +configure(context) AgentContext
         }
         class DockerRuntime
     }
@@ -428,9 +428,9 @@ classDiagram
     AgentBuilder ..> GitAgent : Use
     AgentBuilder ..> DockerAgent : Use
 
-    AgentClient ..> RunContext : Use
+    AgentClient ..> AgentContext : Use
     CliRunner ..> RunContext : Use
-    DockerService ..> RunContext : Use
+    DockerService ..> AgentContext : Use
     RunContext *-- AgentContext
     AgentBuilder ..> AgentContext : Use
     AgentOptions ..> AgentContext : Use

@@ -8,7 +8,7 @@ from ..clis import AgentCli, AgentProfile
 from ..docker import DockerService
 from ..git import GitCli
 from ..hooks import LoopHook, ordered
-from ..run import AgentRequest, RunContext
+from ..run import AgentContext, AgentRequest, RunContext
 from ..sessions import CliOutcome, NativeHandle, Resume, Turn
 
 
@@ -66,7 +66,7 @@ class LoggingDocker:
     def __init__(self, inner: DockerService) -> None:
         self._inner = inner
 
-    def configure(self, context: RunContext) -> RunContext:
+    def configure(self, context: AgentContext) -> AgentContext:
         configured = self._inner.configure(context)
-        _log(f"docker image={configured.agent.docker_image}")
+        _log(f"docker image={configured.docker_image}")
         return configured

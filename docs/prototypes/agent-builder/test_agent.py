@@ -65,7 +65,11 @@ from agent.clis.codex_cli import _parse_codex_events
 
 
 def repo_context() -> RunContext:
-    return RunContext(AgentContext(cwd=Path("/repo")))
+    return RunContext(repo_agent_context())
+
+
+def repo_agent_context() -> AgentContext:
+    return AgentContext(cwd=Path("/repo"))
 
 
 class RecordingRunner:
@@ -106,18 +110,18 @@ class RecordingDocker:
     def __init__(self, events: list[str]) -> None:
         self.events = events
 
-    def configure(self, context: RunContext) -> RunContext:
+    def configure(self, context: AgentContext) -> AgentContext:
         from dataclasses import replace
 
         self.events.append("docker.configure")
-        return replace(context, agent=replace(context.agent, docker_image="test-image"))
+        return replace(context, docker_image="test-image")
 
 
 class ClosingClient:
     def __init__(self) -> None:
         self.close_count = 0
 
-    def run(self, request: AgentRequest, context: RunContext | None = None) -> AgentResult:
+    def run(self, request: AgentRequest, context: AgentContext | None = None) -> AgentResult:
         return AgentResult(request.prompt, SessionName("s"), 0)
 
     def close(self) -> None:
@@ -139,14 +143,14 @@ class AgentBuilderTests(unittest.TestCase):
         self.assertIsInstance(client, CliAgentClient)
 
     def test_run_returns_result_with_session_name(self) -> None:
-        result = self.builder().create().run(AgentRequest("hello"), repo_context())
+        result = self.builder().create().run(AgentRequest("hello"), repo_agent_context())
         self.assertEqual(result.output, "done:hello")
         self.assertTrue(result.session.value.startswith("loop-"))
 
     def test_runs_are_stateless_without_session(self) -> None:
         client = self.builder().create()
-        client.run(AgentRequest("one"), repo_context())
-        client.run(AgentRequest("two"), repo_context())
+        client.run(AgentRequest("one"), repo_agent_context())
+        client.run(AgentRequest("two"), repo_agent_context())
         first, second = self.runner.turns
         self.assertIsInstance(first, Start)
         self.assertIsInstance(second, Start)
@@ -155,14 +159,14 @@ class AgentBuilderTests(unittest.TestCase):
 
     def test_session_is_shared_between_runs_in_one_cwd(self) -> None:
         client = self.builder().with_session().create()
-        first = client.run(AgentRequest("one"), repo_context())
-        second = client.run(AgentRequest("two"), repo_context())
+        first = client.run(AgentRequest("one"), repo_agent_context())
+        second = client.run(AgentRequest("two"), repo_agent_context())
         self.assertEqual(second.session, first.session)
         self.assertIsInstance(self.runner.turns[0], Start)
         self.assertEqual(self.runner.turns[1], Resume(first.session, NativeHandle("copilot", "copilot1")))
 
     def test_named_session(self) -> None:
-        result = self.builder().with_session().create(session=SessionName("feat")).run(AgentRequest("x"), repo_context())
+        result = self.builder().with_session().create(session=SessionName("feat")).run(AgentRequest("x"), repo_agent_context())
         self.assertEqual(result.session, SessionName("feat"))
 
     def test_session_without_with_session_raises(self) -> None:
@@ -181,10 +185,10 @@ class AgentBuilderTests(unittest.TestCase):
         name = SessionName("n")
         client = AgentBuilder(self.runner, self.git, self.docker, sessions=store).with_session().create(session=name)
         with self.assertRaises(RuntimeError):
-            client.run(AgentRequest("x"), repo_context())
+            client.run(AgentRequest("x"), repo_agent_context())
         self.assertEqual(store.get(name, "copilot"), NativeHandle("copilot", "n"))
         self.runner.fail = False
-        client.run(AgentRequest("x"), repo_context())
+        client.run(AgentRequest("x"), repo_agent_context())
         self.assertIsInstance(self.runner.turns[-1], Resume)
 
     def test_cli_mismatch_raises(self) -> None:
@@ -193,14 +197,14 @@ class AgentBuilderTests(unittest.TestCase):
         store._sessions[(name, "copilot")] = NativeHandle("codex", "t")
         client = AgentBuilder(self.runner, self.git, self.docker, sessions=store).with_session().create(session=name)
         with self.assertRaises(SessionCliMismatch):
-            client.run(AgentRequest("x"), repo_context())
+            client.run(AgentRequest("x"), repo_agent_context())
 
     def test_session_sees_the_git_worktree(self) -> None:
         client = self.builder().with_git().with_session().create()
         self.assertIsInstance(client, GitAgent)
         self.assertIsInstance(client._inner, CliAgentClient)
-        client.run(AgentRequest("one"), repo_context())
-        client.run(AgentRequest("two"), repo_context())
+        client.run(AgentRequest("one"), repo_agent_context())
+        client.run(AgentRequest("two"), repo_agent_context())
         self.assertIsInstance(self.runner.turns[1], Resume)
 
     def test_session_name_validation(self) -> None:
@@ -217,7 +221,7 @@ class AgentBuilderTests(unittest.TestCase):
         self.assertIsInstance(client, GitAgent)
         self.assertIsInstance(client._inner, DockerAgent)
         self.assertIsInstance(client._inner._inner, CliAgentClient)
-        self.assertEqual(client.run(AgentRequest("hello"), repo_context()).output, "done:hello")
+        self.assertEqual(client.run(AgentRequest("hello"), repo_agent_context()).output, "done:hello")
         self.assertEqual(
             self.events,
             ["worktree.enter", "docker.configure", "cli.run", "worktree.exit"],
@@ -232,7 +236,7 @@ class AgentBuilderTests(unittest.TestCase):
         self.assertEqual(self.events, ["worktree.enter", "cli.run", "worktree.exit"])
 
     def test_docker_only_keeps_original_workspace(self) -> None:
-        self.builder().with_docker().create().run(AgentRequest("hello"), repo_context())
+        self.builder().with_docker().create().run(AgentRequest("hello"), repo_agent_context())
         self.assertEqual(self.events, ["docker.configure", "cli.run"])
         self.assertEqual(self.runner.contexts[0].agent.cwd, Path("/repo"))
 

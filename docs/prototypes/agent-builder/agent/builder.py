@@ -107,7 +107,7 @@ class AgentBuilder:
         store = self._sessions if self._use_session else None
         client: AgentClient = CliAgentClient(self._runner, profile, defaults, store=store, session=session)
         if self._use_docker:
-            client = DockerAgent(client, self._docker, defaults)
+            client = DockerAgent(client, self._docker, defaults.agent)
         return client
 
     @contextmanager
@@ -133,5 +133,5 @@ class AgentBuilder:
         self._require_session_enabled(session)
         client = self._stack(profile or DEFAULT, self._defaults, session)
         if self._use_git:
-            client = GitAgent(client, self._git, self._git_options, self._defaults)
+            client = GitAgent(client, self._git, self._git_options, self._defaults.agent)
         return client
