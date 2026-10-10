@@ -46,6 +46,19 @@ DEVELOPER = AgentProfile(CodexCli(hook_trust_bypass=True), "gpt-5-codex")  # Cod
 
 Security: `--dangerously-bypass-hook-trust` (Codex) and `GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS=true` (Copilot) also enable any hook file the agent writes into the worktree. Keep the Codex bypass opt-in. Run one agent per worktree at a time: Copilot fires every `loop-*.json` in it.
 
+### Loop hooks
+
+`worktree-ready` Loop hooks are shell commands run in a fresh worktree (`cwd` = the worktree) before the agent starts, in declared order. A failing or timed-out hook force-removes the worktree and raises `LoopHookError`; the agent never starts. `create()` runs them on every `run()`; `open()` runs them once. They receive `LOOP_REPOSITORY` and `LOOP_WORKTREE`.
+
+```python
+GitOptions(
+    strategy=BranchStrategy("loop/ticket-123"),
+    loop_hooks=(LoopHook('cp "$LOOP_REPOSITORY/.env" .env'), LoopHook("npm ci", timeout_sec=600)),
+)
+```
+
+Hooks may write only gitignored paths; nothing enforces it, and a dirty worktree makes the normal removal fail.
+
 Run locally from the prototype directory:
 
 ```sh
@@ -107,9 +120,11 @@ Test a custom CLI with `ProcessCliRunner(run=fake)` and check its `command` and 
 - `Worktree`: `path`, `session` and `agent(profile=DEFAULT, session=None) -> AgentClient`; raises `ValueError` when `session` is set but sessions are off, and `RuntimeError("worktree closed")` after the `open()` block.
 - `AgentBuilder.open(session=None) -> ContextManager[Worktree]`: runs the git strategy once; without git yields the agent cwd. With sessions on, the worktree session is `session` or a generated name; `session` without `with_session()` raises `ValueError`.
 - `AgentBuilder.create(profile=DEFAULT, session=None) -> AgentClient`: one-shot client with one git lifecycle per `run()`; same `session` rule as `open()`.
-- `GitOptions`: `root_path` (worktrees root, must resolve inside the cwd; worktree strategies only), `repository_path` (optional, default the agent `cwd`; relative paths resolve from it) sets `git -C` for multi-repository setups, and `strategy` (default `HeadStrategy()`). A worktree is created at `root_path/<branch>`.
+- `GitOptions`: `root_path` (worktrees root, must resolve inside the cwd; worktree strategies only), `repository_path` (optional, default the agent `cwd`; relative paths resolve from it) sets `git -C` for multi-repository setups, `strategy` (default `HeadStrategy()`), and `loop_hooks` (tuple of `LoopHook`, default empty; rejected with `HeadStrategy`). A worktree is created at `root_path/<branch>`.
+- `LoopHook(command, timeout_sec=120.0)`: frozen; `ValueError` on an empty command or `timeout_sec <= 0`.
+- `LoopHookError(command, output)`: raised when a hook exits non-zero or times out; a failed forced removal is attached with `add_note`.
 - `GitStrategy`: protocol with `open(git, cwd, repository, options)`, a context manager yielding the agent's working directory. Implemented by the frozen dataclasses `HeadStrategy`, `MergeToHeadStrategy` and `BranchStrategy`, each owning its git lifecycle; see [Strategies](#strategies).
-- `GitCli`: with `git -C <repository>`: `fetch` (`fetch --all --prune`), `add_worktree(repository, target, branch, base="HEAD")` (`check-ref-format --branch`; an existing local branch is reused as-is, otherwise `branch` from `origin/<branch>` if present else `base`; then `worktree add <target> <branch>`), `remove_worktree` (`worktree remove <target>`; git refuses with uncommitted changes), `merge_ff_only` (`merge --ff-only <branch>`) and `delete_branch` (`branch -d <branch>`).
+- `GitCli`: with `git -C <repository>`: `fetch` (`fetch --all --prune`), `add_worktree(repository, target, branch, base="HEAD")` (`check-ref-format --branch`; an existing local branch is reused as-is, otherwise `branch` from `origin/<branch>` if present else `base`; then `worktree add <target> <branch>`), `run_hook(hook, worktree, repository)` (shell command in the worktree with a timeout), `remove_worktree(repository, target, *, force=False)` (`worktree remove [--force] <target>`; git refuses with uncommitted changes unless forced), `merge_ff_only` (`merge --ff-only <branch>`) and `delete_branch` (`branch -d <branch>`).
 - `GitRuntime.open()`: resolves the repository and delegates to `options.strategy.open()`, which yields the directory the agent works in; a worktree is removed on exit, also on error.
 - `AgentOptions`: optional frozen caller overrides `docker_image` and `dry_run`; `Agent()` copies the set (non-`None`) values onto the `AgentContext`.
 - `AgentBuilder.with_git(options: GitOptions | None = None) -> Self`: enable the git strategy; defaults to `GitOptions()` (`HeadStrategy`, no git calls).
@@ -306,11 +321,22 @@ classDiagram
             +root_path : Path
             +repository_path : Path | None
             +strategy : GitStrategy
+            +loop_hooks : tuple~LoopHook~
+        }
+        class LoopHook {
+            <<frozen dataclass>>
+            +command : str
+            +timeout_sec : float
+        }
+        class LoopHookError {
+            +command : str
+            +output : str
         }
         class GitCli {
             +fetch(repository) None
             +add_worktree(repository, target, branch, base) None
-            +remove_worktree(repository, target) None
+            +run_hook(hook, worktree, repository) None
+            +remove_worktree(repository, target, force) None
             +merge_ff_only(repository, branch) None
             +delete_branch(repository, branch) None
         }
@@ -375,6 +401,8 @@ classDiagram
     GitRuntime ..> GitOptions : Use
     GitAgent o-- GitOptions
     GitOptions *-- GitStrategy
+    GitOptions o-- LoopHook
+    GitCli ..> LoopHookError : Use
     GitRuntime ..> GitStrategy : Use
     HeadStrategy ..|> GitStrategy
     MergeToHeadStrategy ..|> GitStrategy
@@ -402,7 +430,7 @@ classDiagram
 | `MergeToHeadStrategy()` | Creates a `tmp_<hex>` branch worktree from `HEAD`; when the run succeeds, removes the worktree, merges the branch into the current `HEAD` with `--ff-only`, then deletes it. When the run fails, the worktree is removed and the temp branch is kept unmerged. |
 | `BranchStrategy(branch, base_branch=None)` | `fetch`, then a worktree on `branch`. A new branch starts from `origin/<branch>` if it exists, else `base_branch` (default `HEAD`); an existing local branch is reused as-is. The branch is kept on exit. |
 
-The agent must commit inside the worktree; `worktree remove` refuses to remove one with uncommitted changes. Omitting `with_git()` disables git handling entirely; `HeadStrategy` is the explicit no-op.
+The agent must commit inside the worktree; `worktree remove` refuses to remove one with uncommitted changes. Omitting `with_git()` disables git handling entirely; `HeadStrategy` is the explicit no-op and rejects Loop hooks.
 
 ```python
 agent = Agent().create()                                              # no git layer
@@ -489,7 +517,7 @@ Agent().create()
 
 Agent().with_git().with_docker().create()
   GitAgent.run()
-    -> GitService.open() [enter]
+    -> GitService.open() [enter: worktree add, then Loop hooks]
     -> DockerAgent.run()
       -> DockerService.configure()
       -> CliAgentClient.run()

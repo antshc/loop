@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import tempfile
 import unittest
 from contextlib import contextmanager, redirect_stdout
@@ -31,11 +32,14 @@ from agent import (
     CodexCli,
     CopilotCli,
     DockerAgent,
+    DockerRuntime,
     GitAgent,
     GitCli,
     GitOptions,
     GitRuntime,
     HeadStrategy,
+    LoopHook,
+    LoopHookError,
     MemorySessionStore,
     MergeToHeadStrategy,
     NativeHandle,
@@ -368,21 +372,43 @@ class CliTests(unittest.TestCase):
 
 
 class FakeProcess:
-    def __init__(self, returncode: int) -> None:
+    def __init__(self, returncode: int, stdout: str = "", stderr: str = "") -> None:
         self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
 
 
 class GitFixture:
-    """Records git invocations; `missing` ref fragments make show-ref fail."""
+    """Records git invocations (list commands) and hook calls (shell strings); `missing` ref fragments make show-ref fail."""
 
-    def __init__(self, missing: tuple[str, ...] = ()) -> None:
+    def __init__(
+        self,
+        missing: tuple[str, ...] = (),
+        failing: tuple[str, ...] = (),
+        timing_out: tuple[str, ...] = (),
+        remove_fails: bool = False,
+    ) -> None:
         self.missing = missing
+        self.failing = failing
+        self.timing_out = timing_out
+        self.remove_fails = remove_fails
         self.commands: list[list[str]] = []
+        self.hooks: list[tuple[str, dict]] = []
         self.repositories: set[str] = set()
 
-    def __call__(self, command: list[str], **_: object) -> FakeProcess:
+    def __call__(self, command: list[str] | str, **kwargs: object) -> FakeProcess:
+        if isinstance(command, str):
+            self.hooks.append((command, kwargs))
+            self.commands.append(["hook", command])
+            if command in self.timing_out:
+                raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+            if command in self.failing:
+                return FakeProcess(1, "out-", "err")
+            return FakeProcess(0)
         self.repositories.add(command[2])
         self.commands.append(command[3:])
+        if self.remove_fails and command[3:5] == ["worktree", "remove"]:
+            raise subprocess.CalledProcessError(1, command)
         failed = command[3] == "show-ref" and any(ref in command[-1] for ref in self.missing)
         return FakeProcess(1 if failed else 0)
 
@@ -495,6 +521,113 @@ class GitRuntimeTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "must be inside"):
                     with self.runtime(GitFixture()).open(Path("/repo"), GitOptions(Path("../x"), strategy=strategy)):
                         pass
+
+
+class LoopHookTests(unittest.TestCase):
+    def options(self, *commands: str, strategy: object | None = None) -> GitOptions:
+        return GitOptions(
+            Path("wt"),
+            strategy=strategy or BranchStrategy("loop/a"),
+            loop_hooks=tuple(LoopHook(command, timeout_sec=5) for command in commands),
+        )
+
+    def open(self, git: GitFixture, options: GitOptions):
+        return GitRuntime(GitCli(run=git)).open(Path("/repo"), options)
+
+    def test_hook_validation(self) -> None:
+        with self.assertRaises(ValueError):
+            LoopHook("")
+        with self.assertRaises(ValueError):
+            LoopHook("x", timeout_sec=0)
+
+    def test_head_rejects_hooks_but_worktree_strategies_accept(self) -> None:
+        with self.assertRaisesRegex(ValueError, "need a worktree strategy"):
+            GitOptions(loop_hooks=(LoopHook("x"),))
+        self.options("x")
+        self.options("x", strategy=MergeToHeadStrategy())
+
+    def test_hooks_run_in_order_after_add_with_cwd_timeout_and_env(self) -> None:
+        git = GitFixture(missing=("refs/",))
+        body: list[int] = []
+        with self.open(git, self.options("one", "two")):
+            body.append(len(git.hooks))
+        names = [command[:2] for command in git.commands]
+        self.assertEqual(body, [2])
+        self.assertEqual([hook for hook, _ in git.hooks], ["one", "two"])
+        self.assertLess(names.index(["worktree", "add"]), [n[0] for n in names].index("hook"))
+        for _, kwargs in git.hooks:
+            self.assertEqual(kwargs["cwd"], Path("/repo/wt/loop/a"))
+            self.assertEqual(kwargs["timeout"], 5)
+            self.assertEqual(kwargs["env"]["LOOP_REPOSITORY"], "/repo")
+            self.assertEqual(kwargs["env"]["LOOP_WORKTREE"], "/repo/wt/loop/a")
+
+    def test_failing_hook_force_removes_and_skips_body(self) -> None:
+        git = GitFixture(missing=("refs/",), failing=("one",))
+        entered = False
+        with self.assertRaises(LoopHookError) as caught:
+            with self.open(git, self.options("one", "two")):
+                entered = True
+        self.assertFalse(entered)
+        self.assertEqual(caught.exception.command, "one")
+        self.assertEqual(caught.exception.output, "out-err")
+        self.assertEqual([hook for hook, _ in git.hooks], ["one"])
+        self.assertEqual(git.commands[-1], ["worktree", "remove", "--force", "/repo/wt/loop/a"])
+        names = [command[0] for command in git.commands]
+        for forbidden in ("diff", "commit", "merge"):
+            self.assertNotIn(forbidden, names)
+
+    def test_timed_out_hook_raises(self) -> None:
+        git = GitFixture(missing=("refs/",), timing_out=("slow",))
+        with self.assertRaisesRegex(LoopHookError, "timed out after"):
+            with self.open(git, self.options("slow")):
+                pass
+
+    def test_failing_hook_under_merge_to_head_does_not_merge(self) -> None:
+        git = GitFixture(missing=("refs/",), failing=("one",))
+        with self.assertRaises(LoopHookError):
+            with self.open(git, self.options("one", strategy=MergeToHeadStrategy())):
+                pass
+        self.assertNotIn("merge", [command[0] for command in git.commands])
+        self.assertNotIn(["branch", "-d"], [command[:2] for command in git.commands])
+
+    def test_failed_forced_removal_is_noted_on_hook_error(self) -> None:
+        git = GitFixture(missing=("refs/",), failing=("one",), remove_fails=True)
+        with self.assertRaises(LoopHookError) as caught:
+            with self.open(git, self.options("one")):
+                pass
+        self.assertTrue(any("removal" in note for note in caught.exception.__notes__))
+
+    def builder(self, git: GitFixture, events: list[str]) -> tuple[AgentBuilder, RecordingRunner]:
+        runner = RecordingRunner(events)
+        builder = AgentBuilder(
+            runner, GitRuntime(GitCli(run=git)), DockerRuntime(), AgentContext(cwd=Path("/repo"))
+        )
+        return builder, runner
+
+    def test_builder_failing_hook_never_starts_agent(self) -> None:
+        git = GitFixture(missing=("refs/",), failing=("one",))
+        builder, runner = self.builder(git, [])
+        builder = builder.with_git(self.options("one"))
+        with self.assertRaises(LoopHookError):
+            builder.create().run(AgentRequest("x"))
+        self.assertEqual(runner.contexts, [])
+        with self.assertRaises(LoopHookError):
+            with builder.open():
+                pass
+
+    def test_hooks_fire_per_run_for_create_and_once_for_open(self) -> None:
+        git = GitFixture(missing=("refs/",))
+        builder, _ = self.builder(git, [])
+        builder = builder.with_git(self.options("one", "two"))
+        client = builder.create()
+        client.run(AgentRequest("a"))
+        client.run(AgentRequest("b"))
+        self.assertEqual(len(git.hooks), 4)
+        git.hooks.clear()
+        with builder.open() as wt:
+            wt.agent().run(AgentRequest("a"))
+            wt.agent().run(AgentRequest("b"))
+        self.assertEqual([hook for hook, _ in git.hooks], ["one", "two"])
 
 
 class DryRunTests(unittest.TestCase):

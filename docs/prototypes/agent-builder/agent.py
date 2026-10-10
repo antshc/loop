@@ -264,6 +264,30 @@ class BranchStrategy:
             git.commit_all(target, options.commit_message)
 
 
+DEFAULT_LOOP_HOOK_TIMEOUT_SEC = 120.0
+
+
+@dataclass(frozen=True)
+class LoopHook:
+    """Shell command run in a fresh worktree before the agent starts; may write only gitignored paths."""
+
+    command: str
+    timeout_sec: float = DEFAULT_LOOP_HOOK_TIMEOUT_SEC
+
+    def __post_init__(self) -> None:
+        if not self.command:
+            raise ValueError("Loop hook command must not be empty")
+        if self.timeout_sec <= 0:
+            raise ValueError("Loop hook timeout_sec must be positive")
+
+
+class LoopHookError(Exception):
+    def __init__(self, command: str, output: str) -> None:
+        super().__init__(f"worktree-ready hook failed: {command}\n{output}")
+        self.command = command
+        self.output = output
+
+
 @dataclass(frozen=True)
 class GitOptions:
     """Where the worktree lives (target = root_path/branch) and which strategy creates it."""
@@ -275,6 +299,12 @@ class GitOptions:
     strategy: GitStrategy = HeadStrategy()
     # Message for the safety-net commit of changes the agent left uncommitted.
     commit_message: str = "agent: commit uncommitted changes"
+    # worktree-ready Loop hooks, run in order after the worktree is created.
+    loop_hooks: tuple[LoopHook, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.loop_hooks and isinstance(self.strategy, HeadStrategy):
+            raise ValueError("Loop hooks need a worktree strategy")
 
 
 @dataclass(frozen=True)
@@ -746,9 +776,27 @@ class GitCli:
             self._git(repository, "branch", branch, f"origin/{branch}" if remote else base)
         self._git(repository, "worktree", "add", str(target), branch)
 
-    def remove_worktree(self, repository: Path, target: Path) -> None:
-        """Detach the worktree at `target`; git refuses when it has uncommitted changes. The branch is kept."""
-        self._git(repository, "worktree", "remove", str(target))
+    def remove_worktree(self, repository: Path, target: Path, *, force: bool = False) -> None:
+        """Detach the worktree at `target`; git refuses when it has uncommitted changes unless `force`. The branch is kept."""
+        flags = ["--force"] if force else []
+        self._git(repository, "worktree", "remove", *flags, str(target))
+
+    def run_hook(self, hook: LoopHook, worktree: Path, repository: Path) -> None:
+        try:
+            result = self._run(
+                hook.command,
+                shell=True,
+                cwd=worktree,
+                timeout=hook.timeout_sec,
+                env={**os.environ, "LOOP_REPOSITORY": str(repository), "LOOP_WORKTREE": str(worktree)},
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            raise LoopHookError(hook.command, f"timed out after {hook.timeout_sec}s") from None
+        if result.returncode != 0:
+            raise LoopHookError(hook.command, (result.stdout or "") + (result.stderr or ""))
 
     def commit_all(self, worktree: Path, message: str) -> None:
         """Commit every change in the worktree; no-op when there is nothing to commit."""
@@ -785,6 +833,15 @@ def _worktree(
     target = root / branch
     git.add_worktree(repository, target, branch, base)
     try:
+        for hook in options.loop_hooks:
+            git.run_hook(hook, target, repository)
+    except BaseException as error:
+        try:
+            git.remove_worktree(repository, target, force=True)
+        except Exception as removal:
+            error.add_note(f"forced worktree removal also failed: {removal}")
+        raise
+    try:
         yield target
     finally:
         git.remove_worktree(repository, target)
@@ -820,6 +877,9 @@ class LoggingGitCli(GitCli):
         command = ["git", "-C", str(repository), *args]
         _log(" ".join(command))
         return subprocess.CompletedProcess(command, 1 if "show-ref" in args else 0, "", "")
+
+    def run_hook(self, hook: LoopHook, worktree: Path, repository: Path) -> None:
+        _log(f"loop-hook worktree-ready cwd={worktree} timeout={hook.timeout_sec}: {hook.command}")
 
 
 class LoggingRunner:
@@ -915,7 +975,10 @@ if __name__ == "__main__":
         DEVELOPER = AgentProfile(CodexCli(hook_trust_bypass=True), "gpt-5-codex", "high")
         REVIEWER = AgentProfile(copilot, "claude-sonnet-4.5")
         # Shared worktree: one git lifecycle, several CLIs; one named session, kept per CLI.
-        _shared = Agent(_DRY).with_git(GitOptions(_root, _repo, BranchStrategy("loop/ticket-123", "main"))).with_session()
+        _loop_hooks = (LoopHook('cp "$LOOP_REPOSITORY/.env" .env'), LoopHook("npm ci", timeout_sec=600))
+        _shared = Agent(_DRY).with_git(
+            GitOptions(_root, _repo, BranchStrategy("loop/ticket-123", "main"), loop_hooks=_loop_hooks)
+        ).with_session()
         _shared.with_agent_cli_hooks(
             AgentCliHook("./scripts/session-start.sh", frozenset({AgentCliHookPoint.SESSION_START})),
             AgentCliHook("notify-send", frozenset({AgentCliHookPoint.SESSION_END}), timeout_sec=3),
