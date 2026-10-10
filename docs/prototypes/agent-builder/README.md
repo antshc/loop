@@ -10,8 +10,8 @@ from agent import Agent
 # Default: concrete CopilotAgentClient (no wrappers)
 agent = Agent().create()
 
-# One fluent chain: WorktreeAgent -> DockerAgent -> CopilotAgentClient
-agent = Agent().with_worktrees().with_docker().create()
+# One fluent chain: GitAgent -> DockerAgent -> CopilotAgentClient
+agent = Agent().with_git().with_docker().create()
 
 try:
     result = agent.run("Implement ticket #123")
@@ -32,19 +32,20 @@ Python 3.12+, standard library only. No real Git, Docker, or Copilot installatio
 
 ## Contracts
 
-- `Agent(options: AgentOptions | None = None) -> AgentBuilder`: *composition root*; registers `CopilotCli`, `WorktreesRuntime(GitCli())`, and `DockerRuntime` internally.
-- `WorktreesOptions`: `root_path` (worktrees root, must resolve inside the cwd) and `branch` (new branch name; unset generates `feat_<hex>` per run); the worktree is created at `root_path/branch`. `repository_path` (optional, default the agent `cwd`; relative paths resolve from it) sets `git -C` for multi-repository setups.
-- `GitCli.create_worktree(repository, target, branch, base="main")`: with `git -C <repository>`: `fetch --all --prune`, `check-ref-format --branch`, `branch` (or `branch -f` when it exists locally) from `origin/<branch>` if present else `origin/<base>`, then `worktree add <target> <branch>`.
-- `GitCli.remove_worktree(repository, target)`: `worktree remove <target>`; called when `WorktreesRuntime.open()` exits (also on error). The branch is kept, and git refuses to remove a worktree with uncommitted changes.
+- `Agent(options: AgentOptions | None = None) -> AgentBuilder`: *composition root*; registers `CopilotCli`, `GitRuntime(GitCli())`, and `DockerRuntime` internally.
+- `GitOptions`: `root_path` (worktrees root, must resolve inside the cwd; worktree strategies only), `repository_path` (optional, default the agent `cwd`; relative paths resolve from it) sets `git -C` for multi-repository setups, and `strategy` (default `HeadStrategy()`). A worktree is created at `root_path/<branch>`.
+- `GitStrategy = HeadStrategy | MergeToHeadStrategy | BranchStrategy`: frozen dataclasses, see [Strategies](#strategies).
+- `GitCli`: with `git -C <repository>`: `fetch` (`fetch --all --prune`), `add_worktree(repository, target, branch, base="HEAD")` (`check-ref-format --branch`; an existing local branch is reused as-is, otherwise `branch` from `origin/<branch>` if present else `base`; then `worktree add <target> <branch>`), `remove_worktree` (`worktree remove <target>`; git refuses with uncommitted changes), `merge_ff_only` (`merge --ff-only <branch>`) and `delete_branch` (`branch -d <branch>`).
+- `GitRuntime.open()`: runs the strategy and yields the directory the agent works in; a worktree is removed on exit, also on error.
 - `AgentOptions`: optional frozen caller overrides `docker_image` and `cli_args`; `Agent()` copies the set (non-`None`) values onto the `AgentContext`.
-- `AgentBuilder.with_worktrees(options: WorktreesOptions | None = None) -> Self`: enable per-run worktree scope; defaults to `WorktreesOptions()`.
+- `AgentBuilder.with_git(options: GitOptions | None = None) -> Self`: enable the per-run git strategy; defaults to `GitOptions()` (`HeadStrategy`, no git calls).
 - `AgentBuilder.with_docker() -> Self`: enable Docker execution configuration.
 - `AgentBuilder.create() -> AgentClient`: create a new composed client; no wrapper when no options enabled.
 - `AgentClient.run(prompt: str, context: RunContext | None = None) -> str`: invariant public entry point.
-- `AgentContext`: frozen agent settings `cwd`, `docker_image`, `cli_args` (default `("--allow-all-tools",)`) and `add_dirs` (extra directories, each passed as `--add-dir`); the agent always starts in `cwd` (the harness dir), which already contains the worktree, so `WorktreeAgent` does not add it to `add_dirs`. `Agent()` creates it and the builder seeds the default `RunContext` with it.
+- `AgentContext`: frozen agent settings `cwd`, `docker_image`, `cli_args` (default `("--allow-all-tools",)`) and `add_dirs` (extra directories, each passed as `--add-dir`); the agent always starts in `cwd` (the harness dir), which already contains the worktree, so `GitAgent` does not add it to `add_dirs`. `Agent()` creates it and the builder seeds the default `RunContext` with it.
 - `RunContext`: per-run context; carries the `AgentContext` as `agent` (no `cwd`/`docker_image` of its own).
 - `AgentClient.close() -> None`: lifecycle operation delegated through all wrappers.
-- `CliRunner`, `WorktreeService`, `DockerService`: narrow dependency protocols. The builder accepts their implementations; callers of `Agent()` do not see them.
+- `CliRunner`, `GitService`, `DockerService`: narrow dependency protocols. The builder accepts their implementations; callers of `Agent()` do not see them.
 
 ## Class diagram
 
@@ -54,9 +55,9 @@ Python 3.12+, standard library only. No real Git, Docker, or Copilot installatio
 classDiagram
     namespace Composition {
         class AgentBuilder {
-            -_use_worktrees : bool
+            -_use_git : bool
             -_use_docker : bool
-            +with_worktrees(options) Self
+            +with_git(options) Self
             +with_docker() Self
             +create() AgentClient
         }
@@ -71,7 +72,7 @@ classDiagram
             <<Interface>>
             +run(prompt, context) str
         }
-        class WorktreeService {
+        class GitService {
             <<Interface>>
             +open(cwd, options) ContextManager~Path~
         }
@@ -103,45 +104,67 @@ classDiagram
         class AgentWrapper {
             +close() None
         }
-        class WorktreeAgent {
+        class GitAgent {
             +run(prompt, context) str
         }
         class DockerAgent {
             +run(prompt, context) str
         }
     }
+    namespace GitStrategies {
+        class GitStrategy {
+            <<type alias>>
+            HeadStrategy | MergeToHeadStrategy | BranchStrategy
+        }
+        class HeadStrategy {
+            <<frozen dataclass>>
+        }
+        class MergeToHeadStrategy {
+            <<frozen dataclass>>
+        }
+        class BranchStrategy {
+            <<frozen dataclass>>
+            +branch : str
+            +base_branch : str | None
+        }
+    }
     namespace StubAdapters {
         class CopilotCli
-        class WorktreesRuntime
-        class WorktreesOptions {
+        class GitRuntime {
+            +open(cwd, options) ContextManager~Path~
+        }
+        class GitOptions {
             <<frozen dataclass>>
             +root_path : Path
-            +branch : str | None
             +repository_path : Path | None
+            +strategy : GitStrategy
         }
         class GitCli {
-            +create_worktree(repository, target, branch, base) None
+            +fetch(repository) None
+            +add_worktree(repository, target, branch, base) None
             +remove_worktree(repository, target) None
+            +merge_ff_only(repository, branch) None
+            +delete_branch(repository, branch) None
         }
         class DockerRuntime
     }
 
     CopilotAgentClient ..|> AgentClient
-    WorktreeAgent ..|> AgentClient
+    GitAgent ..|> AgentClient
     DockerAgent ..|> AgentClient
-    WorktreeAgent --|> AgentWrapper : Extends
+    GitAgent --|> AgentWrapper : Extends
     DockerAgent --|> AgentWrapper : Extends
 
     AgentWrapper o-- AgentClient : inner
     CopilotAgentClient o-- CliRunner
-    WorktreeAgent o-- WorktreeService
+    GitAgent o-- GitService
     DockerAgent o-- DockerService
 
     AgentBuilder o-- CliRunner
-    AgentBuilder o-- WorktreeService
+    AgentBuilder o-- GitService
     AgentBuilder o-- DockerService
     AgentBuilder ..> CopilotAgentClient : Use
-    AgentBuilder ..> WorktreeAgent : Use
+    AgentBuilder ..> GitAgent : Use
     AgentBuilder ..> DockerAgent : Use
 
     AgentClient ..> RunContext : Use
@@ -152,15 +175,37 @@ classDiagram
     AgentOptions ..> AgentContext : Use
 
     CopilotCli ..|> CliRunner
-    WorktreesRuntime ..|> WorktreeService
-    WorktreesRuntime o-- GitCli
-    WorktreesRuntime ..> WorktreesOptions : Use
-    WorktreeAgent o-- WorktreesOptions
+    GitRuntime ..|> GitService
+    GitRuntime o-- GitCli
+    GitRuntime ..> GitOptions : Use
+    GitAgent o-- GitOptions
+    GitOptions *-- GitStrategy
+    HeadStrategy ..|> GitStrategy
+    MergeToHeadStrategy ..|> GitStrategy
+    BranchStrategy ..|> GitStrategy
     DockerRuntime ..|> DockerService
 
-    note for AgentBuilder "Agent() registers the stub adapters; create() wraps worktree (outer) > docker > core"
+    note for AgentBuilder "Agent() registers the stub adapters; create() wraps git (outer) > docker > core"
+    note for GitRuntime "match strategy: head = no git; merge-to-head = tmp_hex worktree, ff-only merge, branch -d; branch = fetch, reuse or create, worktree"
 
     classDef default fill:#242424,stroke:#8b949e,color:#c9d1d9,stroke-width:1px
+```
+
+## Strategies
+
+| Strategy | Effect |
+| --- | --- |
+| `HeadStrategy()` (default) | No worktree or branch; the agent works directly in the repository directory. No git calls. |
+| `MergeToHeadStrategy()` | Creates a `tmp_<hex>` branch worktree from `HEAD`; when the run succeeds, removes the worktree, merges the branch into the current `HEAD` with `--ff-only`, then deletes it. When the run fails, the worktree is removed and the temp branch is kept unmerged. |
+| `BranchStrategy(branch, base_branch=None)` | `fetch`, then a worktree on `branch`. A new branch starts from `origin/<branch>` if it exists, else `base_branch` (default `HEAD`); an existing local branch is reused as-is. The branch is kept on exit. |
+
+The agent must commit inside the worktree; `worktree remove` refuses to remove one with uncommitted changes. Omitting `with_git()` disables git handling entirely; `HeadStrategy` is the explicit no-op.
+
+```python
+agent = Agent().create()                                              # no git layer
+agent = Agent().with_git().create()                                   # HeadStrategy
+agent = Agent().with_git(GitOptions(strategy=MergeToHeadStrategy())).create()
+agent = Agent().with_git(GitOptions(strategy=BranchStrategy("loop/ticket-123", "develop"))).create()
 ```
 
 ## Single-repository example
@@ -168,64 +213,61 @@ classDiagram
 The agent `cwd` is the repository itself, so `repository_path` stays unset and only the worktrees root matters. Run from the repo root.
 
 ```python
-agent = Agent().with_worktrees().create()  # all defaults
-
-agent = Agent().with_worktrees(WorktreesOptions(
+agent = Agent().with_git(GitOptions(
     root_path=Path("tmp/worktrees"),   # must resolve inside the cwd
-    branch="loop/ticket-123",          # optional; unset generates feat_<hex>
+    strategy=BranchStrategy("loop/ticket-123"),
 )).create()
 ```
 
-`WorktreesOptions()` defaults to `root_path=".worktrees"`, `branch=None` and `repository_path=None`, so the default run creates `<repo>/.worktrees/feat_<hex>`:
+`GitOptions()` defaults to `root_path=".worktrees"`, `repository_path=None` and `HeadStrategy()`. With `MergeToHeadStrategy()` the default run creates `<repo>/.worktrees/tmp_<hex>`:
 
 ```text
 <repo>/                         # agent cwd, also the git repository
 ├── .git
 ├── .worktrees/                 # root_path (add to .gitignore)
-│   └── feat_1a2b3c4d/          # target = root_path/branch, removed when the run ends
+│   └── tmp_1a2b3c4d/           # target = root_path/branch, removed when the run ends
 └── ...
 ```
 
-- `root_path` must stay inside the cwd: `WorktreesRuntime.open()` raises `ValueError` otherwise, so a sibling such as `../repo.worktrees` is rejected. The sibling layout only works in the multi-repository setup, where the cwd is the harness dir above the repositories.
+- `root_path` must stay inside the cwd for worktree strategies: `GitRuntime.open()` raises `ValueError` otherwise, so a sibling such as `../repo.worktrees` is rejected. The sibling layout only works in the multi-repository setup, where the cwd is the harness dir above the repositories. `HeadStrategy` ignores `root_path`.
 - The default root is inside the repository, so add `.worktrees/` to `.gitignore`.
-- The branch starts from `origin/<branch>` if it exists on the remote, otherwise from `origin/main`. `GitCli.create_worktree` has a `base` argument that `WorktreesOptions` does not expose.
 
 ## Multi-repository example
 
-`repo_agent(repo, branch=None)` builds one worktree-isolated agent for `workspace/<repo>`, with worktrees in `workspace/<repo>.worktrees`. Run it from the harness dir, which is the agent `cwd`.
+`repo_agent(repo, branch=None)` builds one worktree-isolated agent for `workspace/<repo>`, with worktrees in `workspace/<repo>.worktrees`: `BranchStrategy(branch)` when a branch is given, otherwise `MergeToHeadStrategy()`. Run it from the harness dir, which is the agent `cwd`.
 
 ```python
-agent = repo_agent("repo1")  # branch unset: generates feat_<hex>
+agent = repo_agent("repo1")  # MergeToHeadStrategy: tmp_<hex> worktree merged into repo1 HEAD
 agent.run("Implement ticket #123 in repo1")
 ```
 
 It is equivalent to:
 
 ```python
-Agent().with_worktrees(WorktreesOptions(
+Agent().with_git(GitOptions(
     root_path=Path("workspace/repo1.worktrees"),
     repository_path=Path("workspace/repo1"),
+    strategy=MergeToHeadStrategy(),
 )).with_docker().create()
 ```
 
-Resulting folder structure after one run (`feat_1a2b3c4d` is the generated branch):
+Folder structure while one run is active (`tmp_1a2b3c4d` is the generated branch):
 
 ```text
 <harness>/                          # agent cwd (the agent starts here)
 ├── .git
 └── workspace/
     ├── repo1/                      # repository_path -> git -C target
-    │   └── .git                    # holds branch feat_1a2b3c4d and worktree metadata
+    │   └── .git                    # holds branch tmp_1a2b3c4d and worktree metadata
     ├── repo1.worktrees/            # root_path
-    │   └── feat_1a2b3c4d/          # target = root_path/branch
-    │       ├── .git                # file pointing back to repo1/.git/worktrees/feat_1a2b3c4d
-    │       └── ...                 # checkout of branch feat_1a2b3c4d, from origin/main
-    ├── repo2/
-    │   └── .git
-    └── repo2.worktrees/            # created on the first repo2 run
+    │   └── tmp_1a2b3c4d/           # target = root_path/branch, removed when the run ends
+    │       ├── .git                # file pointing back to repo1/.git/worktrees/tmp_1a2b3c4d
+    │       └── ...                 # checkout of tmp_1a2b3c4d, from HEAD
+    └── repo2/
+        └── .git
 ```
 
-The agent runs with `cwd=<harness>`; the worktree is inside it, so no `--add-dir` is needed. Each run adds a new `feat_<hex>` directory while it runs and removes it afterwards (the branch stays in `repo1`). An explicit branch such as `loop/ticket-123` adds a directory level (`repo1.worktrees/loop/ticket-123/`). One agent covers one repository; a second `with_worktrees()` call replaces the first.
+The agent runs with `cwd=<harness>`; the worktree is inside it, so no `--add-dir` is needed. One agent covers one repository; a second `with_git()` call replaces the first.
 
 ## Dry run
 
@@ -242,20 +284,20 @@ Agent().create()
   CopilotAgentClient.run()
     -> CliRunner.run()
 
-Agent().with_worktrees().with_docker().create()
-  WorktreeAgent.run()
-    -> WorktreeService.open() [enter]
+Agent().with_git().with_docker().create()
+  GitAgent.run()
+    -> GitService.open() [enter]
     -> DockerAgent.run()
       -> DockerService.configure()
       -> CopilotAgentClient.run()
         -> CliRunner.run()
-    -> WorktreeService.open() [exit even on error]
+    -> GitService.open() [exit even on error]
 ```
 
-`with_worktrees()` and `with_docker()` set builder flags; `create()` establishes the fixed wrapper order **worktree (outer) -> Docker (inner) -> core**. Calls preserve prompt and context, replacing only the Docker setting (`cwd` is unchanged; the worktree sits inside it). `close()` forwards to the innermost client.
+`with_git()` and `with_docker()` set builder flags; `create()` establishes the fixed wrapper order **git (outer) -> Docker (inner) -> core**. Calls preserve prompt and context, replacing only the Docker setting (`cwd` is unchanged; the worktree sits inside it). `close()` forwards to the innermost client.
 
 ## Prototype boundaries
 
-**`CopilotCli` and `DockerRuntime` are stubs, not real container or Copilot execution.** `WorktreesRuntime` is real: it runs git through `GitCli` (fetch, branch, `worktree add`) against the repository at `repository_path` (default: the agent cwd) and removes the worktree when the run ends. `DockerRuntime.configure()` adds a Docker image to the context without running a container, and `CopilotCli.run()` returns descriptive text without invoking Copilot. Tests drive `GitCli` with a fake process runner, so no git is run; they verify composition and command contracts only.
+**`CopilotCli` and `DockerRuntime` are stubs, not real container or Copilot execution.** `GitRuntime` is real: it runs git through `GitCli` (fetch, branch, `worktree add`) against the repository at `repository_path` (default: the agent cwd) and removes the worktree when the run ends. `DockerRuntime.configure()` adds a Docker image to the context without running a container, and `CopilotCli.run()` returns descriptive text without invoking Copilot. Tests drive `GitCli` with a fake process runner, so no git is run; they verify composition and command contracts only.
 
 Production integration with `loop` would replace these adapters and align the sketch's `run(str) -> str` / `close()` with the repository's actual `AgentClient.run(Prompt, model, reasoning_effort, AgentOptions) -> AgentResult` / `exit()` contract (`src/loop/contracts/agent_client.py`). In particular, a real Docker-capable runner must mount the newly created worktree and run the CLI inside the container. No production source files are changed by this prototype.

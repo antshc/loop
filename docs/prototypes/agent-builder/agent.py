@@ -37,15 +37,35 @@ class AgentOptions:
 
 
 @dataclass(frozen=True)
-class WorktreesOptions:
-    """Where and under which new branch the worktree is created: target = root_path/branch."""
+class HeadStrategy:
+    """No worktree or branch: the agent works directly in the repository directory."""
+
+
+@dataclass(frozen=True)
+class MergeToHeadStrategy:
+    """Temp-branch worktree, fast-forward merged into the current HEAD on success, then the temp branch is deleted."""
+
+
+@dataclass(frozen=True)
+class BranchStrategy:
+    """Worktree on the named branch; `base_branch` is the start ref for a new branch (default HEAD)."""
+
+    branch: str
+    base_branch: str | None = None
+
+
+GitStrategy = HeadStrategy | MergeToHeadStrategy | BranchStrategy
+
+
+@dataclass(frozen=True)
+class GitOptions:
+    """Where the worktree lives (target = root_path/branch) and which strategy creates it."""
 
     # Must resolve inside the agent cwd; relative paths are taken from the cwd.
     root_path: Path = Path(".worktrees")
-    # None generates `feat_<hex>` per run, so each run gets its own branch.
-    branch: str | None = None
     # Repository that git -C targets (multi-repository setups); None uses the agent cwd.
     repository_path: Path | None = None
+    strategy: GitStrategy = HeadStrategy()
 
 
 @dataclass(frozen=True)
@@ -65,8 +85,8 @@ class CliRunner(Protocol):
     def run(self, prompt: str, context: RunContext) -> str: ...
 
 
-class WorktreeService(Protocol):
-    def open(self, cwd: Path, options: WorktreesOptions) -> AbstractContextManager[Path]: ...
+class GitService(Protocol):
+    def open(self, cwd: Path, options: GitOptions) -> AbstractContextManager[Path]: ...
 
 
 class DockerService(Protocol):
@@ -98,22 +118,22 @@ class AgentWrapper:
         self._inner.close()
 
 
-class WorktreeAgent(AgentWrapper):
+class GitAgent(AgentWrapper):
     def __init__(
         self,
         inner: AgentClient,
-        worktrees: WorktreeService,
-        options: WorktreesOptions | None = None,
+        git: GitService,
+        options: GitOptions | None = None,
         defaults: RunContext | None = None,
     ) -> None:
         super().__init__(inner, defaults)
-        self._worktrees = worktrees
-        self._options = options or WorktreesOptions()
+        self._git = git
+        self._options = options or GitOptions()
 
     def run(self, prompt: str, context: RunContext | None = None) -> str:
         original = context or self._defaults
-        # The worktree lifecycle surrounds the entire delegated execution.
-        with self._worktrees.open(original.agent.cwd, self._options):
+        # The strategy's git lifecycle surrounds the entire delegated execution.
+        with self._git.open(original.agent.cwd, self._options):
             # The worktree is inside cwd, so the CLI already has access to it.
             return self._inner.run(prompt, original)
 
@@ -137,21 +157,21 @@ class AgentBuilder:
     def __init__(
         self,
         runner: CliRunner,
-        worktrees: WorktreeService,
+        git: GitService,
         docker: DockerService,
         agent_context: AgentContext | None = None,
     ) -> None:
         self._runner = runner
-        self._worktrees = worktrees
+        self._git = git
         self._docker = docker
         self._defaults = RunContext(agent_context or AgentContext())
-        self._use_worktrees = False
-        self._worktrees_options: WorktreesOptions | None = None
+        self._use_git = False
+        self._git_options: GitOptions | None = None
         self._use_docker = False
 
-    def with_worktrees(self, options: WorktreesOptions | None = None) -> Self:
-        self._use_worktrees = True
-        self._worktrees_options = options
+    def with_git(self, options: GitOptions | None = None) -> Self:
+        self._use_git = True
+        self._git_options = options
         return self
 
     def with_docker(self) -> Self:
@@ -162,8 +182,8 @@ class AgentBuilder:
         client: AgentClient = CopilotAgentClient(self._runner, self._defaults)
         if self._use_docker:
             client = DockerAgent(client, self._docker, self._defaults)
-        if self._use_worktrees:
-            client = WorktreeAgent(client, self._worktrees, self._worktrees_options, self._defaults)
+        if self._use_git:
+            client = GitAgent(client, self._git, self._git_options, self._defaults)
         return client
 
 
@@ -190,26 +210,26 @@ class GitCli:
     ) -> None:
         self._run = run
 
-    def create_worktree(self, repository: Path, target: Path, branch: str, base: str = "main") -> None:
-        """Fetch, validate `branch`, point it at its start ref, and attach a worktree at `target`."""
+    def fetch(self, repository: Path) -> None:
         self._git(repository, "fetch", "--all", "--prune")
+
+    def add_worktree(self, repository: Path, target: Path, branch: str, base: str = "HEAD") -> None:
+        """Validate `branch`, reuse it if it exists locally, else create it, then attach a worktree at `target`."""
         self._git(repository, "check-ref-format", "--branch", branch)
-        start_ref = self._start_ref(repository, branch, base)
-        # Move an existing local branch; create it otherwise.
-        if self._succeeds(repository, "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"):
-            self._git(repository, "branch", "-f", branch, start_ref)
-        else:
-            self._git(repository, "branch", branch, start_ref)
+        if not self._succeeds(repository, "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"):
+            remote = self._succeeds(repository, "show-ref", "--verify", "--quiet", f"refs/remotes/origin/{branch}")
+            self._git(repository, "branch", branch, f"origin/{branch}" if remote else base)
         self._git(repository, "worktree", "add", str(target), branch)
 
     def remove_worktree(self, repository: Path, target: Path) -> None:
         """Detach the worktree at `target`; git refuses when it has uncommitted changes. The branch is kept."""
         self._git(repository, "worktree", "remove", str(target))
 
-    def _start_ref(self, repository: Path, branch: str, base: str) -> str:
-        if self._succeeds(repository, "show-ref", "--verify", "--quiet", f"refs/remotes/origin/{branch}"):
-            return f"origin/{branch}"
-        return f"origin/{base}"
+    def merge_ff_only(self, repository: Path, branch: str) -> None:
+        self._git(repository, "merge", "--ff-only", branch)
+
+    def delete_branch(self, repository: Path, branch: str) -> None:
+        self._git(repository, "branch", "-d", branch)
 
     def _succeeds(self, repository: Path, *args: str) -> bool:
         return self._invoke(repository, args, check=False).returncode == 0
@@ -224,21 +244,39 @@ class GitCli:
         return self._run(command, check=check, capture_output=True, text=True)
 
 
-class WorktreesRuntime:
-    """Creates the worktree at root_path/branch through git, yields its path, and removes it on exit."""
+class GitRuntime:
+    """Applies the options' strategy through git and yields the directory the agent works in."""
 
     def __init__(self, git: GitCli) -> None:
         self._git = git
 
     @contextmanager
-    def open(self, cwd: Path, options: WorktreesOptions) -> Iterator[Path]:
+    def open(self, cwd: Path, options: GitOptions) -> Iterator[Path]:
+        repository = (cwd / options.repository_path) if options.repository_path else cwd
+        match options.strategy:
+            case HeadStrategy():
+                yield repository
+            case MergeToHeadStrategy():
+                branch = f"tmp_{secrets.token_hex(4)}"
+                with self._worktree(cwd, repository, options, branch, "HEAD") as target:
+                    yield target
+                # Reached only when the run succeeded; on failure the temp branch is kept unmerged.
+                self._git.merge_ff_only(repository, branch)
+                self._git.delete_branch(repository, branch)
+            case BranchStrategy(branch=branch, base_branch=base):
+                self._git.fetch(repository)
+                with self._worktree(cwd, repository, options, branch, base or "HEAD") as target:
+                    yield target
+
+    @contextmanager
+    def _worktree(
+        self, cwd: Path, repository: Path, options: GitOptions, branch: str, base: str
+    ) -> Iterator[Path]:
         root = (cwd / options.root_path).resolve()
         if not root.is_relative_to(cwd.resolve()):
             raise ValueError(f"worktrees root {root} must be inside {cwd}")
-        branch = options.branch or f"feat_{secrets.token_hex(4)}"
         target = root / branch
-        repository = (cwd / options.repository_path) if options.repository_path else cwd
-        self._git.create_worktree(repository, target, branch)
+        self._git.add_worktree(repository, target, branch, base)
         try:
             yield target
         finally:
@@ -296,13 +334,13 @@ def Agent(options: AgentOptions | None = None) -> AgentBuilder:
     if options is not None and options.dry_run:
         return AgentBuilder(
             runner=LoggingRunner(CopilotCli()),
-            worktrees=WorktreesRuntime(LoggingGitCli()),
+            git=GitRuntime(LoggingGitCli()),
             docker=LoggingDocker(DockerRuntime()),
             agent_context=agent_context,
         )
     return AgentBuilder(
         runner=CopilotCli(),
-        worktrees=WorktreesRuntime(GitCli()),
+        git=GitRuntime(GitCli()),
         docker=DockerRuntime(),
         agent_context=agent_context,
     )
@@ -321,22 +359,23 @@ def _apply_options(context: AgentContext, options: AgentOptions | None) -> Agent
 def repo_agent(repo: str, branch: str | None = None) -> AgentClient:
     """One worktree-isolated agent for workspace/<repo>, with worktrees in workspace/<repo>.worktrees."""
     workspace = Path("workspace")
-    options = WorktreesOptions(
+    options = GitOptions(
         root_path=workspace / f"{repo}.worktrees",
-        branch=branch,
         repository_path=workspace / repo,
+        strategy=BranchStrategy(branch) if branch else MergeToHeadStrategy(),
     )
-    return Agent().with_worktrees(options).with_docker().create()
+    return Agent().with_git(options).with_docker().create()
 
 
 if __name__ == "__main__":
     # Run from the harness dir (the agent cwd). `--dry-run` only logs; otherwise real git runs in workspace/repo1 and repo2.
     if "--dry-run" in sys.argv:
         _DRY = AgentOptions(dry_run=True)
-        _opts = WorktreesOptions(Path("workspace/repo1.worktrees"), repository_path=Path("workspace/repo1"))
-        # Agent(_DRY).create().run("Implement ticket #123 in harness")
-        Agent(_DRY).with_worktrees(_opts).create().run("Implement ticket #123 in repo1")
-        # print(Agent(_DRY).with_worktrees(_opts).with_docker().create().run("Implement ticket #123 in repo1"))
+        _root = Path("workspace/repo1.worktrees")
+        _repo = Path("workspace/repo1")
+        # Agent(_DRY).with_git(GitOptions(_root, _repo, HeadStrategy())).create().run("Implement ticket #123 in repo1")
+        Agent(_DRY).with_git(GitOptions(_root, _repo, MergeToHeadStrategy())).create().run("Implement ticket #123 in repo1")
+        # Agent(_DRY).with_git(GitOptions(_root, _repo, BranchStrategy("loop/ticket-123", "main"))).create().run("Implement ticket #123 in repo1")
         sys.exit()
     # print(repo_agent("repo1", "loop/ticket-123").run("Implement ticket #123 in repo1"))
     # print(repo_agent("repo2", "loop/ticket-123").run("Implement ticket #123 in repo2"))
