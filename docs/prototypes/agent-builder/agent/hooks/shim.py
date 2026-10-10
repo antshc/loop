@@ -1,6 +1,6 @@
 """Agent CLI hook shim: normalises a CLI's native hook payload for a user command.
 
-Usage: python agent_cli_hook.py --cli <name> --point <point> --session <SessionName> -- <command>
+Usage: python shim.py --cli <name> --point <point> --session <SessionName> -- <command>
 Observe-only: it discards the command's stdout and always exits 0.
 """
 

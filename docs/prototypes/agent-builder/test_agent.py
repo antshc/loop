@@ -58,10 +58,10 @@ from agent import (
     SessionName,
     Start,
     Turn,
-    _parse_codex_events,
     codex,
     copilot,
 )
+from agent.clis.codex_cli import _parse_codex_events
 
 
 def repo_context() -> RunContext:
@@ -837,7 +837,7 @@ class AgentCliHookTests(unittest.TestCase):
         self.assertEqual(set(data["hooks"]), {"userPromptSubmitted", "sessionEnd"})
         entry = data["hooks"]["sessionEnd"][0]
         self.assertEqual(entry["timeoutSec"], 7)
-        for part in ("agent_cli_hook.py", "--session s1", "'my cmd'"):
+        for part in ("shim.py", "--session s1", "'my cmd'"):
             self.assertIn(part, entry["bash"])
 
     def test_codex_command_with_hooks(self) -> None:
@@ -904,7 +904,7 @@ class HookFilesTests(unittest.TestCase):
 
 class ShimTests(unittest.TestCase):
     def test_normalise_copilot_and_codex(self) -> None:
-        from agent_cli_hook import normalise
+        from agent.hooks.shim import normalise
 
         copilot_payload = normalise("copilot", "session-start", {"sessionId": "s", "cwd": "/w", "source": "resume"})
         codex_payload = normalise("codex", "session-start", {"session_id": "s", "cwd": "/w", "source": "resume"})
@@ -915,7 +915,7 @@ class ShimTests(unittest.TestCase):
 
     def test_main_with_failing_command_exits_zero_silently(self) -> None:
         import sys
-        from agent_cli_hook import main
+        from agent.hooks.shim import main
 
         out = StringIO()
         original = sys.stdin

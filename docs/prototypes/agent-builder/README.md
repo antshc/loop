@@ -34,7 +34,7 @@ with builder.open(session=SessionName("ticket-123")) as wt:  # no name: loop-<he
 
 ### Agent CLI hooks
 
-Native CLI hooks observe a run (session start/end, agent stop, prompts, tools, subagents, compaction). They are shell commands, applied builder-wide, and never steer the CLI: the shim `agent_cli_hook.py` normalises each payload, discards stdout and always exits 0.
+Native CLI hooks observe a run (session start/end, agent stop, prompts, tools, subagents, compaction). They are shell commands, applied builder-wide, and never steer the CLI: the shim `agent/hooks/shim.py` normalises each payload, discards stdout and always exits 0.
 
 ```python
 builder = Agent().with_git(GitOptions(strategy=BranchStrategy("loop/ticket-123"))).with_agent_cli_hooks(
@@ -69,11 +69,31 @@ Run locally from the prototype directory:
 
 ```sh
 cd docs/prototypes/agent-builder
-python agent.py --dry-run
+python -m agent --dry-run
 python -m unittest discover -s . -p 'test_*.py'
 ```
 
 Python 3.12+, standard library only. No real Git, Docker, Copilot or Codex installation required for the tests.
+
+## Layout
+
+Vertical feature packages; `agent/__init__.py` re-exports the public surface, so `from agent import Agent` is unchanged.
+
+```text
+agent/
+  sessions/   SessionName, NativeHandle, Start/Resume, CliOutcome, SessionStore  (leaf)
+  hooks/      LoopHook*, AgentCliHook*, shim.py                                  (leaf)
+  run/        AgentRequest/Result, AgentOptions, AgentContext, RunContext
+  clis/       AgentCli, AgentProfile, CopilotCli, CodexCli, CliRunner
+  git/        GitService, GitOptions, strategies, GitCli, GitRuntime
+  docker/     DockerService, DockerRuntime
+  agents/     AgentClient, CliAgentClient, GitAgent, DockerAgent
+  dryrun/     Logging* stub adapters
+  builder.py  AgentBuilder, Worktree
+  factory.py  Agent factory
+```
+
+Dependencies point one way: `builder`/`factory` → `agents` → `clis`, `git`, `docker` → `run` → `hooks`, `sessions`.
 
 ## Extending
 
@@ -171,31 +191,7 @@ classDiagram
             +agent(profile, session) AgentClient
         }
     }
-    namespace Abstractions {
-        class AgentClient {
-            <<Interface>>
-            +run(request, context) AgentResult
-            +close() None
-        }
-        class CliRunner {
-            <<Interface>>
-            +run(profile, request, turn, context) CliOutcome
-        }
-        class SessionStore {
-            <<Interface>>
-            +get(name, cli) NativeHandle | None
-            +save(name, handle) None
-        }
-        class GitService {
-            <<Interface>>
-            +open(cwd, options) ContextManager~Path~
-        }
-        class DockerService {
-            <<Interface>>
-            +configure(context) RunContext
-        }
-    }
-    namespace Contracts {
+    namespace Run {
         class AgentRequest {
             <<frozen dataclass>>
             +prompt : str
@@ -206,6 +202,28 @@ classDiagram
             +session : SessionName
             +exit_code : int
         }
+        class AgentOptions {
+            <<frozen dataclass>>
+            +docker_image : str | None
+        }
+        class AgentContext {
+            <<frozen dataclass>>
+            +cwd : Path
+            +add_dirs : tuple[Path]
+            +docker_image : str | None
+        }
+        class RunContext {
+            <<frozen dataclass>>
+            +agent : AgentContext
+        }
+    }
+    namespace Sessions {
+        class SessionStore {
+            <<Interface>>
+            +get(name, cli) NativeHandle | None
+            +save(name, handle) None
+        }
+        class MemorySessionStore
         class SessionName {
             <<frozen dataclass>>
             +value : str
@@ -233,6 +251,37 @@ classDiagram
         }
         class SessionHandleMissing
         class SessionCliMismatch
+    }
+    namespace Hooks {
+        class LoopHookPoint {
+            <<Enumeration>>
+            WORKTREE_READY
+            WORKTREE_REMOVING
+            RUN_FINISHED
+        }
+        class LoopHook {
+            <<frozen dataclass>>
+            +command : str
+            +timeout_sec : float
+            +point : ClassVar~LoopHookPoint~
+        }
+        class WorktreeReadyLoopHook
+        class WorktreeRemovingLoopHook
+        class RunFinishedLoopHook
+        class LoopHookError {
+            +point : LoopHookPoint
+            +command : str
+            +output : str
+        }
+    }
+    namespace Clis {
+        class AgentCli {
+            <<Interface>>
+            +name : str
+            +handle_for_new(name) NativeHandle | None
+            +command(request, profile, turn, context) list~str~
+            +parse(stdout, turn, exit_code) CliOutcome
+        }
         class AgentProfile {
             <<frozen dataclass>>
             +cli : AgentCli
@@ -241,36 +290,30 @@ classDiagram
             +context : str | None
             +args : tuple[str]
         }
-    }
-    namespace Extension {
-        class AgentCli {
-            <<Interface>>
-            +name : str
-            +handle_for_new(name) NativeHandle | None
-            +command(request, profile, turn, context) list~str~
-            +parse(stdout, turn, exit_code) CliOutcome
-        }
         class CopilotCli
         class CodexCli
         class UserDefinedCli
+        class CliRunner {
+            <<Interface>>
+            +run(profile, request, turn, context) CliOutcome
+        }
+        class ProcessCliRunner {
+            +run(profile, request, turn, context) CliOutcome
+        }
     }
-    namespace Configuration {
-        class AgentOptions {
-            <<frozen dataclass>>
-            +docker_image : str | None
+    namespace Docker {
+        class DockerService {
+            <<Interface>>
+            +configure(context) RunContext
         }
-        class AgentContext {
-            <<frozen dataclass>>
-            +cwd : Path
-            +add_dirs : tuple[Path]
-            +docker_image : str | None
-        }
-        class RunContext {
-            <<frozen dataclass>>
-            +agent : AgentContext
-        }
+        class DockerRuntime
     }
     namespace Agents {
+        class AgentClient {
+            <<Interface>>
+            +run(request, context) AgentResult
+            +close() None
+        }
         class CliAgentClient {
             -_store : SessionStore | None
             -_session : SessionName | None
@@ -287,7 +330,11 @@ classDiagram
             +run(request, context) AgentResult
         }
     }
-    namespace GitStrategies {
+    namespace Git {
+        class GitService {
+            <<Interface>>
+            +open(cwd, options) ContextManager~Path~
+        }
         class GitStrategy {
             <<Interface>>
             +open(git, cwd, repository, options) ContextManager~Path~
@@ -311,14 +358,6 @@ classDiagram
             +_worktree(git, cwd, repository, options, branch, base) Iterator~Path~
         }
     }
-    namespace StubAdapters {
-        class ProcessCliRunner {
-            +run(profile, request, turn, context) CliOutcome
-        }
-        class LoggingRunner {
-            +run(profile, request, turn, context) CliOutcome
-        }
-        class MemorySessionStore
         class GitRuntime {
             +open(cwd, options) ContextManager~Path~
         }
@@ -330,26 +369,6 @@ classDiagram
             +loop_hooks : tuple~LoopHook~
             +hooks_at(point) tuple~LoopHook~
         }
-        class LoopHookPoint {
-            <<Enumeration>>
-            WORKTREE_READY
-            WORKTREE_REMOVING
-            RUN_FINISHED
-        }
-        class LoopHook {
-            <<frozen dataclass>>
-            +command : str
-            +timeout_sec : float
-            +point : ClassVar~LoopHookPoint~
-        }
-        class WorktreeReadyLoopHook
-        class WorktreeRemovingLoopHook
-        class RunFinishedLoopHook
-        class LoopHookError {
-            +point : LoopHookPoint
-            +command : str
-            +output : str
-        }
         class GitCli {
             +fetch(repository) None
             +add_worktree(repository, target, branch, base) None
@@ -358,7 +377,11 @@ classDiagram
             +merge_ff_only(repository, branch) None
             +delete_branch(repository, branch) None
         }
-        class DockerRuntime
+    }
+    namespace DryRun {
+        class LoggingRunner {
+            +run(profile, request, turn, context) CliOutcome
+        }
     }
 
     CliAgentClient ..|> AgentClient
@@ -527,7 +550,7 @@ The agent runs with `cwd=<harness>`; the worktree is inside it, so no `--add-dir
 `Agent(AgentOptions(dry_run=True))` registers stub adapters that only log to the console (lines prefixed `[dry-run]`): `LoggingGitCli` logs each git command instead of running it, and `LoggingRunner` / `LoggingDocker` log the CLI commands (for every CLI) and Docker steps. No git, Docker or agent CLI process starts and nothing is created on disk.
 
 ```sh
-python agent.py --dry-run   # run from the harness dir
+python -m agent --dry-run   # run from the prototype dir
 ```
 
 ## Delegation order

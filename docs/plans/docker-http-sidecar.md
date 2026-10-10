@@ -2,7 +2,7 @@
 
 **Status:** proposed contracts; documentation only. No implementation changes.
 
-**Base:** [Agent builder prototype](./README.md) and [agent.py](./agent.py).
+**Base:** [Agent builder prototype](../prototypes/agent-builder/README.md) and the [agent package](../prototypes/agent-builder/agent/).
 
 ## Goal
 
