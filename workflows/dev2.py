@@ -18,21 +18,21 @@ from loop import (
     BranchStrategy,
     GitOptions,
     LoopHook,
+    Prompt,
+    PromptError,
     configure_logging,
 )
 from workflows.dev import (
     LOOP_HOOKS,
     MAX_TICKET_FAILURES,
-    PROMPT,
     DevError,
     DevResult,
     FileExecutionStore,
-    Prompts,
     parse_response,
     prompt_args,
-    render_prompt,
 )
 from workflows.platforms.git import Commit, GitService
+from workflows.platforms.prompt_source import FilePromptSource, PromptSource
 from workflows.platforms.work_tracking import (
     GhCli,
     Spec,
@@ -49,6 +49,7 @@ LOG_DIR_NAME = ".loop"
 LOG_LEVEL = "INFO"
 _HARNESS_PATH = Path(__file__).resolve().parents[1]
 _WORKTREE_ROOT = _HARNESS_PATH / "workspace" / f"{_HARNESS_PATH.name}.worktrees"
+_PROMPTS_DIR = Path(__file__).parent / "prompts"
 OWNER = "antshc"
 REPO = "loop"
 
@@ -64,34 +65,33 @@ def _initiative_commits(git: GitService, worktree: Path, spec: Spec) -> list[str
     return [f"{commit.sha[:7]} {commit.subject}" for commit in found]
 
 
+def _dev_prompt(
+    template: str, ticket: Ticket, identifier: WorkIdentifier, initiative_commits: list[str], worktree: Path, spec: Spec
+) -> Prompt:
+    """The dev prompt for one Ticket run."""
+    args = prompt_args(ticket, identifier, initiative_commits, worktree, spec.base_branch, spec.feature_branch)
+    return Prompt(template, args)
+
+
 def _attempt(
     spec: Spec,
     ticket: Ticket,
-    identifier: WorkIdentifier,
     worktree: Path,
     client: AgentClient,
     head_before: Commit,
     *,
     git: GitService,
-    prompts: Prompts,
+    template: str,
 ) -> DevResult | str:
     """Runs the agent once and validates its response and Git; returns the accepted result, or the failure reason."""
     identifier = WorkIdentifier(spec.initiative, ticket.number)
-    args = prompt_args(
-        ticket,
-        identifier,
-        _initiative_commits(git, worktree, spec),
-        worktree,
-        spec.base_branch,
-        spec.feature_branch,
-    )
     try:
-        prompt = render_prompt(prompts.dev, args)
-        output = client.run(AgentRequest(prompt)).output
+        prompt = _dev_prompt(template, ticket, identifier, _initiative_commits(git, worktree, spec), worktree, spec)
+        output = client.run(AgentRequest(prompt.render())).output
         dev_result = parse_response(output, identifier)
     except subprocess.CalledProcessError:
         return "agent process did not exit successfully"
-    except DevError as exception:
+    except (DevError, PromptError) as exception:
         return str(exception)
     if dev_result.status == "failed":
         return dev_result.reason or ""
@@ -161,6 +161,7 @@ def main(
     git: GitService | None = None,
     new_agent: Callable[[], AgentBuilder] = Agent,
     store: FileExecutionStore | None = None,
+    prompt_source: PromptSource = FilePromptSource(_PROMPTS_DIR),
     loop_hooks: tuple[LoopHook, ...] = LOOP_HOOKS,
 ) -> int:
     """Delivers the Tickets of every open Spec once; returns the process exit code."""
@@ -172,7 +173,7 @@ def main(
     tracker = TicketsTracker(OWNER, REPO, gh=GhCli(cwd=_HARNESS_PATH))
     git = git or GitService()
     store = store or FileExecutionStore(log_dir)
-    prompts = Prompts(dev=PROMPT.read_text())
+    template = prompt_source.load("dev")
 
     failed = False
     try:
@@ -201,7 +202,7 @@ def main(
                     while True:
                         head_before = git.head(worktree.path)
                         attempt = _attempt(
-                            spec, ticket, worktree.path, client, head_before, git=git, prompts=prompts
+                            spec, ticket, worktree.path, client, head_before, git=git, template=template
                         )
                         if isinstance(attempt, DevResult):
                             spec.close_ticket(
