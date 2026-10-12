@@ -112,6 +112,10 @@ Good interfaces make testing natural:
 - **"Interface" as the TypeScript `interface` keyword or a class's public methods**: too narrow: interface here includes every fact a caller must know.
 - **"Boundary"**: overloaded with DDD's bounded context. Say **seam** or **interface**.
 
+## Subagents
+
+Every subagent this skill spawns **MUST** run on the orchestrator agent's model: pass the current session's model explicitly as the subagent model; never fall back to the subagent default.
+
 ## Going deeper
 
 - **Deepening a cluster given its dependencies**, see [DEEPENING.md](DEEPENING.md): dependency categories, seam discipline, and replace-don't-layer testing.
