@@ -8,7 +8,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
-from .github_repo import GitHubRepo
+from .github_repo import GhRunner
 
 HITL_LABEL = "hitl"
 _BLOCKING_LABELS = frozenset({HITL_LABEL, "spec"})
@@ -231,48 +231,17 @@ def _ticket(node: dict[str, Any]) -> Ticket:
     )
 
 
-class IssueClient:
-    """One repository's issues through `gh`; no GitHub shape leaves this class except raw issue nodes."""
-
-    def __init__(self, repo: GitHubRepo) -> None:
-        self._repo = repo
-
-    def spec_issues(self) -> list[dict[str, Any]]:
-        """Raw GraphQL nodes of every open issue labelled `spec`."""
-        pages = json.loads(self._repo.graphql(_SPECS_QUERY, paginate=True))
-        return [node for page in pages for node in page["data"]["repository"]["issues"]["nodes"]]
-
-    def sub_issues(self, number: int) -> list[dict[str, Any]]:
-        """Raw GraphQL nodes of issue `number`'s sub-issues."""
-        pages = json.loads(self._repo.graphql(_SUB_ISSUES_QUERY, paginate=True, number=number))
-        return [node for page in pages for node in page["data"]["repository"]["issue"]["subIssues"]["nodes"]]
-
-    def comment(self, number: int, body: str) -> None:
-        """Comments `body` on issue `number`."""
-        self._repo.run(("issue", "comment", str(number), "--repo", self._repo.slug, "--body", body))
-
-    def add_label(self, number: int, label: str) -> None:
-        """Adds `label` to issue `number`."""
-        self._repo.run(("issue", "edit", str(number), "--repo", self._repo.slug, "--add-label", label))
-
-    def close_with_comment(self, number: int, body: str) -> None:
-        """Closes issue `number` with `body` as its closing comment."""
-        self._repo.run(("issue", "close", str(number), "--repo", self._repo.slug, "--comment", body))
-
-
 class TicketsTracker:
-    """The harness repo's Spec/Ticket tracker: loads Specs and persists the changes made to them."""
+    """The harness repo's Spec/Ticket tracker: loads Specs through `gh` and persists the changes made to them."""
 
-    def __init__(self, issues: IssueClient) -> None:
-        self._issues = issues
+    def __init__(self, owner: str, name: str, *, gh: GhRunner) -> None:
+        self._owner = owner
+        self._name = name
+        self._gh = gh
 
     def specs(self) -> Iterable[Spec]:
         """Every open Spec on the harness tracker, each with its deliverable Tickets."""
-        return [_spec(node, self._tickets(node["number"])) for node in self._issues.spec_issues()]
-
-    def _tickets(self, spec_number: int) -> tuple[Ticket, ...]:
-        tickets = (_ticket(node) for node in self._issues.sub_issues(spec_number))
-        return tuple(ticket for ticket in tickets if ticket.actionable)
+        return [_spec(node, self._tickets(node["number"])) for node in self._spec_issues()]
 
     def update_spec(self, spec: Spec) -> None:
         """Persists the Spec's and its Tickets' pending changes in order; a failed change stays pending."""
@@ -280,10 +249,31 @@ class TicketsTracker:
             self._apply(change)
             spec.acknowledge(change)
 
+    def _tickets(self, spec_number: int) -> tuple[Ticket, ...]:
+        tickets = (_ticket(node) for node in self._sub_issues(spec_number))
+        return tuple(ticket for ticket in tickets if ticket.actionable)
+
+    def _spec_issues(self) -> list[dict[str, Any]]:
+        pages = json.loads(self._graphql(_SPECS_QUERY))
+        return [node for page in pages for node in page["data"]["repository"]["issues"]["nodes"]]
+
+    def _sub_issues(self, number: int) -> list[dict[str, Any]]:
+        pages = json.loads(self._graphql(_SUB_ISSUES_QUERY, number=number))
+        return [node for page in pages for node in page["data"]["repository"]["issue"]["subIssues"]["nodes"]]
+
+    def _graphql(self, query: str, **variables: int) -> str:
+        args = ["api", "graphql", "--paginate", "--slurp", "-f", f"query={query}"]
+        args += ["-f", f"owner={self._owner}", "-f", f"repo={self._name}"]
+        for name, value in variables.items():
+            args += ["-F", f"{name}={value}"]
+        return self._gh(tuple(args))
+
     def _apply(self, change: _Change) -> None:
+        slug = f"{self._owner}/{self._name}"
+        number = str(change.number)
         if isinstance(change, _CommentOn):
-            self._issues.comment(change.number, change.body)
+            self._gh(("issue", "comment", number, "--repo", slug, "--body", change.body))
         elif isinstance(change, _AddLabel):
-            self._issues.add_label(change.number, change.label)
+            self._gh(("issue", "edit", number, "--repo", slug, "--add-label", change.label))
         else:
-            self._issues.close_with_comment(change.number, change.comment)
+            self._gh(("issue", "close", number, "--repo", slug, "--comment", change.comment))

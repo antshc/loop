@@ -11,7 +11,7 @@ from loop import BranchStrategy
 from workflow_harness import COMPLETED, DevHarness, crash, envelope, hook_error, issue
 from workflows import dev
 from workflows.dev import FileExecutionStore
-from workflows.platforms.work_tracking import GitHubRepo, IssueClient, RepositoryConfig, Spec, TicketsTracker
+from workflows.platforms.work_tracking import GitHubRepo, RepositoryConfig, Spec, TicketsTracker
 from workflows.platforms.work_tracking.fake_gh_cli import FakeGhCli
 
 _PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
@@ -32,7 +32,7 @@ def test_feature_branch_is_just_the_slug_without_a_version() -> None:
 
 
 def _first_ticket():
-    tracker = TicketsTracker(IssueClient(GitHubRepo("o", "r", gh=FakeGhCli())))
+    tracker = TicketsTracker("o", "r", gh=FakeGhCli())
     return next(iter(tracker.specs())).tickets[0]
 
 
@@ -91,7 +91,10 @@ def test_an_unexpected_error_is_logged_and_the_process_exits_non_zero(tmp_path: 
     harness = DevHarness(tmp_path)
 
     class RaisingGithub:
-        def graphql(self, *args, **kwargs):
+        owner = "o"
+        name = "r"
+
+        def run(self, args):
             raise RuntimeError("boom")
 
     code = harness.run(

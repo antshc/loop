@@ -36,7 +36,6 @@ from workflows.platforms.git import Commit, WorkflowGit
 from workflows.platforms.process import CommandError
 from workflows.platforms.work_tracking import (
     GitHubRepo,
-    IssueClient,
     Repository,
     RepositoryConfig,
     RepositoryPool,
@@ -494,6 +493,10 @@ class DevWorkflow:
 # --- Entry point ---
 
 
+def _tracker(repo: GitHubRepo) -> TicketsTracker:
+    return TicketsTracker(repo.owner, repo.name, gh=repo.run)
+
+
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="dev")
     parser.add_argument("--log-dir", type=Path, default=None)
@@ -527,7 +530,7 @@ def main(
 
     deps = DevDeps(
         repository_pool=repository_pool,
-        tracker=TicketsTracker(IssueClient(github_factory(repository_pool.harness.path))),
+        tracker=_tracker(github_factory(repository_pool.harness.path)),
         store=store or FileExecutionStore(log_dir),
         git=git or WorkflowGit(),
         new_agent=new_agent,

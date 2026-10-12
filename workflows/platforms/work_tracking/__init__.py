@@ -12,7 +12,7 @@ from .repository import (
     RepositoryPoolError,
     RepoTarget,
 )
-from .tracker import HITL_LABEL, Comment, IssueClient, Spec, Ticket, TicketsTracker
+from .tracker import HITL_LABEL, Comment, Spec, Ticket, TicketsTracker
 from .work_identifier import WorkIdentifier
 
 __all__ = [
@@ -20,7 +20,6 @@ __all__ = [
     "Comment",
     "GhCli",
     "GitHubRepo",
-    "IssueClient",
     "PullRequest",
     "PullRequestClient",
     "PullRequests",

@@ -4,12 +4,12 @@ from dataclasses import replace
 
 import pytest
 
-from workflows.platforms.work_tracking import GitHubRepo, IssueClient, Spec, TicketsTracker
+from workflows.platforms.work_tracking import Spec, TicketsTracker
 from workflows.platforms.work_tracking.fake_gh_cli import FakeGhCli
 
 
 def _tracker(gh: FakeGhCli | None = None) -> TicketsTracker:
-    return TicketsTracker(IssueClient(GitHubRepo("owner", "repo", gh=gh or FakeGhCli())))
+    return TicketsTracker("owner", "repo", gh=gh or FakeGhCli())
 
 
 def _spec(title: str = "Add login page", labels: tuple[str, ...] = ()) -> Spec:

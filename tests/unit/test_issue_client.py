@@ -7,51 +7,41 @@ import pytest
 
 from conftest import commit_file, git
 from workflows.platforms.process import CommandError
-from workflows.platforms.work_tracking import GitHubRepo, IssueClient
+from workflows.platforms.work_tracking import GitHubRepo, Spec, TicketsTracker
 from workflows.platforms.work_tracking.fake_gh_cli import FakeGhCli
 
 
-def _client(gh: FakeGhCli | Mock | None = None) -> IssueClient:
-    return IssueClient(GitHubRepo("owner", "repo", gh=gh or FakeGhCli()))
+def _tracker(gh: FakeGhCli | Mock | None = None) -> TicketsTracker:
+    return TicketsTracker("owner", "repo", gh=gh or FakeGhCli())
 
 
-def test_spec_issues_returns_the_raw_nodes_of_open_spec_issues() -> None:
-    nodes = _client().spec_issues()
-
-    assert [(node["number"], node["title"]) for node in nodes] == [(1, "Add login page"), (2, "Add logout button")]
-
-
-def test_sub_issues_returns_the_raw_nodes_of_every_sub_issue() -> None:
-    nodes = _client().sub_issues(1)
-
-    assert [(node["number"], node["state"]) for node in nodes] == [
-        (10, "OPEN"),
-        (11, "OPEN"),
-        (12, "OPEN"),
-        (13, "CLOSED"),
-    ]
+def _spec() -> Spec:
+    return Spec(number=1, title="t", url="u", labels=())
 
 
 def test_ticket_writes_map_to_the_matching_gh_command() -> None:
     gh = FakeGhCli()
-    client = _client(gh)
+    spec = _spec()
+    spec.comment("hello")
+    spec.hand_to_human("done")
 
-    client.comment(1, "hello")
-    client.add_label(1, "ready")
-    client.close_with_comment(1, "done")
+    _tracker(gh).update_spec(spec)
 
     assert gh.calls == [
         ("issue", "comment", "1", "--repo", "owner/repo", "--body", "hello"),
-        ("issue", "edit", "1", "--repo", "owner/repo", "--add-label", "ready"),
-        ("issue", "close", "1", "--repo", "owner/repo", "--comment", "done"),
+        ("issue", "edit", "1", "--repo", "owner/repo", "--add-label", "hitl"),
+        ("issue", "comment", "1", "--repo", "owner/repo", "--body", "done"),
     ]
 
 
 def test_non_zero_gh_exit_raises_a_command_error_with_the_command_and_output() -> None:
     gh = Mock(side_effect=CommandError("gh issue comment 1", 1, "not found"))
 
+    spec = _spec()
+    spec.comment("x")
+
     with pytest.raises(CommandError, match="not found"):
-        _client(gh).comment(1, "x")
+        _tracker(gh).update_spec(spec)
 
 
 def test_from_origin_reads_the_origin_remote(tmp_path: Path) -> None:

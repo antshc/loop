@@ -36,7 +36,6 @@ from workflows.platforms.git import Commit, WorkflowGit
 from workflows.platforms.work_tracking import (
     GhCli,
     GitHubRepo,
-    IssueClient,
     Spec,
     Ticket,
     TicketsTracker,
@@ -78,6 +77,7 @@ def _attempt(
     prompts: Prompts,
 ) -> DevResult | str:
     """Runs the agent once and validates its response and Git; returns the accepted result, or the failure reason."""
+    identifier = WorkIdentifier(spec.initiative, ticket.number)
     args = prompt_args(
         ticket,
         identifier,
@@ -159,7 +159,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
 def main(
     argv: list[str] | None = None,
     *,
-    issues: IssueClient | None = None,
+    repo: GitHubRepo | None = None,
     git: WorkflowGit | None = None,
     new_agent: Callable[[], AgentBuilder] = Agent,
     store: FileExecutionStore | None = None,
@@ -171,8 +171,8 @@ def main(
     log_dir = (args.log_dir or Path.cwd() / LOG_DIR_NAME).resolve()
     configure_logging(args.log_level, log_file=log_dir / "dev2.log", logger="")
 
-    issues = issues or IssueClient(GitHubRepo(OWNER, REPO, gh=GhCli(cwd=_HARNESS_PATH)))
-    tracker = TicketsTracker(issues)
+    repo = repo or GitHubRepo(OWNER, REPO, gh=GhCli(cwd=_HARNESS_PATH))
+    tracker = TicketsTracker(repo.owner, repo.name, gh=repo.run)
     git = git or WorkflowGit()
     store = store or FileExecutionStore(log_dir)
     prompts = Prompts(dev=PROMPT.read_text())
@@ -199,13 +199,12 @@ def main(
                 delivered = True
                 # Each actionable Ticket in order; stops at the first one that cannot be delivered.
                 for ticket in spec.tickets:
-                    identifier = WorkIdentifier(spec.initiative, ticket.number)
                     delivered = False
                     # Fresh agent runs until one is accepted or the Ticket's failure cap is reached.
                     while True:
                         head_before = git.head(worktree.path)
                         attempt = _attempt(
-                            spec, ticket, identifier, worktree.path, client, head_before, git=git, prompts=prompts
+                            spec, ticket, worktree.path, client, head_before, git=git, prompts=prompts
                         )
                         if isinstance(attempt, DevResult):
                             spec.close_ticket(
