@@ -1,38 +1,30 @@
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
 from pathlib import Path
 
-from workflows.platforms.work_tracking import GitHubRepo, RepositoryConfig, RepositoryPool
-from workflows.platforms.work_tracking.fake_gh_cli import FakeGhCli
+import pytest
+
+from workflows.platforms.work_tracking import Repository, RepositoryId
 
 
-def _github_factory(checkout: Path) -> GitHubRepo:
-    return GitHubRepo("owner", "repo", gh=FakeGhCli())
+def test_repository_id_contains_owner_and_repo_and_renders_slug() -> None:
+    identity = RepositoryId("antshc", "loop")
+
+    assert identity.owner == "antshc"
+    assert identity.repo == "loop"
+    assert str(identity) == "antshc/loop"
+    assert tuple(identity) == ("antshc", "loop")
 
 
-def test_repository_pool_defaults_each_entrys_worktree_root_under_the_harness_workspace_folder(
-    tmp_path: Path,
-) -> None:
-    clone = tmp_path / "workspace" / "widgets"
-    pool = RepositoryPool(
-        [
-            RepositoryConfig(path=tmp_path, owner_repo="owner/repo", is_harness=True),
-            RepositoryConfig(path=clone, owner_repo="acme/widgets"),
-        ],
-        _github_factory,
-    )
+def test_repository_holds_explicit_paths_and_identity(tmp_path: Path) -> None:
+    worktrees = tmp_path / "workspace" / "harness.worktrees"
+    identity = RepositoryId("owner", "repo")
 
-    assert pool.harness.worktree_root == tmp_path / "workspace" / f"{tmp_path.name}.worktrees"
-    target = pool.get("acme/widgets")
-    assert target is not None and target.worktree_root == tmp_path / "workspace" / "widgets.worktrees"
+    repository = Repository(checkout=tmp_path, worktrees=worktrees, identity=identity)
 
-
-def test_repository_pool_keeps_an_explicit_worktree_root_from_its_config(tmp_path: Path) -> None:
-    custom_root = tmp_path / "elsewhere" / "custom.worktrees"
-
-    pool = RepositoryPool(
-        [RepositoryConfig(path=tmp_path, owner_repo="owner/repo", is_harness=True, worktree_root=custom_root)],
-        _github_factory,
-    )
-
-    assert pool.harness.worktree_root == custom_root
+    assert repository.checkout == tmp_path
+    assert repository.worktrees == worktrees
+    assert repository.identity == identity
+    with pytest.raises(FrozenInstanceError):
+        setattr(repository, "checkout", tmp_path / "other")

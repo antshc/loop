@@ -4,14 +4,7 @@ from __future__ import annotations
 
 from .github_repo import GhCli, GitHubRepo
 from .pull_request_client import PullRequest, PullRequestClient, ReviewThread
-from .repository import (
-    PullRequests,
-    Repository,
-    RepositoryConfig,
-    RepositoryPool,
-    RepositoryPoolError,
-    RepoTarget,
-)
+from .repository import PullRequests, Repository, RepositoryId
 from .tracker import HITL_LABEL, Comment, Spec, Ticket, TicketsTracker
 from .work_identifier import WorkIdentifier
 
@@ -24,10 +17,7 @@ __all__ = [
     "PullRequestClient",
     "PullRequests",
     "Repository",
-    "RepoTarget",
-    "RepositoryConfig",
-    "RepositoryPool",
-    "RepositoryPoolError",
+    "RepositoryId",
     "ReviewThread",
     "Spec",
     "Ticket",

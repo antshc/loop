@@ -1,94 +1,41 @@
-"""Manually checked-out repositories: no git identity check, the user owns the clone and its path."""
+"""Repository paths, GitHub identity, and draft pull request publication."""
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import NamedTuple
 
-from .github_repo import GitHubRepo
 from .pull_request_client import PullRequestClient
 from .tracker import Spec
 
-RepoTarget = str
-GithubFactory = Callable[[Path], GitHubRepo]
+
+class RepositoryId(NamedTuple):
+    """GitHub owner and repository name, represented as an owner/repo slug."""
+
+    owner: str
+    repo: str
+
+    def __str__(self) -> str:
+        return f"{self.owner}/{self.repo}"
 
 
 @dataclass(frozen=True)
-class RepositoryData:
-    """A repository's resolved location: its checkout path, `owner/name`, harness flag, and worktree root."""
+class Repository:
+    """One repository's checkout, worktree directory, and GitHub identity."""
 
-    path: Path
-    owner_repo: str
-    is_harness: bool
-    worktree_root: Path
+    checkout: Path
+    worktrees: Path
+    identity: RepositoryId
 
 
 class PullRequests:
-    """The target repo's draft pull requests; hides which repo hosts them and how titles are formed."""
+    """Publish draft pull requests through a repository-bound GitHub client."""
 
     def __init__(self, client: PullRequestClient) -> None:
         self._client = client
 
     def publish_draft(self, spec: Spec, feature_branch: str) -> str:
-        """URL of the Spec's draft PR from `feature_branch` into its base branch, created when none is open.
-
-        Titles it `<initiative>: <bare title>`; an existing PR is reused unchanged.
-        """
+        """Reuse or create the Spec's draft PR from the feature branch into its base."""
         title = f"{spec.initiative}: {spec.bare_title}"
         return self._client.create_draft_pull_request(feature_branch, spec.base_branch, title).url
-
-
-@dataclass(frozen=True)
-class RepositoryConfig:
-    """A user-declared repository: its checkout path and `owner/name`; one must carry `is_harness`.
-
-    `worktree_root` hardcodes the harness's default worktrees root; only the `is_harness` entry sets it.
-    """
-
-    path: Path
-    owner_repo: RepoTarget
-    is_harness: bool = False
-    worktree_root: Path | None = None
-
-
-@dataclass(frozen=True)
-class Repository(RepositoryData):
-    """A `RepositoryConfig` resolved to its ready-to-use `PullRequests` and worktree root."""
-
-    pull_requests: PullRequests
-
-
-class RepositoryPoolError(Exception):
-    """Raised when `RepositoryPool` is configured with zero or more than one harness repository."""
-
-
-class RepositoryPool:
-    """Every manually checked-out Repository, keyed by `owner/name`; built once from `RepositoryConfig`."""
-
-    def __init__(self, configs: Sequence[RepositoryConfig], github_factory: GithubFactory) -> None:
-        harness_configs = [config for config in configs if config.is_harness]
-        if len(harness_configs) != 1:
-            raise RepositoryPoolError(f"expected exactly one is_harness repository, found {len(harness_configs)}")
-        harness_path = harness_configs[0].path
-        repositories = [
-            Repository(
-                path=config.path,
-                owner_repo=config.owner_repo,
-                is_harness=config.is_harness,
-                pull_requests=PullRequests(PullRequestClient(github_factory(config.path))),
-                worktree_root=config.worktree_root
-                or harness_path / "workspace" / f"{config.path.name}.worktrees",
-            )
-            for config in configs
-        ]
-        self._by_target = {repository.owner_repo.casefold(): repository for repository in repositories}
-        self._harness = next(repository for repository in repositories if repository.is_harness)
-
-    @property
-    def harness(self) -> Repository:
-        return self._harness
-
-    def get(self, target: RepoTarget) -> Repository | None:
-        """The Repository configured for `target`, or None when it has no entry in the pool."""
-        return self._by_target.get(target.casefold())

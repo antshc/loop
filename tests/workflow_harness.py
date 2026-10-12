@@ -11,6 +11,7 @@ import subprocess
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
+from unittest.mock import patch
 
 from loop import (
     AgentBuilder,
@@ -28,7 +29,7 @@ from loop import (
 from workflows import dev
 from workflows.dev import FileExecutionStore
 from workflows.platforms.git import Commit
-from workflows.platforms.work_tracking import GitHubRepo, RepositoryConfig
+from workflows.platforms.work_tracking import GitHubRepo, Repository, RepositoryId
 from workflows.platforms.work_tracking.fake_gh_cli import FakeGhCli
 
 Handler = Callable[[str], str]
@@ -201,22 +202,24 @@ class DevHarness:
         handler: Handler | None = None,
         *,
         github_factory: Callable[[Path], object] | None = None,
-        repositories: Sequence[RepositoryConfig] | None = None,
         store: FileExecutionStore | None = None,
         argv: list[str] | None = None,
     ) -> int:
         if handler is not None:
             self.runner.handler = handler
-        return dev.main(
-            argv if argv is not None else ["--log-dir", str(self.log_dir)],
-            git=self.git,  # type: ignore[arg-type]
-            github_factory=github_factory or (lambda checkout: self.github),  # type: ignore[arg-type,return-value]
-            repositories=repositories
-            if repositories is not None
-            else [RepositoryConfig(path=self.root, owner_repo="owner/repo", is_harness=True)],
-            new_agent=new_agent_for(self.runner, self.git_service, self.root),
-            store=store or self.store,
+        harness = Repository(
+            checkout=self.root,
+            worktrees=self.root / "workspace" / f"{self.root.name}.worktrees",
+            identity=RepositoryId("owner", "repo"),
         )
+        with patch.object(dev, "HARNESS", harness):
+            return dev.main(
+                argv if argv is not None else ["--log-dir", str(self.log_dir)],
+                git=self.git,  # type: ignore[arg-type]
+                github_factory=github_factory or (lambda checkout: self.github),  # type: ignore[arg-type,return-value]
+                new_agent=new_agent_for(self.runner, self.git_service, self.root),
+                store=store or self.store,
+            )
 
 
 def crash(output: str = "") -> Handler:

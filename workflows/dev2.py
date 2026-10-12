@@ -185,7 +185,7 @@ def main(
             if spec.base_branch is None or spec.feature_branch is None:
                 logger.warning("spec #%s skipped: no repo:base label", spec.number)
                 continue
-            # Missing: RepositoryPool target lookup (only the harness repo is used), git fetch, and the base-branch existence check.
+            # Missing: harness target validation, git fetch, and the base-branch existence check.
             options = GitOptions(
                 root_path=_WORKTREE_ROOT,
                 repository_path=_HARNESS_PATH,

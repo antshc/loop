@@ -36,11 +36,12 @@ from loop import (
 from workflows.platforms.git import Commit, GitService
 from workflows.platforms.process import CommandError
 from workflows.platforms.work_tracking import (
+    GhCli,
     GitHubRepo,
+    PullRequestClient,
+    PullRequests,
     Repository,
-    RepositoryConfig,
-    RepositoryPool,
-    RepositoryPoolError,
+    RepositoryId,
     Spec,
     Ticket,
     TicketsTracker,
@@ -48,6 +49,7 @@ from workflows.platforms.work_tracking import (
 )
 
 __all__ = [
+    "HARNESS",
     "PROMPT",
     "DevResponse",
     "DevResult",
@@ -65,15 +67,12 @@ logger = logging.getLogger("workflow.dev")
 LOG_DIR_NAME = ".loop"
 LOG_LEVEL = "INFO"
 LOOP_HOOKS: tuple[LoopHook, ...] = ()
-_HARNESS_PATH = Path(__file__).resolve().parents[1]
-# Single repo: this checkout is both the harness and the only target repository.
-REPOSITORIES: tuple[RepositoryConfig, ...] = (
-    RepositoryConfig(
-        path=_HARNESS_PATH,
-        owner_repo="antshc/loop",
-        is_harness=True,
-        worktree_root=_HARNESS_PATH / "workspace" / f"{_HARNESS_PATH.name}.worktrees",
-    ),
+_ROOT = Path(__file__).resolve().parents[1]
+# This workflow delivers only Specs targeting the harness repository.
+HARNESS: Repository = Repository(
+    checkout=_ROOT,
+    worktrees=_ROOT / "workspace" / f"{_ROOT.name}.worktrees",
+    identity=RepositoryId("antshc", "loop"),
 )
 MAX_TICKET_FAILURES = 2
 PROMPT = Path(__file__).parent / "prompts" / "dev.md"
@@ -290,7 +289,7 @@ class Prompts:
 
 @dataclass(frozen=True)
 class DevDeps:
-    repository_pool: RepositoryPool
+    pull_requests: PullRequests
     tracker: TicketsTracker
     store: FileExecutionStore
     git: GitService
@@ -313,7 +312,7 @@ class DevWorkflow:
 
     def __init__(self, deps: DevDeps) -> None:
         self._tracker = deps.tracker
-        self._repository_pool = deps.repository_pool
+        self._pull_requests = deps.pull_requests
         self._git = deps.git
         self._store = deps.store
         self._new_agent = deps.new_agent
@@ -336,48 +335,47 @@ class DevWorkflow:
             self._tracker.update_spec(spec)
             return Outcome.SKIPPED
 
-        repository = self._repository_pool.get(spec.target)
-        if repository is None:
-            spec.block(f"dev: repo:target:{spec.target} is not configured in the RepositoryPool")
+        if spec.target.casefold() != str(HARNESS.identity).casefold():
+            spec.block(f"dev: repo:target:{spec.target} does not match harness {HARNESS.identity}")
             self._tracker.update_spec(spec)
             return Outcome.SKIPPED
 
         try:
-            if not self._prepare(spec, repository):
+            if not self._prepare(spec):
                 return Outcome.SKIPPED
-            return self._deliver_on_worktree(spec, repository)
+            return self._deliver_on_worktree(spec)
         except (CommandError, LoopHookError, subprocess.CalledProcessError) as exception:
             logger.error("spec #%s failed: %s", spec.number, exception)
             spec.comment(f"dev: {self._describe(exception)}")
             self._tracker.update_spec(spec)
             return Outcome.FAILED
 
-    def _prepare(self, spec: Spec, repository: Repository) -> bool:
+    def _prepare(self, spec: Spec) -> bool:
         """Publishes earlier runs' commits; True only when there are Tickets to deliver."""
-        self._git.fetch(repository.path)
+        self._git.fetch(HARNESS.checkout)
         if not spec.has_work:
-            self.publish_pull_request(spec, repository, repository.path)
+            self.publish_pull_request(spec, HARNESS.checkout)
             return False
-        if not self._git.remote_branch_exists(repository.path, spec.base_branch):
+        if not self._git.remote_branch_exists(HARNESS.checkout, spec.base_branch):
             spec.hand_to_human(f"dev: target branch {spec.base_branch!r} does not exist on {spec.target}")
             self._tracker.update_spec(spec)
             return False
         # Publish earlier runs' commits from the checkout before the worktree opens.
-        self.publish_pull_request(spec, repository, repository.path)
+        self.publish_pull_request(spec, HARNESS.checkout)
         return True
 
-    def _deliver_on_worktree(self, spec: Spec, repository: Repository) -> Outcome:
+    def _deliver_on_worktree(self, spec: Spec) -> Outcome:
         """Opens the feature-branch worktree, delivers the Tickets in it, and publishes before it closes."""
         options = GitOptions(
-            root_path=repository.worktree_root,
-            repository_path=repository.path,
+            root_path=HARNESS.worktrees,
+            repository_path=HARNESS.checkout,
             strategy=BranchStrategy(spec.feature_branch, f"origin/{spec.base_branch}"),
             loop_hooks=self._loop_hooks,
         )
         with self._new_agent().with_git(options).open() as worktree:
             client = worktree.agent(DEFAULT)
             delivered = self._deliver_tickets(spec, worktree.path, client)
-            pull_request_url = self.publish_pull_request(spec, repository, worktree.path)
+            pull_request_url = self.publish_pull_request(spec, worktree.path)
             if delivered and pull_request_url is not None:
                 spec.announce_delivered(pull_request_url)
                 self._tracker.update_spec(spec)
@@ -467,7 +465,7 @@ class DevWorkflow:
 
     def _record_failure(self, ticket: Ticket) -> int:
         """Counts one failure for `ticket` and returns its persisted total."""
-        owner, repo = self._repository_pool.harness.owner_repo.split("/", 1)
+        owner, repo = HARNESS.identity
         self._store.record_failure(
             ticket.url,
             owner=owner,
@@ -478,14 +476,14 @@ class DevWorkflow:
         )
         return self._store.failed_attempts(ticket.url)
 
-    def publish_pull_request(self, spec: Spec, repository: Repository, pusher: Path) -> str | None:
+    def publish_pull_request(self, spec: Spec, pusher: Path) -> str | None:
         """Pushes the feature branch from `pusher` and ensures its draft PR when it is ahead of origin.
 
         Returns the PR URL, or None when there was nothing to publish.
         """
         if not self._git.push_if_ahead(pusher, spec.feature_branch, spec.base_branch):
             return None
-        return repository.pull_requests.publish_draft(spec, spec.feature_branch)
+        return self._pull_requests.publish_draft(spec, spec.feature_branch)
 
     @staticmethod
     def _describe(exception: Exception) -> str:
@@ -498,7 +496,7 @@ class DevWorkflow:
 
 
 def _tracker(repo: GitHubRepo) -> TicketsTracker:
-    return TicketsTracker(repo.owner, repo.name, gh=repo.run)
+    return TicketsTracker(HARNESS.identity.owner, HARNESS.identity.repo, gh=repo.run)
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -513,7 +511,6 @@ def main(
     *,
     git: GitService | None = None,
     github_factory: GithubFactory | None = None,
-    repositories: Sequence[RepositoryConfig] = REPOSITORIES,
     new_agent: Callable[[], AgentBuilder] = Agent,
     store: FileExecutionStore | None = None,
     loop_hooks: tuple[LoopHook, ...] = LOOP_HOOKS,
@@ -525,26 +522,28 @@ def main(
     # The workflow is the application: it owns the root logger so its own records land in the same file.
     configure_logging(args.log_level, log_file=log_dir / "dev.log", logger="")
 
-    github_factory = github_factory or GitHubRepo.from_origin
     try:
-        repository_pool = RepositoryPool(repositories, github_factory)
-    except RepositoryPoolError as exception:
-        logger.error("repository pool misconfigured: %s", exception)
-        return 1
-
-    deps = DevDeps(
-        repository_pool=repository_pool,
-        tracker=_tracker(github_factory(repository_pool.harness.path)),
-        store=store or FileExecutionStore(log_dir),
-        git=git or GitService(),
-        new_agent=new_agent,
-        loop_hooks=loop_hooks,
-        prompts=Prompts(dev=PROMPT.read_text()),
-    )
-
-    try:
+        # GitHub identity comes from the constant, not from the checkout's origin.
+        github = (
+            github_factory(HARNESS.checkout)
+            if github_factory is not None
+            else GitHubRepo(
+                HARNESS.identity.owner,
+                HARNESS.identity.repo,
+                gh=GhCli(cwd=HARNESS.checkout),
+            )
+        )
+        deps = DevDeps(
+            pull_requests=PullRequests(PullRequestClient(github)),
+            tracker=_tracker(github),
+            store=store or FileExecutionStore(log_dir),
+            git=git or GitService(),
+            new_agent=new_agent,
+            loop_hooks=loop_hooks,
+            prompts=Prompts(dev=PROMPT.read_text()),
+        )
         return DevWorkflow(deps).process_specs()
-    except Exception as exception:  # last-resort boundary the ticket requires: log and fail, never crash bare
+    except Exception as exception:  # last-resort boundary: log and fail, never crash bare
         logger.exception("unexpected error: %s", exception)
         return 1
 

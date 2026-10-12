@@ -11,7 +11,7 @@ from loop import BranchStrategy
 from workflow_harness import COMPLETED, DevHarness, crash, envelope, hook_error, issue
 from workflows import dev
 from workflows.dev import FileExecutionStore
-from workflows.platforms.work_tracking import GitHubRepo, RepositoryConfig, Spec, TicketsTracker
+from workflows.platforms.work_tracking import Spec, TicketsTracker
 from workflows.platforms.work_tracking.fake_gh_cli import FakeGhCli
 
 _PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
@@ -74,17 +74,14 @@ def test_a_log_dir_override_writes_logs_to_that_folder(tmp_path: Path) -> None:
     assert code == 0 and (custom / "dev.log").is_file()
 
 
-@pytest.mark.parametrize("harnesses", [0, 2])
-def test_exits_before_reading_specs_unless_exactly_one_repository_is_the_harness(tmp_path: Path, harnesses: int) -> None:
+def test_only_the_configured_harness_is_used(tmp_path: Path) -> None:
     harness = DevHarness(tmp_path)
-    repositories = [
-        RepositoryConfig(path=tmp_path / str(index), owner_repo=f"owner/r{index}", is_harness=index < harnesses)
-        for index in range(2)
-    ]
 
-    code = harness.run(repositories=repositories)
+    code = harness.run(lambda prompt: harness.commit_and_report(10))
 
-    assert code == 1 and harness.gh.calls == []
+    assert code == 0
+    assert harness.git.fetched == [harness.root]
+    assert harness.git_service.opened[0].repository_path == harness.root
 
 
 def test_an_unexpected_error_is_logged_and_the_process_exits_non_zero(tmp_path: Path) -> None:
@@ -114,30 +111,18 @@ def test_the_spec_is_fetched_from_the_harness_when_it_targets_the_harness_origin
     assert code == 0 and harness.git.fetched == [harness.root]
 
 
-def test_a_target_repo_is_fetched_from_its_clone_and_gets_the_pull_request(tmp_path: Path) -> None:
+def test_target_repository_match_is_case_insensitive(tmp_path: Path) -> None:
     harness = DevHarness(
         tmp_path,
-        specs=[issue(1, "Add a widget", labels=("spec", "repo:target:acme/widgets", "repo:base:main"))],
+        specs=[issue(1, "Add a widget", labels=("spec", "repo:target:OWNER/REPO", "repo:base:main"))],
         tickets={1: [issue(10, "Build the widget")]},
     )
-    clone = harness.root / "workspace" / "widgets"
-    target_gh = FakeGhCli(specs=[], tickets={})
-    target_github = GitHubRepo("acme", "widgets", gh=target_gh)
 
-    code = harness.run(
-        lambda prompt: harness.commit_and_report(10, initiative="1"),
-        github_factory=lambda checkout: harness.github if checkout == harness.root else target_github,
-        repositories=[
-            RepositoryConfig(path=harness.root, owner_repo="owner/repo", is_harness=True),
-            RepositoryConfig(path=clone, owner_repo="acme/widgets"),
-        ],
-    )
+    code = harness.run(lambda prompt: harness.commit_and_report(10, initiative="1"))
 
     assert code == 0
-    assert harness.git.fetched == [clone]
-    assert harness.git_service.opened[0].repository_path == clone
-    assert any(call[:2] == ("pr", "create") for call in target_gh.calls)
-    assert harness.calls("issue", "close")
+    assert harness.git.fetched == [harness.root]
+    assert harness.calls("pr", "create")
 
 
 def test_an_unconfigured_repo_target_is_labelled_hitl_with_no_worktree_opened(tmp_path: Path) -> None:
@@ -153,7 +138,7 @@ def test_an_unconfigured_repo_target_is_labelled_hitl_with_no_worktree_opened(tm
     assert harness.git_service.opened == [] and harness.git.fetched == []
     labels, comments = harness.calls("issue", "edit"), harness.calls("issue", "comment")
     assert labels[0][-1] == "hitl"
-    assert "repo:target:acme/widgets" in comments[0][-1] and "RepositoryPool" in comments[0][-1]
+    assert "repo:target:acme/widgets" in comments[0][-1] and "harness owner/repo" in comments[0][-1]
 
 
 @pytest.mark.parametrize(
