@@ -1,6 +1,6 @@
 """Shared Workflow test-support: fakes at the loop library seams and the workflow Git/GitHub boundaries.
 
-`AgentBuilder` is built over a fake `CliRunner` and a fake git service, and `WorkflowGit` is an in-memory fake,
+`AgentBuilder` is built over a fake `CliRunner` and a fake git service, and `GitService` is an in-memory fake,
 so no test starts a process. Holds no tests of its own.
 """
 
@@ -92,7 +92,7 @@ class FakeGitService:
 
 
 class FakeWorkflowGit:
-    """An in-memory `WorkflowGit` over one branch: a commit list, how much of it origin already holds, a dirty flag."""
+    """An in-memory `GitService` over one branch: a commit list, how much of it origin already holds, a dirty flag."""
 
     def __init__(self) -> None:
         self.commits = [Commit("base0000", "base")]

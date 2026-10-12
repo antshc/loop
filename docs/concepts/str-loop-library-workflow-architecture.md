@@ -56,7 +56,7 @@ loop/                              # public API: builder, profiles, strategies, 
 
 ```python
 def main(argv=None, *, git=None, github_factory=None, new_agent=Agent, store=None) -> int:
-    git = git or WorkflowGit()
+    git = git or GitService()
     ...
     options = GitOptions(strategy=BranchStrategy(feature_branch, base_branch), loop_hooks=hooks)
     with new_agent().with_git(options).open() as worktree:

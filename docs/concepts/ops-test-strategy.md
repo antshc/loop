@@ -9,7 +9,7 @@ Loop's behavior is spread over the shipped library (agent builder, CLI runners, 
 One unit test group runs in the project's single test command (`pytest`). It tests one component or one Workflow rule at a time against fakes at the process boundaries; a Workflow scenario is driven through the Workflow's `main` over the same fakes, so the real builder, prompt rendering, response extraction, and Workflow logic cooperate.
 
 - **Library seams:** `CliRunner` and `GitService` (and `DockerService`) are the replaceable boundaries; tests build `AgentBuilder(runner, git, docker)` over a `FakeRunner` and `FakeGitService`.
-- **Workflow seams:** a Workflow's Git reads and publication (`WorkflowGit`) and its GitHub client (`FakeGhCli`) are injected as in-memory fakes; the `dev` Workflow takes `new_agent`, so tests supply a builder over the fake runner.
+- **Workflow seams:** a Workflow's Git reads and publication (`GitService`) and its GitHub client (`FakeGhCli`) are injected as in-memory fakes; the `dev` Workflow takes `new_agent`, so tests supply a builder over the fake runner.
 - **Shared harness:** `tests/workflow_harness.py` holds the fakes, `DevHarness`, and the response-envelope builders, imported by every test module.
 - **Architecture checks:** import-linter contracts run as a test.
 
