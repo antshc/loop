@@ -32,10 +32,9 @@ from workflows.dev import (
     prompt_args,
     render_prompt,
 )
-from workflows.platforms.git import Commit, WorkflowGit
+from workflows.platforms.git import Commit, GitService
 from workflows.platforms.work_tracking import (
     GhCli,
-    GitHubRepo,
     Spec,
     Ticket,
     TicketsTracker,
@@ -59,7 +58,7 @@ def read_specs(tracker: TicketsTracker) -> list[Spec]:
     return list(tracker.specs())
 
 
-def _initiative_commits(git: WorkflowGit, worktree: Path, spec: Spec) -> list[str]:
+def _initiative_commits(git: GitService, worktree: Path, spec: Spec) -> list[str]:
     """This Initiative's `ccode(<initiative-id>|` commits on the feature branch since the base branch, as `<short hash> <subject>`."""
     found = git.initiative_commits(worktree, spec.base_branch, f"ccode({spec.initiative}|")
     return [f"{commit.sha[:7]} {commit.subject}" for commit in found]
@@ -73,7 +72,7 @@ def _attempt(
     client: AgentClient,
     head_before: Commit,
     *,
-    git: WorkflowGit,
+    git: GitService,
     prompts: Prompts,
 ) -> DevResult | str:
     """Runs the agent once and validates its response and Git; returns the accepted result, or the failure reason."""
@@ -102,7 +101,7 @@ def _attempt(
 
 
 def _commit_violation(
-    git: WorkflowGit, worktree: Path, head_before: Commit, identifier: WorkIdentifier, dev_result: DevResult
+    git: GitService, worktree: Path, head_before: Commit, identifier: WorkIdentifier, dev_result: DevResult
 ) -> str | None:
     """Why the worktree does not hold exactly the one clean, correctly tagged commit the result claims, or None."""
     head = git.head(worktree)
@@ -159,8 +158,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
 def main(
     argv: list[str] | None = None,
     *,
-    repo: GitHubRepo | None = None,
-    git: WorkflowGit | None = None,
+    git: GitService | None = None,
     new_agent: Callable[[], AgentBuilder] = Agent,
     store: FileExecutionStore | None = None,
     loop_hooks: tuple[LoopHook, ...] = LOOP_HOOKS,
@@ -171,9 +169,8 @@ def main(
     log_dir = (args.log_dir or Path.cwd() / LOG_DIR_NAME).resolve()
     configure_logging(args.log_level, log_file=log_dir / "dev2.log", logger="")
 
-    repo = repo or GitHubRepo(OWNER, REPO, gh=GhCli(cwd=_HARNESS_PATH))
-    tracker = TicketsTracker(repo.owner, repo.name, gh=repo.run)
-    git = git or WorkflowGit()
+    tracker = TicketsTracker(OWNER, REPO, gh=GhCli(cwd=_HARNESS_PATH))
+    git = git or GitService()
     store = store or FileExecutionStore(log_dir)
     prompts = Prompts(dev=PROMPT.read_text())
 

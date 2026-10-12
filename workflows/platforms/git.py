@@ -22,7 +22,7 @@ class Commit:
     subject: str
 
 
-class WorkflowGit:
+class GitService:
     """Git operations on a given checkout or worktree; `run` is the injectable process seam."""
 
     def __init__(self, *, run: Run = run_command) -> None:

@@ -32,7 +32,7 @@ from loop import (
     configure_logging,
 )
 from workflows.platforms.agent_response import extract_response
-from workflows.platforms.git import Commit, WorkflowGit
+from workflows.platforms.git import Commit, GitService
 from workflows.platforms.process import CommandError
 from workflows.platforms.work_tracking import (
     GitHubRepo,
@@ -289,7 +289,7 @@ class DevDeps:
     repository_pool: RepositoryPool
     tracker: TicketsTracker
     store: FileExecutionStore
-    git: WorkflowGit
+    git: GitService
     new_agent: Callable[[], AgentBuilder]
     loop_hooks: tuple[LoopHook, ...]
     prompts: Prompts
@@ -507,7 +507,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
 def main(
     argv: list[str] | None = None,
     *,
-    git: WorkflowGit | None = None,
+    git: GitService | None = None,
     github_factory: GithubFactory | None = None,
     repositories: Sequence[RepositoryConfig] = REPOSITORIES,
     new_agent: Callable[[], AgentBuilder] = Agent,
@@ -532,7 +532,7 @@ def main(
         repository_pool=repository_pool,
         tracker=_tracker(github_factory(repository_pool.harness.path)),
         store=store or FileExecutionStore(log_dir),
-        git=git or WorkflowGit(),
+        git=git or GitService(),
         new_agent=new_agent,
         loop_hooks=loop_hooks,
         prompts=Prompts(dev=PROMPT.read_text()),

@@ -18,7 +18,7 @@ from typing import Any
 
 from loop import Agent, AgentBuilder, AgentProfile, AgentRequest, BranchStrategy, GitOptions, Worktree, copilot
 from workflows.platforms.agent_response import extract_response
-from workflows.platforms.git import WorkflowGit
+from workflows.platforms.git import GitService
 
 logger = logging.getLogger("workflow.plan_implement")
 
@@ -80,7 +80,7 @@ def _run_step(worktree: Worktree, profile: AgentProfile, prompt: str) -> dict[st
     return envelope["result"]
 
 
-def _run(worktree: Worktree, git: WorkflowGit, task: str, planner: AgentProfile, implementer: AgentProfile) -> int:
+def _run(worktree: Worktree, git: GitService, task: str, planner: AgentProfile, implementer: AgentProfile) -> int:
     # The agent-written plan and the task are embedded as text and sent verbatim; they are never preprocessed.
     plan_result = _run_step(worktree, planner, f"{task}\n\n{PLAN_INSTRUCTIONS}")
     if plan_result is None:
@@ -115,12 +115,12 @@ def main(
     plan_effort: str = PLAN_EFFORT,
     implement_model: str = IMPLEMENT_MODEL,
     implement_effort: str = IMPLEMENT_EFFORT,
-    git: WorkflowGit | None = None,
+    git: GitService | None = None,
     new_agent: Callable[[], AgentBuilder] = Agent,
 ) -> int:
     """Plans `argv`'s task with `plan_model`, then implements it with `implement_model`; returns the exit code."""
     args = _parse_args(argv)
-    git = git or WorkflowGit()
+    git = git or GitService()
     planner = AgentProfile(copilot, plan_model, plan_effort)
     implementer = AgentProfile(copilot, implement_model, implement_effort)
     branch = f"loop/run-{uuid.uuid4().hex[:8]}"
