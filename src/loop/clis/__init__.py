@@ -4,6 +4,7 @@ from .base import AgentCli, AgentProfile
 from .codex_cli import CodexCli
 from .copilot_cli import CopilotCli
 from .runner import CliRunner, ProcessCliRunner
+from .transport import CodexJson, CopilotJson, CopilotText, Transcript, Transport
 
 copilot = CopilotCli()
 codex = CodexCli()
@@ -14,9 +15,14 @@ __all__ = [
     "AgentProfile",
     "CliRunner",
     "CodexCli",
+    "CodexJson",
     "CopilotCli",
+    "CopilotJson",
+    "CopilotText",
     "DEFAULT",
     "ProcessCliRunner",
+    "Transcript",
+    "Transport",
     "codex",
     "copilot",
 ]

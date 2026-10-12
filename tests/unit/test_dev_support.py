@@ -8,23 +8,26 @@ from pathlib import Path
 import pytest
 
 from workflows.dev import (
+    DevResponse,
     DevResult,
     DevResultError,
     ExecutionStoreError,
     FileExecutionStore,
     PromptError,
     parse_dev_result,
-    parse_response,
     render_prompt,
 )
-from workflows.platforms.agent_response import extract_response
 from workflows.platforms.work_tracking import WorkIdentifier
 
 COMPLETED = {"commit": "abc", "summary": "done", "verification": "ran tests"}
 
 
+def _envelope_dict(identifier: str = "Checkout|10", status: str = "completed", result: dict | None = None) -> dict:
+    return {"identifier": identifier, "status": status, "result": COMPLETED if result is None else result}
+
+
 def _envelope(identifier: str = "Checkout|10", status: str = "completed", result: dict | None = None) -> str:
-    return json.dumps({"identifier": identifier, "status": status, "result": COMPLETED if result is None else result})
+    return json.dumps(_envelope_dict(identifier, status, result))
 
 
 def test_render_prompt_substitutes_placeholders_and_leaves_other_braces_alone() -> None:
@@ -45,52 +48,39 @@ def test_render_prompt_rejects_a_missing_argument_and_warns_on_an_unused_one(
     assert "unused prompt argument: EXTRA" in caplog.text
 
 
-def test_extract_response_returns_the_last_object_carrying_a_status() -> None:
-    text = 'noise {"status": "completed", "result": {}} {"other": 1} {"status": "failed", "result": {"reason": "r"}} tail'
-
-    assert json.loads(extract_response(text) or "")["status"] == "failed"
-
-
-@pytest.mark.parametrize("text", ["", "no json", '{"status": "completed"', '{"other": 1}', "[1]"])
-def test_extract_response_returns_none_without_a_complete_status_object(text: str) -> None:
-    assert extract_response(text) is None
-
-
 def test_parse_dev_result_decodes_a_completed_response() -> None:
-    assert parse_dev_result(_envelope()) == DevResult(
+    assert parse_dev_result(_envelope_dict()) == DevResult(
         "Checkout|10", "completed", commit="abc", summary="done", verification="ran tests"
     )
 
 
 def test_parse_dev_result_decodes_a_failed_response() -> None:
-    result = parse_dev_result(_envelope(status="failed", result={"reason": "stuck"}))
+    result = parse_dev_result(_envelope_dict(status="failed", result={"reason": "stuck"}))
 
     assert (result.status, result.reason) == ("failed", "stuck")
 
 
 @pytest.mark.parametrize(
-    "response",
+    "envelope",
     [
-        "{not json",
-        "[1]",
-        json.dumps({"identifier": "x", "status": "weird", "result": {}}),
-        json.dumps({"identifier": "x", "status": "completed", "result": {"commit": "a", "summary": "s"}}),
-        json.dumps({"identifier": "x", "status": "failed", "result": {}}),
+        {"identifier": "x", "status": "weird", "result": {}},
+        {"identifier": "x", "status": "completed", "result": {"commit": "a", "summary": "s"}},
+        {"identifier": "x", "status": "failed", "result": {}},
     ],
 )
-def test_parse_dev_result_rejects_a_malformed_response(response: str) -> None:
+def test_parse_dev_result_rejects_a_malformed_response(envelope: dict) -> None:
     with pytest.raises(DevResultError):
-        parse_dev_result(response)
+        parse_dev_result(envelope)
 
 
-def test_parse_response_requires_a_response_for_the_asked_task() -> None:
+def test_dev_response_requires_a_response_for_the_asked_task() -> None:
     identifier = WorkIdentifier("Checkout", 10)
 
-    assert parse_response(f"x {_envelope()}", identifier).commit == "abc"
+    assert DevResponse(identifier).decode(f"x {_envelope()}").commit == "abc"
     with pytest.raises(DevResultError, match="no response object"):
-        parse_response("nothing", identifier)
+        DevResponse(identifier).decode("nothing")
     with pytest.raises(DevResultError, match="does not match task"):
-        parse_response(_envelope("Checkout|11"), identifier)
+        DevResponse(identifier).decode(_envelope("Checkout|11"))
 
 
 def _store(tmp_path: Path, day: int = 1) -> FileExecutionStore:

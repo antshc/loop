@@ -27,11 +27,11 @@ AgentBuilder.create() / Worktree.agent(profile)
                        Headless AI Agent (Copilot CLI, Codex)
 ```
 
-`AgentClient.run(request, context=None)` takes one `AgentRequest(prompt)` and returns an `AgentResult(output, session, exit_code)`. The model and reasoning effort belong to the profile, so Runs that need different ones use different clients; the prompt is sent as given, and rendering any template is the Workflow's job.
+`AgentClient.run(request, context=None)` takes one `AgentRequest(prompt)` and returns an `AgentResult(output, session, exit_code)`. `output` is the assistant's text, decoded from the CLI's stdout by the CLI's `Transport`; interpreting it (a JSON envelope, a `<completed>` tag, or anything else) is the Workflow's own job, done by calling a decoder (such as `LastJsonObject`) directly on `AgentResult.output`. The model and reasoning effort belong to the profile, so Runs that need different ones use different clients; the prompt is sent as given, and rendering any template is the Workflow's job.
 
 Sessions are off by default: without `with_session()` every run starts a fresh provider session under a generated name. With `with_session()`, a `SessionName` identifies a logical session; the client asks the `SessionStore` for the `NativeHandle` of that name and CLI and resumes it, or starts a new session, and saves the handle returned by the CLI. The provider CLI stays authoritative for the transcript; the store maps only the logical name to the CLI's native handle. `MemorySessionStore` keeps handles for the process lifetime. A handle stored for a different CLI raises `SessionCliMismatch`.
 
-The CLI adapter (`CopilotCli`, `CodexCli`) owns command construction, session create/resume flags, and permission flags. A `ProcessCliRunner` starts the process on the host in the agent context's working directory (the worktree when a worktree is open), returns the raw stdout, and raises `CalledProcessError` on a non-zero exit. Extra directories (`--add-dir`) are passed only when the run's `AgentContext` lists them.
+The CLI adapter (`CopilotCli`, `CodexCli`) owns command construction, session create/resume flags, and permission flags, and each carries a `Transport` (`CopilotText` by default, or `CopilotJson`; `CodexJson` for Codex) that decodes its stdout shape into the assistant's text. A `ProcessCliRunner` starts the process on the host in the agent context's working directory (the worktree when a worktree is open) and raises `CalledProcessError` on a non-zero exit. Extra directories (`--add-dir`) are passed only when the run's `AgentContext` lists them.
 
 `AgentClient` is different from a Headless AI Agent: the Headless AI Agent is the executable worker; `AgentClient` is the orchestration-facing boundary used to invoke it and continue it when requested.
 
@@ -46,7 +46,7 @@ The CLI adapter (`CopilotCli`, `CodexCli`) owns command construction, session cr
 - MUST resume a logical session by `SessionName` through `SessionStore` when sessions are enabled, and save the CLI's handle after each run.
 - MUST keep provider conversation history owned by the provider CLI; `SessionStore` MUST NOT duplicate or interpret the transcript.
 - MUST run the provider CLI on the host in the working directory of the agent context.
-- MUST return the CLI's raw stdout as `AgentResult.output` and raise `CalledProcessError` on a non-zero exit; interpreting the output (such as a response envelope) belongs to the Workflow.
+- MUST return the CLI's decoded assistant text as `AgentResult.output`, and raise `CalledProcessError` on a non-zero exit; interpreting that text (such as a response envelope) belongs to the Workflow, which may reuse a decoder (`LastJsonObject`) directly on it.
 - MUST keep `AgentClient` agnostic of what a prompt asks for: Tickets, Specs, and identifier meaning belong to the Workflow.
 - MUST make `CliRunner` the replaceable boundary for tests; there is no test double inside the public `loop` API.
 - MUST NOT make Workflows construct provider CLI commands or provider session identifiers directly.

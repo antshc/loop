@@ -8,6 +8,7 @@ from ..hooks import AgentCliHook, AgentCliHookPoint, AgentCliHookWiring, ordered
 from ..run import AgentRequest, RunContext
 from ..sessions import CliOutcome, NativeHandle, Resume, SessionName, Start, Turn
 from .base import AgentProfile
+from .transport import CopilotText, Transport
 
 
 class CopilotCli:
@@ -27,8 +28,9 @@ class CopilotCli:
         AgentCliHookPoint.PRE_COMPACT: "preCompact",
     }
 
-    def __init__(self, args: tuple[str, ...] = ("--allow-all-tools",)) -> None:
+    def __init__(self, args: tuple[str, ...] = ("--allow-all-tools",), *, transport: Transport = CopilotText()) -> None:
         self._args = args
+        self.transport = transport
 
     def native_point(self, point: AgentCliHookPoint) -> str:
         return self._EVENTS[point]
@@ -58,8 +60,13 @@ class CopilotCli:
         settings = {"--model": profile.model, "--reasoning-effort": profile.reasoning_effort, "--context": profile.context}
         run_args = [part for flag, value in settings.items() if value is not None for part in (flag, value)]
         session_args = ["--name", turn.name.value] if isinstance(turn, Start) else [f"--resume={turn.handle.value}"]
-        return ["copilot", "-p", request.prompt, *session_args, *self._args, *run_args, *profile.args, *dirs]
+        return [
+            "copilot", "-p", request.prompt, *self.transport.args, *session_args, *self._args, *run_args, *profile.args, *dirs,
+        ]
 
     def parse(self, stdout: str, turn: Turn, exit_code: int) -> CliOutcome:
+        transcript = self.transport.decode(stdout)
         handle = turn.handle if isinstance(turn, Resume) else self.handle_for_new(turn.name)
-        return CliOutcome(stdout, handle, exit_code)
+        # The process exit code wins; a 0 falls back to the stream's own exitCode, when the transport reports one.
+        code = exit_code if exit_code != 0 else (transcript.exit_code or 0)
+        return CliOutcome(transcript.text, handle, code)

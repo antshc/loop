@@ -7,28 +7,14 @@ from ..hooks import AgentCliHook, AgentCliHookPoint, AgentCliHookWiring, ordered
 from ..run import AgentRequest, RunContext
 from ..sessions import CliOutcome, NativeHandle, Resume, SessionHandleMissing, SessionName, Turn
 from .base import AgentProfile
-
-
-def _parse_codex_events(stdout: str) -> tuple[str | None, str]:
-    """Return (thread id, last agent message) from `codex exec --json` JSONL output."""
-    thread_id: str | None = None
-    message = ""
-    for line in stdout.splitlines():
-        try:
-            event = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if event.get("type") == "thread.started":
-            thread_id = event.get("thread_id")
-        elif event.get("type") == "item.completed" and event.get("item", {}).get("type") == "agent_message":
-            message = event["item"].get("text", "")
-    return thread_id, message
+from .transport import CodexJson
 
 
 class CodexCli:
     """Codex CLI adapter; Codex assigns its own thread id."""
 
     name = "codex"
+    transport = CodexJson()
     _EVENTS = {
         AgentCliHookPoint.SESSION_START: "SessionStart",
         AgentCliHookPoint.SESSION_END: "SessionEnd",
@@ -79,7 +65,7 @@ class CodexCli:
             run_args += ["--model", profile.model]
         if profile.reasoning_effort is not None:
             run_args += ["-c", f"model_reasoning_effort={profile.reasoning_effort}"]
-        head = ["codex", "exec", "--json", *self._args, *run_args, *profile.args, *dirs]
+        head = ["codex", "exec", *self.transport.args, *self._args, *run_args, *profile.args, *dirs]
         if context.agent_cli_hooks:
             head += self.hook_wiring(context.agent_cli_hooks, turn, context.agent.cwd).args
         if isinstance(turn, Resume):
@@ -87,9 +73,9 @@ class CodexCli:
         return [*head, request.prompt]
 
     def parse(self, stdout: str, turn: Turn, exit_code: int) -> CliOutcome:
-        thread_id, message = _parse_codex_events(stdout)
-        if thread_id is not None:
-            return CliOutcome(message, NativeHandle(self.name, thread_id), exit_code)
+        transcript = self.transport.decode(stdout)
+        if transcript.handle_value is not None:
+            return CliOutcome(transcript.text, NativeHandle(self.name, transcript.handle_value), exit_code)
         if isinstance(turn, Resume):
-            return CliOutcome(message, turn.handle, exit_code)
+            return CliOutcome(transcript.text, turn.handle, exit_code)
         raise SessionHandleMissing("codex output had no thread.started event")

@@ -7,17 +7,26 @@ docs/concepts/str-agent-run.md). No push, pull request, or Ticket access.
 from __future__ import annotations
 
 import argparse
-import json
 import logging
+import re
 import subprocess
 import sys
 import uuid
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
-from loop import Agent, AgentBuilder, AgentProfile, AgentRequest, BranchStrategy, GitOptions, Worktree, copilot
-from workflows.platforms.agent_response import extract_response
+from loop import (
+    Agent,
+    AgentBuilder,
+    AgentProfile,
+    AgentRequest,
+    BranchStrategy,
+    ContentDecodeError,
+    GitOptions,
+    Worktree,
+    copilot,
+)
 from workflows.platforms.git import GitService
 
 logger = logging.getLogger("workflow.plan_implement")
@@ -31,23 +40,48 @@ PLAN_INSTRUCTIONS = """You are planning a coding task on this repository. Do not
 
 Write a concise, actionable implementation plan for another agent to follow.
 
-Reply with exactly one JSON object as your final message, with nothing after it:
-{"status": "completed", "result": {"plan": "<the plan, as plain text>"}}
-
-If you cannot produce a plan, reply instead with:
-{"status": "failed", "result": {"reason": "<why>"}}
+End your final message with exactly one of these tags, with nothing after it:
+<completed>Success</completed>
+<completed>Failure: <why></completed>
 """
 
 IMPLEMENT_INSTRUCTIONS = """You are implementing a coding task on this repository, following the plan above.
 
 Implement the plan. Commit your work with git. Do not push.
 
-Reply with exactly one JSON object as your final message, with nothing after it:
-{"status": "completed", "result": {}}
-
-If you cannot complete the implementation, reply instead with:
-{"status": "failed", "result": {"reason": "<why>"}}
+End your final message with exactly one of these tags, with nothing after it:
+<completed>Success</completed>
+<completed>Failure: <why></completed>
 """
+
+_COMPLETED_TAG = re.compile(r"<completed>(.*?)</completed>", re.DOTALL)
+
+
+@dataclass(frozen=True)
+class StepResult:
+    """One step's reply: whether its `<completed>` tag signals success, the text written before it, and why not."""
+
+    completed: bool
+    body: str
+    reason: str | None = None
+
+
+class StepResponse:
+    """Decodes a step's `<completed>Success</completed>` / `<completed>Failure: <why></completed>` reply."""
+
+    def decode(self, text: str) -> StepResult:
+        match = _COMPLETED_TAG.search(text)
+        if match is None:
+            raise ContentDecodeError("no <completed> tag in agent output", text)
+        body = text[: match.start()].strip()
+        tag = match.group(1).strip()
+        if tag.lower() == "success":
+            return StepResult(True, body)
+        reason = tag.split(":", 1)[1].strip() if ":" in tag else tag
+        return StepResult(False, body, reason)
+
+
+STEP = StepResponse()
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -56,39 +90,21 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _envelope(output: str) -> dict[str, Any] | None:
-    """The last `{status, result}` envelope in `output`, or None when there is none of that shape."""
-    response = extract_response(output)
-    if response is None:
-        return None
-    envelope = json.loads(response)
-    status, result = envelope.get("status"), envelope.get("result")
-    if status not in ("completed", "failed") or not isinstance(result, dict):
-        return None
-    return envelope
-
-
-def _run_step(worktree: Worktree, profile: AgentProfile, prompt: str) -> dict[str, Any] | None:
-    """Runs one fresh, stateless step; its `result` object, or None when it failed or answered in the wrong shape."""
+def _run_step(worktree: Worktree, profile: AgentProfile, prompt: str) -> str | None:
+    """Runs one fresh, stateless step; the text it wrote before its `<completed>` tag, or None when it failed."""
     try:
         output = worktree.agent(profile).run(AgentRequest(prompt)).output
-    except subprocess.CalledProcessError:
+        result = STEP.decode(output)
+    except (subprocess.CalledProcessError, ContentDecodeError):
         return None
-    envelope = _envelope(output)
-    if envelope is None or envelope["status"] != "completed":
-        return None
-    return envelope["result"]
+    return result.body if result.completed else None
 
 
 def _run(worktree: Worktree, git: GitService, task: str, planner: AgentProfile, implementer: AgentProfile) -> int:
     # The agent-written plan and the task are embedded as text and sent verbatim; they are never preprocessed.
-    plan_result = _run_step(worktree, planner, f"{task}\n\n{PLAN_INSTRUCTIONS}")
-    if plan_result is None:
+    plan = _run_step(worktree, planner, f"{task}\n\n{PLAN_INSTRUCTIONS}")
+    if not plan:
         logger.error("planning run failed")
-        return 1
-    plan = plan_result.get("plan")
-    if not isinstance(plan, str) or not plan:
-        logger.error("planning run returned an empty plan")
         return 1
 
     head_before = git.head(worktree.path)

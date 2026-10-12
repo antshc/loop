@@ -60,8 +60,8 @@ def main(argv=None, *, git=None, github_factory=None, new_agent=Agent, store=Non
     ...
     options = GitOptions(strategy=BranchStrategy(feature_branch, base_branch), loop_hooks=hooks)
     with new_agent().with_git(options).open() as worktree:
-        result = worktree.agent(profile).run(AgentRequest(prompt))
-        envelope = extract_response(result.output)   # workflow-owned parsing
+        output = worktree.agent(profile).run(AgentRequest(prompt)).output
+        envelope = extract_response(output)   # workflow-owned parsing
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))

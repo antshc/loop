@@ -26,12 +26,13 @@ from loop import (
     AgentClient,
     AgentRequest,
     BranchStrategy,
+    ContentDecodeError,
     GitOptions,
+    LastJsonObject,
     LoopHook,
     LoopHookError,
     configure_logging,
 )
-from workflows.platforms.agent_response import extract_response
 from workflows.platforms.git import Commit, GitService
 from workflows.platforms.process import CommandError
 from workflows.platforms.work_tracking import (
@@ -48,6 +49,7 @@ from workflows.platforms.work_tracking import (
 
 __all__ = [
     "PROMPT",
+    "DevResponse",
     "DevResult",
     "DevResultError",
     "WorkIdentifier",
@@ -152,13 +154,7 @@ class DevResult:
     reason: str | None = None
 
 
-def _decode_envelope(response: str) -> dict[str, Any]:
-    try:
-        envelope = json.loads(response)
-    except json.JSONDecodeError as exception:
-        raise DevResultError(f"response is not valid JSON: {exception}") from exception
-    if not isinstance(envelope, dict):
-        raise DevResultError(f"response is not a JSON object: {response!r}")
+def _check_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
     identifier, status, result = envelope.get("identifier"), envelope.get("status"), envelope.get("result")
     if not isinstance(identifier, str) or status not in ("completed", "failed") or not isinstance(result, dict):
         raise DevResultError(f"malformed response envelope: {envelope!r}")
@@ -179,24 +175,32 @@ def _completed_result(identifier: str, result: dict[str, Any]) -> DevResult:
     return DevResult(identifier, "completed", commit=commit, summary=summary, verification=verification)
 
 
-def parse_dev_result(response: str) -> DevResult:
+def parse_dev_result(envelope: dict[str, Any]) -> DevResult:
     """Decodes a run's response envelope for the `completed` and `failed` shapes `dev` understands."""
-    envelope = _decode_envelope(response)
+    envelope = _check_envelope(envelope)
     identifier, result = envelope["identifier"], envelope["result"]
     if envelope["status"] == "failed":
         return _failed_result(identifier, result)
     return _completed_result(identifier, result)
 
 
-def parse_response(output: str, identifier: WorkIdentifier) -> DevResult:
-    """Decodes the last response object in the agent's output and checks it answers task `identifier`."""
-    response = extract_response(output)
-    if response is None:
-        raise DevResultError("no response object in agent output")
-    dev_result = parse_dev_result(response)
-    if dev_result.identifier != str(identifier):
-        raise DevResultError(f"response identifier {dev_result.identifier!r} does not match task {identifier!r}")
-    return dev_result
+class DevResponse:
+    """Decodes a run's response envelope for `identifier`; call `decode` directly on `AgentResult.output`."""
+
+    def __init__(self, identifier: WorkIdentifier) -> None:
+        self._identifier = identifier
+        self._envelope = LastJsonObject(lambda value: "status" in value)
+
+    def decode(self, text: str) -> DevResult:
+        """Decodes the last response object in `text` and checks it answers this task."""
+        try:
+            envelope = self._envelope.decode(text)
+        except ContentDecodeError as exception:
+            raise DevResultError("no response object in agent output") from exception
+        dev_result = parse_dev_result(envelope)
+        if dev_result.identifier != str(self._identifier):
+            raise DevResultError(f"response identifier {dev_result.identifier!r} does not match task {self._identifier!r}")
+        return dev_result
 
 
 # --- Daily per-Ticket execution log of failed attempts ---
@@ -431,7 +435,7 @@ class DevWorkflow:
         try:
             prompt = render_prompt(self._prompts.dev, args)
             output = client.run(AgentRequest(prompt)).output
-            dev_result = parse_response(output, identifier)
+            dev_result = DevResponse(identifier).decode(output)
         except subprocess.CalledProcessError:
             return "agent process did not exit successfully"
         except DevError as exception:

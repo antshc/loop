@@ -26,9 +26,9 @@ from workflows.dev import (
     LOOP_HOOKS,
     MAX_TICKET_FAILURES,
     DevError,
+    DevResponse,
     DevResult,
     FileExecutionStore,
-    parse_response,
     prompt_args,
 )
 from workflows.platforms.git import Commit, GitService
@@ -88,7 +88,7 @@ def _attempt(
     try:
         prompt = _dev_prompt(template, ticket, identifier, _initiative_commits(git, worktree, spec), worktree, spec)
         output = client.run(AgentRequest(prompt.render())).output
-        dev_result = parse_response(output, identifier)
+        dev_result = DevResponse(identifier).decode(output)
     except subprocess.CalledProcessError:
         return "agent process did not exit successfully"
     except (DevError, PromptError) as exception:

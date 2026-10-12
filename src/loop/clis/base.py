@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from ..hooks import AgentCliHook, AgentCliHookPoint, AgentCliHookWiring
     from ..run import AgentRequest, RunContext
     from ..sessions import CliOutcome, NativeHandle, SessionName, Turn
+    from .transport import Transport
 
 
 class AgentCli(Protocol):
@@ -17,6 +18,7 @@ class AgentCli(Protocol):
     # Unique per CLI: it scopes session keys.
     name: str
     hook_points: frozenset[AgentCliHookPoint]
+    transport: Transport
 
     def hook_wiring(self, hooks: tuple[AgentCliHook, ...], turn: Turn, workdir: Path) -> AgentCliHookWiring:
         """Pure translation of `hooks` into this CLI's native wiring; does no I/O."""

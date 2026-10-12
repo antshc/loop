@@ -15,8 +15,13 @@ from .clis import (
     AgentProfile,
     CliRunner,
     CodexCli,
+    CodexJson,
     CopilotCli,
+    CopilotJson,
+    CopilotText,
     ProcessCliRunner,
+    Transcript,
+    Transport,
     codex,
     copilot,
 )
@@ -55,7 +60,18 @@ from .hooks import (
     WorktreeRemovingLoopHook,
 )
 from .log import configure_logging
-from .run import AgentContext, AgentOptions, AgentRequest, AgentResult, Prompt, PromptError, RunContext
+from .run import (
+    AgentContext,
+    AgentOptions,
+    AgentRequest,
+    AgentResult,
+    ContentDecodeError,
+    ContentDecoder,
+    LastJsonObject,
+    Prompt,
+    PromptError,
+    RunContext,
+)
 from .sessions import (
     CliOutcome,
     MemorySessionStore,
@@ -93,7 +109,12 @@ __all__ = [
     "CliOutcome",
     "CliRunner",
     "CodexCli",
+    "CodexJson",
+    "ContentDecodeError",
+    "ContentDecoder",
     "CopilotCli",
+    "CopilotJson",
+    "CopilotText",
     "DockerAgent",
     "DockerRuntime",
     "DockerService",
@@ -104,6 +125,7 @@ __all__ = [
     "GitService",
     "GitStrategy",
     "HeadStrategy",
+    "LastJsonObject",
     "LoggingDocker",
     "LoggingGitCli",
     "LoggingRunner",
@@ -132,6 +154,8 @@ __all__ = [
     "Start",
     "SubagentStartAgentCliHook",
     "SubagentStopAgentCliHook",
+    "Transcript",
+    "Transport",
     "Turn",
     "UnsupportedAgentCliHookPoint",
     "Worktree",

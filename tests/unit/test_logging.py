@@ -15,6 +15,7 @@ from loop import (
     AgentProfile,
     AgentRequest,
     CliOutcome,
+    CopilotText,
     GitCli,
     NativeHandle,
     ProcessCliRunner,
@@ -138,6 +139,7 @@ def test_a_named_scope_does_not_duplicate_records_through_the_root() -> None:
 class _Cli:
     name = "fake"
     hook_points = frozenset()
+    transport = CopilotText()
 
     def hook_wiring(self, *args: object) -> AgentCliHookWiring:
         return AgentCliHookWiring()

@@ -227,10 +227,11 @@ def crash(output: str = "") -> Handler:
 
 
 def plan_envelope(status: str = "completed", plan: str = "do the work", reason: str = "stuck") -> str:
-    result = {"plan": plan} if status == "completed" else {"reason": reason}
-    return json.dumps({"status": status, "result": result})
+    tag = "Success" if status == "completed" else f"Failure: {reason}"
+    body = plan if status == "completed" else ""
+    return f"{body}\n<completed>{tag}</completed>"
 
 
 def implement_envelope(status: str = "completed", reason: str = "stuck") -> str:
-    result = {} if status == "completed" else {"reason": reason}
-    return json.dumps({"status": status, "result": result})
+    tag = "Success" if status == "completed" else f"Failure: {reason}"
+    return f"<completed>{tag}</completed>"

@@ -38,6 +38,8 @@ from loop import (
     CliOutcome,
     CodexCli,
     CopilotCli,
+    CopilotJson,
+    CopilotText,
     DockerAgent,
     DockerRuntime,
     GitAgent,
@@ -61,7 +63,6 @@ from loop import (
     codex,
     copilot,
 )
-from loop.clis.codex_cli import _parse_codex_events
 
 
 def repo_context() -> RunContext:
@@ -309,6 +310,7 @@ class WorktreeTests(unittest.TestCase):
 class UserCli:
     name = "user"
     hook_points: frozenset[AgentCliHookPoint] = frozenset()
+    transport = CopilotText()
 
     def hook_wiring(self, hooks: tuple[AgentCliHook, ...], turn: Turn, workdir: Path) -> AgentCliHookWiring:
         return AgentCliHookWiring()
@@ -345,11 +347,15 @@ class CliTests(unittest.TestCase):
         profile = replace(PLANNER, args=("--x",))
         tail = ["--allow-all-tools", "--model", "claude-opus-4.5", "--reasoning-effort", "high", "--x"]
         start = CopilotCli().command(AgentRequest("p"), profile, Start(SessionName("n")), repo_context())
-        self.assertEqual(start, ["copilot", "-p", "p", "--name", "n", *tail])
+        self.assertEqual(start, ["copilot", "-p", "p", "--output-format", "text", "--name", "n", *tail])
         resume = CopilotCli().command(
             AgentRequest("p"), profile, Resume(SessionName("n"), NativeHandle("copilot", "h")), repo_context()
         )
-        self.assertEqual(resume, ["copilot", "-p", "p", "--resume=h", *tail])
+        self.assertEqual(resume, ["copilot", "-p", "p", "--output-format", "text", "--resume=h", *tail])
+
+    def test_copilot_command_with_a_json_transport(self) -> None:
+        start = CopilotCli(transport=CopilotJson()).command(AgentRequest("p"), PLANNER, Start(SessionName("n")), repo_context())
+        self.assertEqual(start[:5], ["copilot", "-p", "p", "--output-format", "json"])
 
     def test_codex_command_new_and_resume(self) -> None:
         profile = replace(DEVELOPER, args=("--x",))
@@ -363,17 +369,6 @@ class CliTests(unittest.TestCase):
         resumed = CodexCli().command(AgentRequest("p"), profile, Resume(name, NativeHandle("codex", "t1")), repo_context())
         self.assertEqual(resumed[:4], ["codex", "exec", "resume", "t1"])
         self.assertEqual(resumed[-1], "p")
-
-    def test_parse_codex_events(self) -> None:
-        stdout = "\n".join([
-            '{"type":"thread.started","thread_id":"t1"}',
-            "not json",
-            '{"type":"item.completed","item":{"type":"agent_message","text":"first"}}',
-            '{"type":"item.completed","item":{"type":"agent_message","text":"last"}}',
-        ])
-        self.assertEqual(_parse_codex_events(stdout), ("t1", "last"))
-        outcome = CodexCli().parse(stdout, Start(SessionName("n")), 0)
-        self.assertEqual(outcome, CliOutcome("last", NativeHandle("codex", "t1"), 0))
 
     def test_codex_parse_without_thread_id(self) -> None:
         with self.assertRaises(SessionHandleMissing):
