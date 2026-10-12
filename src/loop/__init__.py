@@ -55,7 +55,7 @@ from .hooks import (
     WorktreeRemovingLoopHook,
 )
 from .log import configure_logging
-from .run import AgentContext, AgentOptions, AgentRequest, AgentResult, RunContext
+from .run import AgentContext, AgentOptions, AgentRequest, AgentResult, Prompt, PromptError, RunContext
 from .sessions import (
     CliOutcome,
     MemorySessionStore,
@@ -117,6 +117,8 @@ __all__ = [
     "PreCompactAgentCliHook",
     "PreToolAgentCliHook",
     "ProcessCliRunner",
+    "Prompt",
+    "PromptError",
     "PromptSubmittedAgentCliHook",
     "Resume",
     "RunContext",
