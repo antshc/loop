@@ -72,7 +72,7 @@ _ROOT = Path(__file__).resolve().parents[1]
 HARNESS: Repository = Repository(
     checkout=_ROOT,
     worktrees=_ROOT / "workspace" / f"{_ROOT.name}.worktrees",
-    identity=RepositoryId("antshc", "loop"),
+    owner_name=RepositoryId("antshc", "loop"),
 )
 MAX_TICKET_FAILURES = 2
 PROMPT = Path(__file__).parent / "prompts" / "dev.md"
@@ -335,8 +335,8 @@ class DevWorkflow:
             self._tracker.update_spec(spec)
             return Outcome.SKIPPED
 
-        if spec.target.casefold() != str(HARNESS.identity).casefold():
-            spec.block(f"dev: repo:target:{spec.target} does not match harness {HARNESS.identity}")
+        if spec.target.casefold() != str(HARNESS.owner_name).casefold():
+            spec.block(f"dev: repo:target:{spec.target} does not match harness {HARNESS.owner_name}")
             self._tracker.update_spec(spec)
             return Outcome.SKIPPED
 
@@ -465,7 +465,7 @@ class DevWorkflow:
 
     def _record_failure(self, ticket: Ticket) -> int:
         """Counts one failure for `ticket` and returns its persisted total."""
-        owner, repo = HARNESS.identity
+        owner, repo = HARNESS.owner_name
         self._store.record_failure(
             ticket.url,
             owner=owner,
@@ -496,7 +496,7 @@ class DevWorkflow:
 
 
 def _tracker(repo: GitHubRepo) -> TicketsTracker:
-    return TicketsTracker(HARNESS.identity.owner, HARNESS.identity.repo, gh=repo.run)
+    return TicketsTracker(HARNESS.owner_name.owner, HARNESS.owner_name.repo, gh=repo.run)
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -528,8 +528,8 @@ def main(
             github_factory(HARNESS.checkout)
             if github_factory is not None
             else GitHubRepo(
-                HARNESS.identity.owner,
-                HARNESS.identity.repo,
+                HARNESS.owner_name.owner,
+                HARNESS.owner_name.repo,
                 gh=GhCli(cwd=HARNESS.checkout),
             )
         )

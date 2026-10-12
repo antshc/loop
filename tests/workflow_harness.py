@@ -210,7 +210,7 @@ class DevHarness:
         harness = Repository(
             checkout=self.root,
             worktrees=self.root / "workspace" / f"{self.root.name}.worktrees",
-            identity=RepositoryId("owner", "repo"),
+            owner_name=RepositoryId("owner", "repo"),
         )
         with patch.object(dev, "HARNESS", harness):
             return dev.main(

@@ -22,22 +22,22 @@ class RepositoryId(NamedTuple):
 class Repository:
     checkout: Path
     worktrees: Path
-    identity: RepositoryId
+    owner_name: RepositoryId
 
 
 ROOT = Path(__file__).resolve().parents[1]
 HARNESS = Repository(
     checkout=ROOT,
     worktrees=ROOT / "workspace" / f"{ROOT.name}.worktrees",
-    identity=RepositoryId("antshc", "loop"),
+    owner_name=RepositoryId("antshc", "loop"),
 )
 ```
 
-- MUST validate each Spec's `repo:target:<owner/repo>` label against `str(HARNESS.identity)`, case-insensitively.
+- MUST validate each Spec's `repo:target:<owner/repo>` label against `str(HARNESS.owner_name)`, case-insensitively.
 - MUST mark missing, malformed, duplicated, or foreign targets `hitl` without fetching Git or opening a worktree.
 - MUST use `HARNESS.checkout` for Git fetch and repository operations; the agent edits only its new worktree.
 - MUST create feature-branch worktrees beneath `HARNESS.worktrees`, one directory per branch.
-- MUST use `HARNESS.identity.owner` and `HARNESS.identity.repo` for GitHub identity and execution logs; do not split slugs at call sites.
+- MUST use `HARNESS.owner_name.owner` and `HARNESS.owner_name.repo` for GitHub identity and execution logs; do not split slugs at call sites.
 - MUST publish PRs to the harness GitHub repository using its repository-bound `PullRequests` client.
 - MUST NOT clone a missing repository or fall back to a different target when a Spec label does not match.
 

@@ -26,7 +26,7 @@ class Repository:
 
     checkout: Path
     worktrees: Path
-    identity: RepositoryId
+    owner_name: RepositoryId
 
 
 class PullRequests:
