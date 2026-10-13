@@ -23,7 +23,7 @@ from .sessions import MemorySessionStore, SessionName, SessionStore
 logger = logging.getLogger(__name__)
 
 
-class Worktree:
+class AgentWorkspace:
     """One live worktree shared by clients of several CLIs; valid only inside `AgentBuilder.open()`."""
 
     def __init__(
@@ -114,19 +114,19 @@ class AgentBuilder:
         return client
 
     @contextmanager
-    def open(self, session: SessionName | None = None) -> Iterator[Worktree]:
+    def open(self, session: SessionName | None = None) -> Iterator[AgentWorkspace]:
         """Run the git strategy once and share the worktree between clients of any CLI."""
         self._require_session_enabled(session)
         shared = (session or SessionName.new()) if self._use_session else None
-        worktree: Worktree | None = None
+        worktree: AgentWorkspace | None = None
         try:
             if self._use_git:
                 with self._git.open(self._defaults.agent.cwd, self._git_options or GitOptions()) as path:
-                    worktree = Worktree(path, self._stack, self._defaults, shared)
+                    worktree = AgentWorkspace(path, self._stack, self._defaults, shared)
                     logger.info("worktree opened: %s", path)
                     yield worktree
             else:
-                worktree = Worktree(self._defaults.agent.cwd, self._stack, self._defaults, shared)
+                worktree = AgentWorkspace(self._defaults.agent.cwd, self._stack, self._defaults, shared)
                 logger.info("worktree opened: %s", worktree.path)
                 yield worktree
         finally:

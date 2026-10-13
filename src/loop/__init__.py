@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 
 from .agents import AgentClient, AgentWrapper, CliAgentClient, DockerAgent, GitAgent
-from .builder import AgentBuilder, Worktree
+from .builder import AgentBuilder, AgentWorkspace
 from .clis import (
     DEFAULT,
     AgentCli,
@@ -158,7 +158,7 @@ __all__ = [
     "Transport",
     "Turn",
     "UnsupportedAgentCliHookPoint",
-    "Worktree",
+    "AgentWorkspace",
     "WorktreeReadyLoopHook",
     "WorktreeRemovingLoopHook",
     "codex",

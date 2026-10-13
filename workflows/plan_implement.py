@@ -24,7 +24,7 @@ from loop import (
     BranchStrategy,
     ContentDecodeError,
     GitOptions,
-    Worktree,
+    AgentWorkspace,
     copilot,
 )
 from workflows.platforms.git import GitService
@@ -90,7 +90,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _run_step(worktree: Worktree, profile: AgentProfile, prompt: str) -> str | None:
+def _run_step(worktree: AgentWorkspace, profile: AgentProfile, prompt: str) -> str | None:
     """Runs one fresh, stateless step; the text it wrote before its `<completed>` tag, or None when it failed."""
     try:
         output = worktree.agent(profile).run(AgentRequest(prompt)).output
@@ -100,7 +100,7 @@ def _run_step(worktree: Worktree, profile: AgentProfile, prompt: str) -> str | N
     return result.body if result.completed else None
 
 
-def _run(worktree: Worktree, git: GitService, task: str, planner: AgentProfile, implementer: AgentProfile) -> int:
+def _run(worktree: AgentWorkspace, git: GitService, task: str, planner: AgentProfile, implementer: AgentProfile) -> int:
     # The agent-written plan and the task are embedded as text and sent verbatim; they are never preprocessed.
     plan = _run_step(worktree, planner, f"{task}\n\n{PLAN_INSTRUCTIONS}")
     if not plan:
