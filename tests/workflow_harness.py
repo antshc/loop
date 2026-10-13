@@ -11,7 +11,6 @@ from loop import (
     AgentBuilder, AgentContext, AgentProfile, AgentRequest, CliOutcome, DockerRuntime,
     GitOptions, NativeHandle, RunContext,
 )
-from workflows.platforms.git import Commit
 
 
 Handler = Callable[[str], str]
@@ -53,56 +52,6 @@ class FakeGitService:
             yield self.worktree
         finally:
             self.closed += 1
-
-
-class FakeWorkflowGit:
-    """An in-memory `GitService` over one branch: a commit list, how much of it origin already holds, a dirty flag."""
-
-    def __init__(self) -> None:
-        self.commits = [Commit("base0000", "base")]
-        self.pushed_count = 1
-        self.remote_branches = {"main"}
-        self.dirty = False
-        self.fetched: list[Path] = []
-        self.pushes: list[tuple[Path, str]] = []
-        self.restores: list[str] = []
-
-    def commit(self, subject: str) -> str:
-        sha = f"c{len(self.commits):07d}"
-        self.commits.append(Commit(sha, subject))
-        return sha
-
-    def fetch(self, path: Path) -> None:
-        self.fetched.append(path)
-
-    def remote_branch_exists(self, path: Path, branch: str) -> bool:
-        return branch in self.remote_branches
-
-    def push_if_ahead(self, path: Path, branch: str, base: str) -> bool:
-        if len(self.commits) <= self.pushed_count:
-            return False
-        self.pushes.append((path, branch))
-        self.pushed_count = len(self.commits)
-        return True
-
-    def head(self, path: Path) -> Commit:
-        return self.commits[-1]
-
-    def commits_since(self, path: Path, sha: str) -> list[Commit]:
-        index = next(index for index, commit in enumerate(self.commits) if commit.sha == sha)
-        return self.commits[index + 1 :]
-
-    def initiative_commits(self, path: Path, base: str, prefix: str) -> list[Commit]:
-        return [commit for commit in self.commits[1:] if commit.subject.startswith(prefix)]
-
-    def restore(self, path: Path, sha: str) -> None:
-        index = next(index for index, commit in enumerate(self.commits) if commit.sha == sha)
-        del self.commits[index + 1 :]
-        self.dirty = False
-        self.restores.append(sha)
-
-    def is_clean(self, path: Path) -> bool:
-        return not self.dirty
 
 
 def new_agent_for(runner: FakeRunner, git_service: FakeGitService, cwd: Path) -> Callable[[], AgentBuilder]:

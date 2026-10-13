@@ -160,6 +160,7 @@ It depends on the public `loop` package, not sibling Workflow helpers.
 The independent [`plan_implement.py`](workflows/plan_implement.py) is a self-contained,
 function-based script: prompt text, response parsing, Git reads, and orchestration
 live together, with no sibling Workflow imports.
+There is no shared helper layer under `workflows/`; each Workflow owns the helpers it uses.
 
 - [`run.py`](workflows/dev/run.py): logging, retry settings, Loop hooks, and dependency wiring.
 - [`repositories.py`](workflows/dev/repositories.py): `HARNESS` and `configured_repositories`; edit its returned tuple to configure several repositories for `python -m workflows.dev`, or pass `repositories=` to `main`.
