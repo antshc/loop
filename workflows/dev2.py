@@ -192,17 +192,17 @@ def main(
                 strategy=BranchStrategy(spec.feature_branch, f"origin/{spec.base_branch}"),
                 loop_hooks=loop_hooks,
             )
-            with new_agent().with_git(options).open() as worktree:
-                client = worktree.agent(DEFAULT)
+            with new_agent().with_git(options).open() as agent_workspace:
+                client = agent_workspace.agent(DEFAULT)
                 delivered = True
                 # Each actionable Ticket in order; stops at the first one that cannot be delivered.
                 for ticket in spec.tickets:
                     delivered = False
                     # Fresh agent runs until one is accepted or the Ticket's failure cap is reached.
                     while True:
-                        head_before = git.head(worktree.path)
+                        head_before = git.head(agent_workspace.path)
                         attempt = _attempt(
-                            spec, ticket, worktree.path, client, head_before, git=git, template=template
+                            spec, ticket, agent_workspace.path, client, head_before, git=git, template=template
                         )
                         if isinstance(attempt, DevResult):
                             spec.close_ticket(
@@ -213,7 +213,7 @@ def main(
                             store.reset(ticket.url)
                             delivered = True
                             break
-                        git.restore(worktree.path, head_before.sha)
+                        git.restore(agent_workspace.path, head_before.sha)
                         if _record_failure(store, f"{OWNER}/{REPO}", ticket) >= MAX_TICKET_FAILURES:
                             spec.escalate(ticket.number, attempt)
                             tracker.update_spec(spec)
