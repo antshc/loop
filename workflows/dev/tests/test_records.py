@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from workflows.platforms.work_tracking import Repository, RepositoryId
+from workflows.dev.records import Repository, RepositoryId
 
 
 def test_repository_id_contains_owner_and_repo_and_renders_slug() -> None:

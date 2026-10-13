@@ -1,58 +1,20 @@
-"""Shared Workflow test-support: fakes at the loop library seams and the workflow Git/GitHub boundaries.
-
-`AgentBuilder` is built over a fake `CliRunner` and a fake git service, and `GitService` is an in-memory fake,
-so no test starts a process. Holds no tests of its own.
-"""
+"""Fakes for the plan-and-implement Workflow."""
 
 from __future__ import annotations
 
-import json
 import subprocess
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from unittest.mock import patch
 
 from loop import (
-    AgentBuilder,
-    AgentContext,
-    AgentProfile,
-    AgentRequest,
-    CliOutcome,
-    DockerRuntime,
-    GitOptions,
-    LoopHookError,
-    LoopHookPoint,
-    NativeHandle,
-    RunContext,
+    AgentBuilder, AgentContext, AgentProfile, AgentRequest, CliOutcome, DockerRuntime,
+    GitOptions, NativeHandle, RunContext,
 )
-from workflows import dev
-from workflows.dev import FileExecutionStore
-from workflows.platforms.git import Commit, GitService
-from workflows.platforms.work_tracking import GitHubRepo, Repository, RepositoryId
-from workflows.platforms.work_tracking.fake_gh_cli import FakeGhCli
-from workflows.platforms.work_tracking import AgentCommitSubject
+from workflows.platforms.git import Commit
+
 
 Handler = Callable[[str], str]
-
-
-def envelope(identifier: str = "Checkout|10", status: str = "completed", result: dict | None = None) -> str:
-    return json.dumps({"identifier": identifier, "status": status, "result": result if result is not None else {}})
-
-
-COMPLETED = {"commit": "abc", "summary": "done", "verification": "ran tests"}
-
-
-def issue(number: int, title: str, *, state: str = "OPEN", labels: tuple[str, ...] = ()) -> dict:
-    return {
-        "number": number,
-        "title": title,
-        "url": f"https://github.com/owner/repo/issues/{number}",
-        "state": state,
-        "body": f"Body of #{number}",
-        "labels": {"nodes": [{"name": label} for label in labels]},
-        "comments": {"nodes": []},
-    }
 
 
 class FakeRunner:
@@ -143,130 +105,8 @@ class FakeWorkflowGit:
         return not self.dirty
 
 
-class FakeRepositoryGit(GitService):
-    """Routes Git calls to isolated fake histories and rejects unexpected checkout or worktree paths."""
-
-    def __init__(self, paths: dict[Path, FakeWorkflowGit]) -> None:
-        self.paths = paths
-
-    def fetch(self, path: Path) -> None:
-        self.paths[path].fetch(path)
-
-    def remote_branch_exists(self, path: Path, branch: str) -> bool:
-        return self.paths[path].remote_branch_exists(path, branch)
-
-    def push_if_ahead(self, path: Path, branch: str, base: str) -> bool:
-        return self.paths[path].push_if_ahead(path, branch, base)
-
-    def head(self, path: Path) -> Commit:
-        return self.paths[path].head(path)
-
-    def commits_since(self, path: Path, sha: str) -> list[Commit]:
-        return self.paths[path].commits_since(path, sha)
-
-    def initiative_commits(self, path: Path, base: str, prefix: str) -> list[Commit]:
-        return self.paths[path].initiative_commits(path, base, prefix)
-
-    def restore(self, path: Path, sha: str) -> None:
-        self.paths[path].restore(path, sha)
-
-    def is_clean(self, path: Path) -> bool:
-        return self.paths[path].is_clean(path)
-
-
-class FakeRepositoryGh(FakeGhCli):
-    """Returns the target repository's URL when a draft PR is created."""
-
-    def __init__(self, repository: RepositoryId) -> None:
-        super().__init__(specs=[], tickets={}, prs=[])
-        self.repository = repository
-
-    def __call__(self, args: tuple[str, ...]) -> str:
-        output = super().__call__(args)
-        if args[:2] == ("pr", "create"):
-            return f"https://github.com/{self.repository}/pull/99"
-        return output
-
-
 def new_agent_for(runner: FakeRunner, git_service: FakeGitService, cwd: Path) -> Callable[[], AgentBuilder]:
     return lambda: AgentBuilder(runner, git_service, DockerRuntime(), AgentContext(cwd=cwd))
-
-
-def hook_error() -> LoopHookError:
-    return LoopHookError(LoopHookPoint.WORKTREE_READY, "setup.sh", "exit 1")
-
-
-class DevHarness:
-    """Wires `dev.main` to fakes: a fake CLI runner, git service, workflow git and `gh`, and a real execution store."""
-
-    def __init__(
-        self,
-        tmp_path: Path,
-        *,
-        specs: list[dict] | None = None,
-        tickets: dict[int, list[dict]] | None = None,
-        prs: list[dict] | None = None,
-    ) -> None:
-        self.tmp_path = tmp_path
-        self.root = tmp_path / "harness"
-        self.log_dir = tmp_path / "logs"
-        self.worktree = tmp_path / "worktree"
-        self.git = FakeWorkflowGit()
-        self.runner = FakeRunner()
-        self.git_service = FakeGitService(self.worktree)
-        self.gh = FakeGhCli(
-            specs=specs
-            if specs is not None
-            else [issue(1, "Checkout: Add login page", labels=("spec", "repo:target:owner/repo", "repo:base:main"))],
-            tickets=tickets if tickets is not None else {1: [issue(10, "Add login form")]},
-            prs=prs,
-        )
-        self.github = GitHubRepo("owner", "repo", gh=self.gh)
-        self.store = FileExecutionStore(self.log_dir)
-
-    @property
-    def prompts(self) -> list[str]:
-        return self.runner.prompts
-
-    def commit_and_report(
-        self, number: int, *, initiative: str = "Checkout", summary: str = "done", subject: str | None = None
-    ) -> str:
-        identifier = AgentCommitSubject(initiative, number)
-        sha = self.git.commit(subject or f"{identifier.to_subject()}work")
-        return envelope(str(identifier), result={**COMPLETED, "commit": sha, "summary": summary})
-
-    def commit_then(self, response: Callable[[str], str]) -> Handler:
-        return lambda prompt: response(self.git.commit(f"{AgentCommitSubject('Checkout', 10).to_subject()}work"))
-
-    def writes(self) -> list[tuple[str, ...]]:
-        return [call for call in self.gh.calls if call[0] in ("issue", "pr")]
-
-    def calls(self, *prefix: str) -> list[tuple[str, ...]]:
-        return [call for call in self.gh.calls if call[: len(prefix)] == prefix]
-
-    def run(
-        self,
-        handler: Handler | None = None,
-        *,
-        github_factory: Callable[[Path], object] | None = None,
-        store: FileExecutionStore | None = None,
-        argv: list[str] | None = None,
-    ) -> int:
-        if handler is not None:
-            self.runner.handler = handler
-        harness = Repository(
-            checkout=self.root,
-            worktrees=self.root / "workspace" / f"{self.root.name}.worktrees",
-            owner_name=RepositoryId("owner", "repo"),
-        )
-        with patch.object(dev, "HARNESS", harness):
-            return dev.main(
-                argv if argv is not None else ["--log-dir", str(self.log_dir)],
-                git=self.git,  # type: ignore[arg-type]
-                github_factory=github_factory or (lambda checkout: self.github),  # type: ignore[arg-type,return-value]
-                new_agent=new_agent_for(self.runner, self.git_service, self.root),
-                store=store or self.store,
-            )
 
 
 def crash(output: str = "") -> Handler:

@@ -6,7 +6,7 @@
 
 Python library for composing autonomous agent Workflows on Git worktrees.
 
-Loop ships no command and no built-in Workflows. You write each Workflow as a plain Python script on the public `loop` API and run it through your own shell alias. The repository's [`workflows/dev.py`](workflows/dev.py) module is an example only.
+Loop ships no command and no built-in Workflows. You write each Workflow as runnable Python on the public `loop` API and run it through your own shell alias. The repository's self-contained [`workflows/dev/`](workflows/dev/) package is an example only.
 
 ## Features
 
@@ -70,7 +70,7 @@ dev --log-level DEBUG
 
 ### Different agent workflows per repository
 
-The example [`dev`](workflows/dev.py) reads Specs and Tickets from `HARNESS`.
+The example [`dev`](workflows/dev/) reads Specs and Tickets from `HARNESS`.
 By default it implements only Specs targeting the harness itself. Pass
 `repositories=` to route Specs by their `repo:target:<owner/repo>` label to
 explicitly configured checkouts under the harness's `workspace` folder.
@@ -88,12 +88,13 @@ from functools import partial
 from pathlib import Path
 
 from loop import AgentProfile, AgentRequest, AgentWorkspace, copilot
-from workflows.dev import PROMPT, DevResponse, RepositoryWorkflow, implement_ticket, main
-from workflows.platforms.work_tracking import Repository, RepositoryId
-from workflows.tickets import TicketContext, TicketResult
+from workflows.dev import (
+    DevResponse, Repository, RepositoryId, RepositoryWorkflow,
+    TicketContext, TicketResult, implement_ticket, load_prompt, main,
+)
 
 workspace = Path.cwd() / "workspace"
-implement = partial(implement_ticket, template=PROMPT.read_text())
+implement = partial(implement_ticket, template=load_prompt("implement"))
 reviewer = AgentProfile(copilot)  # Set a model and reasoning effort here if desired.
 
 
@@ -134,12 +135,12 @@ if __name__ == "__main__":
 ```
 
 Run this user-owned script from the harness root. Configure `HARNESS` in
-[`dev`](workflows/dev.py) for the repository holding your Specs and Tickets.
+[`repositories.py`](workflows/dev/repositories.py) for the repository holding your Specs and Tickets.
 The supplied list replaces the default target; include the harness explicitly
 if it should also receive code changes. Repository identities are matched
 case-insensitively; duplicate configurations fail the run.
 
-The reusable [`deliver_tickets`](workflows/tickets.py) function handles Ticket
+The dev-owned [`deliver_tickets`](workflows/dev/attempt.py) function handles Ticket
 iteration, refreshed Initiative history, retries, rollback, failure counts, and
 Ticket closure. A delegate can return a failed `TicketResult` or raise
 `TicketWorkflowError` for an expected, retryable failure; agent process failures
@@ -151,6 +152,30 @@ Existing Initiative commits provide context; a matching subject alone does not
 automatically close or skip a Ticket. Git operations and draft PRs use the target
 repository; Ticket updates and failure-record identities remain on the harness.
 Without session-enabled builders, agent steps start fresh sessions.
+
+### Dev package and named prompts
+
+All dev-owned code, prompts, tests, and fakes live in [`workflows/dev/`](workflows/dev/).
+It depends on the public `loop` package, not sibling Workflow helpers.
+The independent [`plan_implement.py`](workflows/plan_implement.py) is a self-contained,
+function-based script: prompt text, response parsing, Git reads, and orchestration
+live together, with no sibling Workflow imports.
+
+- [`run.py`](workflows/dev/run.py): logging, retry settings, Loop hooks, and dependency wiring.
+- [`repositories.py`](workflows/dev/repositories.py): `HARNESS` and `configured_repositories`; edit its returned tuple to configure several repositories for `python -m workflows.dev`, or pass `repositories=` to `main`.
+- [`backlog.py`](workflows/dev/backlog.py) and [`attempt.py`](workflows/dev/attempt.py): Spec routing/publication and Ticket delivery.
+- [`agent.py`](workflows/dev/agent.py), [`reply.py`](workflows/dev/reply.py), and [`journal.py`](workflows/dev/journal.py): prompt handling, response interpretation, and failure history.
+- [`records.py`](workflows/dev/records.py): work items, repository identities, and outcomes.
+- [`checkout.py`](workflows/dev/checkout.py), [`platforms.py`](workflows/dev/platforms.py), and [`commands.py`](workflows/dev/commands.py): Git, GitHub, and subprocess access.
+- [`prompts/`](workflows/dev/prompts/): named Markdown templates; `load_prompt("implement")` reads `implement.md` relative to the package, not the current directory.
+- [`tests/`](workflows/dev/tests/): dev tests and local fakes; run `pytest workflows/dev/tests`.
+
+Add templates to the prompt folder and let each repository's delegate select,
+render, or combine them. For example, after adding `review.md`, use
+`render_prompt(load_prompt("review"), {"COMMIT": result.commit})` with that template's
+arguments. Delegates own step ordering and agent profiles; there is no prompt
+pipeline or configuration-file format. A missing template raises an error rather
+than falling back to a different prompt.
 
 ### Logging
 
@@ -237,15 +262,16 @@ fresh.run(AgentRequest("Plan ticket #123 in repo1"))
 fresh.run(AgentRequest("Implement ticket #123 in repo1"))
 ```
 
-See [`workflows/dev.py`](workflows/dev.py) for a complete Workflow, [`workflows/plan_implement.py`](workflows/plan_implement.py) for two runs with different models on one worktree, and [`workflows/prompts/dev.md`](workflows/prompts/dev.md) for the `dev` prompt template.
+See [`workflows/dev/`](workflows/dev/) for a complete Workflow, [`workflows/plan_implement.py`](workflows/plan_implement.py) for two runs with different models on one worktree, and [`workflows/dev/prompts/implement.md`](workflows/dev/prompts/implement.md) for the default `dev` prompt template.
 
 ## Repository layout
 
 | Location | Contents |
 |---|---|
 | `src/loop/` | The `loop` library |
-| `workflows/` | Example `dev` and `plan_implement` Workflows and the `dev` prompt template |
-| `tests/` | Test suite: `tests/unit/` (unit tests against fakes), `tests/workflow_harness.py` (shared Workflow harness), and import-linter architecture checks |
+| `workflows/dev/` | Self-contained example dev Workflow, named prompts, repository configuration, helpers, and tests |
+| `workflows/` | Also contains the self-contained `plan_implement.py` example |
+| `tests/` | Library and sibling Workflow tests, their fakes, and import-linter architecture checks; `pytest` also discovers `workflows/dev/tests/` |
 | `docs/` | ADRs, Crosscutting Concepts, and research notes |
 | `archive/` | Retired prototypes; parts source only |
 

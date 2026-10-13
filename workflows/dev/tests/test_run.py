@@ -8,11 +8,13 @@ from pathlib import Path
 import pytest
 
 from loop import BranchStrategy
-from workflow_harness import COMPLETED, DevHarness, crash, envelope, hook_error, issue
+from workflows.dev.tests.doubles import COMPLETED, DevHarness, crash, envelope, hook_error, issue
 from workflows import dev
+from workflows.dev import agent
 from workflows.dev import FileExecutionStore
-from workflows.platforms.work_tracking import AgentCommitSubject, GitHubRepo, Spec, TicketsTracker
-from workflows.platforms.work_tracking.fake_gh_cli import FakeGhCli
+from workflows.dev.records import AgentCommitSubject, Spec
+from workflows.dev.platforms import GitHubRepo, TicketsTracker
+from workflows.dev.tests.doubles import FakeGhCli
 
 _PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
 TWO_TICKETS = {1: [issue(10, "Add login form"), issue(11, "Add login tests")]}
@@ -248,9 +250,9 @@ def test_a_failing_worktree_hook_fails_the_spec_with_its_reason(tmp_path: Path) 
 
 
 def test_a_prompt_placeholder_with_no_argument_fails_the_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    template = tmp_path / "dev.md"
+    template = tmp_path / "implement.md"
     template.write_text("Task {{UNKNOWN}}")
-    monkeypatch.setattr(dev, "PROMPT", template)
+    monkeypatch.setattr(agent, "PROMPTS", tmp_path)
     harness = DevHarness(tmp_path)
 
     code = harness.run()

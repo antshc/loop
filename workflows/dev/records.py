@@ -1,38 +1,88 @@
-"""Spec/Ticket entities and the harness tracker: Spec metadata, actionable Tickets, hand-offs, persisted Spec changes."""
+"""Work items, repository identities, and outcomes used by dev."""
 
 from __future__ import annotations
 
-import json
 import re
-from collections.abc import Iterable
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from pathlib import Path
+from typing import NamedTuple
 
-from .github_repo import GhRunner
+from loop import AgentWorkspace
+
+
+class RepositoryId(NamedTuple):
+    """GitHub owner and repository name, represented as an owner/repo slug."""
+
+    owner: str
+    repo: str
+
+    def __str__(self) -> str:
+        return f"{self.owner}/{self.repo}"
+
+
+@dataclass(frozen=True)
+class Repository:
+    """One repository's checkout, worktree directory, and GitHub identity."""
+
+    checkout: Path
+    worktrees: Path
+    owner_name: RepositoryId
+
+
+@dataclass(frozen=True)
+class AgentCommitSubject:
+    """The response identifier and required commit-subject prefix for one Ticket."""
+
+    initiative: str
+    ticket_number: int
+
+    def __str__(self) -> str:
+        return f"{self.initiative}|{self.ticket_number}"
+
+    @property
+    def initiative_commit_prefix(self) -> str:
+        """The prefix shared by all delivering commits for this Initiative."""
+        return f"ccode({self.initiative}|"
+
+    def to_subject(self) -> str:
+        """The required prefix of a Ticket's delivering commit subject."""
+        return f"ccode({self}): "
+
+
+@dataclass(frozen=True)
+class Commit:
+    sha: str
+    subject: str
+
+
+@dataclass(frozen=True)
+class PullRequest:
+    number: int
+    title: str
+    url: str
+    branch: str
+
 
 HITL_LABEL = "hitl"
+
+
 _BLOCKING_LABELS = frozenset({HITL_LABEL, "spec"})
+
+
 _INITIATIVE = re.compile(r"^(?P<initiative>[^:]+):\s*(?P<title>.+)$")
+
+
 _TARGET_PREFIX = "repo:target:"
+
+
 _BASE_PREFIX = "repo:base:"
+
+
 _SLUG = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
+
+
 _VERSION = re.compile(r"(\d+(?:\.\d+)+)")
-_ISSUE_FIELDS = (
-    "number title url state body labels(first: 20) { nodes { name } }"
-    " comments(first: 50) { nodes { author { login } body createdAt } }"
-)
-_SPECS_QUERY = (
-    "query($owner: String!, $repo: String!) {"
-    " repository(owner: $owner, name: $repo) {"
-    f'  issues(first: 100, states: OPEN, labels: ["spec"]) {{ nodes {{ {_ISSUE_FIELDS} }} }}'
-    " } }"
-)
-_SUB_ISSUES_QUERY = (
-    "query($owner: String!, $repo: String!, $number: Int!) {"
-    " repository(owner: $owner, name: $repo) {"
-    f"  issue(number: $number) {{ subIssues(first: 100) {{ nodes {{ {_ISSUE_FIELDS} }} }} }}"
-    " } }"
-)
 
 
 def slugify(text: str) -> str:
@@ -195,85 +245,31 @@ def _with_label(labels: tuple[str, ...], label: str) -> tuple[str, ...]:
     return labels if label in labels else (*labels, label)
 
 
-def _comments(node: dict[str, Any]) -> tuple[Comment, ...]:
-    return tuple(
-        # `author` is null for deleted accounts.
-        Comment((comment["author"] or {}).get("login", "ghost"), comment["body"], comment["createdAt"])
-        for comment in node["comments"]["nodes"]
-    )
+class TicketWorkflowError(Exception):
+    """An expected failure in ticket delivery or its agent delegate."""
 
 
-def _labels(node: dict[str, Any]) -> tuple[str, ...]:
-    return tuple(label["name"] for label in node["labels"]["nodes"])
+@dataclass(frozen=True)
+class TicketContext:
+    """The selected Ticket and branch history supplied to one agent-workflow attempt."""
+
+    ticket: Ticket
+    identifier: AgentCommitSubject
+    initiative_commits: tuple[str, ...]
+    base_branch: str
+    feature_branch: str
 
 
-def _spec(node: dict[str, Any], tickets: tuple[Ticket, ...]) -> Spec:
-    return Spec(
-        number=node["number"],
-        title=node["title"],
-        url=node["url"],
-        labels=_labels(node),
-        body=node["body"],
-        comments=_comments(node),
-        tickets=tickets,
-    )
+@dataclass(frozen=True)
+class TicketResult:
+    """A delegate's completed commit, summary and verification, or its failure reason."""
+
+    identifier: str
+    status: str
+    commit: str | None = None
+    summary: str | None = None
+    verification: str | None = None
+    reason: str | None = None
 
 
-def _ticket(node: dict[str, Any]) -> Ticket:
-    return Ticket(
-        number=node["number"],
-        title=node["title"],
-        state=node["state"].lower(),
-        labels=_labels(node),
-        url=node["url"],
-        body=node["body"],
-        comments=_comments(node),
-    )
-
-
-class TicketsTracker:
-    """The harness repo's Spec/Ticket tracker: loads Specs through `gh` and persists the changes made to them."""
-
-    def __init__(self, owner: str, name: str, *, gh: GhRunner) -> None:
-        self._owner = owner
-        self._name = name
-        self._gh = gh
-
-    def specs(self) -> Iterable[Spec]:
-        """Every open Spec on the harness tracker, each with its deliverable Tickets."""
-        return [_spec(node, self._tickets(node["number"])) for node in self._spec_issues()]
-
-    def update_spec(self, spec: Spec) -> None:
-        """Persists the Spec's and its Tickets' pending changes in order; a failed change stays pending."""
-        for change in spec.pending_changes:
-            self._apply(change)
-            spec.acknowledge(change)
-
-    def _tickets(self, spec_number: int) -> tuple[Ticket, ...]:
-        tickets = (_ticket(node) for node in self._sub_issues(spec_number))
-        return tuple(ticket for ticket in tickets if ticket.actionable)
-
-    def _spec_issues(self) -> list[dict[str, Any]]:
-        pages = json.loads(self._graphql(_SPECS_QUERY))
-        return [node for page in pages for node in page["data"]["repository"]["issues"]["nodes"]]
-
-    def _sub_issues(self, number: int) -> list[dict[str, Any]]:
-        pages = json.loads(self._graphql(_SUB_ISSUES_QUERY, number=number))
-        return [node for page in pages for node in page["data"]["repository"]["issue"]["subIssues"]["nodes"]]
-
-    def _graphql(self, query: str, **variables: int) -> str:
-        args = ["api", "graphql", "--paginate", "--slurp", "-f", f"query={query}"]
-        args += ["-f", f"owner={self._owner}", "-f", f"repo={self._name}"]
-        for name, value in variables.items():
-            args += ["-F", f"{name}={value}"]
-        return self._gh(tuple(args))
-
-    def _apply(self, change: _Change) -> None:
-        slug = f"{self._owner}/{self._name}"
-        number = str(change.number)
-        if isinstance(change, _CommentOn):
-            self._gh(("issue", "comment", number, "--repo", slug, "--body", change.body))
-        elif isinstance(change, _AddLabel):
-            self._gh(("issue", "edit", number, "--repo", slug, "--add-label", change.label))
-        else:
-            self._gh(("issue", "close", number, "--repo", slug, "--comment", change.comment))
+AgentWorkflow = Callable[[TicketContext, AgentWorkspace], TicketResult]

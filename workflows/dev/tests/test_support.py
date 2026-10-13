@@ -17,7 +17,7 @@ from workflows.dev import (
     parse_dev_result,
     render_prompt,
 )
-from workflows.platforms.work_tracking import AgentCommitSubject
+from workflows.dev.records import AgentCommitSubject
 
 COMPLETED = {"commit": "abc", "summary": "done", "verification": "ran tests"}
 

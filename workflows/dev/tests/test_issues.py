@@ -5,10 +5,11 @@ from unittest.mock import Mock
 
 import pytest
 
-from conftest import commit_file, git
-from workflows.platforms.process import CommandError
-from workflows.platforms.work_tracking import GitHubRepo, Spec, TicketsTracker
-from workflows.platforms.work_tracking.fake_gh_cli import FakeGhCli
+from workflows.dev.tests.doubles import commit_file, git
+from workflows.dev.commands import CommandError
+from workflows.dev.platforms import GitHubRepo, TicketsTracker
+from workflows.dev.records import Spec
+from workflows.dev.tests.doubles import FakeGhCli
 
 
 def _tracker(gh: FakeGhCli | Mock | None = None) -> TicketsTracker:

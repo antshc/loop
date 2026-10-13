@@ -11,7 +11,7 @@ One unit test group runs in the project's single test command (`pytest`). It tes
 - **Library seams:** `CliRunner` and `GitService` (and `DockerService`) are the replaceable boundaries; tests build `AgentBuilder(runner, git, docker)` over a `FakeRunner` and `FakeGitService`.
 - **Workflow seams:** a Workflow's Git reads and publication (`GitService`) and its GitHub client (`FakeGhCli`) are injected as in-memory fakes; the `dev` Workflow takes `new_agent`, so tests supply a builder over the fake runner.
 - **Ticket delegate seam:** reusable Ticket orchestration is tested through `deliver_tickets` with function delegates returning typed results; multi-repository scenarios drive `dev.main` with separate histories, clients, and delegates to prove target isolation and harness-only Ticket updates.
-- **Shared harness:** `tests/workflow_harness.py` holds the fakes, `DevHarness`, and the response-envelope builders, imported by every test module.
+- **Workflow-local harness:** `workflows/dev/tests/doubles.py` holds dev's fakes, `DevHarness`, and response-envelope builders. `tests/workflow_harness.py` independently supports `plan_implement`; dev tests import no sibling harness.
 - **Architecture checks:** import-linter contracts run as a test.
 
 ## Rules
@@ -23,8 +23,8 @@ One unit test group runs in the project's single test command (`pytest`). It tes
 - MUST exercise agent response parsing with raw runner output; tests of the independent Ticket delegate seam may return typed results without parsing an agent envelope.
 - MUST assert a scenario outcome on effects at the fake boundaries — tracker writes, pushes, CLI invocations and prompts — and MUST NOT assert on Workflow internals.
 - MUST state each scenario as Given/when/then in its docstring, and name each test as a sentence of the behavior it proves.
-- MUST keep fakes and Workflow wiring in the shared harness; a test module MUST NOT rebuild them.
-- MUST run the architecture checks (layering, workflows import only the public `loop` API, platforms import no Workflow) inside the test run.
+- MUST keep fakes and Workflow wiring in the owning Workflow's test harness; a test module MUST NOT rebuild them.
+- MUST run the architecture checks (library layering, Workflows import only the public `loop` API, dev imports no sibling helpers, Ticket orchestration imports no agent delegate) inside the test run.
 - MUST keep test fakes out of the public `loop` API.
 
 ## Example
@@ -41,10 +41,11 @@ harness.runner.handler = harness.commit_then(lambda sha: envelope("Checkout|10",
 
 | Concern | Stable anchor | Semantic locator |
 |---|---|---|
-| Workflow wiring for tests | One harness binds the Workflow entry point to fakes at every boundary | `tests`: `DevHarness`, `FakeRunner`, `FakeGitService`, `FakeWorkflowGit` |
-| Envelope builders | Response envelopes the Workflows extract | `tests`: `plan_envelope`, `implement_envelope`, `envelope` |
-| Boundary fakes | One fake per boundary | `tests`: `FakeRunner`, `FakeGitService`; `workflows/platforms/work_tracking`: `FakeGhCli` |
-| Unit tests | Component behavior and Workflow rules against fakes | `tests/unit`: agent builder, `dev`, `plan_implement`, platform git, and library tests |
+| Workflow wiring for tests | One local harness binds dev to fakes at every boundary | `workflows/dev/tests/doubles.py`: `DevHarness`, `FakeRunner`, `FakeGitService`, `FakeWorkflowGit` |
+| Envelope builders | Response envelopes the Workflows extract | `tests/workflow_harness.py`: `plan_envelope`, `implement_envelope`; `workflows/dev/tests/doubles.py`: `envelope` |
+| Boundary fakes | One fake per boundary | `workflows/dev/tests/doubles.py`: dev's runner, Git, and `FakeGhCli` |
+| Unit tests | Library and Workflow rules against fakes | `tests/unit` and `workflows/dev/tests`; both discovered by root `pytest` |
+| Package independence | Dev runs without sibling Workflow files and resolves its own prompts | `workflows/dev/tests/test_package.py` |
 | Architecture checks | Import rules enforced as a test | `tests/unit/test_library.py`: `lint-imports` |
 
 ## References

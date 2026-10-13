@@ -19,7 +19,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src", ".", "tests"]
-testpaths = ["tests"]
+testpaths = ["tests", "workflows/dev/tests"]
 norecursedirs = ["archive", ".*"]
 
 [tool.importlinter]
@@ -58,16 +58,22 @@ forbidden_modules = [
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
-name = "Shared workflow platforms import no workflow"
+name = "Sibling workflow helpers import no workflow"
 type = "forbidden"
 source_modules = ["workflows.platforms"]
-forbidden_modules = ["workflows.dev", "workflows.tickets", "workflows.plan_implement"]
+forbidden_modules = ["workflows.dev", "workflows.plan_implement"]
 
 [[tool.importlinter.contracts]]
 name = "Ticket orchestration imports no agent workflow"
 type = "forbidden"
-source_modules = ["workflows.tickets"]
-forbidden_modules = ["workflows.dev", "workflows.plan_implement"]
+source_modules = ["workflows.dev.attempt"]
+forbidden_modules = ["workflows.dev.agent", "workflows.dev.repositories", "workflows.dev.run"]
+
+[[tool.importlinter.contracts]]
+name = "Workflows own their helpers"
+type = "forbidden"
+source_modules = ["workflows.dev", "workflows.plan_implement"]
+forbidden_modules = ["workflows.content", "workflows.platforms"]
 
 [[tool.importlinter.contracts]]
 name = "No workflow imports another workflow"

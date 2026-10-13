@@ -7,7 +7,7 @@ The harness contains agent instructions, skills, Specs, and Tickets. The dev wor
 
 ## Harness and target repositories
 
-`workflows/dev.py` reads Specs and Tickets from the immutable `HARNESS: Repository`.
+`workflows/dev/` reads Specs and Tickets from the immutable `HARNESS: Repository` configured in `repositories.py`.
 Each target is an explicit `RepositoryWorkflow` pairing a `Repository` with an
 agent delegate. With no target configuration, the workflow defaults to
 implementation on the harness repository.
@@ -28,7 +28,7 @@ class Repository:
     owner_name: RepositoryId
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]  # workflows/dev/repositories.py
 HARNESS = Repository(
     checkout=ROOT,
     worktrees=ROOT / "workspace" / f"{ROOT.name}.worktrees",

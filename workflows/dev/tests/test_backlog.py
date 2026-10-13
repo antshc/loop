@@ -4,8 +4,9 @@ from dataclasses import replace
 
 import pytest
 
-from workflows.platforms.work_tracking import Spec, TicketsTracker
-from workflows.platforms.work_tracking.fake_gh_cli import FakeGhCli
+from workflows.dev.records import Spec
+from workflows.dev.platforms import TicketsTracker
+from workflows.dev.tests.doubles import FakeGhCli
 
 
 def _tracker(gh: FakeGhCli | None = None) -> TicketsTracker:

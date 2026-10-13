@@ -4,12 +4,12 @@ The `loop` Python library: a single installable package (`pip install` from this
 
 ## Dependencies
 
-- **Called by:** Workflow scripts (user-owned; `workflows/dev.py` is the example) through the public `loop` API only.
+- **Called by:** User-owned Workflows (`workflows/dev/` is the self-contained example) through the public `loop` API only.
 - **Calls (via subprocess):** `git`, the `copilot` and `codex` CLIs, and optionally `docker`. No Python dependency beyond `python-json-logger`.
 
 ## Interfaces
 
-Public API re-exported from [`src/loop/__init__.py`](../../src/loop/__init__.py): `Agent()` returns an `AgentBuilder` ([Build agents with an agent builder](../adr/build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md)), configured with `with_git(GitOptions)`, `with_docker`, `with_session`, and `with_agent_cli_hooks`; `create()` yields an `AgentClient` and `open()` a `Worktree` whose `agent(profile)` yields clients. An `AgentProfile` picks the CLI (`copilot`, `codex`), model, and reasoning effort; a run takes an `AgentRequest` and returns an `AgentResult`. Replaceable seams are `CliRunner`, `GitService`, `DockerService`, and `SessionStore`. The GitHub client and the Spec/Ticket tracker are not part of the public API: they live in `workflows/platforms/work_tracking` beside the example workflows.
+Public API re-exported from [`src/loop/__init__.py`](../../src/loop/__init__.py): `Agent()` returns an `AgentBuilder` ([Build agents with an agent builder](../adr/build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md)), configured with `with_git(GitOptions)`, `with_docker`, `with_session`, and `with_agent_cli_hooks`; `create()` yields an `AgentClient` and `open()` a `Worktree` whose `agent(profile)` yields clients. An `AgentProfile` picks the CLI (`copilot`, `codex`), model, and reasoning effort; a run takes an `AgentRequest` and returns an `AgentResult`. Replaceable seams are `CliRunner`, `GitService`, `DockerService`, and `SessionStore`. The GitHub client and the Spec/Ticket tracker are not part of the public API: dev owns them in `workflows/dev/platforms.py`.
 
 ## Tweaks/Configuration
 
@@ -37,7 +37,7 @@ hooks/          Loop hooks (worktree-ready, worktree-removing, run-finished), Ag
 sessions/       SessionStore and session values
 ```
 
-Dependency rule (enforced by import-linter in `pyproject.toml`): a strict layering `factory` > `builder | dryrun` > `agents` > `clis | docker | git` > `run` > `hooks` > `sessions`; `workflows` import only the public `loop` API and `workflows.platforms` import no Workflow.
+Dependency rule (enforced by import-linter in `pyproject.toml`): a strict layering `factory` > `builder | dryrun` > `agents` > `clis | docker | git` > `run` > `hooks` > `sessions`; Workflows import only the public `loop` API, dev imports no sibling helpers, and Ticket orchestration imports no agent delegate.
 
 ## Container view
 

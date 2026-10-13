@@ -1,8 +1,4 @@
-"""Example Workflow: plan a task with a strong model, implement it with a cheaper one, on one worktree.
-
-One worktree, two stateless runs (an `AgentProfile` per step; the Shared Worktree Agent Run variant,
-docs/concepts/str-agent-run.md). No push, pull request, or Ticket access.
-"""
+"""Self-contained Workflow: plan, implement, and report commits on one worktree without pushing."""
 
 from __future__ import annotations
 
@@ -13,7 +9,6 @@ import subprocess
 import sys
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
 
 from loop import (
@@ -21,13 +16,11 @@ from loop import (
     AgentBuilder,
     AgentProfile,
     AgentRequest,
+    AgentWorkspace,
     BranchStrategy,
     GitOptions,
-    AgentWorkspace,
     copilot,
 )
-from workflows.content import ContentDecodeError
-from workflows.platforms.git import GitService
 
 logger = logging.getLogger("workflow.plan_implement")
 
@@ -54,74 +47,35 @@ End your final message with exactly one of these tags, with nothing after it:
 <completed>Failure: <why></completed>
 """
 
-_COMPLETED_TAG = re.compile(r"<completed>(.*?)</completed>", re.DOTALL)
-
-
-@dataclass(frozen=True)
-class StepResult:
-    """One step's reply: whether its `<completed>` tag signals success, the text written before it, and why not."""
-
-    completed: bool
-    body: str
-    reason: str | None = None
-
-
-class StepResponse:
-    """Decodes a step's `<completed>Success</completed>` / `<completed>Failure: <why></completed>` reply."""
-
-    def decode(self, text: str) -> StepResult:
-        match = _COMPLETED_TAG.search(text)
-        if match is None:
-            raise ContentDecodeError("no <completed> tag in agent output", text)
-        body = text[: match.start()].strip()
-        tag = match.group(1).strip()
-        if tag.lower() == "success":
-            return StepResult(True, body)
-        reason = tag.split(":", 1)[1].strip() if ":" in tag else tag
-        return StepResult(False, body, reason)
-
-
-STEP = StepResponse()
-
-
-def _parse_args(argv: list[str] | None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(prog="plan_implement")
-    parser.add_argument("task")
-    return parser.parse_args(argv)
+def _response_body(text: str) -> str:
+    """Returns the text before a success tag; raises ValueError for missing or unsuccessful tags."""
+    match = re.search(r"<completed>(.*?)</completed>", text, re.DOTALL)
+    if match is None:
+        raise ValueError("no <completed> tag in agent output")
+    status = match.group(1).strip()
+    if status.lower() != "success":
+        raise ValueError(f"agent reported: {status}")
+    return text[: match.start()].strip()
 
 
 def _run_step(worktree: AgentWorkspace, profile: AgentProfile, prompt: str) -> str | None:
-    """Runs one fresh, stateless step; the text it wrote before its `<completed>` tag, or None when it failed."""
+    """Runs a fresh session and returns its response body, or logs failure and returns None."""
     try:
         output = worktree.agent(profile).run(AgentRequest(prompt)).output
-        result = STEP.decode(output)
-    except (subprocess.CalledProcessError, ContentDecodeError):
+    except subprocess.CalledProcessError as exception:
+        logger.error("agent command failed: %s; stderr: %s", exception, exception.stderr)
         return None
-    return result.body if result.completed else None
+    try:
+        return _response_body(output)
+    except ValueError as exception:
+        logger.error("%s", exception)
+        return None
 
 
-def _run(worktree: AgentWorkspace, git: GitService, task: str, planner: AgentProfile, implementer: AgentProfile) -> int:
-    # The agent-written plan and the task are embedded as text and sent verbatim; they are never preprocessed.
-    plan = _run_step(worktree, planner, f"{task}\n\n{PLAN_INSTRUCTIONS}")
-    if not plan:
-        logger.error("planning run failed")
-        return 1
-
-    head_before = git.head(worktree.path)
-    implement_result = _run_step(worktree, implementer, f"{plan}\n\n{IMPLEMENT_INSTRUCTIONS}")
-    commits = git.commits_since(worktree.path, head_before.sha)
-    logger.info("commits: %s", ", ".join(commit.sha for commit in commits) or "none")
-    if implement_result is None:
-        logger.error("implementing run failed")
-        return 1
-    return 0
-
-
-def _git_options(branch: str) -> GitOptions:
-    return GitOptions(
-        root_path=Path("workspace") / f"{Path.cwd().name}.worktrees",
-        strategy=BranchStrategy(branch, "origin/main"),
-    )
+def _git_output(path: Path, args: list[str]) -> str:
+    return subprocess.run(
+        ["git", "--no-pager", *args], cwd=path, check=True, capture_output=True, text=True,
+    ).stdout.strip()
 
 
 def main(
@@ -131,20 +85,37 @@ def main(
     plan_effort: str = PLAN_EFFORT,
     implement_model: str = IMPLEMENT_MODEL,
     implement_effort: str = IMPLEMENT_EFFORT,
-    git: GitService | None = None,
+    read_git: Callable[[Path, list[str]], str] = _git_output,
     new_agent: Callable[[], AgentBuilder] = Agent,
 ) -> int:
-    """Plans `argv`'s task with `plan_model`, then implements it with `implement_model`; returns the exit code."""
-    args = _parse_args(argv)
-    git = git or GitService()
+    """Plans and implements a task in one worktree; returns 0 on success, 1 on step failure, or 130 on interrupt."""
+    parser = argparse.ArgumentParser(prog="plan_implement")
+    parser.add_argument("task")
+    args = parser.parse_args(argv)
     planner = AgentProfile(copilot, plan_model, plan_effort)
     implementer = AgentProfile(copilot, implement_model, implement_effort)
     branch = f"loop/run-{uuid.uuid4().hex[:8]}"
     logger.info("branch %s", branch)
+    options = GitOptions(
+        root_path=Path("workspace") / f"{Path.cwd().name}.worktrees",
+        strategy=BranchStrategy(branch, "origin/main"),
+    )
 
-    with new_agent().with_git(_git_options(branch)).open() as worktree:
+    with new_agent().with_git(options).open() as worktree:
         try:
-            return _run(worktree, git, args.task, planner, implementer)
+            plan = _run_step(worktree, planner, f"{args.task}\n\n{PLAN_INSTRUCTIONS}")
+            if not plan:
+                logger.error("planning run failed: no usable plan")
+                return 1
+
+            head_before = read_git(worktree.path, ["rev-parse", "HEAD"])
+            result = _run_step(worktree, implementer, f"{plan}\n\n{IMPLEMENT_INSTRUCTIONS}")
+            commits = read_git(worktree.path, ["log", "--reverse", "--format=%H", f"{head_before}..HEAD"])
+            logger.info("commits: %s", ", ".join(commits.splitlines()) or "none")
+            if result is None:
+                logger.error("implementing run failed")
+                return 1
+            return 0
         except KeyboardInterrupt:
             logger.warning("interrupted")
             return 130

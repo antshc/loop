@@ -5,26 +5,25 @@ from pathlib import Path
 import pytest
 
 from loop import AgentProfile, AgentRequest, AgentWorkspace, copilot
-from workflow_harness import (
-    FakeGitService,
-    FakeRepositoryGh,
-    FakeRepositoryGit,
-    FakeRunner,
-    FakeWorkflowGit,
-    issue,
-    new_agent_for,
-)
+from workflows.dev.tests.doubles import FakeGitService, FakeRepositoryGh, FakeRepositoryGit, FakeRunner, FakeWorkflowGit, issue, new_agent_for
 from workflows import dev
-from workflows.platforms.git import Commit
-from workflows.platforms.work_tracking import Repository, RepositoryId
-from workflows.platforms.work_tracking.fake_gh_cli import FakeGhCli
-from workflows.tickets import TicketContext, TicketResult
+from workflows.dev import agent, platforms, run
+from workflows.dev.records import Commit
+from workflows.dev.records import Repository, RepositoryId
+from workflows.dev.tests.doubles import FakeGhCli
+from workflows.dev.records import TicketContext, TicketResult
 
 
 @pytest.mark.parametrize("first_fails", [False, True])
 def test_harness_specs_route_to_separate_repositories_and_agent_delegates(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, first_fails: bool
 ) -> None:
+    prompts = tmp_path / "prompts"
+    prompts.mkdir()
+    (prompts / "first.md").write_text("Implement {{TITLE}} for the first repository")
+    (prompts / "second.md").write_text("Implement {{TITLE}} for the second repository")
+    (prompts / "review.md").write_text("Review {{COMMIT}}")
+    monkeypatch.setattr(agent, "PROMPTS", prompts)
     harness = Repository(tmp_path, tmp_path / "workspace/harness.worktrees", RepositoryId("owner", "harness"))
     one = Repository(tmp_path / "workspace/one", tmp_path / "workspace/one.worktrees", RepositoryId("owner", "one"))
     two = Repository(tmp_path / "workspace/two", tmp_path / "workspace/two.worktrees", RepositoryId("owner", "two"))
@@ -65,7 +64,8 @@ def test_harness_specs_route_to_separate_repositories_and_agent_delegates(
         assert context.ticket.number == 10
         assert context.initiative_commits == ("c000000 ccode(Checkout|9): one history",)
         assert (context.base_branch, context.feature_branch) == ("main", "first")
-        worktree.agent(implementer).run(AgentRequest("Implement first"))
+        prompt = dev.render_prompt(dev.load_prompt("first"), {"TITLE": context.ticket.title})
+        worktree.agent(implementer).run(AgentRequest(prompt))
         sha = one_git.commit(f"{context.identifier.to_subject()}first")
         if first_fails:
             return TicketResult(str(context.identifier), "failed", reason="cannot deliver first")
@@ -76,15 +76,17 @@ def test_harness_specs_route_to_separate_repositories_and_agent_delegates(
         assert context.ticket.number == 20
         assert context.initiative_commits == ("c000000 ccode(Checkout|19): two history",)
         assert (context.base_branch, context.feature_branch) == ("release/2.4", "2_4_second")
-        worktree.agent(implementer).run(AgentRequest("Implement second"))
-        two_git.commit(f"{context.identifier.to_subject()}second")
-        worktree.agent(reviewer).run(AgentRequest("Review second"))
+        prompt = dev.render_prompt(dev.load_prompt("second"), {"TITLE": context.ticket.title})
+        worktree.agent(implementer).run(AgentRequest(prompt))
+        sha = two_git.commit(f"{context.identifier.to_subject()}second")
+        review = dev.render_prompt(dev.load_prompt("review"), {"COMMIT": sha})
+        worktree.agent(reviewer).run(AgentRequest(review))
         amended = Commit("reviewed-sha", f"{context.identifier.to_subject()}reviewed")
         two_git.commits[-1] = amended
         return TicketResult(str(context.identifier), "completed", amended.sha, "second reviewed", "tested and reviewed")
 
-    monkeypatch.setattr(dev, "HARNESS", harness)
-    monkeypatch.setattr(dev, "GhCli", github_cli)
+    monkeypatch.setattr(run, "HARNESS", harness)
+    monkeypatch.setattr(platforms, "GhCli", github_cli)
     code = dev.main(
         ["--log-dir", str(tmp_path / "logs")],
         git=git,
@@ -104,6 +106,8 @@ def test_harness_specs_route_to_separate_repositories_and_agent_delegates(
     assert one_service.closed == two_service.closed == 1
     assert one_runner.profiles == [implementer] * (2 if first_fails else 1)
     assert two_runner.profiles == [implementer, reviewer]
+    assert one_runner.prompts == ["Implement First task for the first repository"] * (2 if first_fails else 1)
+    assert two_runner.prompts == ["Implement Second task for the second repository", "Review c0000002"]
     assert one_git.pushes == ([] if first_fails else [(one_path, "first")])
     assert two_git.pushes == [(two_path, "2_4_second")]
     assert len(two_git.commits) == 3
@@ -129,8 +133,8 @@ def test_duplicate_case_insensitive_repository_configuration_fails_before_proces
     def delegate(_context: TicketContext, _worktree: AgentWorkspace) -> TicketResult:
         pytest.fail("duplicate configuration must not invoke a delegate")
 
-    monkeypatch.setattr(dev, "HARNESS", harness)
-    monkeypatch.setattr(dev, "GhCli", lambda **_kwargs: github)
+    monkeypatch.setattr(run, "HARNESS", harness)
+    monkeypatch.setattr(platforms, "GhCli", lambda **_kwargs: github)
     code = dev.main(
         ["--log-dir", str(tmp_path / "logs"), "--log-level", "DEBUG"],
         repositories=(dev.RepositoryWorkflow(harness, delegate), dev.RepositoryWorkflow(duplicate, delegate)),

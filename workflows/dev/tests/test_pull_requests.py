@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from workflows.platforms.work_tracking import GitHubRepo, PullRequestClient
-from workflows.platforms.work_tracking.fake_gh_cli import FakeGhCli
+from workflows.dev.platforms import GitHubRepo, PullRequestClient
+from workflows.dev.tests.doubles import FakeGhCli
 
 
 def _client(gh: FakeGhCli | None = None) -> PullRequestClient:

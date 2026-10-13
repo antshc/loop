@@ -6,9 +6,11 @@ from pathlib import Path
 import pytest
 
 from loop import AgentWorkspace, GitOptions
-from workflow_harness import DevHarness, issue, new_agent_for
-from workflows.platforms.work_tracking import RepositoryId, Spec, TicketsTracker
-from workflows.tickets import AgentWorkflow, TicketContext, TicketResult, TicketWorkflowError, deliver_tickets
+from workflows.dev.tests.doubles import DevHarness, issue, new_agent_for
+from workflows.dev.records import RepositoryId, Spec
+from workflows.dev.platforms import TicketsTracker
+from workflows.dev.records import AgentWorkflow, TicketContext, TicketResult, TicketWorkflowError
+from workflows.dev.attempt import deliver_tickets
 
 
 def _deliver(harness: DevHarness, delegate: AgentWorkflow, *, spec: Spec | None = None, max_failures: int = 2) -> bool:

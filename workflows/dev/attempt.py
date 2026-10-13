@@ -1,126 +1,23 @@
+"""Ticket delivery, retries, and validation of the agent's commit."""
+
 from __future__ import annotations
 
-import json
 import logging
 import subprocess
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 
 from loop import AgentWorkspace
-from workflows.platforms.git import Commit, GitService
-from workflows.platforms.work_tracking import AgentCommitSubject, RepositoryId, Spec, Ticket, TicketsTracker
+
+from .checkout import GitService
+from .journal import FileExecutionStore
+from .platforms import TicketsTracker
+from .records import (
+    AgentCommitSubject, AgentWorkflow, Commit, RepositoryId, Spec, Ticket,
+    TicketContext, TicketResult, TicketWorkflowError,
+)
+
 
 logger = logging.getLogger("workflow.tickets")
-
-
-class TicketWorkflowError(Exception):
-    """An expected failure in ticket delivery or its agent delegate."""
-
-
-class ExecutionStoreError(TicketWorkflowError):
-    """The execution log on disk is unreadable."""
-
-
-@dataclass(frozen=True)
-class TicketContext:
-    """The selected Ticket and branch history supplied to one agent-workflow attempt."""
-
-    ticket: Ticket
-    identifier: AgentCommitSubject
-    initiative_commits: tuple[str, ...]
-    base_branch: str
-    feature_branch: str
-
-
-@dataclass(frozen=True)
-class TicketResult:
-    """A delegate's completed commit, summary and verification, or its failure reason."""
-
-    identifier: str
-    status: str
-    commit: str | None = None
-    summary: str | None = None
-    verification: str | None = None
-    reason: str | None = None
-
-
-AgentWorkflow = Callable[[TicketContext, AgentWorkspace], TicketResult]
-Clock = Callable[[], datetime]
-
-
-class FileExecutionStore:
-    """Daily JSON array of failure records at `<directory>/<workflow>-execution-log-<UTC date>.json`."""
-
-    def __init__(self, directory: Path, *, workflow: str = "dev", clock: Clock | None = None) -> None:
-        self._directory = Path(directory)
-        self._workflow = workflow
-        self._clock = clock or (lambda: datetime.now(timezone.utc))
-
-    def failed_attempts(self, key: str) -> int:
-        """Returns today's persisted failure count for a Ticket URL."""
-        record = self._find(self._load(), key)
-        return record["count"] if record else 0
-
-    def record_failure(
-        self,
-        key: str,
-        *,
-        owner: str,
-        repo: str,
-        task_id: str,
-        title: str,
-        items: Sequence[int],
-    ) -> None:
-        """Increments today's failure count for the given Ticket."""
-        records = self._load()
-        record = self._find(records, key)
-        updated = {
-            "owner": owner,
-            "repo": repo,
-            "type": "spec",
-            "task_id": task_id,
-            "title": title,
-            "task": key,
-            "count": (record["count"] if record else 0) + 1,
-            "last_run": self._clock().strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "last_items": list(items),
-        }
-        if record is None:
-            records.append(updated)
-        else:
-            records[records.index(record)] = updated
-        self._save(records)
-
-    def reset(self, key: str) -> None:
-        """Clears today's failures for a delivered Ticket."""
-        self._save([record for record in self._load() if record["task"] != key])
-
-    def _path(self) -> Path:
-        date = self._clock().strftime("%Y-%m-%d")
-        return self._directory / f"{self._workflow}-execution-log-{date}.json"
-
-    def _load(self) -> list[dict]:
-        path = self._path()
-        if not path.is_file():
-            return []
-        try:
-            data = json.loads(path.read_text())
-        except json.JSONDecodeError as exception:
-            raise ExecutionStoreError(f"execution log is not valid JSON: {path}") from exception
-        if not isinstance(data, list):
-            raise ExecutionStoreError(f"execution log must be a JSON array: {path}")
-        return data
-
-    def _save(self, records: list[dict]) -> None:
-        path = self._path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(records, separators=(",", ":")))
-
-    @staticmethod
-    def _find(records: list[dict], key: str) -> dict | None:
-        return next((record for record in records if record["task"] == key), None)
 
 
 def deliver_tickets(

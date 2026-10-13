@@ -158,8 +158,8 @@ Decisions: [Run one fresh agent per Ticket](../adr/run-one-fresh-agent-per-ticke
 ## Implementation Map
 | Concern | Stable anchor | Semantic locator |
 |---|---|---|
-| External contract | Operator-run service for one repository board | `workflows/dev.py`: runnable module (`python -m workflows.dev`) `main(argv)`, options `--log-dir`, `--log-level`; run from the harness root |
-| Spec and Ticket selection | Open Specs; actionable Tickets | `workflows/platforms/work_tracking`: `TicketsTracker.specs`, `Spec.tickets` |
-| Execution | Fresh non-interactive Copilot run per Ticket | `loop`: `AgentBuilder`, `Worktree.agent`, `AgentClient`; `workflows/dev.py`: `DevResponse` |
-| Failure bound | Per-Ticket failure count across runs | `workflows/dev.py`: `FileExecutionStore` |
-| Tests | Workflow scenarios against fakes | `tests/unit/test_dev_workflow.py`; shared harness in `tests/workflow_harness.py` |
+| External contract | Operator-run service for one repository board | `workflows/dev/run.py`: runnable package (`python -m workflows.dev`) `main(argv)`, options `--log-dir`, `--log-level`; run from the harness root |
+| Spec and Ticket selection | Open Specs; actionable Tickets | `workflows/dev/platforms.py`: `TicketsTracker.specs`; `workflows/dev/records.py`: `Spec.tickets` |
+| Execution | Fresh non-interactive Copilot run per Ticket by default | `loop`: `AgentBuilder`, `Worktree.agent`, `AgentClient`; `workflows/dev/agent.py`: named prompts and default delegate; `workflows/dev/reply.py`: `DevResponse` |
+| Failure bound | Per-Ticket failure count across runs | `workflows/dev/journal.py`: `FileExecutionStore` |
+| Tests | Workflow scenarios against fakes | `workflows/dev/tests/test_run.py`; local harness in `workflows/dev/tests/doubles.py` |
