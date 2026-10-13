@@ -27,6 +27,23 @@ One unit test group runs in the project's single test command (`pytest`). It tes
 - MUST run the architecture checks (library layering, Workflows import only the public `loop` API, dev imports no sibling helpers, Ticket orchestration imports no agent delegate) inside the test run.
 - MUST keep test fakes out of the public `loop` API.
 
+## Python compatibility
+
+The library and example Workflows support Python 3.10+, including 3.10.12; [package metadata](../../pyproject.toml) declares the minimum. For runtime compatibility changes, validate in isolated environments on exact Python 3.10.12 and a newer supported interpreter (currently 3.12). Use each environment's `python` for both installation and execution:
+
+```sh
+python --version
+python -m pip install -e ".[dev]"
+python -m pip check
+python -m pytest
+python -m workflows.dev --help
+python -m workflows.plan_implement --help
+```
+
+Run from the repository root with `git` installed. The root test command covers library tests, both example Workflows, and import-linter contracts. The `--help` checks exercise Workflow imports and argument parsing without starting agents or contacting GitHub.
+
+Syntax checks alone do not prove runtime compatibility: imports, standard-library APIs, dependency resolution, and error paths must also work. Preserve hook-point string conversion, formatting, and JSON serialization across runtimes. Cleanup failures must not mask the original error: Python 3.11+ attaches exception notes; Python 3.10 logs the secondary failure with its traceback. Tests cover the applicable path on each runtime.
+
 ## Example
 
 A `dev` scenario drives `main` through `DevHarness`: the runner fake commits through the workflow Git fake and answers with the raw response envelope, and the test asserts on tracker writes and publication.

@@ -36,8 +36,10 @@ Consult these before searching the code:
 
 ## 5. Build and validation policy
 
-- Install: `pip install -e ".[dev]"` from the reporoot.
-- Test: `pytest` from the reporoot (configured in `pyproject.toml`, `testpaths = ["tests", "workflows/dev/tests"]`); it includes the import-linter architecture checks.
+- Runtime: Python 3.10+ for the library and example Workflows; preserve the minimum declared in `pyproject.toml`.
+- Install: `python -m pip install -e ".[dev]"` from the reporoot.
+- Test: `python -m pytest` from the reporoot (configured in `pyproject.toml`, `testpaths = ["tests", "workflows/dev/tests"]`); it includes the import-linter architecture checks.
+- For compatibility changes, follow [Test Strategy: Python compatibility](../docs/concepts/ops-test-strategy.md#python-compatibility); a newer local interpreter alone does not verify the minimum.
 
 ## 6. Documentation conventions
 

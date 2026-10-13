@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import secrets
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
@@ -8,6 +9,8 @@ from typing import TYPE_CHECKING, Iterator, Protocol
 
 from ..hooks import LoopHookPoint
 from .git_cli import GitCli
+
+logger = logging.getLogger(__name__)
 
 # GitOptions holds a strategy and each strategy takes the options, so it is imported for annotations only.
 if TYPE_CHECKING:
@@ -79,7 +82,11 @@ def _worktree(
         try:
             git.remove_worktree(repository, target, force=True)
         except Exception as removal:
-            error.add_note(f"forced worktree removal also failed: {removal}")
+            note = f"forced worktree removal also failed: {removal}"
+            if hasattr(error, "add_note"):
+                error.add_note(note)
+            else:
+                logger.error(note, exc_info=True)
         raise
     try:
         yield target

@@ -7,6 +7,12 @@ applyTo: "**/*.py"
 
 Confirm each rule below against neighboring files in the same package before trusting it over what the codebase actually does — the codebase wins when it conflicts.
 
+## Runtime compatibility
+
+- MUST keep `src/`, `workflows/`, and tests compatible with Python 3.10, including 3.10.12; `pyproject.toml` declares the supported minimum.
+- Use 3.10-compatible syntax and standard-library APIs; guard newer APIs with a tested fallback. Preserve string behavior when replacing `StrEnum`; preserve the original exception and report cleanup failures when `add_note` is unavailable.
+- Validate compatibility changes on Python 3.10.12 and a newer supported runtime per [Test Strategy](../../docs/concepts/ops-test-strategy.md#python-compatibility).
+
 ## Typing & imports
 
 - MUST start every module with `from __future__ import annotations`.

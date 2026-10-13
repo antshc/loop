@@ -602,12 +602,25 @@ class LoopHookTests(unittest.TestCase):
         self.assertNotIn("merge", [command[0] for command in git.commands])
         self.assertNotIn(["branch", "-d"], [command[:2] for command in git.commands])
 
+    @unittest.skipUnless(hasattr(Exception, "add_note"), "exception notes require Python 3.11")
     def test_failed_forced_removal_is_noted_on_hook_error(self) -> None:
         git = GitFixture(missing=("refs/",), failing=("one",), remove_fails=True)
         with self.assertRaises(LoopHookError) as caught:
             with self.open(git, self.options("one")):
                 pass
         self.assertTrue(any("removal" in note for note in caught.exception.__notes__))
+
+    @unittest.skipIf(hasattr(Exception, "add_note"), "Python 3.10 logs instead of adding notes")
+    def test_failed_forced_removal_is_logged_without_masking_hook_error(self) -> None:
+        git = GitFixture(missing=("refs/",), failing=("one",), remove_fails=True)
+        with self.assertLogs("loop.git.strategies", level="ERROR") as logs:
+            with self.assertRaises(LoopHookError) as caught:
+                with self.open(git, self.options("one")):
+                    pass
+        self.assertEqual(caught.exception.command, "one")
+        self.assertEqual(caught.exception.point, LoopHookPoint.WORKTREE_READY)
+        self.assertIn("forced worktree removal also failed:", logs.output[0])
+        self.assertIsNotNone(logs.records[0].exc_info)
 
     def builder(self, git: GitFixture, events: list[str]) -> tuple[AgentBuilder, RecordingRunner]:
         runner = RecordingRunner(events)
@@ -643,6 +656,18 @@ class LoopHookTests(unittest.TestCase):
 
 
 class HookPointClassTests(unittest.TestCase):
+    def test_hook_points_preserve_string_behavior(self) -> None:
+        for points in (AgentCliHookPoint, LoopHookPoint):
+            for point in points:
+                with self.subTest(point=point):
+                    self.assertIsInstance(point, str)
+                    self.assertEqual(point, point.value)
+                    self.assertEqual(str(point), point.value)
+                    self.assertEqual(f"{point}", point.value)
+                    self.assertEqual(f"{point:>30}", f"{point.value:>30}")
+                    self.assertEqual(json.dumps(point), json.dumps(point.value))
+                    self.assertIs(points(point.value), point)
+
     def check_one_to_one(self, base: type, points: type, suffix: str) -> None:
         subclasses = base.__subclasses__()
         self.assertEqual(sorted(cls.point for cls in subclasses), sorted(points))

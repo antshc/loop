@@ -4,280 +4,148 @@
 
 # Loop
 
-Python library for composing autonomous agent Workflows on Git worktrees.
+Python library for composing autonomous coding-agent Workflows on Git worktrees.
 
-Loop ships no command and no built-in Workflows. You write each Workflow as runnable Python on the public `loop` API and run it through your own shell alias. The repository's self-contained [`workflows/dev/`](workflows/dev/) package is an example only.
+Use Loop to run Copilot CLI or Codex from Python, manage branches and worktrees,
+and coordinate multiple agent steps. You own the prompts, control flow, and
+interpretation of results; Loop provides the execution and lifecycle building blocks.
+It ships no command and no built-in Workflows.
+
+[Installation](#installation) | [Quick start](#quick-start) | [Examples](#examples) | [Documentation](#documentation) | [Contributing](#contributing)
 
 ## Features
 
-- **Agent builder** — `Agent()` composes git, Docker, session, and hook options into agent clients and Git worktrees; agents run on the host with the worktree as working directory.
-- **Agent profiles** — Copilot CLI and Codex adapters with per-client model and reasoning effort, session resume, and raw stdout as the result.
-- **Branch strategies** — worktrees on a named branch, a merged temporary branch, or the repository head; the example Workflows add a GitHub client for draft pull requests and Ticket state, where Python owns push, pull requests, and Ticket state and the agent commits each task.
-- **Loop hooks** — shell commands run on the host at `worktree-ready`, `worktree-removing`, and `run-finished`.
-- **Dry run** — `AgentOptions(dry_run=True)` exercises the builder with logging-only adapters.
+- **Composable agents:** choose a CLI, model, and reasoning effort per agent profile.
+- **Git lifecycle management:** use a named-branch worktree, a temporary branch
+  merged back into HEAD, or the repository directory directly.
+- **Multi-step Workflows:** share a worktree across agents and optionally resume sessions.
+- **Lifecycle commands:** run host shell commands at `worktree-ready`,
+  `worktree-removing`, and `run-finished` Loop hook points.
+- **Dry runs:** log Git and agent operations before enabling real execution.
 
 ## Requirements
 
-- Python 3.12 or newer
-- `git`
-- GitHub CLI (`gh`) for the GitHub client
-- Copilot CLI (or Codex CLI) for the agent client
+- Python 3.10 or newer (including 3.10.12), for both the library and example Workflows.
+- Git for repository and worktree operations.
+- [Copilot CLI](https://github.com/github/copilot-cli) or
+  [Codex CLI](https://github.com/openai/codex), installed and authenticated for live agent runs.
+- [GitHub CLI](https://cli.github.com/) (`gh`), authenticated, only for examples
+  that interact with GitHub.
 
-## Install
+## Installation
 
-Loop is installed with `pip` from this repository ([Install Loop with pip](docs/adr/install-loop-with-pip-from-the-repository.md)).
-
-```sh
-pip install -e .
-```
-
-For development:
+Install from this repository, not from PyPI. In a shell:
 
 ```sh
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"      # once
-pytest
+git clone https://github.com/antshc/loop.git
+cd loop
+python -m venv .venv
 ```
 
-To run the example `dev` Workflow on this repository:
+Activate the virtual environment:
 
 ```sh
-gh auth status               # needs an authenticated gh with access to antshc/loop
-copilot --version            # the default agent client is Copilot CLI
-python -m workflows.dev
+# Linux / macOS
+source .venv/bin/activate
 ```
 
-## Usage
-
-Write a Workflow as a script that imports only from `loop`:
-
-```python
-from loop import Agent, AgentProfile, AgentRequest, BranchStrategy, GitOptions, copilot
-
-options = GitOptions(strategy=BranchStrategy("fix-tests", "main"))
-with Agent().with_git(options).open() as worktree:
-    agent = worktree.agent(AgentProfile(copilot, "claude-sonnet-5.5", "high"))
-    result = agent.run(AgentRequest("Fix the failing tests and commit."))
-    print(result.output)
+```powershell
+# Windows PowerShell
+.venv\Scripts\Activate.ps1
 ```
 
-Run it through your own alias:
+Then install the library:
 
 ```sh
-alias dev='PYTHONPATH=/path/to/harness python -m workflows.dev'
-dev --log-level DEBUG
+python -m pip install .
 ```
 
-### Different agent workflows per repository
+The repository revision determines the installed version. To update, pull the
+desired revision and reinstall. For an editable development installation, see
+[Contributing](#contributing).
 
-The example [`dev`](workflows/dev/) reads Specs and Tickets from `HARNESS`.
-By default it implements only Specs targeting the harness itself. Pass
-`repositories=` to route Specs by their `repo:target:<owner/repo>` label to
-explicitly configured checkouts under the harness's `workspace` folder.
-Repositories must already be cloned; unknown targets are handed to a human.
+## Quick start
 
-Each `RepositoryWorkflow` pairs a `Repository` with a function accepting
-`(TicketContext, AgentWorkspace)` and returning a `TicketResult`. The function
-owns agent profiles, step ordering, prompt rendering, and response decoding.
-For example, one repository can implement only while another implements and reviews:
-
-```python
-from __future__ import annotations
-
-from functools import partial
-from pathlib import Path
-
-from loop import AgentProfile, AgentRequest, AgentWorkspace, copilot
-from workflows.dev import (
-    DevResponse, Repository, RepositoryId, RepositoryWorkflow,
-    TicketContext, TicketResult, implement_ticket, load_prompt, main,
-)
-
-workspace = Path.cwd() / "workspace"
-implement = partial(implement_ticket, template=load_prompt("implement"))
-reviewer = AgentProfile(copilot)  # Set a model and reasoning effort here if desired.
-
-
-def implement_and_review(context: TicketContext, worktree: AgentWorkspace) -> TicketResult:
-    """Implements the Ticket, then reviews and optionally amends its one commit."""
-    result = implement(context, worktree)
-    if result.status == "failed":
-        return result
-    prompt = f"""Review commit {result.commit} against this Ticket:
-{context.ticket.title}
-{context.ticket.body}
-
-Work only in this worktree. Verify the implementation; fix defects by amending
-the existing commit, not by adding another. Keep the commit subject prefix
-{context.identifier.to_subject()!r}. Leave the worktree clean.
-Do not push, create PRs, or update Tickets.
-
-Return a JSON object with identifier "{context.identifier}" and status
-"completed", with result containing commit (the final full HEAD SHA), summary,
-and verification. If review cannot complete, return status "failed" with
-result containing reason.
-"""
-    output = worktree.agent(reviewer).run(AgentRequest(prompt)).output
-    return DevResponse(context.identifier).decode(output)
-
-
-if __name__ == "__main__":
-    raise SystemExit(main(repositories=(
-        RepositoryWorkflow(
-            Repository(workspace / "api", workspace / "api.worktrees", RepositoryId("acme", "api")),
-            implement,
-        ),
-        RepositoryWorkflow(
-            Repository(workspace / "web", workspace / "web.worktrees", RepositoryId("acme", "web")),
-            implement_and_review,
-        ),
-    )))
-```
-
-Run this user-owned script from the harness root. Configure `HARNESS` in
-[`repositories.py`](workflows/dev/repositories.py) for the repository holding your Specs and Tickets.
-The supplied list replaces the default target; include the harness explicitly
-if it should also receive code changes. Repository identities are matched
-case-insensitively; duplicate configurations fail the run.
-
-The dev-owned [`deliver_tickets`](workflows/dev/attempt.py) function handles Ticket
-iteration, refreshed Initiative history, retries, rollback, failure counts, and
-Ticket closure. A delegate can return a failed `TicketResult` or raise
-`TicketWorkflowError` for an expected, retryable failure; agent process failures
-are also retried. Each retry invokes the whole delegate.
-
-After the delegate finishes, the ticket workflow requires exactly one new,
-correctly tagged commit, a clean worktree, and a reported SHA equal to HEAD.
-Existing Initiative commits provide context; a matching subject alone does not
-automatically close or skip a Ticket. Git operations and draft PRs use the target
-repository; Ticket updates and failure-record identities remain on the harness.
-Without session-enabled builders, agent steps start fresh sessions.
-
-### Dev package and named prompts
-
-All dev-owned code, prompts, tests, and fakes live in [`workflows/dev/`](workflows/dev/).
-It depends on the public `loop` package, not sibling Workflow helpers.
-The independent [`plan_implement.py`](workflows/plan_implement.py) is a self-contained,
-function-based script: prompt text, response parsing, Git reads, and orchestration
-live together, with no sibling Workflow imports.
-There is no shared helper layer under `workflows/`; each Workflow owns the helpers it uses.
-
-- [`run.py`](workflows/dev/run.py): logging, retry settings, Loop hooks, and dependency wiring.
-- [`repositories.py`](workflows/dev/repositories.py): `HARNESS` and `configured_repositories`; edit its returned tuple to configure several repositories for `python -m workflows.dev`, or pass `repositories=` to `main`.
-- [`backlog.py`](workflows/dev/backlog.py) and [`attempt.py`](workflows/dev/attempt.py): Spec routing/publication and Ticket delivery.
-- [`agent.py`](workflows/dev/agent.py), [`reply.py`](workflows/dev/reply.py), and [`journal.py`](workflows/dev/journal.py): prompt handling, response interpretation, and failure history.
-- [`records.py`](workflows/dev/records.py): work items, repository identities, and outcomes.
-- [`checkout.py`](workflows/dev/checkout.py), [`platforms.py`](workflows/dev/platforms.py), and [`commands.py`](workflows/dev/commands.py): Git, GitHub, and subprocess access.
-- [`prompts/`](workflows/dev/prompts/): named Markdown templates; `load_prompt("implement")` reads `implement.md` relative to the package, not the current directory.
-- [`tests/`](workflows/dev/tests/): dev tests and local fakes; run `pytest workflows/dev/tests`.
-
-Add templates to the prompt folder and let each repository's delegate select,
-render, or combine them. For example, after adding `review.md`, use
-`render_prompt(load_prompt("review"), {"COMMIT": result.commit})` with that template's
-arguments. Delegates own step ordering and agent profiles; there is no prompt
-pipeline or configuration-file format. A missing template raises an error rather
-than falling back to a different prompt.
-
-### Logging
-
-The library logs under the `loop` logger and is silent until you call `configure_logging`:
-
-```python
-from pathlib import Path
-from loop import configure_logging
-
-configure_logging()                                        # INFO: console only
-configure_logging("DEBUG")                                 # DEBUG: console + JSON lines in ./loop.log
-configure_logging("DEBUG", log_file=Path("logs/run.log"))  # custom file
-configure_logging("DEBUG", log_file=None)                  # DEBUG without a file
-```
-
-It configures only the `loop` logger; pass `logger=""` to configure the root logger for your whole application.
-
-`dev` writes its file to `<log-dir>/dev.log`, and only with `--log-level DEBUG`.
-
-### Examples
-
-Every example uses `AgentOptions(dry_run=True)`, which only logs; drop it to run real git and agents.
-
-One-shot run: one git lifecycle per `run()`.
-
-```python
-from pathlib import Path
-
-from loop import Agent, AgentOptions, AgentRequest, GitOptions, MergeToHeadStrategy
-
-dry = AgentOptions(dry_run=True)
-root, repo = Path("workspace/repo1.worktrees"), Path("workspace/repo1")
-Agent(dry).with_git(GitOptions(root, repo, MergeToHeadStrategy())).create().run(
-    AgentRequest("Implement ticket #123 in repo1")
-)
-```
-
-Role profiles; which CLI and model fill a role is a Workflow choice.
-
-```python
-from loop import AgentProfile, CodexCli, copilot
-
-PLANNER = AgentProfile(copilot, "claude-opus-4.5", "high")
-DEVELOPER = AgentProfile(CodexCli(hook_trust_bypass=True), "gpt-5-codex", "high")
-REVIEWER = AgentProfile(copilot, "claude-sonnet-4.5")
-```
-
-Shared worktree: one git lifecycle, several CLIs, one named session kept per CLI.
+Save this as `my_workflow.py` and run it from the Git repository you want to work
+on. It starts in **dry-run mode**: Git and agent operations are logged, not executed.
 
 ```python
 from loop import (
+    Agent,
+    AgentOptions,
+    AgentProfile,
+    AgentRequest,
     BranchStrategy,
-    SessionEndAgentCliHook,
-    SessionName,
-    SessionStartAgentCliHook,
-    WorktreeReadyLoopHook,
+    GitOptions,
+    configure_logging,
+    copilot,
 )
 
-loop_hooks = (
-    WorktreeReadyLoopHook('cp "$LOOP_REPOSITORY/.env" .env'),
-    WorktreeReadyLoopHook("npm ci", timeout_sec=600),
-)
-shared = Agent(dry).with_git(
-    GitOptions(root, repo, BranchStrategy("loop/ticket-123", "main"), loop_hooks=loop_hooks)
-).with_session()
-shared.with_agent_cli_hooks(
-    SessionStartAgentCliHook("./scripts/session-start.sh"),
-    SessionEndAgentCliHook("notify-send", timeout_sec=3),
-)
-with shared.open(session=SessionName("ticket-123")) as wt:
-    plan = wt.agent(PLANNER).run(AgentRequest("Plan ticket #123 in repo1"))
-    developer = wt.agent(DEVELOPER)
-    developer.run(AgentRequest(f"Implement this plan:\n{plan.output}"))
-    developer.run(AgentRequest("Fix failing tests"))  # resumes the Codex session
-    # A fresh session gives an unbiased review.
-    wt.agent(REVIEWER, session=SessionName.new()).run(AgentRequest("Review the diff against the plan"))
+configure_logging()
+options = GitOptions(strategy=BranchStrategy("loop/fix-tests"))
+
+with Agent(AgentOptions(dry_run=True)).with_git(options).open() as worktree:
+    agent = worktree.agent(AgentProfile(copilot))
+    result = agent.run(AgentRequest("Fix the failing tests, verify, and commit. Do not push."))
+    print(result.output)
 ```
 
-Without `with_session()`, each run starts under a new `loop-<hex>` name.
-
-```python
-fresh = Agent(dry).with_git(GitOptions(root, repo, BranchStrategy("loop/ticket-123", "main"))).create()
-fresh.run(AgentRequest("Plan ticket #123 in repo1"))
-fresh.run(AgentRequest("Implement ticket #123 in repo1"))
+```sh
+python my_workflow.py
 ```
 
-See [`workflows/dev/`](workflows/dev/) for a complete Workflow, [`workflows/plan_implement.py`](workflows/plan_implement.py) for two runs with different models on one worktree, and [`workflows/dev/prompts/implement.md`](workflows/dev/prompts/implement.md) for the default `dev` prompt template.
+To run it for real, replace `Agent(AgentOptions(dry_run=True))` with `Agent()`.
+The example uses the CLI's default model and reasoning effort. It creates or
+reuses `loop/fix-tests`, starting a new branch from HEAD, and runs the agent in
+`.worktrees/loop/fix-tests`. On successful exit, Loop commits any remaining
+changes and removes the worktree; the branch remains for review. This strategy
+does not merge or push it.
 
-## Repository layout
+`result.output` contains the agent's output text, not a validated task outcome.
+Your Workflow must interpret it and verify the work.
 
-| Location | Contents |
+> **Execution safety:** agents run on the host with your user permissions.
+> Worktrees separate code changes; they are not a security sandbox. The default
+> Copilot adapter allows all tools. Use trusted repositories and prompts, and
+> review changes before publishing them.
+
+## Examples
+
+The examples live in this repository and are not included in the installed
+`loop` package.
+
+| Example | Purpose |
 |---|---|
-| `src/loop/` | The `loop` library |
-| `workflows/dev/` | Self-contained example dev Workflow, named prompts, repository configuration, helpers, and tests |
-| `workflows/` | Also contains the self-contained `plan_implement.py` example |
-| `tests/` | Library and sibling Workflow tests, their fakes, and import-linter architecture checks; `pytest` also discovers `workflows/dev/tests/` |
-| `docs/` | ADRs, Crosscutting Concepts, and research notes |
-| `archive/` | Retired prototypes; parts source only |
+| [Library usage](docs/usage.md#library-examples) | One-shot runs, profiles, shared worktrees, sessions, and Loop hooks |
+| [Plan and implement](workflows/plan_implement.py) | Plan and implement with different models on one worktree |
+| [Dev Workflow guide](docs/usage.md#dev-workflow) | Deliver GitHub Tickets, configure multiple repositories, and customize prompts |
+
+The dev Workflow can create commits, push branches, open draft pull requests,
+and update Tickets. Read its configuration guide before running it.
 
 ## Documentation
 
-- [CONTEXT.md](CONTEXT.md) — domain glossary
-- [ARCHITECTURE.md](ARCHITECTURE.md) — building blocks, ADRs, and Crosscutting Concepts
-- [System context](docs/building-blocks/system-context.md) — context and container diagrams
+- [Usage guide](docs/usage.md): advanced examples, logging, and dev Workflow configuration.
+- [Domain glossary](CONTEXT.md): project terminology.
+- [Architecture](ARCHITECTURE.md): codebase structure, design decisions, and concepts.
+- [System context](docs/building-blocks/system-context.md): context and container diagrams.
+- [Installation decision](docs/adr/install-loop-with-pip-from-the-repository.md): distribution and versioning.
+
+## Contributing
+
+From the repository root, with your virtual environment active:
+
+```sh
+python -m pip install -e ".[dev]"
+python -m pytest
+```
+
+The test suite includes library tests, example Workflow tests, and import-linter
+architecture checks. See the [test strategy](docs/concepts/ops-test-strategy.md)
+for testing boundaries.
+
+For compatibility changes, verify installation, tests, and Workflow entry points on Python 3.10.12 and a newer supported interpreter; see [Python compatibility](docs/concepts/ops-test-strategy.md#python-compatibility).
+
+For bug reports and feature requests, [open an issue](https://github.com/antshc/loop/issues).
+Include reproduction steps and relevant Python and agent CLI versions for bugs;
+remove credentials and sensitive data from logs before sharing them.

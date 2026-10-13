@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
-import tomllib
+from importlib.metadata import distribution
 from pathlib import Path
 
 ROOT = Path(__file__).parents[2]
@@ -11,12 +11,18 @@ WORKFLOWS = ROOT / "workflows"
 
 
 def test_packaging_declares_no_scripts_and_ships_no_workflow_file() -> None:
-    config = tomllib.loads((ROOT / "pyproject.toml").read_text())
+    package = distribution("loop")
     workflow_files = {p.name for p in WORKFLOWS.glob("*.py") if p.name != "__init__.py"}
     package_files = {p.name for p in SRC.rglob("*.py") if p.name != "__init__.py"}
 
-    assert "scripts" not in config["project"]
+    assert not any(
+        entry.group in {"console_scripts", "gui_scripts"} for entry in package.entry_points
+    )
     assert not workflow_files & package_files
+
+
+def test_package_supports_python_310() -> None:
+    assert distribution("loop").metadata["Requires-Python"] == ">=3.10"
 
 
 def test_import_linter_contracts_pass() -> None:
