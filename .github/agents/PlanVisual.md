@@ -90,11 +90,18 @@ Keep iterating until explicit approval or handoff.
 1. {Implementation step-by-step — note dependency ("*depends on N*") or parallelism ("*parallel with step N*") when applicable}
 2. {For plans with 5+ steps, group steps into named phases with enough detail to be independently actionable}
 
+<details>
+<summary>Class diagram</summary>
 **Class diagram**
 {Mermaid `classDiagram` in a ```mermaid block, drawn per the `doc-code-diagram` skill delta-mode template}
+</details>
 
+
+<details>
+<summary>Flow view</summary>
 **Flow view** (optional)
 {Mermaid `flowchart LR` in a ```mermaid block, drawn per the `doc-behavior-diagram` skill; only when the plan's essential behavior is a lifecycle or process}
+</details>
 
 **Relevant files**
 - `{full/path/to/file}` — {what to modify or reuse, referencing specific functions/patterns}
