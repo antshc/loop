@@ -1,8 +1,4 @@
-"""Autonomous dev loop: one branch and worktree per open Spec, one Ticket per fresh agent run.
-
-Control flow, metadata parsing, and the dev result model are owned here,
-not by the loop library (see docs/concepts/str-loop-library-workflow-architecture.md).
-"""
+"""Routes harness Specs to repository-specific agent workflows on one worktree per Spec."""
 
 from __future__ import annotations
 
@@ -14,8 +10,8 @@ import subprocess
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
 from enum import Enum, auto
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -23,8 +19,8 @@ from loop import (
     DEFAULT,
     Agent,
     AgentBuilder,
-    AgentClient,
     AgentRequest,
+    AgentWorkspace,
     BranchStrategy,
     GitOptions,
     LoopHook,
@@ -32,19 +28,27 @@ from loop import (
     configure_logging,
 )
 from workflows.content import ContentDecodeError, LastJsonObject
-from workflows.platforms.git import Commit, GitService
+from workflows.platforms.git import GitService
 from workflows.platforms.process import CommandError
 from workflows.platforms.work_tracking import (
     GhCli,
     GitHubRepo,
     PullRequestClient,
-    PullRequests,
     Repository,
     RepositoryId,
     Spec,
     Ticket,
     TicketsTracker,
     AgentCommitSubject,
+)
+from workflows.tickets import (
+    AgentWorkflow,
+    ExecutionStoreError,
+    FileExecutionStore,
+    TicketContext,
+    TicketResult as DevResult,
+    TicketWorkflowError as DevError,
+    deliver_tickets,
 )
 
 __all__ = [
@@ -53,6 +57,10 @@ __all__ = [
     "DevResponse",
     "DevResult",
     "DevResultError",
+    "ExecutionStoreError",
+    "FileExecutionStore",
+    "RepositoryWorkflow",
+    "implement_ticket",
     "main",
     "parse_dev_result",
     "prompt_args",
@@ -66,7 +74,7 @@ LOG_DIR_NAME = ".loop"
 LOG_LEVEL = "INFO"
 LOOP_HOOKS: tuple[LoopHook, ...] = ()
 _ROOT = Path(__file__).resolve().parents[1]
-# This workflow delivers only Specs targeting the harness repository.
+# Specs and Tickets stay here even when their code targets another repository.
 HARNESS: Repository = Repository(
     checkout=_ROOT,
     worktrees=_ROOT / "workspace" / f"{_ROOT.name}.worktrees",
@@ -78,16 +86,8 @@ PROMPT = Path(__file__).parent / "prompts" / "dev.md"
 # --- Errors the dev workflow raises on purpose ---
 
 
-class DevError(Exception):
-    """Base class for every error the dev workflow raises on purpose."""
-
-
 class PromptError(DevError):
     """A prompt template placeholder has no matching argument."""
-
-
-class ExecutionStoreError(DevError):
-    """The execution log on disk is unreadable."""
 
 
 class DevResultError(DevError):
@@ -138,18 +138,6 @@ def prompt_args(
 # --- The dev result model: decodes the agent's response envelope ---
 
 
-@dataclass(frozen=True)
-class DevResult:
-    """The decoded `result` of a run's response envelope: `commit`/`summary`/`verification`, or `reason`."""
-
-    identifier: str
-    status: str
-    commit: str | None = None
-    summary: str | None = None
-    verification: str | None = None
-    reason: str | None = None
-
-
 def _check_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
     identifier, status, result = envelope.get("identifier"), envelope.get("status"), envelope.get("result")
     if not isinstance(identifier, str) or status not in ("completed", "failed") or not isinstance(result, dict):
@@ -198,79 +186,22 @@ class DevResponse:
         return parse_dev_result({**envelope, "identifier": str(self._identifier)})
 
 
-# --- Daily per-Ticket execution log of failed attempts ---
-
-Clock = Callable[[], datetime]
+# --- The default agent delegate; other repositories can supply different steps ---
 
 
-class FileExecutionStore:
-    """Daily JSON array of per-Spec execution records at `<directory>/<workflow>-execution-log-<UTC date>.json`."""
-
-    def __init__(self, directory: Path, *, workflow: str = "dev", clock: Clock | None = None) -> None:
-        self._directory = Path(directory)
-        self._workflow = workflow
-        self._clock = clock or (lambda: datetime.now(timezone.utc))
-
-    def failed_attempts(self, key: str) -> int:
-        record = self._find(self._load(), key)
-        return record["count"] if record else 0
-
-    def record_failure(
-        self,
-        key: str,
-        *,
-        owner: str,
-        repo: str,
-        task_id: str,
-        title: str,
-        items: Sequence[int],
-    ) -> None:
-        records = self._load()
-        record = self._find(records, key)
-        updated = {
-            "owner": owner,
-            "repo": repo,
-            "type": "spec",
-            "task_id": task_id,
-            "title": title,
-            "task": key,
-            "count": (record["count"] if record else 0) + 1,
-            "last_run": self._clock().strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "last_items": list(items),
-        }
-        if record is None:
-            records.append(updated)
-        else:
-            records[records.index(record)] = updated
-        self._save(records)
-
-    def reset(self, key: str) -> None:
-        self._save([record for record in self._load() if record["task"] != key])
-
-    def _path(self) -> Path:
-        date = self._clock().strftime("%Y-%m-%d")
-        return self._directory / f"{self._workflow}-execution-log-{date}.json"
-
-    def _load(self) -> list[dict]:
-        path = self._path()
-        if not path.is_file():
-            return []
-        try:
-            data = json.loads(path.read_text())
-        except json.JSONDecodeError as exception:
-            raise ExecutionStoreError(f"execution log is not valid JSON: {path}") from exception
-        if not isinstance(data, list):
-            raise ExecutionStoreError(f"execution log must be a JSON array: {path}")
-        return data
-
-    def _save(self, records: list[dict]) -> None:
-        path = self._path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(records, separators=(",", ":")))
-
-    @staticmethod
-    def _find(records: list[dict], key: str) -> dict | None:
-        return next((record for record in records if record["task"] == key), None)
+def implement_ticket(context: TicketContext, worktree: AgentWorkspace, *, template: str) -> DevResult:
+    """Runs one fresh implementation agent and decodes its response for the selected Ticket."""
+    args = prompt_args(
+        context.ticket,
+        context.identifier,
+        context.initiative_commits,
+        worktree.path,
+        context.base_branch,
+        context.feature_branch,
+    )
+    prompt = render_prompt(template, args)
+    output = worktree.agent(DEFAULT).run(AgentRequest(prompt)).output
+    return DevResponse(context.identifier).decode(output)
 
 
 # --- Dependencies `main` wires once and passes through the orchestration ---
@@ -279,19 +210,24 @@ GithubFactory = Callable[[Path], GitHubRepo]
 
 
 @dataclass(frozen=True)
-class Prompts:
-    dev: str
+class RepositoryWorkflow:
+    """One allowed target repository and the agent steps used to deliver its Tickets."""
+
+    repository: Repository
+    run_agents: AgentWorkflow
 
 
 @dataclass(frozen=True)
 class DevDeps:
-    pull_requests: PullRequests
+    """Shared dependencies for routing and delivering harness Specs."""
+
     tracker: TicketsTracker
     store: FileExecutionStore
     git: GitService
     new_agent: Callable[[], AgentBuilder]
     loop_hooks: tuple[LoopHook, ...]
-    prompts: Prompts
+    ticket_repository: RepositoryId
+    github_factory: GithubFactory | None
 
 
 # --- Spec orchestration: prepare, deliver, publish, and announce each open Spec ---
@@ -303,196 +239,116 @@ class Outcome(Enum):
     SKIPPED = auto()
 
 
-class DevWorkflow:
-    """Delivers every open Spec through the dependencies it is constructed with."""
+def process_specs(repositories: Sequence[RepositoryWorkflow], deps: DevDeps) -> int:
+    """Routes every non-human-blocked Spec to its configured repository and returns the exit code."""
+    targets: dict[str, RepositoryWorkflow] = {}
+    for workflow in repositories:
+        target = str(workflow.repository.owner_name).casefold()
+        if target in targets:
+            raise DevError(f"duplicate repository workflow: {target}")
+        targets[target] = workflow
+    failed = False
+    for spec in deps.tracker.specs():
+        if not spec.awaiting_human:
+            failed = (_process_spec(spec, targets, deps) is Outcome.FAILED) or failed
+    return 1 if failed else 0
 
-    def __init__(self, deps: DevDeps) -> None:
-        self._tracker = deps.tracker
-        self._pull_requests = deps.pull_requests
-        self._git = deps.git
-        self._store = deps.store
-        self._new_agent = deps.new_agent
-        self._loop_hooks = deps.loop_hooks
-        self._prompts = deps.prompts
 
-    def process_specs(self) -> int:
-        """Processes every Spec not waiting for a human; returns the process exit code."""
-        failed = False
-        for spec in self._tracker.specs():
-            if spec.awaiting_human:
-                continue
-            failed = (self._process_spec(spec) is Outcome.FAILED) or failed
-        return 1 if failed else 0
-
-    def _process_spec(self, spec: Spec) -> Outcome:
-        """Prepare, deliver, and publish one Spec."""
-        if spec.target is None or spec.base_branch is None:
-            spec.block(f"dev: cannot resolve repo:target/repo:base labels on {spec.url}")
-            self._tracker.update_spec(spec)
+def _process_spec(spec: Spec, targets: Mapping[str, RepositoryWorkflow], deps: DevDeps) -> Outcome:
+    target = spec.target
+    if target is None or spec.base_branch is None:
+        spec.block(f"dev: cannot resolve repo:target/repo:base labels on {spec.url}")
+        deps.tracker.update_spec(spec)
+        return Outcome.SKIPPED
+    workflow = targets.get(target.casefold())
+    if workflow is None:
+        spec.block(f"dev: repo:target:{target} is not configured for harness {deps.ticket_repository}")
+        deps.tracker.update_spec(spec)
+        return Outcome.SKIPPED
+    try:
+        if not _prepare(spec, workflow.repository, deps):
             return Outcome.SKIPPED
+        return _deliver_on_worktree(spec, workflow, deps)
+    except (CommandError, LoopHookError, subprocess.CalledProcessError) as exception:
+        logger.error("spec #%s failed: %s", spec.number, exception)
+        spec.comment(f"dev: {_describe(exception)}")
+        deps.tracker.update_spec(spec)
+        return Outcome.FAILED
 
-        if spec.target.casefold() != str(HARNESS.owner_name).casefold():
-            spec.block(f"dev: repo:target:{spec.target} does not match harness {HARNESS.owner_name}")
-            self._tracker.update_spec(spec)
-            return Outcome.SKIPPED
 
-        try:
-            if not self._prepare(spec):
-                return Outcome.SKIPPED
-            return self._deliver_on_worktree(spec)
-        except (CommandError, LoopHookError, subprocess.CalledProcessError) as exception:
-            logger.error("spec #%s failed: %s", spec.number, exception)
-            spec.comment(f"dev: {self._describe(exception)}")
-            self._tracker.update_spec(spec)
-            return Outcome.FAILED
+def _prepare(spec: Spec, repository: Repository, deps: DevDeps) -> bool:
+    deps.git.fetch(repository.checkout)
+    if not spec.has_work:
+        _publish_pull_request(spec, repository, repository.checkout, deps)
+        return False
+    base_branch = spec.base_branch
+    if base_branch is None:
+        raise DevError(f"cannot resolve base branch for Spec {spec.url}")
+    if not deps.git.remote_branch_exists(repository.checkout, base_branch):
+        spec.hand_to_human(f"dev: target branch {base_branch!r} does not exist on {spec.target}")
+        deps.tracker.update_spec(spec)
+        return False
+    # Publish earlier runs' commits from the checkout before the worktree opens.
+    _publish_pull_request(spec, repository, repository.checkout, deps)
+    return True
 
-    def _prepare(self, spec: Spec) -> bool:
-        """Publishes earlier runs' commits; True only when there are Tickets to deliver."""
-        self._git.fetch(HARNESS.checkout)
-        if not spec.has_work:
-            self.publish_pull_request(spec, HARNESS.checkout)
-            return False
-        if not self._git.remote_branch_exists(HARNESS.checkout, spec.base_branch):
-            spec.hand_to_human(f"dev: target branch {spec.base_branch!r} does not exist on {spec.target}")
-            self._tracker.update_spec(spec)
-            return False
-        # Publish earlier runs' commits from the checkout before the worktree opens.
-        self.publish_pull_request(spec, HARNESS.checkout)
-        return True
 
-    def _deliver_on_worktree(self, spec: Spec) -> Outcome:
-        """Opens the feature-branch worktree, delivers the Tickets in it, and publishes before it closes."""
-        options = GitOptions(
-            root_path=HARNESS.worktrees,
-            repository_path=HARNESS.checkout,
-            strategy=BranchStrategy(spec.feature_branch, f"origin/{spec.base_branch}"),
-            loop_hooks=self._loop_hooks,
-        )
-        with self._new_agent().with_git(options).open() as worktree:
-            client = worktree.agent(DEFAULT)
-            delivered = self._deliver_tickets(spec, worktree.path, client)
-            pull_request_url = self.publish_pull_request(spec, worktree.path)
-            if delivered and pull_request_url is not None:
-                spec.announce_delivered(pull_request_url)
-                self._tracker.update_spec(spec)
-        return Outcome.SUCCESS if delivered else Outcome.FAILED
-
-    def _deliver_tickets(self, spec: Spec, worktree: Path, client: AgentClient) -> bool:
-        """Delivers each actionable Ticket in order; stops at the first failure."""
-        for ticket in spec.tickets:
-            if not self._deliver_ticket(spec, ticket, worktree, client):
-                return False
-        return True
-
-    def _deliver_ticket(self, spec: Spec, ticket: Ticket, worktree: Path, client: AgentClient) -> bool:
-        """Fresh agent runs for `ticket` until one is accepted or its failure cap is reached; True on success."""
-        identifier = AgentCommitSubject(spec.initiative, ticket.number)
-        while True:
-            head_before = self._git.head(worktree)
-            attempt = self._attempt(spec, ticket, identifier, worktree, client, head_before)
-            if isinstance(attempt, DevResult):
-                spec.close_ticket(
-                    ticket.number, f"Delivered in {attempt.commit}.\n\n{attempt.summary}\n\n{attempt.verification}"
-                )
-                self._tracker.update_spec(spec)
-                self._store.reset(ticket.url)
-                return True
-            self._git.restore(worktree, head_before.sha)
-            if self._record_failure(ticket) >= MAX_TICKET_FAILURES:
-                spec.escalate(ticket.number, attempt)
-                self._tracker.update_spec(spec)
-                return False
-
-    def _initiative_commits(self, worktree: Path, spec: Spec, identifier: AgentCommitSubject) -> list[str]:
-        """This Initiative's `ccode(<initiative-id>|` commits on the feature branch since the base branch, as `<short hash> <subject>`."""
-        found = self._git.initiative_commits(worktree, spec.base_branch, identifier.initiative_commit_prefix)
-        return [f"{commit.sha[:7]} {commit.subject}" for commit in found]
-
-    def _attempt(
-        self,
-        spec: Spec,
-        ticket: Ticket,
-        identifier: AgentCommitSubject,
-        worktree: Path,
-        client: AgentClient,
-        head_before: Commit,
-    ) -> DevResult | str:
-        """Runs the agent once and validates its response and Git; returns the accepted result, or the failure reason."""
-        args = prompt_args(
-            ticket,
-            identifier,
-            self._initiative_commits(worktree, spec, identifier),
+def _deliver_on_worktree(spec: Spec, workflow: RepositoryWorkflow, deps: DevDeps) -> Outcome:
+    feature_branch = spec.feature_branch
+    if feature_branch is None:
+        raise DevError(f"cannot resolve feature branch for Spec {spec.url}")
+    options = GitOptions(
+        root_path=workflow.repository.worktrees,
+        repository_path=workflow.repository.checkout,
+        strategy=BranchStrategy(feature_branch, f"origin/{spec.base_branch}"),
+        loop_hooks=deps.loop_hooks,
+    )
+    with deps.new_agent().with_git(options).open() as worktree:
+        delivered = deliver_tickets(
+            spec,
             worktree,
-            spec.base_branch,
-            spec.feature_branch,
+            workflow.run_agents,
+            git=deps.git,
+            tracker=deps.tracker,
+            store=deps.store,
+            ticket_repository=deps.ticket_repository,
+            max_failures=MAX_TICKET_FAILURES,
         )
-        try:
-            prompt = render_prompt(self._prompts.dev, args)
-            output = client.run(AgentRequest(prompt)).output
-            dev_result = DevResponse(identifier).decode(output)
-        except subprocess.CalledProcessError:
-            return "agent process did not exit successfully"
-        except DevError as exception:
-            return str(exception)
-        if dev_result.status == "failed":
-            return dev_result.reason or ""
+        pull_request_url = _publish_pull_request(spec, workflow.repository, worktree.path, deps)
+        if delivered and pull_request_url is not None:
+            spec.announce_delivered(pull_request_url)
+            deps.tracker.update_spec(spec)
+    return Outcome.SUCCESS if delivered else Outcome.FAILED
 
-        violation = self._commit_violation(worktree, head_before, identifier, dev_result)
-        return dev_result if violation is None else violation
 
-    def _commit_violation(
-        self, worktree: Path, head_before: Commit, identifier: AgentCommitSubject, dev_result: DevResult
-    ) -> str | None:
-        """Why the worktree does not hold exactly the one clean, correctly tagged commit the result claims, or None."""
-        head = self._git.head(worktree)
-        if head.sha == head_before.sha:
-            return "HEAD did not change: the agent made no commit"
-        new_commits = self._git.commits_since(worktree, head_before.sha)
-        if len(new_commits) != 1:
-            return f"expected exactly one commit since {head_before.sha}, found {len(new_commits)}"
-        prefix = identifier.to_subject()
-        if not head.subject.startswith(prefix):
-            return f"HEAD subject {head.subject!r} does not start with {prefix!r}"
-        if not self._git.is_clean(worktree):
-            return "the worktree has uncommitted changes"
-        if dev_result.commit != head.sha:
-            return f"result.commit {dev_result.commit!r} does not equal HEAD {head.sha!r}"
+def _publish_pull_request(spec: Spec, repository: Repository, pusher: Path, deps: DevDeps) -> str | None:
+    base_branch, feature_branch = spec.base_branch, spec.feature_branch
+    if base_branch is None or feature_branch is None:
+        raise DevError(f"cannot resolve branches for Spec {spec.url}")
+    if not deps.git.push_if_ahead(pusher, feature_branch, base_branch):
         return None
+    client = PullRequestClient(_github(repository, deps.github_factory))
+    title = f"{spec.initiative}: {spec.bare_title}"
+    return client.create_draft_pull_request(feature_branch, base_branch, title).url
 
-    def _record_failure(self, ticket: Ticket) -> int:
-        """Counts one failure for `ticket` and returns its persisted total."""
-        owner, repo = HARNESS.owner_name
-        self._store.record_failure(
-            ticket.url,
-            owner=owner,
-            repo=repo,
-            task_id=str(ticket.number),
-            title=ticket.title,
-            items=[ticket.number],
-        )
-        return self._store.failed_attempts(ticket.url)
 
-    def publish_pull_request(self, spec: Spec, pusher: Path) -> str | None:
-        """Pushes the feature branch from `pusher` and ensures its draft PR when it is ahead of origin.
-
-        Returns the PR URL, or None when there was nothing to publish.
-        """
-        if not self._git.push_if_ahead(pusher, spec.feature_branch, spec.base_branch):
-            return None
-        return self._pull_requests.publish_draft(spec, spec.feature_branch)
-
-    @staticmethod
-    def _describe(exception: Exception) -> str:
-        if isinstance(exception, subprocess.CalledProcessError):
-            return f"{exception}\n{exception.stderr or ''}".strip()
-        return str(exception)
+def _describe(exception: Exception) -> str:
+    if isinstance(exception, subprocess.CalledProcessError):
+        return f"{exception}\n{exception.stderr or ''}".strip()
+    return str(exception)
 
 
 # --- Entry point ---
 
 
-def _tracker(repo: GitHubRepo) -> TicketsTracker:
-    return TicketsTracker(HARNESS.owner_name.owner, HARNESS.owner_name.repo, gh=repo.run)
+def _github(repository: Repository, factory: GithubFactory | None) -> GitHubRepo:
+    if factory is not None:
+        return factory(repository.checkout)
+    return GitHubRepo(
+        repository.owner_name.owner,
+        repository.owner_name.repo,
+        gh=GhCli(cwd=repository.checkout),
+    )
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -510,8 +366,9 @@ def main(
     new_agent: Callable[[], AgentBuilder] = Agent,
     store: FileExecutionStore | None = None,
     loop_hooks: tuple[LoopHook, ...] = LOOP_HOOKS,
+    repositories: Sequence[RepositoryWorkflow] | None = None,
 ) -> int:
-    """Runs the dev Workflow once over every open Spec from the current folder; returns the process exit code."""
+    """Delivers harness Specs through configured repositories, defaulting to implementation on the harness."""
     args = _parse_args(argv)
 
     log_dir = (args.log_dir or Path.cwd() / LOG_DIR_NAME).resolve()
@@ -519,30 +376,45 @@ def main(
     configure_logging(args.log_level, log_file=log_dir / "dev.log", logger="")
 
     try:
-        # GitHub identity comes from the constant, not from the checkout's origin.
-        github = (
-            github_factory(HARNESS.checkout)
-            if github_factory is not None
-            else GitHubRepo(
-                HARNESS.owner_name.owner,
-                HARNESS.owner_name.repo,
-                gh=GhCli(cwd=HARNESS.checkout),
-            )
-        )
+        github = _github(HARNESS, github_factory)
+        if repositories is None:
+            repositories = (RepositoryWorkflow(HARNESS, partial(implement_ticket, template=PROMPT.read_text())),)
         deps = DevDeps(
-            pull_requests=PullRequests(PullRequestClient(github)),
-            tracker=_tracker(github),
+            tracker=TicketsTracker(HARNESS.owner_name.owner, HARNESS.owner_name.repo, gh=github.run),
             store=store or FileExecutionStore(log_dir),
             git=git or GitService(),
             new_agent=new_agent,
             loop_hooks=loop_hooks,
-            prompts=Prompts(dev=PROMPT.read_text()),
+            ticket_repository=HARNESS.owner_name,
+            github_factory=github_factory,
         )
-        return DevWorkflow(deps).process_specs()
+        return process_specs(repositories, deps)
     except Exception as exception:  # last-resort boundary: log and fail, never crash bare
         logger.exception("unexpected error: %s", exception)
         return 1
 
 
 if __name__ == "__main__":
+    # Example: replace the default call below to target two existing sub-repositories.
+    # workspace = HARNESS.checkout / "workspace"
+    # implement = partial(implement_ticket, template=PROMPT.read_text())
+    # repositories = (
+    #     RepositoryWorkflow(
+    #         repository=Repository(
+    #             checkout=workspace / "api",
+    #             worktrees=workspace / "api.worktrees",
+    #             owner_name=RepositoryId("acme", "api"),
+    #         ),
+    #         run_agents=implement,
+    #     ),
+    #     RepositoryWorkflow(
+    #         repository=Repository(
+    #             checkout=workspace / "web",
+    #             worktrees=workspace / "web.worktrees",
+    #             owner_name=RepositoryId("acme", "web"),
+    #         ),
+    #         run_agents=implement,  # Replace with this repository's agent workflow.
+    #     ),
+    # )
+    # sys.exit(main(sys.argv[1:], repositories=repositories))
     sys.exit(main(sys.argv[1:]))

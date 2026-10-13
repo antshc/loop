@@ -1,7 +1,15 @@
 # Autonomous Spec Delivery
 
 ## Purpose
-Loop delivers the approved Tickets of every open Spec to a draft pull request without an operator in the session, one fresh agent run per Ticket, and escalates a Ticket to a human once it keeps failing.
+Loop delivers the approved Tickets of every open Spec to a draft pull request without an operator in the session and escalates a Ticket to a human once it keeps failing. The default agent delegate uses one fresh implementation run per Ticket attempt; configured repositories may compose several agent steps per attempt.
+
+Specs and Tickets are read and updated on the harness tracker. Each Spec's target
+selects an explicitly configured repository and its agent delegate; Git operations
+and the draft PR belong to that target. The reusable ticket workflow supplies the
+selected Ticket and refreshed Initiative history, invokes the delegate, and
+validates its typed result and exactly one final commit. Implement/Review delegates
+may amend that commit; retries restart the entire delegate after rollback.
+The process diagrams below show the default implementation delegate.
 
 ## Definition
 - **Actors:** Operator; Loop (the example `dev` Workflow); Copilot agent (one fresh headless run per Ticket); GitHub.

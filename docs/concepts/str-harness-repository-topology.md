@@ -5,9 +5,12 @@
 
 The harness contains agent instructions, skills, Specs, and Tickets. The dev workflow runs agents on isolated Git worktrees without modifying its checkout.
 
-## Current implementation: single repository
+## Harness and target repositories
 
-`workflows/dev.py` targets only the harness repository. A single immutable `HARNESS: Repository` constant declares the checkout, the worktree parent folder, and its GitHub identity. No repository registry or runtime target resolution is required.
+`workflows/dev.py` reads Specs and Tickets from the immutable `HARNESS: Repository`.
+Each target is an explicit `RepositoryWorkflow` pairing a `Repository` with an
+agent delegate. With no target configuration, the workflow defaults to
+implementation on the harness repository.
 
 ```python
 class RepositoryId(NamedTuple):
@@ -33,12 +36,14 @@ HARNESS = Repository(
 )
 ```
 
-- MUST validate each Spec's `repo:target:<owner/repo>` label against `str(HARNESS.owner_name)`, case-insensitively.
-- MUST mark missing, malformed, duplicated, or foreign targets `hitl` without fetching Git or opening a worktree.
-- MUST use `HARNESS.checkout` for Git fetch and repository operations; the agent edits only its new worktree.
-- MUST create feature-branch worktrees beneath `HARNESS.worktrees`, one directory per branch.
-- MUST use `HARNESS.owner_name.owner` and `HARNESS.owner_name.repo` for GitHub identity and execution logs; do not split slugs at call sites.
-- MUST publish PRs to the harness GitHub repository using its repository-bound `PullRequests` client.
+- MUST resolve each Spec's `repo:target:<owner/repo>` label against the configured repositories, case-insensitively.
+- MUST mark missing, malformed, duplicated, or unconfigured targets `hitl` when they block actionable Tickets, without fetching Git or opening a worktree.
+- MUST reject duplicate repository configurations rather than choose one delegate implicitly.
+- MUST use the selected repository's `checkout` for Git fetch and repository operations; the agent edits only its worktree.
+- MUST create feature-branch worktrees beneath the selected repository's `worktrees`, one directory per branch.
+- MUST keep Spec/Ticket reads, updates, and execution-log identities on `HARNESS.owner_name`.
+- MUST publish PRs to the selected target's GitHub repository; create its `PullRequestClient` only when Git has work to publish, and keep it out of Ticket orchestration.
+- `PullRequestClient` exposes only `create_draft_pull_request`; finding an existing open PR is internal, and PR editing and review-thread operations are outside this ticket-delivery module.
 - MUST NOT clone a missing repository or fall back to a different target when a Spec label does not match.
 
 ## Directory layout
@@ -56,4 +61,26 @@ loop/                           # HARNESS.checkout
 
 ## Multi-repository layouts
 
-A harness wrapping independent codebase repositories remains an architectural possibility but is **not supported by the current dev workflow**. Supporting it requires an explicit target repository configuration, separate repository-scoped PR clients, and new tests. Do not implicitly reintroduce registry or pool behavior into the single-repository workflow.
+The same ticket workflow can deliver code to independently cloned repositories
+under the Workspace Folder, each with different agent steps:
+
+```text
+harness/
+├── workflows/
+└── workspace/
+    ├── api/                    # api checkout
+    ├── api.worktrees/
+    │   └── <feature-branch>/
+    ├── web/                    # web checkout
+    └── web.worktrees/
+        └── <feature-branch>/
+```
+
+Specs remain on the harness tracker and identify their target and base branch by
+labels. The selected agent delegate receives only the current Ticket's context
+and the open `AgentWorkspace`, not the Spec or tracker. Ticket iteration,
+Initiative history, retry/rollback, and one-commit validation do not vary with
+the delegate. There is no directory discovery or repository cloning.
+
+See the [multi-repository example](../../README.md#different-agent-workflows-per-repository)
+for configuration and an Implement/Review delegate.

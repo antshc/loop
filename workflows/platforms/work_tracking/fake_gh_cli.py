@@ -51,11 +51,6 @@ class FakeGhCli:
             return json.dumps([{"data": {"repository": {"issue": {"subIssues": {"nodes": nodes}}}}}])
         if "labels: [" in query:
             return json.dumps([{"data": {"repository": {"issues": {"nodes": self._specs}}}}])
-        if "reviewThreads" in query:
-            return json.dumps({"data": {"repository": {"pullRequest": {"reviewThreads": {"nodes": [
-                _thread("t1", False, "Rename this variable."),
-                _thread("t2", True, "Looks good."),
-            ]}}}}})
         return "{}"
 
     def _pr_list(self, args: tuple[str, ...]) -> str:
@@ -85,13 +80,4 @@ def _pr(number: int, branch: str, title: str = "Add login page (PR)") -> dict:
         "title": title,
         "url": f"https://github.com/owner/repo/pull/{number}",
         "headRefName": branch,
-    }
-
-
-def _thread(thread_id: str, resolved: bool, body: str) -> dict:
-    return {
-        "id": thread_id,
-        "isResolved": resolved,
-        "path": "src/app.py",
-        "comments": {"nodes": [{"body": body}]},
     }

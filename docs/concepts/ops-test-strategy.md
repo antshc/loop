@@ -10,6 +10,7 @@ One unit test group runs in the project's single test command (`pytest`). It tes
 
 - **Library seams:** `CliRunner` and `GitService` (and `DockerService`) are the replaceable boundaries; tests build `AgentBuilder(runner, git, docker)` over a `FakeRunner` and `FakeGitService`.
 - **Workflow seams:** a Workflow's Git reads and publication (`GitService`) and its GitHub client (`FakeGhCli`) are injected as in-memory fakes; the `dev` Workflow takes `new_agent`, so tests supply a builder over the fake runner.
+- **Ticket delegate seam:** reusable Ticket orchestration is tested through `deliver_tickets` with function delegates returning typed results; multi-repository scenarios drive `dev.main` with separate histories, clients, and delegates to prove target isolation and harness-only Ticket updates.
 - **Shared harness:** `tests/workflow_harness.py` holds the fakes, `DevHarness`, and the response-envelope builders, imported by every test module.
 - **Architecture checks:** import-linter contracts run as a test.
 
@@ -18,8 +19,8 @@ One unit test group runs in the project's single test command (`pytest`). It tes
 - MUST test every shipped component against its own boundary fake, one behavior per test.
 - MUST NOT start a real `git`, `gh`, `docker`, or agent CLI process, or reach the network, from any test; the project has no live or integration test group.
 - MUST drive a Workflow scenario through the Workflow's `main` with injected dependencies, with the real builder, prompt rendering, and response extraction.
-- MUST make the runner fake commit through the Git fake before it reports completion, so Git validation runs against fake state.
-- MUST NOT hand a Workflow a pre-built agent result: the runner fake returns the raw output the CLI would print, and the Workflow extracts the envelope.
+- MUST make the runner fake or injected Ticket delegate commit through the Git fake before reporting completion, so Git validation runs against fake state.
+- MUST exercise agent response parsing with raw runner output; tests of the independent Ticket delegate seam may return typed results without parsing an agent envelope.
 - MUST assert a scenario outcome on effects at the fake boundaries — tracker writes, pushes, CLI invocations and prompts — and MUST NOT assert on Workflow internals.
 - MUST state each scenario as Given/when/then in its docstring, and name each test as a sentence of the behavior it proves.
 - MUST keep fakes and Workflow wiring in the shared harness; a test module MUST NOT rebuild them.

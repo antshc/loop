@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from .github_repo import GhCli, GitHubRepo
-from .pull_request_client import PullRequest, PullRequestClient, ReviewThread
-from .repository import PullRequests, Repository, RepositoryId
+from .pull_request_client import PullRequest, PullRequestClient
+from .repository import Repository, RepositoryId
 from .tracker import HITL_LABEL, Comment, Spec, Ticket, TicketsTracker
 from .agent_commit_subject import AgentCommitSubject
 
@@ -15,10 +15,8 @@ __all__ = [
     "GitHubRepo",
     "PullRequest",
     "PullRequestClient",
-    "PullRequests",
     "Repository",
     "RepositoryId",
-    "ReviewThread",
     "Spec",
     "Ticket",
     "TicketsTracker",

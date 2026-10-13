@@ -68,6 +68,90 @@ alias dev='PYTHONPATH=/path/to/harness python -m workflows.dev'
 dev --log-level DEBUG
 ```
 
+### Different agent workflows per repository
+
+The example [`dev`](workflows/dev.py) reads Specs and Tickets from `HARNESS`.
+By default it implements only Specs targeting the harness itself. Pass
+`repositories=` to route Specs by their `repo:target:<owner/repo>` label to
+explicitly configured checkouts under the harness's `workspace` folder.
+Repositories must already be cloned; unknown targets are handed to a human.
+
+Each `RepositoryWorkflow` pairs a `Repository` with a function accepting
+`(TicketContext, AgentWorkspace)` and returning a `TicketResult`. The function
+owns agent profiles, step ordering, prompt rendering, and response decoding.
+For example, one repository can implement only while another implements and reviews:
+
+```python
+from __future__ import annotations
+
+from functools import partial
+from pathlib import Path
+
+from loop import AgentProfile, AgentRequest, AgentWorkspace, copilot
+from workflows.dev import PROMPT, DevResponse, RepositoryWorkflow, implement_ticket, main
+from workflows.platforms.work_tracking import Repository, RepositoryId
+from workflows.tickets import TicketContext, TicketResult
+
+workspace = Path.cwd() / "workspace"
+implement = partial(implement_ticket, template=PROMPT.read_text())
+reviewer = AgentProfile(copilot)  # Set a model and reasoning effort here if desired.
+
+
+def implement_and_review(context: TicketContext, worktree: AgentWorkspace) -> TicketResult:
+    """Implements the Ticket, then reviews and optionally amends its one commit."""
+    result = implement(context, worktree)
+    if result.status == "failed":
+        return result
+    prompt = f"""Review commit {result.commit} against this Ticket:
+{context.ticket.title}
+{context.ticket.body}
+
+Work only in this worktree. Verify the implementation; fix defects by amending
+the existing commit, not by adding another. Keep the commit subject prefix
+{context.identifier.to_subject()!r}. Leave the worktree clean.
+Do not push, create PRs, or update Tickets.
+
+Return a JSON object with identifier "{context.identifier}" and status
+"completed", with result containing commit (the final full HEAD SHA), summary,
+and verification. If review cannot complete, return status "failed" with
+result containing reason.
+"""
+    output = worktree.agent(reviewer).run(AgentRequest(prompt)).output
+    return DevResponse(context.identifier).decode(output)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(repositories=(
+        RepositoryWorkflow(
+            Repository(workspace / "api", workspace / "api.worktrees", RepositoryId("acme", "api")),
+            implement,
+        ),
+        RepositoryWorkflow(
+            Repository(workspace / "web", workspace / "web.worktrees", RepositoryId("acme", "web")),
+            implement_and_review,
+        ),
+    )))
+```
+
+Run this user-owned script from the harness root. Configure `HARNESS` in
+[`dev`](workflows/dev.py) for the repository holding your Specs and Tickets.
+The supplied list replaces the default target; include the harness explicitly
+if it should also receive code changes. Repository identities are matched
+case-insensitively; duplicate configurations fail the run.
+
+The reusable [`deliver_tickets`](workflows/tickets.py) function handles Ticket
+iteration, refreshed Initiative history, retries, rollback, failure counts, and
+Ticket closure. A delegate can return a failed `TicketResult` or raise
+`TicketWorkflowError` for an expected, retryable failure; agent process failures
+are also retried. Each retry invokes the whole delegate.
+
+After the delegate finishes, the ticket workflow requires exactly one new,
+correctly tagged commit, a clean worktree, and a reported SHA equal to HEAD.
+Existing Initiative commits provide context; a matching subject alone does not
+automatically close or skip a Ticket. Git operations and draft PRs use the target
+repository; Ticket updates and failure-record identities remain on the harness.
+Without session-enabled builders, agent steps start fresh sessions.
+
 ### Logging
 
 The library logs under the `loop` logger and is silent until you call `configure_logging`:

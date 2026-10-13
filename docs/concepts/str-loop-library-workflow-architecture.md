@@ -7,11 +7,12 @@ Let each autonomous procedure (`dev`, a review loop, a custom flow) be written a
 
 ## Concept
 
-Loop is a library of an agent builder, agent CLI adapters, git, and hooks; a **workflow** is one ordinary Python file that wires them and runs its own loop (the unit Sandcastle calls a template).
+Loop is a library of an agent builder, agent CLI adapters, git, and hooks; a **workflow** is an ordinary Python entry point that wires them and runs its own loop, with reusable workflow-side modules where responsibilities are shared.
 
 - The core of Loop is the **agent builder** and git. `Agent()` returns an `AgentBuilder`; `open()` creates a worktree under the harness's `workspace` folder on a branch strategy and yields clients that run the agent CLI directly on the host in that worktree, and removes the worktree on exit ([Build agents with an agent builder](../adr/build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md)).
 - Loop ships default implementations for git, the Copilot and Codex agent CLIs, and an in-memory session store. The replaceable seams are `CliRunner`, `GitService`, `DockerService`, and `SessionStore`; tests replace them with fakes ([Ship Loop as a workflow library](../adr/ship-loop-as-a-workflow-library-with-no-built-in-workflows.md)). The GitHub client, Spec/Ticket tracker, response extraction, commit validation, and publication are workflow-side code in `workflows/platforms/` and the Workflow.
 - Loop ships no workflows: the user writes every workflow, `dev` included; this repository's `workflows/dev.py` is only an example and test subject.
+- The example `dev` separates repository routing from reusable Ticket orchestration in `workflows/tickets.py`. A function delegate owns the agent steps for each configured repository; the Ticket module owns history, retries, and commit validation without importing an agent workflow.
 - A workflow imports only the public `loop` API and is a runnable script: its entry point takes an argument list and returns an exit code, and a `__main__` guard passes that code to the process exit. Dependencies enter that entry point as optional parameters that default to the shipped implementations, so tests substitute fakes ([Ship Loop as a workflow library](../adr/ship-loop-as-a-workflow-library-with-no-built-in-workflows.md)).
 - Loop ships no command: the user runs a workflow script through their own shell alias (for example `alias loop-dev='python -m workflows.dev'`), with the harness as the current folder ([Ship Loop as a workflow library](../adr/ship-loop-as-a-workflow-library-with-no-built-in-workflows.md)).
 - The workflow file is the workflow's DSL and carries its own settings as code: harness root, log dir, the agent profile, retry and failure bounds, prompt template, and the Loop hooks it passes in `GitOptions`. Command-line arguments are optional overrides the workflow chooses to expose; there is no Loop configuration file.
@@ -25,11 +26,11 @@ Loop is a library of an agent builder, agent CLI adapters, git, and hooks; a **w
 - MUST let a user replace any shipped implementation (git, GitHub tracker, agent builder) with their own through the workflow's injected dependencies.
 - MUST run every agent invocation through an `AgentClient` from the builder or an opened `Worktree`; a workflow MUST NOT call the provider CLI directly.
 - MUST create the branch and worktree through `GitOptions` and a branch strategy, by default under the harness's `workspace` folder, and run the Workflow from the harness root so the worktree root is inside the process working directory.
-- MUST write each workflow as one Python file that owns its settings, control flow, and wiring and exposes one entry point returning the exit code, run by a `__main__` guard.
+- MUST give each workflow a Python entry point that owns its settings and wiring, returns the exit code, and runs through a `__main__` guard; shared workflow-side modules may encapsulate reusable control flow.
 - MUST accept every external dependency of that entry point as an optional parameter defaulting to the shipped implementation.
 - MUST declare a workflow's settings and Loop hooks as code in the workflow module; a workflow MUST run with no command-line arguments and MUST NOT require a configuration file.
 - MUST treat command-line arguments as optional overrides of the workflow's coded settings, owned by that workflow.
-- MUST NOT let a workflow import another workflow.
+- MUST NOT couple independent workflow entry points through imports; a user-owned composition script may import a workflow's explicit composition interface, and shared orchestration must not import its agent delegates.
 - MUST keep the library layered by import direction (`factory` > `builder` > `agents` > `clis | docker | git` > `run` > `hooks` > `sessions`), and `workflows/platforms` free of Workflow imports.
 - MUST keep process execution (`git`, `gh`, agent CLIs) inside shipped implementations.
 - MUST NOT run a workflow file from outside the harness-root workflows folder; running it executes its code.
@@ -49,7 +50,8 @@ loop/                              # public API: builder, profiles, strategies, 
 └── SessionStore, MemorySessionStore
 <harness root>/workflows/         # user-written; imports only `loop`; main(argv) -> int
 ├── platforms/work_tracking/      # GitHubRepo (gh wrapper), PullRequestClient, Spec/Ticket entities, TicketsTracker
-├── dev/                          # runs via the user's alias: python -m workflows.dev
+├── dev.py                        # routes Specs and supplies the default agent delegate
+├── tickets.py                    # reusable Ticket orchestration, independent of agent steps
 ├── plan_implement.py             # plan with one model, implement with another, on one worktree
 └── review.py                     # may call its own tracker client
 ```

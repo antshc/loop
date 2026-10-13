@@ -11,7 +11,7 @@ from loop import BranchStrategy
 from workflow_harness import COMPLETED, DevHarness, crash, envelope, hook_error, issue
 from workflows import dev
 from workflows.dev import FileExecutionStore
-from workflows.platforms.work_tracking import AgentCommitSubject, Spec, TicketsTracker
+from workflows.platforms.work_tracking import AgentCommitSubject, GitHubRepo, Spec, TicketsTracker
 from workflows.platforms.work_tracking.fake_gh_cli import FakeGhCli
 
 _PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
@@ -370,6 +370,19 @@ def test_nothing_ahead_means_no_push_and_no_pull_request(tmp_path: Path) -> None
     code = harness.run()
 
     assert code == 0 and harness.git.pushes == [] and harness.writes() == []
+
+
+def test_nothing_to_publish_constructs_only_the_harness_tracker_client(tmp_path: Path) -> None:
+    harness = DevHarness(tmp_path, tickets={1: []})
+    checkouts: list[Path] = []
+
+    def github_factory(checkout: Path) -> GitHubRepo:
+        checkouts.append(checkout)
+        return harness.github
+
+    assert harness.run(github_factory=github_factory) == 0
+    assert checkouts == [harness.root]
+    assert harness.calls("pr") == []
 
 
 def test_repeating_a_run_with_the_remote_up_to_date_pushes_nothing_more(tmp_path: Path) -> None:

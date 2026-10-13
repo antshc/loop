@@ -28,7 +28,7 @@ from loop import (
 )
 from workflows import dev
 from workflows.dev import FileExecutionStore
-from workflows.platforms.git import Commit
+from workflows.platforms.git import Commit, GitService
 from workflows.platforms.work_tracking import GitHubRepo, Repository, RepositoryId
 from workflows.platforms.work_tracking.fake_gh_cli import FakeGhCli
 from workflows.platforms.work_tracking import AgentCommitSubject
@@ -141,6 +141,51 @@ class FakeWorkflowGit:
 
     def is_clean(self, path: Path) -> bool:
         return not self.dirty
+
+
+class FakeRepositoryGit(GitService):
+    """Routes Git calls to isolated fake histories and rejects unexpected checkout or worktree paths."""
+
+    def __init__(self, paths: dict[Path, FakeWorkflowGit]) -> None:
+        self.paths = paths
+
+    def fetch(self, path: Path) -> None:
+        self.paths[path].fetch(path)
+
+    def remote_branch_exists(self, path: Path, branch: str) -> bool:
+        return self.paths[path].remote_branch_exists(path, branch)
+
+    def push_if_ahead(self, path: Path, branch: str, base: str) -> bool:
+        return self.paths[path].push_if_ahead(path, branch, base)
+
+    def head(self, path: Path) -> Commit:
+        return self.paths[path].head(path)
+
+    def commits_since(self, path: Path, sha: str) -> list[Commit]:
+        return self.paths[path].commits_since(path, sha)
+
+    def initiative_commits(self, path: Path, base: str, prefix: str) -> list[Commit]:
+        return self.paths[path].initiative_commits(path, base, prefix)
+
+    def restore(self, path: Path, sha: str) -> None:
+        self.paths[path].restore(path, sha)
+
+    def is_clean(self, path: Path) -> bool:
+        return self.paths[path].is_clean(path)
+
+
+class FakeRepositoryGh(FakeGhCli):
+    """Returns the target repository's URL when a draft PR is created."""
+
+    def __init__(self, repository: RepositoryId) -> None:
+        super().__init__(specs=[], tickets={}, prs=[])
+        self.repository = repository
+
+    def __call__(self, args: tuple[str, ...]) -> str:
+        output = super().__call__(args)
+        if args[:2] == ("pr", "create"):
+            return f"https://github.com/{self.repository}/pull/99"
+        return output
 
 
 def new_agent_for(runner: FakeRunner, git_service: FakeGitService, cwd: Path) -> Callable[[], AgentBuilder]:
