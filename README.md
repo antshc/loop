@@ -119,9 +119,52 @@ The examples live in this repository and are not included in the installed
 | [Library usage](docs/usage.md#library-examples) | One-shot runs, profiles, shared worktrees, sessions, and Loop hooks |
 | [Plan and implement](workflows/plan_implement.py) | Plan and implement with different models on one worktree |
 | [Dev Workflow guide](docs/usage.md#dev-workflow) | Deliver GitHub Tickets, configure multiple repositories, and customize prompts |
+| [Multi-repository Workflow](docs/usage.md#different-agent-workflows-per-repository) | Route Specs to several repositories, each with its own agent steps |
 
 The dev Workflow can create commits, push branches, open draft pull requests,
 and update Tickets. Read its configuration guide before running it.
+
+### Multi-repository example
+
+The dev Workflow routes Specs by their `repo:target:<owner/repo>` label to
+repositories you configure. Each `RepositoryWorkflow` pairs a checkout with a
+function that owns its agent steps; here `api` only implements while `web`
+implements and then reviews. Repositories must already be cloned under
+`workspace/`, and unknown targets are handed to a human.
+
+```python
+from functools import partial
+from pathlib import Path
+
+from workflows.dev import (
+    Repository, RepositoryId, RepositoryWorkflow, implement_ticket, load_prompt, main,
+)
+
+workspace = Path.cwd() / "workspace"
+implement = partial(implement_ticket, template=load_prompt("implement"))
+
+
+def implement_and_review(context, worktree):
+    result = implement(context, worktree)
+    ...  # run a reviewer agent on result.commit; return a TicketResult
+    return result
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(repositories=(
+        RepositoryWorkflow(
+            Repository(workspace / "api", workspace / "api.worktrees", RepositoryId("acme", "api")),
+            implement,
+        ),
+        RepositoryWorkflow(
+            Repository(workspace / "web", workspace / "web.worktrees", RepositoryId("acme", "web")),
+            implement_and_review,
+        ),
+    )))
+```
+
+Run it from the harness root. The [usage guide](docs/usage.md#different-agent-workflows-per-repository)
+has the complete reviewer step and delivery rules.
 
 ## Documentation
 
