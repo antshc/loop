@@ -22,11 +22,11 @@ from loop import (
     AgentProfile,
     AgentRequest,
     BranchStrategy,
-    ContentDecodeError,
     GitOptions,
     AgentWorkspace,
     copilot,
 )
+from workflows.content import ContentDecodeError
 from workflows.platforms.git import GitService
 
 logger = logging.getLogger("workflow.plan_implement")

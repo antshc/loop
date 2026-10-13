@@ -26,13 +26,12 @@ from loop import (
     AgentClient,
     AgentRequest,
     BranchStrategy,
-    ContentDecodeError,
     GitOptions,
-    LastJsonObject,
     LoopHook,
     LoopHookError,
     configure_logging,
 )
+from workflows.content import ContentDecodeError, LastJsonObject
 from workflows.platforms.git import Commit, GitService
 from workflows.platforms.process import CommandError
 from workflows.platforms.work_tracking import (

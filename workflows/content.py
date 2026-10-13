@@ -1,7 +1,4 @@
-"""Content decoders: turn an agent's assistant text into the typed value a Workflow wants.
-
-Workflows call `decode` directly on `AgentResult.output`; the library does not wire these into a run.
-"""
+"""Content decoders used by workflow scripts to interpret agent output."""
 
 from __future__ import annotations
 
