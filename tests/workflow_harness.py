@@ -31,6 +31,7 @@ from workflows.dev import FileExecutionStore
 from workflows.platforms.git import Commit
 from workflows.platforms.work_tracking import GitHubRepo, Repository, RepositoryId
 from workflows.platforms.work_tracking.fake_gh_cli import FakeGhCli
+from workflows.platforms.work_tracking import AgentCommitSubject
 
 Handler = Callable[[str], str]
 
@@ -185,11 +186,12 @@ class DevHarness:
     def commit_and_report(
         self, number: int, *, initiative: str = "Checkout", summary: str = "done", subject: str | None = None
     ) -> str:
-        sha = self.git.commit(subject or f"ccode({initiative}|{number}): work")
-        return envelope(f"{initiative}|{number}", result={**COMPLETED, "commit": sha, "summary": summary})
+        identifier = AgentCommitSubject(initiative, number)
+        sha = self.git.commit(subject or f"{identifier.to_subject()}work")
+        return envelope(str(identifier), result={**COMPLETED, "commit": sha, "summary": summary})
 
     def commit_then(self, response: Callable[[str], str]) -> Handler:
-        return lambda prompt: response(self.git.commit("ccode(Checkout|10): work"))
+        return lambda prompt: response(self.git.commit(f"{AgentCommitSubject('Checkout', 10).to_subject()}work"))
 
     def writes(self) -> list[tuple[str, ...]]:
         return [call for call in self.gh.calls if call[0] in ("issue", "pr")]

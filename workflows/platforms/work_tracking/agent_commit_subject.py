@@ -6,14 +6,19 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class WorkIdentifier:
-    """The response envelope's `identifier`, and the commit subject's parenthesized tag."""
+class AgentCommitSubject:
+    """The response identifier and required commit-subject prefix for one Ticket."""
 
     initiative: str
     ticket_number: int
 
     def __str__(self) -> str:
         return f"{self.initiative}|{self.ticket_number}"
+
+    @property
+    def initiative_commit_prefix(self) -> str:
+        """The prefix shared by all delivering commits for this Initiative."""
+        return f"ccode({self.initiative}|"
 
     def to_subject(self) -> str:
         """The required prefix of a Ticket's delivering commit subject."""

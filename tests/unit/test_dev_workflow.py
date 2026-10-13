@@ -11,7 +11,7 @@ from loop import BranchStrategy
 from workflow_harness import COMPLETED, DevHarness, crash, envelope, hook_error, issue
 from workflows import dev
 from workflows.dev import FileExecutionStore
-from workflows.platforms.work_tracking import Spec, TicketsTracker
+from workflows.platforms.work_tracking import AgentCommitSubject, Spec, TicketsTracker
 from workflows.platforms.work_tracking.fake_gh_cli import FakeGhCli
 
 _PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
@@ -37,17 +37,21 @@ def _first_ticket():
 
 
 def test_prompt_template_placeholders_match_the_supplied_arguments_exactly() -> None:
-    args = dev.prompt_args(_first_ticket(), dev.WorkIdentifier("Checkout", 10), ["abc1234 first"], Path("/w"), "main", "f")
+    args = dev.prompt_args(
+        _first_ticket(), AgentCommitSubject("Checkout", 10), ["abc1234 first"], Path("/w"), "main", "f"
+    )
 
     assert set(_PLACEHOLDER.findall(dev.PROMPT.read_text())) == set(args)
 
 
-def test_prompt_args_carry_only_the_ticket_its_task_id_and_the_initiative_commits() -> None:
-    args = dev.prompt_args(_first_ticket(), dev.WorkIdentifier("Checkout", 10), [], Path("/w"), "main", "feature")
+def test_prompt_args_carry_only_the_ticket_and_the_initiative_commits() -> None:
+    identifier = AgentCommitSubject("Checkout", 10)
+    args = dev.prompt_args(_first_ticket(), identifier, [], Path("/w"), "main", "feature")
 
     ticket_json = json.loads(args["TICKET_JSON"])
     assert (ticket_json["number"], ticket_json["body"]) == (10, "Body of #10")
-    assert args["TASK_ID"] == "Checkout|10"
+    assert "TASK_ID" not in args
+    assert args["COMMIT_SUBJECT_PREFIX"] == identifier.to_subject()
     assert "No task commits" in args["INITIATIVE_COMMITS"]
     assert {"SPEC_JSON", "TICKETS_JSON", "RECENT_COMMITS"}.isdisjoint(args)
 
@@ -221,7 +225,7 @@ def test_two_tickets_each_failing_once_are_not_escalated(tmp_path: Path) -> None
     seen: set[int] = set()
 
     def handler(prompt: str) -> str:
-        number = 10 if "Task id: `Checkout|10`" in prompt else 11
+        number = 10 if '"number": 10' in prompt else 11
         if number not in seen:
             seen.add(number)
             return ""
@@ -245,7 +249,7 @@ def test_a_failing_worktree_hook_fails_the_spec_with_its_reason(tmp_path: Path) 
 
 def test_a_prompt_placeholder_with_no_argument_fails_the_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     template = tmp_path / "dev.md"
-    template.write_text("Task {{TASK_ID}} {{UNKNOWN}}")
+    template.write_text("Task {{UNKNOWN}}")
     monkeypatch.setattr(dev, "PROMPT", template)
     harness = DevHarness(tmp_path)
 

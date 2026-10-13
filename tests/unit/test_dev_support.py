@@ -17,7 +17,7 @@ from workflows.dev import (
     parse_dev_result,
     render_prompt,
 )
-from workflows.platforms.work_tracking import WorkIdentifier
+from workflows.platforms.work_tracking import AgentCommitSubject
 
 COMPLETED = {"commit": "abc", "summary": "done", "verification": "ran tests"}
 
@@ -74,13 +74,24 @@ def test_parse_dev_result_rejects_a_malformed_response(envelope: dict) -> None:
 
 
 def test_dev_response_requires_a_response_for_the_asked_task() -> None:
-    identifier = WorkIdentifier("Checkout", 10)
+    identifier = AgentCommitSubject("Checkout", 10)
+    response_without_identifier = json.dumps({"status": "completed", "result": COMPLETED})
 
+    result = DevResponse(identifier).decode(f"x {response_without_identifier}")
+    assert (result.identifier, result.commit) == (str(identifier), "abc")
     assert DevResponse(identifier).decode(f"x {_envelope()}").commit == "abc"
     with pytest.raises(DevResultError, match="no response object"):
         DevResponse(identifier).decode("nothing")
     with pytest.raises(DevResultError, match="does not match task"):
         DevResponse(identifier).decode(_envelope("Checkout|11"))
+
+
+def test_agent_commit_subject_formats_ticket_identifiers_and_commit_prefixes() -> None:
+    identifier = AgentCommitSubject("Checkout", 10)
+
+    assert str(identifier) == "Checkout|10"
+    assert identifier.initiative_commit_prefix == "ccode(Checkout|"
+    assert identifier.to_subject() == "ccode(Checkout|10): "
 
 
 def _store(tmp_path: Path, day: int = 1) -> FileExecutionStore:

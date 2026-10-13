@@ -5,8 +5,6 @@ You start in the worktree at `{{WORKTREE_PATH}}`, on branch `{{FEATURE_BRANCH}}`
 
 ## Task
 
-Task id: `{{TASK_ID}}`
-
 The Ticket to implement and verify:
 
 <ticket-json>
@@ -94,12 +92,11 @@ message>` and a concise body carrying:
 End your final message with exactly one JSON object carrying:
 
 ```json
-{"identifier": "{{TASK_ID}}", "status": "completed", "result": {"commit": "<full commit SHA>", "summary": "<one-line summary>", "verification": "<exact commands, executed tests and results, seams proved, remaining gaps>"}}
+{"status": "completed", "result": {"commit": "<full commit SHA>", "summary": "<one-line summary>", "verification": "<exact commands, executed tests and results, seams proved, remaining gaps>"}}
 ```
 
 or, if the Ticket could not be finished:
 
 ```json
-{"identifier": "{{TASK_ID}}", "status": "failed", "result": {"reason": "<why it failed>"}}
+{"status": "failed", "result": {"reason": "<why it failed>"}}
 ```
-

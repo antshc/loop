@@ -38,7 +38,7 @@ from workflows.platforms.work_tracking import (
     Spec,
     Ticket,
     TicketsTracker,
-    WorkIdentifier,
+    AgentCommitSubject,
 )
 
 __all__ = ["main", "read_specs"]
@@ -59,14 +59,21 @@ def read_specs(tracker: TicketsTracker) -> list[Spec]:
     return list(tracker.specs())
 
 
-def _initiative_commits(git: GitService, worktree: Path, spec: Spec) -> list[str]:
+def _initiative_commits(
+    git: GitService, worktree: Path, spec: Spec, identifier: AgentCommitSubject
+) -> list[str]:
     """This Initiative's `ccode(<initiative-id>|` commits on the feature branch since the base branch, as `<short hash> <subject>`."""
-    found = git.initiative_commits(worktree, spec.base_branch, f"ccode({spec.initiative}|")
+    found = git.initiative_commits(worktree, spec.base_branch, identifier.initiative_commit_prefix)
     return [f"{commit.sha[:7]} {commit.subject}" for commit in found]
 
 
 def _dev_prompt(
-    template: str, ticket: Ticket, identifier: WorkIdentifier, initiative_commits: list[str], worktree: Path, spec: Spec
+    template: str,
+    ticket: Ticket,
+    identifier: AgentCommitSubject,
+    initiative_commits: list[str],
+    worktree: Path,
+    spec: Spec,
 ) -> Prompt:
     """The dev prompt for one Ticket run."""
     args = prompt_args(ticket, identifier, initiative_commits, worktree, spec.base_branch, spec.feature_branch)
@@ -84,9 +91,16 @@ def _attempt(
     template: str,
 ) -> DevResult | str:
     """Runs the agent once and validates its response and Git; returns the accepted result, or the failure reason."""
-    identifier = WorkIdentifier(spec.initiative, ticket.number)
     try:
-        prompt = _dev_prompt(template, ticket, identifier, _initiative_commits(git, worktree, spec), worktree, spec)
+        identifier = AgentCommitSubject(spec.initiative, ticket.number)
+        prompt = _dev_prompt(
+            template,
+            ticket,
+            identifier,
+            _initiative_commits(git, worktree, spec, identifier),
+            worktree,
+            spec,
+        )
         output = client.run(AgentRequest(prompt.render())).output
         dev_result = DevResponse(identifier).decode(output)
     except subprocess.CalledProcessError:
@@ -96,12 +110,14 @@ def _attempt(
     if dev_result.status == "failed":
         return dev_result.reason or ""
 
-    violation = _commit_violation(git, worktree, head_before, identifier, dev_result)
+    violation = _commit_violation(
+        git, worktree, head_before, identifier, dev_result
+    )
     return dev_result if violation is None else violation
 
 
 def _commit_violation(
-    git: GitService, worktree: Path, head_before: Commit, identifier: WorkIdentifier, dev_result: DevResult
+    git: GitService, worktree: Path, head_before: Commit, identifier: AgentCommitSubject, dev_result: DevResult
 ) -> str | None:
     """Why the worktree does not hold exactly the one clean, correctly tagged commit the result claims, or None."""
     head = git.head(worktree)

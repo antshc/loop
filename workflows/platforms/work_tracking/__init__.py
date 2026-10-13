@@ -6,7 +6,7 @@ from .github_repo import GhCli, GitHubRepo
 from .pull_request_client import PullRequest, PullRequestClient, ReviewThread
 from .repository import PullRequests, Repository, RepositoryId
 from .tracker import HITL_LABEL, Comment, Spec, Ticket, TicketsTracker
-from .work_identifier import WorkIdentifier
+from .agent_commit_subject import AgentCommitSubject
 
 __all__ = [
     "HITL_LABEL",
@@ -22,5 +22,5 @@ __all__ = [
     "Spec",
     "Ticket",
     "TicketsTracker",
-    "WorkIdentifier",
+    "AgentCommitSubject",
 ]

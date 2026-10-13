@@ -45,7 +45,7 @@ from workflows.platforms.work_tracking import (
     Spec,
     Ticket,
     TicketsTracker,
-    WorkIdentifier,
+    AgentCommitSubject,
 )
 
 __all__ = [
@@ -54,7 +54,6 @@ __all__ = [
     "DevResponse",
     "DevResult",
     "DevResultError",
-    "WorkIdentifier",
     "main",
     "parse_dev_result",
     "prompt_args",
@@ -120,7 +119,7 @@ def render_prompt(template: str, args: Mapping[str, str]) -> str:
 
 def prompt_args(
     ticket: Ticket,
-    identifier: WorkIdentifier,
+    identifier: AgentCommitSubject,
     initiative_commits: Sequence[str],
     worktree: Path,
     base_branch: str,
@@ -130,7 +129,6 @@ def prompt_args(
     return {
         "TICKET_JSON": json.dumps(asdict(ticket), indent=2),
         "INITIATIVE_COMMITS": "\n".join(initiative_commits) or "No task commits for this Initiative exist on the feature branch yet.",
-        "TASK_ID": str(identifier),
         "COMMIT_SUBJECT_PREFIX": identifier.to_subject(),
         "WORKTREE_PATH": str(worktree),
         "TARGET_BRANCH": base_branch,
@@ -186,7 +184,7 @@ def parse_dev_result(envelope: dict[str, Any]) -> DevResult:
 class DevResponse:
     """Decodes a run's response envelope for `identifier`; call `decode` directly on `AgentResult.output`."""
 
-    def __init__(self, identifier: WorkIdentifier) -> None:
+    def __init__(self, identifier: AgentCommitSubject) -> None:
         self._identifier = identifier
         self._envelope = LastJsonObject(lambda value: "status" in value)
 
@@ -196,10 +194,9 @@ class DevResponse:
             envelope = self._envelope.decode(text)
         except ContentDecodeError as exception:
             raise DevResultError("no response object in agent output") from exception
-        dev_result = parse_dev_result(envelope)
-        if dev_result.identifier != str(self._identifier):
-            raise DevResultError(f"response identifier {dev_result.identifier!r} does not match task {self._identifier!r}")
-        return dev_result
+        if "identifier" in envelope and envelope["identifier"] != str(self._identifier):
+            raise DevResultError(f"response identifier {envelope['identifier']!r} does not match task {self._identifier!r}")
+        return parse_dev_result({**envelope, "identifier": str(self._identifier)})
 
 
 # --- Daily per-Ticket execution log of failed attempts ---
@@ -390,7 +387,7 @@ class DevWorkflow:
 
     def _deliver_ticket(self, spec: Spec, ticket: Ticket, worktree: Path, client: AgentClient) -> bool:
         """Fresh agent runs for `ticket` until one is accepted or its failure cap is reached; True on success."""
-        identifier = WorkIdentifier(spec.initiative, ticket.number)
+        identifier = AgentCommitSubject(spec.initiative, ticket.number)
         while True:
             head_before = self._git.head(worktree)
             attempt = self._attempt(spec, ticket, identifier, worktree, client, head_before)
@@ -407,16 +404,16 @@ class DevWorkflow:
                 self._tracker.update_spec(spec)
                 return False
 
-    def _initiative_commits(self, worktree: Path, spec: Spec) -> list[str]:
+    def _initiative_commits(self, worktree: Path, spec: Spec, identifier: AgentCommitSubject) -> list[str]:
         """This Initiative's `ccode(<initiative-id>|` commits on the feature branch since the base branch, as `<short hash> <subject>`."""
-        found = self._git.initiative_commits(worktree, spec.base_branch, f"ccode({spec.initiative}|")
+        found = self._git.initiative_commits(worktree, spec.base_branch, identifier.initiative_commit_prefix)
         return [f"{commit.sha[:7]} {commit.subject}" for commit in found]
 
     def _attempt(
         self,
         spec: Spec,
         ticket: Ticket,
-        identifier: WorkIdentifier,
+        identifier: AgentCommitSubject,
         worktree: Path,
         client: AgentClient,
         head_before: Commit,
@@ -425,7 +422,7 @@ class DevWorkflow:
         args = prompt_args(
             ticket,
             identifier,
-            self._initiative_commits(worktree, spec),
+            self._initiative_commits(worktree, spec, identifier),
             worktree,
             spec.base_branch,
             spec.feature_branch,
@@ -445,7 +442,7 @@ class DevWorkflow:
         return dev_result if violation is None else violation
 
     def _commit_violation(
-        self, worktree: Path, head_before: Commit, identifier: WorkIdentifier, dev_result: DevResult
+        self, worktree: Path, head_before: Commit, identifier: AgentCommitSubject, dev_result: DevResult
     ) -> str | None:
         """Why the worktree does not hold exactly the one clean, correctly tagged commit the result claims, or None."""
         head = self._git.head(worktree)
