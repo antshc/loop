@@ -28,7 +28,7 @@ class CopilotCli:
         AgentCliHookPoint.PRE_COMPACT: "preCompact",
     }
 
-    def __init__(self, args: tuple[str, ...] = ("--allow-all-tools",), *, transport: Transport = CopilotText()) -> None:
+    def __init__(self, args: tuple[str, ...] = ("--autopilot", "--allow-all", "--no-ask-user"), *, transport: Transport = CopilotText()) -> None:
         self._args = args
         self.transport = transport
 
@@ -59,7 +59,7 @@ class CopilotCli:
         dirs = [part for directory in context.agent.add_dirs for part in ("--add-dir", str(directory))]
         settings = {"--model": profile.model, "--reasoning-effort": profile.reasoning_effort, "--context": profile.context}
         run_args = [part for flag, value in settings.items() if value is not None for part in (flag, value)]
-        session_args = ["--name", turn.name.value] if isinstance(turn, Start) else [f"--resume={turn.handle.value}"]
+        session_args = ["--name", request.name or turn.name.value] if isinstance(turn, Start) else [f"--resume={turn.handle.value}"]
         return [
             "copilot", "-p", request.prompt, *self.transport.args, *session_args, *self._args, *run_args, *profile.args, *dirs,
         ]

@@ -41,10 +41,15 @@ class CliAgentClient:
         self._session = session or (SessionName.new() if store is not None else None)
 
     def run(self, request: AgentRequest, context: AgentContext | None = None) -> AgentResult:
+        if request.name is not None and self._store is not None:
+            raise ValueError("request name requires a stateless client")
         turn = self._turn()
         run_context = self._defaults if context is None else replace(self._defaults, agent=context)
-        launched, launched_request = apply_start_mode(run_context.agent, request)
-        outcome = self._runner.run(self._profile, launched_request, turn, replace(run_context, agent=launched))
+        agent, request = apply_start_mode(run_context.agent, request)
+        if agent is not run_context.agent:
+            logger.info("harness start: cwd=%s worktree=%s", agent.cwd, run_context.agent.cwd)
+            run_context = replace(run_context, agent=agent)
+        outcome = self._runner.run(self._profile, request, turn, run_context)
         if self._store is not None:
             self._store.save(turn.name, outcome.handle)
         return AgentResult(outcome.output, turn.name, outcome.exit_code)

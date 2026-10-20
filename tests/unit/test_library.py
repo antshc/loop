@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import shutil
 import subprocess
 import sys
 from importlib.metadata import distribution
@@ -27,6 +29,9 @@ def test_package_supports_python_310() -> None:
 
 def test_import_linter_contracts_pass() -> None:
     lint_imports = Path(sys.executable).parent / "lint-imports"
-    result = subprocess.run([str(lint_imports)], cwd=ROOT, capture_output=True, text=True)
+    executable = str(lint_imports) if lint_imports.exists() else shutil.which("lint-imports")
+    assert executable, "lint-imports (import-linter) is not installed"
+    environment = os.environ | {"PYTHONPATH": os.pathsep.join(filter(None, [str(ROOT / "src"), os.environ.get("PYTHONPATH")]))}
+    result = subprocess.run([executable], cwd=ROOT, env=environment, capture_output=True, text=True)
 
     assert result.returncode == 0, result.stdout + result.stderr

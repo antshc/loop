@@ -8,9 +8,13 @@ from ..hooks import AgentCliHook
 
 
 class AgentStartMode(str, Enum):
-    """Where the CLI process starts: in the worktree itself, or in the harness with the worktree granted."""
+    """Where an agent CLI process starts relative to the worktree it works on."""
 
+    __str__ = str.__str__
+
+    # Launch directly in the worktree.
     WORKTREE = "worktree"
+    # Launch in the harness repository; the prompt is prefixed with an instruction to change into the worktree.
     HARNESS = "harness"
 
 

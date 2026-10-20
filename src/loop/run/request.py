@@ -10,7 +10,7 @@ class AgentRequest:
     """One agent execution."""
 
     prompt: str
-    # Optional human-readable label for the execution.
+    # Display name for a stateless run's new session; a resumable session is named by its SessionName.
     name: str | None = None
 
 

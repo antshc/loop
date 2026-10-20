@@ -173,6 +173,12 @@ class AgentBuilderTests(unittest.TestCase):
     def test_session_without_with_session_raises(self) -> None:
         with self.assertRaises(ValueError):
             self.builder().create(session=SessionName("a"))
+
+    def test_request_name_requires_a_stateless_client(self) -> None:
+        self.builder().create().run(AgentRequest("x", "loop(1) T"), repo_agent_context())
+        self.assertIsInstance(self.runner.turns[0], Start)
+        with self.assertRaises(ValueError):
+            self.builder().with_session().create().run(AgentRequest("x", "loop(1) T"), repo_agent_context())
         with self.assertRaises(ValueError):
             with self.builder().open(session=SessionName("a")):
                 pass
@@ -345,13 +351,21 @@ class CliTests(unittest.TestCase):
 
     def test_copilot_command(self) -> None:
         profile = replace(PLANNER, args=("--x",))
-        tail = ["--allow-all-tools", "--model", "claude-opus-4.5", "--reasoning-effort", "high", "--x"]
+        tail = ["--autopilot", "--allow-all", "--no-ask-user", "--model", "claude-opus-4.5", "--reasoning-effort", "high", "--x"]
         start = CopilotCli().command(AgentRequest("p"), profile, Start(SessionName("n")), repo_context())
         self.assertEqual(start, ["copilot", "-p", "p", "--output-format", "text", "--name", "n", *tail])
         resume = CopilotCli().command(
             AgentRequest("p"), profile, Resume(SessionName("n"), NativeHandle("copilot", "h")), repo_context()
         )
         self.assertEqual(resume, ["copilot", "-p", "p", "--output-format", "text", "--resume=h", *tail])
+
+    def test_copilot_command_names_a_new_session_after_the_request_name(self) -> None:
+        start = CopilotCli().command(AgentRequest("p", "loop(7) Fix it"), PLANNER, Start(SessionName("n")), repo_context())
+        self.assertEqual(start[5:7], ["--name", "loop(7) Fix it"])
+        resume = CopilotCli().command(
+            AgentRequest("p", "loop(7) Fix it"), PLANNER, Resume(SessionName("n"), NativeHandle("copilot", "h")), repo_context()
+        )
+        self.assertNotIn("loop(7) Fix it", resume)
 
     def test_copilot_command_with_a_json_transport(self) -> None:
         start = CopilotCli(transport=CopilotJson()).command(AgentRequest("p"), PLANNER, Start(SessionName("n")), repo_context())
