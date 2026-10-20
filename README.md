@@ -120,6 +120,7 @@ The examples live in this repository and are not included in the installed
 | [Plan and implement](workflows/plan_implement.py) | Plan and implement with different models on one worktree |
 | [Dev Workflow guide](docs/usage.md#dev-workflow) | Deliver GitHub Tickets, configure multiple repositories, and customize prompts |
 | [Multi-repository Workflow](docs/usage.md#different-agent-workflows-per-repository) | Route Specs to several repositories, each with its own agent steps |
+| [Scenario-style dev Workflow](workflows/dev_bdd/README.md) | Dummy BDD-style Workflow demonstrating nested scenarios, live flow visualization and Allure results |
 
 The dev Workflow can create commits, push branches, open draft pull requests,
 and update Tickets. Read its configuration guide before running it.
@@ -165,6 +166,22 @@ if __name__ == "__main__":
 
 Run it from the harness root. The [usage guide](docs/usage.md#different-agent-workflows-per-repository)
 has the complete reviewer step and delivery rules.
+
+### Optional: visualize flows with scenarios (BDD style)
+
+`workflows/dev_bdd` is a dummy Workflow (no GitHub, Git or agent calls) showing a
+delivery flow structured as readable nested scenarios over named steps. It prints a live, colored progress tree
+and can write [Allure](https://allurereport.org/) results. This is optional: the
+`loop` library does not depend on it, and Allure is an extra (`pip install -e ".[reports]"`).
+
+```sh
+python -m workflows.dev_bdd            # live progress, Allure results in .loop/allure-results
+python -m workflows.dev_bdd --quiet --no-allure
+```
+
+To restructure your own project this way, use the reusable
+[restructuring prompt](docs/prompts/restructure-to-scenarios.md). See the
+[usage guide](USAGE.md#scenario-style-flow-visualization-optional) for options.
 
 ## Documentation
 

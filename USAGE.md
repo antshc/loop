@@ -5,6 +5,7 @@ This guide covers the example dev Workflow and advanced library usage.
 Run repository examples from the repository root.
 
 - [Dev Workflow](#dev-workflow)
+- [Scenario-style flow visualization (optional)](#scenario-style-flow-visualization-optional)
 - [Logging](#logging)
 - [Library examples](#library-examples)
 
@@ -140,6 +141,50 @@ render, or combine them. For example, after adding `review.md`, use
 arguments. Delegates own step ordering and agent profiles; there is no prompt
 pipeline or configuration-file format. A missing template raises an error rather
 than falling back to a different prompt.
+
+## Scenario-style flow visualization (optional)
+
+[`workflows/dev_bdd/`](workflows/dev_bdd/) is a dummy scenario-driven Workflow (fake data, no GitHub, Git
+or agent calls). Flows are plain Python scenarios made of named steps, and each run prints a live,
+indented tree of what is executing. It is code-first: no Gherkin and no Given/When/Then. Nothing in
+`src/loop` depends on it.
+
+```sh
+python -m workflows.dev_bdd
+```
+
+```
+> Development workflow
+  > Process specification #100
+    > Deliver ticket #101
+      > Execute agent
+      < Execute agent [SUCCESS] 41.20s
+```
+
+Options:
+
+| Option | Meaning |
+|---|---|
+| `--quiet` | Disable the live progress on stderr |
+| `--no-allure` | Disable Allure results |
+| `--allure-results DIR` | Allure results directory (default `<log-dir>/allure-results`); an error if `allure-commons` is missing |
+
+Progress is colored on a terminal and plain when piped or when `NO_COLOR` is set.
+
+Allure results are optional and on by default. Install the extra to produce them; without it the
+Workflow logs a warning and runs normally.
+
+```sh
+python -m pip install -e ".[reports]"
+python -m workflows.dev_bdd
+allure serve .loop/allure-results
+```
+
+The Allure adapter is single-threaded and has not yet been verified against a viewer.
+
+Layers (`run -> scenarios -> steps -> services`) and their rules are in
+[`workflows/dev_bdd/AGENTS.md`](workflows/dev_bdd/AGENTS.md). To apply the same structure to another
+project, use the reusable prompt [`docs/prompts/restructure-to-scenarios.md`](docs/prompts/restructure-to-scenarios.md).
 
 ## Logging
 
