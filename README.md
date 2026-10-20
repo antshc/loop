@@ -54,11 +54,22 @@ source .venv/bin/activate
 .venv\Scripts\Activate.ps1
 ```
 
+Upgrade the packaging tools first. Old `pip`/`setuptools` cannot read
+`pyproject.toml` metadata and silently install an empty `UNKNOWN-0.0.0` package:
+
+```sh
+python -m pip install --upgrade pip "setuptools>=68" wheel
+```
+
 Then install the library:
 
 ```sh
 python -m pip install .
 ```
+
+To install without cloning, run `python -m pip install git+https://github.com/antshc/loop`
+after the upgrade. Verify with `python -m pip show loop`: the name must be `loop`, not `UNKNOWN`.
+If `UNKNOWN` was installed, run `python -m pip uninstall UNKNOWN` and reinstall.
 
 The repository revision determines the installed version. To update, pull the
 desired revision and reinstall. For an editable development installation, see
