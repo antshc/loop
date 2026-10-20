@@ -275,6 +275,16 @@ fresh.run(AgentRequest("Plan ticket #123 in repo1"))
 fresh.run(AgentRequest("Implement ticket #123 in repo1"))
 ```
 
+By default the CLI starts inside the worktree. To start it in the harness checkout
+instead (so it loads the harness context), set `start_mode` and `harness_dir`; Loop
+grants the worktree with `--add-dir` and prefixes each prompt with a `cd` instruction:
+
+```python
+from loop import Agent, AgentOptions, AgentStartMode
+
+Agent(AgentOptions(start_mode=AgentStartMode.HARNESS, harness_dir=Path("/path/to/harness")))
+```
+
 See [`workflows/dev/`](../workflows/dev/) for a complete Workflow,
 [`workflows/plan_implement.py`](../workflows/plan_implement.py) for two runs with
 different models on one worktree, and

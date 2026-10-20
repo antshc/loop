@@ -6,6 +6,7 @@ from typing import Protocol
 
 from ..clis import AgentProfile, CliRunner
 from ..run import AgentContext, AgentRequest, AgentResult, RunContext
+from ..run.launch import apply_start_mode
 from ..sessions import Resume, SessionCliMismatch, SessionName, SessionStore, Start, Turn
 
 logger = logging.getLogger(__name__)
@@ -42,7 +43,8 @@ class CliAgentClient:
     def run(self, request: AgentRequest, context: AgentContext | None = None) -> AgentResult:
         turn = self._turn()
         run_context = self._defaults if context is None else replace(self._defaults, agent=context)
-        outcome = self._runner.run(self._profile, request, turn, run_context)
+        launched, launched_request = apply_start_mode(run_context.agent, request)
+        outcome = self._runner.run(self._profile, launched_request, turn, replace(run_context, agent=launched))
         if self._store is not None:
             self._store.save(turn.name, outcome.handle)
         return AgentResult(outcome.output, turn.name, outcome.exit_code)

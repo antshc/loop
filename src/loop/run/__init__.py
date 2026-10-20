@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .context import AgentContext, AgentOptions, RunContext
+from .context import AgentContext, AgentOptions, AgentStartMode, RunContext
 from .prompt import Prompt, PromptError
 from .request import AgentRequest, AgentResult
 
@@ -9,6 +9,7 @@ __all__ = [
     "AgentOptions",
     "AgentRequest",
     "AgentResult",
+    "AgentStartMode",
     "Prompt",
     "PromptError",
     "RunContext",

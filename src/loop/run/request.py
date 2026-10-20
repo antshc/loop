@@ -10,6 +10,8 @@ class AgentRequest:
     """One agent execution."""
 
     prompt: str
+    # Optional human-readable label for the execution.
+    name: str | None = None
 
 
 @dataclass(frozen=True)

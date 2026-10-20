@@ -36,6 +36,8 @@ def _apply_options(context: AgentContext, options: AgentOptions | None) -> Agent
         return context
     if options.docker_image is not None:
         context = replace(context, docker_image=options.docker_image)
+    if options.start_mode is not None:
+        context = replace(context, start_mode=options.start_mode, harness_dir=options.harness_dir)
     return context
 
 
