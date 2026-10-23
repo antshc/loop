@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 
 from ..hooks import AgentCliHook
+from .settings import freeze_env, validate_timeout
 
 
 class AgentStartMode(str, Enum):
@@ -29,8 +31,12 @@ class AgentContext:
     start_mode: AgentStartMode = AgentStartMode.WORKTREE
     # The harness checkout the CLI starts in; required by the harness start mode.
     harness_dir: Path | None = None
+    env: Mapping[str, str] | None = None
+    timeout_sec: float | None = None
 
     def __post_init__(self) -> None:
+        validate_timeout(self.timeout_sec)
+        object.__setattr__(self, "env", freeze_env(self.env))
         # Accepts the mode's string value; an unknown value raises ValueError.
         object.__setattr__(self, "start_mode", AgentStartMode(self.start_mode))
         if self.start_mode is AgentStartMode.HARNESS and self.harness_dir is None:

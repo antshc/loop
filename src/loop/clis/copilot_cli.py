@@ -8,6 +8,7 @@ from ..hooks import AgentCliHook, AgentCliHookPoint, AgentCliHookWiring, ordered
 from ..run import AgentRequest, RunContext
 from ..sessions import CliOutcome, NativeHandle, Resume, SessionName, Start, Turn
 from .base import AgentProfile
+from .permissions import Permissions, has_permission_args
 from .transport import CopilotText, Transport
 
 
@@ -53,15 +54,28 @@ class CopilotCli:
     def handle_for_new(self, name: SessionName) -> NativeHandle:
         return NativeHandle(self.name, name.value)
 
+    def permission_args(self, permissions: Permissions) -> tuple[str, ...]:
+        """Replace broad defaults with native tool approvals and deny patterns."""
+        defaults = tuple(arg for arg in self._args if arg not in ("--allow-all", "--yolo", "--allow-all-tools"))
+        if has_permission_args(defaults):
+            raise ValueError("CLI permission arguments conflict with profile permissions")
+        allow = ("--allow-all-tools",) if permissions.tools == "allow-all" else tuple(
+            part for tool in permissions.tools for part in ("--allow-tool", tool)
+        )
+        deny = tuple(part for tool in permissions.deny_tools for part in ("--deny-tool", tool))
+        return (*defaults, *allow, *deny)
+
     def command(
         self, request: AgentRequest, profile: AgentProfile, turn: Turn, context: RunContext
     ) -> list[str]:
+        profile.validate_permissions()
+        cli_args = self._args if profile.permissions is None else self.permission_args(profile.permissions)
         dirs = [part for directory in context.agent.add_dirs for part in ("--add-dir", str(directory))]
         settings = {"--model": profile.model, "--reasoning-effort": profile.reasoning_effort, "--context": profile.context}
         run_args = [part for flag, value in settings.items() if value is not None for part in (flag, value)]
         session_args = ["--name", request.name or turn.name.value] if isinstance(turn, Start) else [f"--resume={turn.handle.value}"]
         return [
-            "copilot", "-p", request.prompt, *self.transport.args, *session_args, *self._args, *run_args, *profile.args, *dirs,
+            "copilot", "-p", request.prompt, *self.transport.args, *session_args, *cli_args, *run_args, *profile.args, *dirs,
         ]
 
     def parse(self, stdout: str, turn: Turn, exit_code: int) -> CliOutcome:

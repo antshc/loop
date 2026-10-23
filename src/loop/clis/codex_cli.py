@@ -59,6 +59,7 @@ class CodexCli:
     def command(
         self, request: AgentRequest, profile: AgentProfile, turn: Turn, context: RunContext
     ) -> list[str]:
+        profile.validate_permissions()
         dirs = [part for directory in context.agent.add_dirs for part in ("--add-dir", str(directory))]
         run_args: list[str] = []
         if profile.model is not None:

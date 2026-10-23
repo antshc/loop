@@ -16,6 +16,8 @@ It ships no command and no built-in Workflows.
 ## Features
 
 - **Composable agents:** choose a CLI, model, and reasoning effort per agent profile.
+- **Reusable Python profiles:** import instructions, tool permissions, directories,
+  environment, and timeouts into your Workflows. See [profile examples](USAGE.md#reusable-agent-profiles).
 - **Git lifecycle management:** use a named-branch worktree, a temporary branch
   merged back into HEAD, or the repository directory directly.
 - **Multi-step Workflows:** share a worktree across agents and optionally resume sessions.
