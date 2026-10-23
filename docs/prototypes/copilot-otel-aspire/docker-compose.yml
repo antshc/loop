@@ -1,0 +1,14 @@
+services:
+  aspire-dashboard:
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:13.2
+    # Own host ports so it runs next to the dashboard-aspire prototype.
+    network_mode: bridge
+    ports:
+      - "18898:18888"  # UI
+      - "4327:18889"   # OTLP gRPC
+      - "4328:18890"   # OTLP HTTP
+    environment:
+      DASHBOARD__FRONTEND__AUTHMODE: Unsecured
+      DASHBOARD__OTLP__AUTHMODE: Unsecured
+      # Prompts, tool arguments and results travel as span attributes; keep them whole.
+      DASHBOARD__TELEMETRYLIMITS__MAXATTRIBUTELENGTH: "65536"
