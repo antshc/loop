@@ -79,6 +79,40 @@ The following is a **recommended operating model**, not a role assignment mandat
 - **Agent-led:** Specify, Design & Plan, Implement, Verify & Review, Release, Operate.
 - **Shared:** Learn & Improve.
 
+### Concrete gate examples across the lifecycle
+
+A **gate** is a decision based on explicit criteria and evidence. It can run automatically, require human judgment, or trigger human review only when a policy-defined risk condition occurs. These are examples, **not universally required approvals**.
+
+| Phase | Automated / agent-evaluated gate examples | Human decision gate examples | Evidence and failure response |
+| --- | --- | --- | --- |
+| **1. Discover** | Check whether the problem duplicates existing work; verify the proposed goal has measurable outcomes; flag insufficient user or operational evidence. | Select which customer problem deserves investment; approve funding or high-impact priority changes. | Problem statement, feedback, baseline metrics. If inconclusive, return for research or reject the opportunity. |
+| **2. Specify** | Check acceptance criteria for testability and traceability; detect conflicting requirements; cover important negative, boundary, accessibility, and non-functional cases. | Settle ambiguous business rules; approve changes to customer promises, sensitive-data scope, or regulatory obligations. | Requirements, scenario examples, acceptance checklist. Block implementation until material ambiguity is resolved. |
+| **3. Design & Plan** | Check alignment with architecture constraints; identify compatibility risks and external dependencies; require migration and rollback strategies where relevant; verify tasks map to acceptance criteria. | Decide a breaking API change, irreversible data migration, significant infrastructure expense, or security exception. | Architecture decision, risk analysis, dependency plan. Redesign or escalate unacceptable tradeoffs. |
+| **4. Implement** | Require successful build, lint/type checks, relevant unit/integration tests, secret and dependency scans; flag unintended files or scope expansion. | Approve bypassing a mandatory check; resolve requests for new elevated permissions or unexpected scope. | CI results, diff, test logs, scan reports. Fix failures; stop on unresolved policy violations. |
+| **5. Verify & Review** | Execute acceptance scenarios against the application; check API/database/UI evidence where suitable; run independent code review, security checks, and performance regression tests; confirm defect fixes have regression coverage. | Accept a documented residual risk; adjudicate disputed behavior; review critical security or production-impacting changes. | Test reports, observed outputs, evidence links, review findings. Return failed changes for rework; do not accept unsupported success claims. |
+| **6. Release** | Verify artifact identity/provenance, environment configuration, migration readiness, deployment health and rollback path; run smoke tests and progressive-rollout checks. | Approve high-risk production changes, exceptional downtime, risky migration, or policy waiver. | Artifact digest, release record, deployment logs, canary metrics. Pause or roll back failed deployment; escalate unrecoverable changes. |
+| **7. Operate** | Check SLO/error-budget alerts, error rate, latency and resource anomalies; correlate incidents with recent deployments; allow only pre-authorized bounded remediation. | Authorize destructive repair, broad production access, customer-impacting shutdown, or crisis response decisions. | Telemetry, alerts, incident timeline, mitigation outcomes. Escalate severe incidents and open corrective work. |
+| **8. Learn & Improve** | Detect recurring incidents, escaped defects, agent retry patterns and delivery regressions; verify corrective actions have owners and measurable outcomes. | Prioritize product and process investments; accept policy changes or systemic architectural remediation. | Post-incident review, DORA trends, action-item tracking. Reopen unresolved improvements and feed validated work into the backlog. |
+
+#### Gate decision contract
+
+For each implemented gate, define:
+
+1. **Trigger:** When it runs and for which changes or risk levels.
+2. **Evaluator:** Automated check, agent with evidence, human approver, or a combination.
+3. **Pass criteria:** An observable, testable condition; avoid vague assertions such as "looks good."
+4. **Evidence:** Durable result, including the evaluated revision, environment, and test or decision record where applicable.
+5. **Failure action:** Block, retry, return to an earlier phase, roll back, or escalate to an identified owner.
+6. **Override policy:** Who may grant an exception, under what conditions, with an auditable reason.
+
+**Example — progressive production rollout gate**
+
+- **Trigger:** New version deployed to a limited production cohort.
+- **Agent check:** Smoke tests pass; observed errors, latency, and service health remain within predefined rollout policy.
+- **Human escalation:** Required if telemetry is inconclusive, the rollout affects critical operations, or a policy exception is requested.
+- **Evidence:** Deployed artifact version, smoke-test report, rollout telemetry, and decision timestamp.
+- **Failure:** Halt promotion; automatically roll back only when an approved rollback path is safe, otherwise escalate.
+
 ### Human-in-the-loop principles
 
 1. **Accountability stays with humans.** Agents can execute work autonomously within delegated permissions; they do not independently redefine business objectives or accept unlimited risk.
