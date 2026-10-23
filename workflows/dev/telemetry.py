@@ -4,20 +4,28 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from contextlib import AbstractContextManager, nullcontext
-from typing import Callable, Protocol
+from typing import Protocol
 
 from loop import RunObserver
 
-# Opens a named span with attributes; Agent Run and Worktree spans started inside it nest under it.
-SpanFactory = Callable[[str, Mapping[str, "str | int | bool"]], AbstractContextManager[object]]
+class SpanFactory(Protocol):
+    """Opens a named span with attributes, exported as resource `role` when given; Agent Run and Worktree spans started inside it nest under it."""
+
+    def __call__(
+        self, name: str, attributes: Mapping[str, str | int | bool], *, role: str | None = None
+    ) -> AbstractContextManager[object]: ...
 
 
 class TracingObserver(RunObserver, Protocol):
     """A RunObserver that also opens Workflow-owned spans on its own trace provider."""
 
-    def span(self, name: str, attributes: Mapping[str, str | int | bool] | None = None) -> AbstractContextManager[object]: ...
+    def span(
+        self, name: str, attributes: Mapping[str, str | int | bool] | None = None, *, role: str | None = None
+    ) -> AbstractContextManager[object]: ...
 
 
-def no_span(name: str, attributes: Mapping[str, str | int | bool]) -> AbstractContextManager[object]:
+def no_span(
+    name: str, attributes: Mapping[str, str | int | bool], *, role: str | None = None
+) -> AbstractContextManager[object]:
     """The default: opens nothing."""
     return nullcontext()

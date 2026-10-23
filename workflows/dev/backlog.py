@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
 
-from loop import AgentBuilder, BranchStrategy, GitOptions, LoopHook, LoopHookError
+from loop import AgentBuilder, BranchStrategy, GitOptions, LoopHook, LoopHookError, Role
 
 from .attempt import deliver_tickets
 from .checkout import GitService
@@ -108,23 +108,33 @@ def _deliver_on_worktree(spec: Spec, workflow: RepositoryWorkflow, deps: DevDeps
         strategy=BranchStrategy(feature_branch, f"origin/{spec.base_branch}"),
         loop_hooks=deps.loop_hooks,
     )
-    with deps.span(f"spec {spec.initiative}", {"loop.spec.url": spec.url}), deps.new_agent().with_git(options).open() as worktree:
-        delivered = deliver_tickets(
-            spec,
-            worktree,
-            workflow.run_agents,
-            git=deps.git,
-            tracker=deps.tracker,
-            store=deps.store,
-            ticket_repository=deps.ticket_repository,
-            max_failures=deps.max_ticket_failures,
-            span=deps.span,
-        )
-        pull_request_url = _publish_pull_request(spec, workflow.repository, worktree.path, deps)
-        if delivered and pull_request_url is not None:
-            spec.announce_delivered(pull_request_url)
-            deps.tracker.update_spec(spec)
+    with deps.span(f"spec {spec.initiative}", {"loop.spec.url": spec.url}):
+        _record_request(spec, deps)
+        with deps.new_agent().with_git(options).open() as worktree:
+            delivered = deliver_tickets(
+                spec,
+                worktree,
+                workflow.run_agents,
+                git=deps.git,
+                tracker=deps.tracker,
+                store=deps.store,
+                ticket_repository=deps.ticket_repository,
+                max_failures=deps.max_ticket_failures,
+                span=deps.span,
+            )
+            with deps.span("publish branch", {"loop.branch": feature_branch}, role=Role.CODE):
+                pull_request_url = _publish_pull_request(spec, workflow.repository, worktree.path, deps)
+                if delivered and pull_request_url is not None:
+                    spec.announce_delivered(pull_request_url)
+                    deps.tracker.update_spec(spec)
     return Outcome.SUCCESS if delivered else Outcome.FAILED
+
+
+def _record_request(spec: Spec, deps: DevDeps) -> None:
+    """Marks the engineer's request that started this delivery."""
+    attributes = {"loop.spec.url": spec.url, "loop.spec.title": spec.title}
+    with deps.span("request", attributes, role=Role.ENGINEER):
+        logger.info("delivering spec #%s: %s", spec.number, spec.title)
 
 
 def _publish_pull_request(spec: Spec, repository: Repository, pusher: Path, deps: DevDeps) -> str | None:

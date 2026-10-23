@@ -6,10 +6,10 @@ import json
 import logging
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 
-from loop import DEFAULT, AgentRequest, AgentWorkspace
+from loop import DEFAULT, AgentRequest, AgentWorkspace, Role
 
 from .records import AgentCommitSubject, Ticket, TicketContext, TicketResult as DevResult, TicketWorkflowError as DevError
 from .reply import DevResponse
@@ -20,6 +20,9 @@ logger = logging.getLogger("workflow.dev")
 
 PROMPTS = Path(__file__).parent / "prompts"
 PROMPT = PROMPTS / "implement.md"
+
+
+DEVELOPER = replace(DEFAULT, name=Role.DEVELOPER)
 
 
 def load_prompt(name: str) -> str:
@@ -81,5 +84,5 @@ def implement_ticket(context: TicketContext, worktree: AgentWorkspace, *, templa
         context.feature_branch,
     )
     prompt = render_prompt(template, args)
-    output = worktree.agent(DEFAULT).run(AgentRequest(prompt)).output
+    output = worktree.agent(DEVELOPER).run(AgentRequest(prompt)).output
     return DevResponse(context.identifier).decode(output)

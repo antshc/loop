@@ -92,6 +92,7 @@ class ObservingCliRunner:
             tools=reading.tools if reading else (),
             prompt=request.prompt,
             output=outcome.output if outcome else None,
+            agent=profile.name,
         )
         try:
             self._observer.agent_run(record)

@@ -50,3 +50,5 @@ class AgentProfile:
     reasoning_effort: str | None = None
     context: str | None = None
     args: tuple[str, ...] = ()
+    # Names the agent in observations, so a backend can tell several agents apart.
+    name: str | None = None

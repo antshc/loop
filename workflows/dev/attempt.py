@@ -6,7 +6,7 @@ import logging
 import subprocess
 from pathlib import Path
 
-from loop import AgentWorkspace
+from loop import AgentWorkspace, Role
 
 from .checkout import GitService
 from .journal import FileExecutionStore
@@ -44,11 +44,12 @@ def deliver_tickets(
             context = _ticket_context(spec, ticket, worktree.path, git)
             result = _attempt(context, worktree, run_agents, git, head_before, span)
             if isinstance(result, TicketResult):
-                spec.close_ticket(
-                    ticket.number, f"Delivered in {result.commit}.\n\n{result.summary}\n\n{result.verification}"
-                )
-                tracker.update_spec(spec)
-                store.reset(ticket.url)
+                with span(f"close #{ticket.number}", {"loop.ticket.number": ticket.number}, role=Role.CODE):
+                    spec.close_ticket(
+                        ticket.number, f"Delivered in {result.commit}.\n\n{result.summary}\n\n{result.verification}"
+                    )
+                    tracker.update_spec(spec)
+                    store.reset(ticket.url)
                 break
             logger.warning("ticket %s failed: %s", ticket.url, result)
             git.restore(worktree.path, head_before.sha)
@@ -90,10 +91,10 @@ def _attempt(
         return "agent process did not exit successfully"
     except TicketWorkflowError as exception:
         return str(exception)
-    violation = _result_violation(context.identifier, result)
-    if violation is not None:
-        return violation
-    violation = _commit_violation(git, worktree.path, head_before, context.identifier, result)
+    with span(f"verify #{ticket.number}", {"loop.ticket.number": ticket.number}, role=Role.CODE):
+        violation = _result_violation(context.identifier, result)
+        if violation is None:
+            violation = _commit_violation(git, worktree.path, head_before, context.identifier, result)
     return result if violation is None else violation
 
 

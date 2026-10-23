@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from contextlib import AbstractContextManager
 from datetime import datetime
 from pathlib import Path
@@ -17,8 +17,9 @@ from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider as SdkTracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.trace import Span, SpanKind, Status, StatusCode, TracerProvider
+from opentelemetry.trace import Span, SpanKind, Status, StatusCode, Tracer, TracerProvider
 
+from .roles import Role
 from .values import AgentRunRecord, ToolCall, Usage, WorktreeEvent
 
 SCOPE = "loop"
@@ -43,8 +44,10 @@ class OtlpObserver:
         tracer_provider: TracerProvider | None = None,
         meter_provider: MeterProvider | None = None,
         capture_content: bool = False,
+        resource_providers: Callable[[str], TracerProvider] | None = None,
     ) -> None:
         self._tracer = (tracer_provider or trace.get_tracer_provider()).get_tracer(SCOPE)
+        self._resource_providers = resource_providers
         meter = (meter_provider or metrics.get_meter_provider()).get_meter(SCOPE)
         self._capture_content = capture_content
         self._worktrees: dict[Path, Span] = {}
@@ -52,14 +55,15 @@ class OtlpObserver:
 
     def agent_run(self, record: AgentRunRecord) -> None:
         """Exports one `invoke_agent` span, its `execute_tool` children and the usage metrics."""
-        span = self._tracer.start_span(
-            f"invoke_agent {record.cli}",
+        tracer = self._resource_tracer(record.agent)
+        span = tracer.start_span(
+            f"invoke_agent {record.agent or record.cli}",
             context=self._parent_context(record.cwd),
             start_time=_nanos(record.started_at),
             attributes=self._agent_attributes(record),
         )
         for tool in record.tools:
-            self._export_tool(span, tool)
+            self._export_tool(tracer, span, tool)
         failed = record.error is not None or record.exit_code != 0
         if failed:
             span.set_status(Status(StatusCode.ERROR, record.error or f"exit code {record.exit_code}"))
@@ -69,7 +73,7 @@ class OtlpObserver:
     def worktree(self, event: WorktreeEvent) -> None:
         """Holds a `loop.worktree` span open from `ready` until `removed`."""
         if event.point == "ready":
-            self._worktrees[event.path] = self._tracer.start_span(
+            self._worktrees[event.path] = self._resource_tracer(Role.CODE).start_span(
                 "loop.worktree",
                 start_time=_nanos(event.at),
                 attributes={"loop.worktree.path": str(event.path)},
@@ -83,9 +87,17 @@ class OtlpObserver:
             span.set_status(Status(StatusCode.ERROR, "worktree run failed"))
         span.end(end_time=_nanos(event.at))
 
-    def span(self, name: str, attributes: Mapping[str, str | int | bool] | None = None) -> AbstractContextManager[Span]:
-        """A Workflow-owned span on this observer's provider; Agent Run and Worktree spans started inside nest under it."""
-        return self._tracer.start_as_current_span(name, attributes=dict(attributes or {}))
+    def span(
+        self, name: str, attributes: Mapping[str, str | int | bool] | None = None, *, role: str | None = None
+    ) -> AbstractContextManager[Span]:
+        """A Workflow-owned span, exported as resource `role` when given; Agent Run and Worktree spans started inside nest under it."""
+        return self._resource_tracer(role).start_as_current_span(name, attributes=dict(attributes or {}))
+
+    def _resource_tracer(self, resource: str | None) -> Tracer:
+        """The tracer exporting as its own resource when the observer has resource providers, else the shared one."""
+        if resource is None or self._resource_providers is None:
+            return self._tracer
+        return self._resource_providers(resource).get_tracer(SCOPE)
 
     def _parent_context(self, cwd: Path) -> otel_context.Context | None:
         span = self._worktrees.get(cwd)
@@ -99,6 +111,7 @@ class OtlpObserver:
             "loop.agent.cwd": str(record.cwd),
         }
         optional = {
+            "gen_ai.agent.name": record.agent,
             "gen_ai.request.model": record.model,
             "loop.agent.thinking": record.reasoning_effort,
             "loop.agent.native_session_id": record.native_id,
@@ -111,7 +124,7 @@ class OtlpObserver:
             attributes.update(_content_attributes(record))
         return attributes
 
-    def _export_tool(self, agent_span: Span, tool: ToolCall) -> None:
+    def _export_tool(self, tracer: Tracer, agent_span: Span, tool: ToolCall) -> None:
         attributes: dict[str, object] = {
             "gen_ai.operation.name": "execute_tool",
             "gen_ai.tool.name": tool.name,
@@ -121,7 +134,7 @@ class OtlpObserver:
         if self._capture_content:
             attributes["gen_ai.tool.call.arguments"] = json.dumps(dict(tool.arguments))
             attributes["gen_ai.tool.call.result"] = tool.result
-        span = self._tracer.start_span(
+        span = tracer.start_span(
             f"execute_tool {tool.name}",
             context=trace.set_span_in_context(agent_span),
             kind=SpanKind.INTERNAL,
@@ -199,14 +212,34 @@ def otlp_observer(
     capture_content: bool = False,
     tracer_provider: TracerProvider | None = None,
     meter_provider: MeterProvider | None = None,
+    resource_per_agent: bool = False,
 ) -> OtlpObserver:
-    """An observer exporting over OTLP/HTTP; `endpoint` is a base URL such as http://localhost:4318 (the standard `OTEL_EXPORTER_OTLP_*` variables apply when it is None)."""
-    resource = Resource.create({"service.name": service_name or os.environ.get("OTEL_SERVICE_NAME") or DEFAULT_SERVICE_NAME})
+    """An observer exporting over OTLP/HTTP; `endpoint` is a base URL such as http://localhost:4318 (the standard `OTEL_EXPORTER_OTLP_*` variables apply when it is None).
+
+    With `resource_per_agent`, each named agent, each `span(role=...)` and the Worktree (as `Role.CODE`) export as their own resource, which backends such as Aspire color apart.
+    """
+    name = service_name or os.environ.get("OTEL_SERVICE_NAME") or DEFAULT_SERVICE_NAME
+    # Resource-per-agent backends list each resource by name, so drop the per-process suffix there too.
+    resource = Resource.create({"service.name": name, **({"service.instance.id": name} if resource_per_agent else {})})
     return OtlpObserver(
         tracer_provider=tracer_provider or _own_tracer_provider(resource, endpoint),
         meter_provider=meter_provider or _own_meter_provider(resource, endpoint),
         capture_content=capture_content,
+        resource_providers=_resource_providers(endpoint) if resource_per_agent else None,
     )
+
+
+def _resource_providers(endpoint: str | None) -> Callable[[str], TracerProvider]:
+    providers: dict[str, TracerProvider] = {}
+
+    def provider(name: str) -> TracerProvider:
+        if name not in providers:
+            # A fixed instance id keeps Aspire from suffixing the resource name with a per-process id.
+            resource = Resource.create({"service.name": name, "service.instance.id": name})
+            providers[name] = _own_tracer_provider(resource, endpoint)
+        return providers[name]
+
+    return provider
 
 
 def _signal_endpoint(endpoint: str | None, signal: str) -> str | None:

@@ -160,3 +160,91 @@ def test_workflow_span_from_the_observer_parents_agent_runs_on_the_same_provider
 
 def test_otlp_observer_builds_with_an_explicit_endpoint() -> None:
     assert isinstance(otlp_observer(endpoint="http://localhost:4318/", service_name="dev"), OtlpObserver)
+
+
+class ResourceCapture:
+    """One in-memory exporter per resource name, to see which resource each span is exported as."""
+
+    def __init__(self) -> None:
+        self.exporters: dict[str, InMemorySpanExporter] = {}
+        self.shared = InMemorySpanExporter()
+        shared_provider = TracerProvider()
+        shared_provider.add_span_processor(SimpleSpanProcessor(self.shared))
+        self.tracer = shared_provider.get_tracer("workflow")
+        self.observer = OtlpObserver(
+            tracer_provider=shared_provider,
+            meter_provider=MeterProvider(metric_readers=[InMemoryMetricReader()]),
+            resource_providers=self._provider,
+        )
+
+    def _provider(self, name: str) -> TracerProvider:
+        exporter = self.exporters.setdefault(name, InMemorySpanExporter())
+        provider = TracerProvider()
+        provider.add_span_processor(SimpleSpanProcessor(exporter))
+        return provider
+
+    def names(self, resource: str) -> list[str]:
+        return [span.name for span in self.exporters[resource].get_finished_spans()]
+
+
+def named_record(agent: str | None) -> AgentRunRecord:
+    return AgentRunRecord(**{**record(usage=USAGE).__dict__, "agent": agent})
+
+
+def test_named_agents_and_the_worktree_export_as_their_own_resources() -> None:
+    capture = ResourceCapture()
+
+    with capture.tracer.start_as_current_span("#1 add basket"):
+        capture.observer.worktree(WorktreeEvent("ready", CWD, START, None))
+        capture.observer.agent_run(named_record("planner"))
+        capture.observer.agent_run(named_record("developer"))
+        capture.observer.worktree(WorktreeEvent("removed", CWD, START + timedelta(seconds=7), True))
+
+    assert capture.names("planner") == ["execute_tool bash", "invoke_agent planner"]
+    assert capture.names("developer") == ["execute_tool bash", "invoke_agent developer"]
+    assert capture.names("code") == ["loop.worktree"]
+    assert [span.name for span in capture.shared.get_finished_spans()] == ["#1 add basket"]
+
+
+def test_an_unnamed_agent_stays_on_the_shared_resource() -> None:
+    capture = ResourceCapture()
+
+    capture.observer.agent_run(named_record(None))
+
+    assert [span.name for span in capture.shared.get_finished_spans()] == ["execute_tool bash", "invoke_agent copilot"]
+    assert "planner" not in capture.exporters
+
+
+def test_the_agent_name_is_an_attribute_of_its_span() -> None:
+    capture = ResourceCapture()
+
+    capture.observer.agent_run(named_record("planner"))
+
+    span = capture.exporters["planner"].get_finished_spans()[-1]
+    assert span.attributes["gen_ai.agent.name"] == "planner"
+
+
+def test_the_public_factory_builds_a_resource_per_agent_observer() -> None:
+    import loop
+
+    observer = loop.otlp_observer(endpoint="http://localhost:1", service_name="t", resource_per_agent=True)
+
+    assert observer._resource_providers is not None
+
+
+def test_a_workflow_span_with_a_role_exports_as_that_resource_and_still_nests() -> None:
+    capture = ResourceCapture()
+
+    with capture.observer.span("spec", None):
+        with capture.observer.span("request", None, role="engineer"):
+            pass
+
+    request = capture.exporters["engineer"].get_finished_spans()[0]
+    spec = capture.shared.get_finished_spans()[0]
+    assert request.parent.span_id == spec.context.span_id
+
+
+def test_the_shared_role_names_match_the_adw_vocabulary() -> None:
+    from loop import Role
+
+    assert Role.ALL == ("engineer", "code", "planner", "developer", "reviewer")

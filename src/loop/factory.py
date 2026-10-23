@@ -7,8 +7,8 @@ from .agents import AgentClient
 from .builder import AgentBuilder
 from .clis import ProcessCliRunner
 from .docker import DockerRuntime
-from .dryrun import LoggingDocker, LoggingGitCli, LoggingRunner
-from .git import BranchStrategy, GitCli, GitOptions, GitRuntime, MergeToHeadStrategy
+from .dryrun import DirectoryGit, FakeCliRunner, LoggingDocker, LoggingGitCli, LoggingRunner
+from .git import BranchStrategy, GitCli, GitOptions, GitRuntime, GitService, MergeToHeadStrategy
 from .run import AgentContext, AgentOptions
 from .sessions import SessionName
 
@@ -28,6 +28,16 @@ def Agent(options: AgentOptions | None = None) -> AgentBuilder:
         git=GitRuntime(GitCli()),
         docker=DockerRuntime(),
         agent_context=agent_context,
+    )
+
+
+def fake_agent(runner: FakeCliRunner, git: GitService | None = None, options: AgentOptions | None = None) -> AgentBuilder:
+    """A builder that runs `runner` instead of a CLI in a temporary directory instead of a worktree, for end-to-end runs in isolation."""
+    return AgentBuilder(
+        runner=runner,
+        git=git or DirectoryGit(),
+        docker=DockerRuntime(),
+        agent_context=_apply_options(AgentContext(), options),
     )
 
 

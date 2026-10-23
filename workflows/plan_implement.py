@@ -19,6 +19,7 @@ from loop import (
     AgentWorkspace,
     BranchStrategy,
     GitOptions,
+    Role,
     copilot,
 )
 
@@ -92,8 +93,8 @@ def main(
     parser = argparse.ArgumentParser(prog="plan_implement")
     parser.add_argument("task")
     args = parser.parse_args(argv)
-    planner = AgentProfile(copilot, plan_model, plan_effort)
-    implementer = AgentProfile(copilot, implement_model, implement_effort)
+    planner = AgentProfile(copilot, plan_model, plan_effort, name=Role.PLANNER)
+    implementer = AgentProfile(copilot, implement_model, implement_effort, name=Role.DEVELOPER)
     branch = f"loop/run-{uuid.uuid4().hex[:8]}"
     logger.info("branch %s", branch)
     options = GitOptions(

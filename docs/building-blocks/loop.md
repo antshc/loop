@@ -27,7 +27,7 @@ Paths relative to `src/loop/`.
 __init__.py     public API
 factory.py      Agent() composition root
 builder.py      AgentBuilder, Worktree
-dryrun/         logging-only adapters for the demo
+dryrun/         logging-only adapters for the demo, plus FakeCliRunner and DirectoryGit for isolated end-to-end runs
 agents/         AgentClient, AgentProfile, copilot and codex profiles, wrappers over a client
 clis/           CliRunner, the Copilot and Codex CLI adapters, the observing runner and the Copilot session-log reader
 docker/         DockerRuntime and DockerService
@@ -120,6 +120,6 @@ Likewise indexed in [ARCHITECTURE.md](../../ARCHITECTURE.md#architecture-decisio
 - **Agent builder:** `Agent()` composes git, Docker, session, and hook options into agent clients and worktrees; agents run on the host with the worktree as working directory ([Build agents with an agent builder](../adr/build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md)).
 - **Agent profiles:** the CLI (Copilot, Codex), model, and reasoning effort are chosen per client; the library returns the CLI's raw stdout and the Workflow parses it.
 - **Git worktrees and hooks:** `BranchStrategy`, `MergeToHeadStrategy`, and `HeadStrategy` choose the worktree branch; Loop hooks run at `worktree-ready`, `worktree-removing`, and `run-finished`. Push, pull requests, and Ticket state stay in Workflow Python, while the agent commits each task ([Run one fresh agent per Ticket](../adr/run-one-fresh-agent-per-ticket-from-python-and-let-the-agent-commit-it.md)).
-- **Dry run:** `AgentOptions(dry_run=True)` exercises the builder with logging-only adapters.
+- **Dry run:** `AgentOptions(dry_run=True)` exercises the builder with logging-only adapters; `fake_agent(FakeCliRunner(...))` runs a scripted agent in a temporary directory and, passed as the observer's reader, reports its usage and tools like a real CLI.
 - **Observation (optional):** `with_observer(observer)` reports each Agent Run turn (usage and tool calls from the CLI's session log) and each Worktree to a `RunObserver`; `otlp_observer(...)` (extra `loop[otel]`) exports OpenTelemetry spans and metrics over OTLP to Aspire or any backend. Nothing changes, and `opentelemetry` is never imported, without it ([Observe Agent Runs through an optional observer seam](../adr/observe-agent-runs-through-an-optional-observer-seam-that-exports-to-opentelemetry.md)).
 - **Logging:** the library logs under the `loop` logger and stays silent until the host calls `configure_logging()`. INFO goes to the console only; DEBUG adds detail and also writes JSON lines to a configurable file (`log_file=None` disables it).

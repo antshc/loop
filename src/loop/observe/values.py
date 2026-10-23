@@ -77,6 +77,8 @@ class AgentRunRecord:
     tools: tuple[ToolCall, ...]
     prompt: str
     output: str | None
+    # The profile's name; None for an unnamed agent.
+    agent: str | None = None
 
 
 @dataclass(frozen=True)

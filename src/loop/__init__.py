@@ -28,8 +28,16 @@ from .clis import (
     copilot,
 )
 from .docker import DockerRuntime, DockerService
-from .dryrun import LoggingDocker, LoggingGitCli, LoggingRunner
-from .factory import Agent, repo_agent
+from .dryrun import (
+    DirectoryGit,
+    FakeCliRunner,
+    FakeReply,
+    FakeToolUse,
+    LoggingDocker,
+    LoggingGitCli,
+    LoggingRunner,
+)
+from .factory import Agent, fake_agent, repo_agent
 from .git import (
     BranchStrategy,
     GitCli,
@@ -62,7 +70,7 @@ from .hooks import (
     WorktreeRemovingLoopHook,
 )
 from .log import configure_logging
-from .observe import AgentRunRecord, LogReading, RunObserver, ToolCall, Usage, WorktreeEvent, otlp_observer
+from .observe import AgentRunRecord, LogReading, Role, RunObserver, ToolCall, Usage, WorktreeEvent, otlp_observer
 from .run import (
     AgentContext,
     AgentOptions,
@@ -119,7 +127,11 @@ __all__ = [
     "CopilotText",
     "DockerAgent",
     "DockerRuntime",
+    "DirectoryGit",
     "DockerService",
+    "FakeCliRunner",
+    "FakeReply",
+    "FakeToolUse",
     "GitAgent",
     "GitCli",
     "GitOptions",
@@ -145,6 +157,7 @@ __all__ = [
     "PromptError",
     "PromptSubmittedAgentCliHook",
     "Resume",
+    "Role",
     "RunContext",
     "RunObserver",
     "RunFinishedLoopHook",
@@ -171,6 +184,7 @@ __all__ = [
     "codex",
     "configure_logging",
     "copilot",
+    "fake_agent",
     "otlp_observer",
     "repo_agent",
 ]

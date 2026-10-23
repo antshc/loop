@@ -510,7 +510,7 @@ class SpanRecordingObserver:
         self.endpoint = endpoint
         self.events: list[str] = []
 
-    def span(self, name: str, attributes: dict | None = None):
+    def span(self, name: str, attributes: dict | None = None, *, role: str | None = None):
         events = self.events
 
         class _Span:
@@ -546,10 +546,18 @@ def test_an_otlp_endpoint_observes_runs_and_nests_them_in_spec_and_ticket_spans(
     assert code == 0 and [o.endpoint for o in observers] == ["http://collector:4318"]
     assert observers[0].events == [
         "open spec Checkout",
+        "open request",
+        "close request",
         "worktree ready",
         "open #10 Add login form",
         "agent_run",
         "close #10 Add login form",
+        "open verify #10",
+        "close verify #10",
+        "open close #10",
+        "close close #10",
+        "open publish branch",
+        "close publish branch",
         "worktree removing",
         "worktree removed",
         "close spec Checkout",

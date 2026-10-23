@@ -33,6 +33,29 @@ alias dev='PYTHONPATH=/path/to/harness python -m workflows.dev'
 dev --log-level DEBUG
 ```
 
+### Debugging with fakes
+
+`--fake <seam>` (repeatable) replaces one external dependency of `dev` with a fake and leaves the
+rest real; `--dry` fakes them all and publishes the run to the dashboard (OTLP endpoint
+`OTEL_EXPORTER_OTLP_ENDPOINT`, default `http://localhost:4318`).
+
+| Seam | Fakes | Needs |
+|------|-------|-------|
+| `agent` | the Copilot CLI: a scripted agent that reports usage and tool calls and commits in the worktree | none |
+| `git` | the Workflow's Git reads and pushes, and the worktree (a temporary directory) | `agent` |
+| `github` | `gh`: one canned Spec with two Tickets; writes are logged, not sent | none |
+| `store` | the failure log, in a temporary directory | none |
+
+```sh
+python -m workflows.dev --dry                                  # everything fake, traces in the dashboard
+python -m workflows.dev --fake agent --fake github --fake store   # real Git: the fake agent makes real empty commits and `dev` really pushes
+python -m workflows.dev --dry --fake-speed 0 --no-rework        # instant, no failing first attempt
+```
+
+By default the second Ticket fails its first attempt so the retry path shows up in the trace.
+In code, `Fakes` in [`dry.py`](workflows/dev/dry.py) builds the same fakes, and the library offers
+`fake_agent`, `FakeCliRunner` and `DirectoryGit` to run any functional slice in isolation.
+
 ### Different agent workflows per repository
 
 The example [`dev`](../workflows/dev/) reads Specs and Tickets from `HARNESS`.
@@ -232,6 +255,15 @@ exported only with `otlp_observer(capture_content=True)`. Without `with_observer
 A span appears in the dashboard when it ends, and Codex Agent Runs carry no usage. Pass any
 object with `agent_run(record)` and `worktree(event)` methods to `with_observer` to send the
 records elsewhere. The dev Workflow opts in with `python -m workflows.dev --otlp-endpoint http://localhost:4318`.
+Name a profile from the shared `Role` vocabulary (`replace(DEFAULT, name=Role.REVIEWER)`) and pass `otlp_observer(resource_per_agent=True)` to export each named agent as its own resource, which Aspire colors apart:
+
+| `Role` | Exports |
+|--------|---------|
+| `ENGINEER` | the request that starts a run (`observer.span("request", role=Role.ENGINEER)`) |
+| `CODE` | the Worktree and deterministic steps: checks, validation, Git, GitHub (`observer.span(..., role=Role.CODE)`) |
+| `PLANNER`, `DEVELOPER`, `REVIEWER` | the agents of those names (`AgentProfile(name=...)`) |
+
+`dev` uses `ENGINEER` for the Spec request, `CODE` for commit verification, ticket close and branch publication, and `DEVELOPER` for its agent; `plan_implement` names its agents `PLANNER` and `DEVELOPER`.
 See [Run Observation](docs/concepts/str-run-observation.md).
 
 ## Library examples
