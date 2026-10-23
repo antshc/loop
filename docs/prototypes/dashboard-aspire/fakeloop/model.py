@@ -74,3 +74,27 @@ class AgentConfig:
     color: str
     coding_agent: str = "copilot"
     context_window: int = 200_000
+
+
+class GateFailure(Exception):
+    """Every attempt failed its gate."""
+
+
+@dataclass(frozen=True)
+class ToolStep:
+    """One scripted tool call."""
+
+    tool: str
+    args: dict[str, str]
+    result: str
+    ok: bool = True
+    seconds: float = 0.6
+
+
+@dataclass(frozen=True)
+class Attempt:
+    """One send to the agent: the tool calls it makes, its answer, and the gate evidence."""
+
+    steps: tuple[ToolStep, ...]
+    envelope: dict[str, object]
+    checks: tuple[GateCheck, ...]

@@ -3,14 +3,29 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
+from typing import Protocol
 
 from opentelemetry import trace
 from opentelemetry.trace import Span, Status, StatusCode
 
-from .model import Phase, PhaseParams
+from loop import Prompt
+
+from .model import AgentConfig, Attempt, Phase, PhaseParams
 from .telemetry import Telemetry, trace_hex
+
+
+class PhaseAgent(Protocol):
+    """What a phase needs from an agent, fake or real."""
+
+    def call(self, ph: PhaseHandle, prompt: Prompt, output_type: str, gate: str,
+             attempts: Sequence[Attempt]) -> dict[str, object]:
+        """Runs the agent for the phase and returns its envelope."""
+        ...
+
+
+AgentFactory = Callable[[AgentConfig, str], PhaseAgent]
 
 
 class PhaseHandle:
@@ -36,8 +51,10 @@ class PhaseHandle:
 class Run:
     """One session: a root span whose trace id is the session id, and the phases entered so far."""
 
-    def __init__(self, telemetry: Telemetry, engineer: str, adw_name: str, speed: float = 1.0) -> None:
+    def __init__(self, telemetry: Telemetry, engineer: str, adw_name: str, speed: float = 1.0,
+                 *, agents: AgentFactory) -> None:
         self.telemetry = telemetry
+        self._agents = agents
         self.speed = speed
         self.phases: list[Phase] = []
         self._seq = 0
@@ -47,6 +64,10 @@ class Run:
         self._ticket_id: int | None = None
         self.adw_id = trace_hex(self._root)
         telemetry.started(self._root, "loop.session.start", attributes)
+
+    def agent(self, config: AgentConfig, system_prompt: str) -> PhaseAgent:
+        """A new agent for one phase, built by the factory this run was started with."""
+        return self._agents(config, system_prompt)
 
     def sleep(self, seconds: float) -> None:
         """Pauses so the dashboard can be watched live in Aspire; `--speed 0` skips the wait."""

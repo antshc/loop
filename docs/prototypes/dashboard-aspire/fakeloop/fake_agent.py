@@ -7,42 +7,18 @@ import random
 import time
 import uuid
 from collections.abc import Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 
 from opentelemetry import trace
 from opentelemetry.trace import Span, Status, StatusCode
 
 from loop import Prompt
 
-from .model import AgentConfig, GateCheck, GateReport
+from .model import AgentConfig, Attempt, GateCheck, GateFailure, GateReport, ToolStep
 from .runner import PhaseHandle
 
 # Dollars per million tokens, for the fake usage breakdown.
 _RATES = {"input": 3.0, "output": 15.0, "cache_read": 0.3, "cache_write": 3.75}
-
-
-class GateFailure(Exception):
-    """Every scripted attempt failed its gate."""
-
-
-@dataclass(frozen=True)
-class ToolStep:
-    """One scripted tool call."""
-
-    tool: str
-    args: dict[str, str]
-    result: str
-    ok: bool = True
-    seconds: float = 0.6
-
-
-@dataclass(frozen=True)
-class Attempt:
-    """One send to the agent: the tool calls it makes, its answer, and the gate evidence."""
-
-    steps: tuple[ToolStep, ...]
-    envelope: dict[str, object]
-    checks: tuple[GateCheck, ...]
 
 
 class FakeAgent:
@@ -57,7 +33,8 @@ class FakeAgent:
              attempts: Sequence[Attempt]) -> dict[str, object]:
         """Plays attempts until one passes its gate; raises `GateFailure` when none does."""
         started_at = time.perf_counter()
-        span = self._start(ph, prompt.render())
+        span = start_agent_span(
+            ph, self.config, self.session_id, self.system_prompt, prompt.render())
         totals = dict.fromkeys(
             ("input_tokens", "output_tokens", "reasoning_tokens", "cache_read_tokens",
              "cache_write_tokens"), 0)
@@ -74,7 +51,7 @@ class FakeAgent:
                     "loop.envelope.output_type": output_type,
                     "loop.envelope.payload": json.dumps(envelope),
                     "loop.envelope.valid": True, "loop.envelope.attempt": number})
-                passed = _gate(ph, gate, GateReport(attempt.checks), number)
+                passed = record_gate(ph, gate, GateReport(attempt.checks), number)
                 if passed:
                     break
                 ph.run.sleep(0.4)
@@ -82,26 +59,6 @@ class FakeAgent:
         if not passed:
             raise GateFailure(f"{gate} failed after {len(attempts)} attempt(s)")
         return envelope
-
-    def _start(self, ph: PhaseHandle, user_prompt: str) -> Span:
-        attributes = {
-            "gen_ai.operation.name": "invoke_agent", "gen_ai.agent.name": self.config.name,
-            "gen_ai.provider.name": self.config.coding_agent,
-            "gen_ai.request.model": self.config.model, "gen_ai.conversation.id": self.session_id,
-            "loop.agent.color": self.config.color,
-            "loop.agent.coding_agent": self.config.coding_agent,
-            "loop.agent.thinking": "medium",
-            "loop.agent.purpose": ph.phase.params.description,
-            "loop.agent.context_window": self.config.context_window}
-        span = ph.tracer.start_span(
-            f"invoke_agent {self.config.name}", kind=trace.SpanKind.CLIENT,
-            attributes={**attributes,
-                        "gen_ai.system_instructions": json.dumps(
-                            [{"type": "text", "content": self.system_prompt}]),
-                        "gen_ai.input.messages": json.dumps(
-                            [{"role": "user", "parts": [{"type": "text", "content": user_prompt}]}])})
-        ph.run.telemetry.started(span, "loop.agent.start", attributes, parent=ph.span)
-        return span
 
     def _tool_call(self, ph: PhaseHandle, step: ToolStep) -> None:
         with ph.tracer.start_as_current_span(
@@ -161,7 +118,7 @@ class FakeAgent:
         telemetry.cost.add(cost, common)
 
 
-def _gate(ph: PhaseHandle, gate: str, report: GateReport, attempt: int) -> bool:
+def record_gate(ph: PhaseHandle, gate: str, report: GateReport, attempt: int) -> bool:
     """Records a gate verdict as an instant span under the phase and returns it."""
     span = ph.tracer.start_span(
         f"gate {gate}", context=trace.set_span_in_context(ph.span), attributes={
@@ -174,3 +131,26 @@ def _gate(ph: PhaseHandle, gate: str, report: GateReport, attempt: int) -> bool:
     span.end()
     ph.run.telemetry.gate_results.add(1, {"loop.gate.name": gate, "loop.gate.passed": report.passed})
     return report.passed
+
+
+def start_agent_span(ph: PhaseHandle, config: AgentConfig, session_id: str, system_prompt: str,
+                     user_prompt: str) -> Span:
+    """Opens the `invoke_agent` span under the phase and logs its start marker."""
+    attributes = {
+        "gen_ai.operation.name": "invoke_agent", "gen_ai.agent.name": config.name,
+        "gen_ai.provider.name": config.coding_agent,
+        "gen_ai.request.model": config.model, "gen_ai.conversation.id": session_id,
+        "loop.agent.color": config.color,
+        "loop.agent.coding_agent": config.coding_agent,
+        "loop.agent.thinking": "medium",
+        "loop.agent.purpose": ph.phase.params.description,
+        "loop.agent.context_window": config.context_window}
+    span = ph.tracer.start_span(
+        f"invoke_agent {config.name}", kind=trace.SpanKind.CLIENT,
+        attributes={**attributes,
+                    "gen_ai.system_instructions": json.dumps(
+                        [{"type": "text", "content": system_prompt}]),
+                    "gen_ai.input.messages": json.dumps(
+                        [{"role": "user", "parts": [{"type": "text", "content": user_prompt}]}])})
+    ph.run.telemetry.started(span, "loop.agent.start", attributes, parent=ph.span)
+    return span

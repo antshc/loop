@@ -62,6 +62,11 @@ class Telemetry:
             description="Duration of an agent invocation.")
         self.cost = meter.create_counter(
             "loop.agent.cost", unit="USD", description="Estimated agent spend.")
+        self.aiu = meter.create_counter(
+            "loop.agent.aiu", unit="{AIU}", description="GitHub AI units the agent consumed.")
+        self.premium_requests = meter.create_counter(
+            "loop.agent.premium_requests", unit="{request}",
+            description="Premium requests the user's prompts billed.")
         self.gate_results = meter.create_counter(
             "loop.gate.results", unit="{gate}", description="Gate verdicts by gate and outcome.")
         self.phase_duration = meter.create_histogram(
