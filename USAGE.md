@@ -5,7 +5,7 @@ This guide covers the example dev Workflow and advanced library usage.
 Run repository examples from the repository root.
 
 - [Dev Workflow](#dev-workflow)
-- [Scenario-style flow visualization (optional)](#scenario-style-flow-visualization-optional)
+- [Optional Workflow Builder](#optional-workflow-builder)
 - [Logging](#logging)
 - [Telemetry (optional)](#telemetry-optional)
 - [Library examples](#library-examples)
@@ -166,49 +166,189 @@ arguments. Delegates own step ordering and agent profiles; there is no prompt
 pipeline or configuration-file format. A missing template raises an error rather
 than falling back to a different prompt.
 
-## Scenario-style flow visualization (optional)
+## Optional Workflow Builder
 
-[`workflows/dev_bdd/`](workflows/dev_bdd/) is a dummy scenario-driven Workflow (fake data, no GitHub, Git
-or agent calls). Flows are plain Python scenarios made of named steps, and each run prints a live,
-indented tree of what is executing. It is code-first: no Gherkin and no Given/When/Then. Nothing in
-`src/loop` depends on it.
+`WorkflowBuilder` adds phase tracking, high-level console logs, terminal visualization,
+and optional OTLP spans to ordinary Python. It does not execute callbacks or schedule
+work: your script owns loops, conditions, retries, Git, and agent calls. Existing
+`Agent()` workflows need no changes.
+
+Import from the public package:
+
+```python
+from loop import Kind, Phase, Phases, Role, Workflow, WorkflowBuilder, WorkflowRun
+```
+
+### Run the fake e-commerce example
+
+[`workflows/workflow_reporting.py`](workflows/workflow_reporting.py) is self-contained,
+uses fake basket data, and makes no agent, Git, or GitHub calls. Run from the repository root:
 
 ```sh
-python -m workflows.dev_bdd
+python -m workflows.workflow_reporting
+python -m workflows.workflow_reporting --fail-verification  # exits 1; PR stays a draft
+python -m pip install -e ".[visualization]"
+python -m workflows.workflow_reporting --visualize
 ```
 
+The example deliberately rejects the first implementation attempt and recovers on
+its second attempt. It publishes a fake draft PR before verification, skips cleanup,
+and marks readiness only after verification and review complete.
+
+### Define phases; execute with ordinary Python
+
+This smaller runnable example demonstrates the same interface:
+
+```python
+from loop import Kind, Role, WorkflowBuilder, configure_logging
+
+configure_logging()  # The application owns logging handlers.
+workflow = (
+    WorkflowBuilder("eShop development")
+    .phase("prepare", "Prepare repository", Kind.CODE, Role.CODE)
+    .phase("implement", "Implement ticket", Kind.AGENT, Role.DEVELOPER)
+    .phase("verify", "Verify application", Kind.CODE, "verifier")
+    .phase("review", "Review pull request", Kind.AGENT, Role.REVIEWER)
+    .console()
+    .build()
+)
+
+basket = []
+with workflow.run(spec=42) as run:
+    with run.phase("prepare"):
+        basket.clear()
+
+    for ticket, product in ((43, "coffee"), (44, "tea")):
+        for attempt in range(1, 3):
+            with run.phase("implement", ticket=ticket, attempt=attempt) as phase:
+                changed = not (ticket == 43 and attempt == 1)
+                if phase.gate("product added", changed, "No changes produced"):
+                    basket.append(product)
+            if phase.status == "completed":
+                break
+        else:
+            run.fail(f"Ticket #{ticket} exhausted its retries")
+            break
+
+    if run.outcome.status != "failed":
+        with run.phase("verify") as phase:
+            verified = basket == ["coffee", "tea"]
+            phase.set(verdict="pass" if verified else "fail")
+            phase.gate("basket contains products", verified, "Basket verification failed")
+        if verified:
+            with run.phase("review") as phase:
+                phase.set(blocking_findings=0)
+            run.set(ready=True)
+        else:
+            run.skip("review", "Verification failed")
+            run.set(ready=False)
+            run.fail("Verification failed; PR remains a draft")
+
+assert run.outcome.status == "completed"
+assert run.outcome.attributes["ready"] is True
 ```
-> Development workflow
-  > Process specification #100
-    > Deliver ticket #101
-      > Execute agent
-      < Execute agent [SUCCESS] 41.20s
+
+`build()` snapshots the declarations. Each `workflow.run()` creates independent state;
+reuse the definition for several Specs. Phase names must be unique and declared before
+use. Existing helpers may also pass the declared kind and owner positionally, as with
+`Phases.phase(name, kind, owner, **attributes)`; conflicting declarations are rejected.
+Definition order controls the pending display, not execution order. The current
+interface is synchronous; keep phase contexts within their run and close them before
+leaving it. Thread scheduling and asynchronous context managers are outside its scope.
+
+### Outcomes and gates
+
+- `run.phase(...)` starts a new occurrence every time, even for the same Ticket.
+  Each occurrence has its own ID, parent ID, attempt attributes, and duration.
+- Nested phases inherit their parent's attributes; inner changes do not mutate the parent.
+- `phase.gate(check, ok, note)` records a claim and returns `ok`. A failed gate makes
+  that phase failed. The caller decides whether to stop, retry, or continue.
+- `phase.fail(reason)` is sticky: clean exit and `phase.succeed()` cannot erase failure.
+- Clean exit completes a running phase. Exceptions mark it failed and propagate unchanged;
+  interruption/cancellation marks it cancelled. Console errors summarize exception types.
+- `run.skip(name, reason, **attributes)` records a skipped occurrence without running work.
+  A declared phase never entered remains pending; it is not automatically called or skipped.
+- A failed child does not automatically fail its parent: retries may recover. Call
+  `run.fail(reason)` when recovery fails or a business outcome blocks delivery.
+- `phase.set(...)` and `run.set(...)` record business facts; they do not infer success.
+  Set verification verdict and PR readiness explicitly. Read the root result through
+  `run.outcome` and occurrence history through `run.executions` after exit.
+
+### Independent reporting options
+
+| Option | Behavior | Dependency |
+|---|---|---|
+| No options | Track phases and gates without output | Base install |
+| `.console()` | High-level transitions and final results through `loop.workflow` | Base install |
+| `.visualize(stream=...)` | Live terminal table; one final table when redirected | `loop[visualization]` |
+| `.otel(observer)` | Export nested phase spans through an existing observer | `loop[otel]` |
+
+Combine the options as needed. Importing Loop never imports Rich or OpenTelemetry.
+Missing Rich raises an actionable error only when visualization is requested.
+`configure_logging()` or the host's logging configuration controls console records;
+the builder installs no handlers. Visualization defaults to stderr, honors `NO_COLOR`,
+and restores the terminal on failure. With console and visualization together, each
+log transition is emitted once; the table is a separate view of the same phases.
+Reporting errors are summarized without replacing the workflow's outcome or original exception.
+
+Use `.phase(..., visible=False)` for details such as commit or restore operations.
+They stay in execution history and telemetry but do not appear in console or terminal.
+Console output excludes prompts, agent output, tool calls, command output, gate details,
+and stack traces. Pass short, high-level reasons to `phase.fail()` and `run.fail()`.
+
+Example console transitions (timestamps/logger omitted):
+
+```text
+INFO  eShop development · spec #42 started
+INFO  Implement ticket · spec #42 · ticket #43 · attempt 1 started
+WARN  Implement ticket · spec #42 · ticket #43 · attempt 1 failed · 0.0s · No changes produced
+INFO  Implement ticket · spec #42 · ticket #43 · attempt 2 started
+INFO  Implement ticket · spec #42 · ticket #43 · attempt 2 completed · 0.0s
+INFO  eShop development · spec #42 completed · 0.0s · ready=True
 ```
 
-Options:
+### Share telemetry with agent observation
 
-| Option | Meaning |
-|---|---|
-| `--quiet` | Disable the live progress on stderr |
-| `--no-allure` | Disable Allure results |
-| `--allure-results DIR` | Allure results directory (default `<log-dir>/allure-results`); an error if `allure-commons` is missing |
+```python
+from loop import Agent, WorkflowBuilder, otlp_observer
 
-Progress is colored on a terminal and plain when piped or when `NO_COLOR` is set.
-
-Allure results are optional and on by default. Install the extra to produce them; without it the
-Workflow logs a warning and runs normally.
-
-```sh
-python -m pip install -e ".[reports]"
-python -m workflows.dev_bdd
-allure serve .loop/allure-results
+observer = otlp_observer(endpoint="http://localhost:4318", resource_per_agent=True)
+agent_builder = Agent().with_observer(observer)
+workflow_builder = WorkflowBuilder("delivery").otel(observer)
 ```
 
-The Allure adapter is single-threaded and has not yet been verified against a viewer.
+Declare phases on `workflow_builder`, build it, and open each phase around the existing
+agent/worktree calls. `.otel(observer)` does not attach an agent observer automatically;
+`with_observer(observer)` remains the independent agent opt-in. Share the same observer
+so spans share providers and trace context. An active workflow phase parents an Agent Run,
+including within a worktree; the worktree remains the fallback parent without a current span.
+Gates and explicit failed outcomes are exported even when the Python body returns normally.
 
-Layers (`run -> scenarios -> steps -> services`) and their rules are in
-[`workflows/dev_bdd/AGENTS.md`](workflows/dev_bdd/AGENTS.md). To apply the same structure to another
-project, use the reusable prompt [`docs/prompts/restructure-to-scenarios.md`](docs/prompts/restructure-to-scenarios.md).
+### Adapt an eShop-style dev workflow
+
+Declare phases in a user-owned `definition.py`, build once in `run.py`, and pass the
+active `run` to helpers accepting a phase tracker. The
+[eShop reference](https://github.com/antshc/eShop/tree/main/tools/loop/workflows/dev)
+adds optional planning/ticket creation before delivery, publishes tickets as they land,
+verifies the integrated app, performs optional cleanup, closes the implementation worktree,
+then reviews the PR and checks readiness. Preserve that ordering in Python. The builder
+adds no GitHub writes, commits, Ticket policy, or review logic.
+
+Loop's current `workflows/dev/` example keeps its existing behavior; it is not migrated
+as part of this example. Existing workflow-owned spans also remain supported.
+
+### Track phases without a builder
+
+```python
+from loop import Kind, Phases, Role
+
+phases = Phases()
+with phases.phase("verify", Kind.CODE, Role.CODE) as phase:
+    phase.gate("basket has coffee", "coffee" in ["coffee"])
+```
+
+Direct `Phases()` has no registry and emits no output. The builder and phase tracking
+are both optional for agent execution.
 
 ## Logging
 
