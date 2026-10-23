@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
+from functools import partial
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
@@ -31,6 +33,7 @@ class FakeGhCli:
         prs: list[dict] | None = None,
     ) -> None:
         self.calls: list[tuple[str, ...]] = []
+        self._created: dict[int, dict] = {}
         self._tickets = (
             tickets
             if tickets is not None
@@ -58,7 +61,28 @@ class FakeGhCli:
         if args[:2] == ("pr", "list"):
             return self._pr_list(args)
         if args[:2] == ("pr", "create"):
+            self._prs.append({**_pr(99, args[args.index("--head") + 1]), "body": args[args.index("--body") + 1]})
             return "https://github.com/owner/repo/pull/99\n"
+        if args[:2] == ("pr", "edit"):
+            for pr in self._prs:
+                if str(pr["number"]) == args[2]:
+                    pr["body"] = args[args.index("--body") + 1]
+            return ""
+        if args[:2] == ("pr", "diff"):
+            return PR_DIFF
+        if args[:2] == ("issue", "create"):
+            number = 101 + len(self._created)
+            node = issue(number, args[args.index("--title") + 1])
+            node["body"] = args[args.index("--body") + 1]
+            self._created[number] = node
+            return node["url"]
+        if args[:2] == ("api", "--method"):
+            number = int(args[3].split("/")[-2])
+            child = int(args[-1].split("=")[-1]) - 1000
+            self._tickets.setdefault(number, []).append(self._created[child])
+            return "{}"
+        if args and args[0] == "api" and "--jq" in args:
+            return str(1000 + int(args[1].split("/")[-1]))
         if args and args[0] == "issue":
             return ""
         query = next((arg for arg in args if arg.startswith("query=")), "")
@@ -129,11 +153,24 @@ class FakeRunner:
         self.handler: Handler = handler or (lambda prompt: "")
         self.prompts: list[str] = []
         self.profiles: list[AgentProfile] = []
+        self.plan_prompts: list[str] = []
+        self.verify_prompts: list[str] = []
+        self.chore_prompts: list[str] = []
+        self.review_prompts: list[str] = []
+        self.plan_handler = lambda prompt: envelope("", "failed", {"reason": "needs a product decision"})
+        self.verify_handler = lambda prompt: envelope("", result={"verdict": "inconclusive"})
+        self.chore_handler = lambda prompt: envelope("", result={"summary": "No cleanup needed"})
+        self.review_handler = lambda prompt: clean_review(re.search(r"head is commit\s+`([^`]+)`", prompt)[1])
 
     def run(self, profile: AgentProfile, request: AgentRequest, turn: object, context: RunContext) -> CliOutcome:
-        self.prompts.append(request.prompt)
         self.profiles.append(profile)
-        output = self.handler(request.prompt)
+        stage = {"planner": "plan", "verifier": "verify", "chore": "chore", "reviewer": "review"}.get(profile.name)
+        if stage is None:
+            self.prompts.append(request.prompt)
+            output = self.handler(request.prompt)
+        else:
+            getattr(self, f"{stage}_prompts").append(request.prompt)
+            output = getattr(self, f"{stage}_handler")(request.prompt)
         return CliOutcome(output, NativeHandle(profile.cli.name, f"session{len(self.prompts)}"), 0)
 
 
@@ -168,14 +205,25 @@ class FakeWorkflowGit:
         self.pushed_count = 1
         self.remote_branches = {"main"}
         self.dirty = False
+        self._changed: list[str] = []
         self.fetched: list[Path] = []
         self.pushes: list[tuple[Path, str]] = []
         self.restores: list[str] = []
 
-    def commit(self, subject: str) -> str:
+    def commit(self, subject: str | Path, message: str | None = None, body: str = ""):
         sha = f"c{len(self.commits):07d}"
-        self.commits.append(Commit(sha, subject))
-        return sha
+        commit = Commit(sha, message if message is not None else str(subject), body)
+        self.commits.append(commit)
+        self.dirty = False
+        self._changed.clear()
+        return commit if message is not None else sha
+
+    def edit(self, path: str = "src/Basket.cs") -> None:
+        self.dirty = True
+        self._changed.append(path)
+
+    def add_commit(self, subject: str) -> str:
+        return self.commit(subject)
 
     def fetch(self, path: Path) -> None:
         self.fetched.append(path)
@@ -197,6 +245,18 @@ class FakeWorkflowGit:
         index = next(index for index, commit in enumerate(self.commits) if commit.sha == sha)
         return self.commits[index + 1 :]
 
+    def branch_commits(self, path: Path, base: str) -> list[Commit]:
+        return self.commits[1:]
+
+    def status(self, path: Path) -> str:
+        return "\n".join(f" M {path}" for path in self.changed_files(path))
+
+    def ref_sha(self, path: Path, ref: str) -> str:
+        return self.commits[self.pushed_count - 1].sha
+
+    def changed_files(self, path: Path) -> list[str]:
+        return list(self._changed) or (["src/Basket.cs"] if self.dirty else [])
+
     def initiative_commits(self, path: Path, base: str, prefix: str) -> list[Commit]:
         return [commit for commit in self.commits[1:] if commit.subject.startswith(prefix)]
 
@@ -204,6 +264,7 @@ class FakeWorkflowGit:
         index = next(index for index, commit in enumerate(self.commits) if commit.sha == sha)
         del self.commits[index + 1 :]
         self.dirty = False
+        self._changed.clear()
         self.restores.append(sha)
 
     def is_clean(self, path: Path) -> bool:
@@ -230,6 +291,9 @@ class FakeRepositoryGit(GitService):
 
     def commits_since(self, path: Path, sha: str) -> list[Commit]:
         return self.paths[path].commits_since(path, sha)
+
+    def branch_commits(self, path: Path, base: str) -> list[Commit]:
+        return self.paths[path].branch_commits(path, base)
 
     def initiative_commits(self, path: Path, base: str, prefix: str) -> list[Commit]:
         return self.paths[path].initiative_commits(path, base, prefix)
@@ -319,6 +383,8 @@ class DevHarness:
         store: FileExecutionStore | None = None,
         argv: list[str] | None = None,
         new_observer: Callable[[str], object] | None = None,
+        all_phases: bool = False,
+        repositories: Sequence[object] | None = None,
     ) -> int:
         if handler is not None:
             self.runner.handler = handler
@@ -328,13 +394,21 @@ class DevHarness:
             owner_name=RepositoryId("owner", "repo"),
         )
         extra = {"new_observer": new_observer} if new_observer is not None else {}
-        with patch.object(dev, "HARNESS", harness):
+        configured = dev.configured_repositories
+        def repository_slice(repository):
+            if all_phases:
+                return configured(repository)
+            from workflows.dev.agent import implement_ticket, load_prompt
+            from workflows.dev.repositories import RepositoryWorkflow
+            return (RepositoryWorkflow(repository, partial(implement_ticket, template=load_prompt("implement"))),)
+        with patch.object(dev, "HARNESS", harness), patch.object(dev, "configured_repositories", repository_slice):
             return dev.main(
                 argv if argv is not None else ["--log-dir", str(self.log_dir)],
                 git=self.git,  # type: ignore[arg-type]
                 github_factory=github_factory or (lambda checkout: self.github),  # type: ignore[arg-type,return-value]
                 new_agent=new_agent_for(self.runner, self.git_service, self.root),
                 store=store or self.store,
+                repositories=repositories,
                 **extra,  # type: ignore[arg-type]
             )
 
@@ -354,3 +428,32 @@ def commit_file(directory: Path, name: str, content: str, message: str) -> None:
     (directory / name).write_text(content)
     git(directory, "add", "-A")
     git(directory, "commit", "-m", message)
+
+
+class FakePhaseSpan:
+    """Accepts workflow span facts without requiring OpenTelemetry in workflow tests."""
+
+    def __init__(self) -> None:
+        self.attributes = {}
+        self.events = []
+        self.status = None
+
+    def set_attribute(self, name, value) -> None:
+        self.attributes[name] = value
+
+    def add_event(self, name, attributes) -> None:
+        self.events.append((name, attributes))
+
+    def set_status(self, status) -> None:
+        self.status = status
+
+
+PR_DIFF = "diff --git a/src/Basket.cs b/src/Basket.cs\n--- a/src/Basket.cs\n+++ b/src/Basket.cs\n@@ -1 +1 @@\n-old\n+new\n"
+
+
+def clean_review(head: str) -> str:
+    return envelope("", result={
+        "axes": [{"name": name, "outcome": "completed"}
+                 for name in ("bugs", "quality", "smells", "initiative")],
+        "head": head, "findings": [],
+    })

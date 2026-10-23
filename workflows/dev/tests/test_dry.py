@@ -10,6 +10,7 @@ import pytest
 from loop import AgentRunRecord, Role, WorktreeEvent
 from workflows.dev import main
 from workflows.dev.dry import DryGit, Fakes, commit_in_worktree
+from workflows.dev.tests.doubles import FakePhaseSpan
 
 
 class RecordingObserver:
@@ -26,9 +27,10 @@ class RecordingObserver:
         spans = self.spans
         self.roles[name] = role
 
-        class _Span:
-            def __enter__(self) -> None:
+        class _Span(FakePhaseSpan):
+            def __enter__(self):
                 spans.append(name)
+                return self
 
             def __exit__(self, *exc: object) -> None:
                 return None
@@ -60,23 +62,25 @@ def test_a_dry_run_delivers_every_ticket_and_publishes_the_runs_to_the_default_e
 
     assert code == 0 and observer.endpoint == "http://localhost:4318"
     assert observer.worktrees == ["ready", "removing", "removed"]
-    tickets = [span for span in observer.spans if span.startswith("#")]
-    assert observer.spans[:2] == ["spec Basket", "request"]
-    assert tickets == ["#10 Add discount policy", "#11 Apply discount at checkout", "#11 Apply discount at checkout"]
+    assert observer.spans[:2] == ["dev", "Spec"]
+    assert observer.spans.count("Implement ticket") == 3
+    assert "Refine changes" in observer.spans
+    assert observer.spans.index("Review pull request") > observer.spans.index("Refine changes")
 
 
 def test_workflow_spans_export_as_the_shared_roles(tmp_path: Path) -> None:
     _, observer = _dry(tmp_path)
 
-    assert observer.roles["request"] == Role.ENGINEER
-    assert {observer.roles[name] for name in ("verify #10", "close #10", "publish branch")} == {Role.CODE}
-    assert observer.roles["spec Basket"] is None
+    assert observer.roles["Spec"] == Role.ENGINEER
+    assert {observer.roles[name] for name in ("Validate ticket commit", "Close ticket", "Publish draft PR")} == {Role.CODE}
+    assert observer.roles["Implement ticket"] == Role.DEVELOPER
+    assert observer.roles["Review pull request"] == Role.REVIEWER
 
 
 def test_the_second_ticket_is_reworked_after_a_failed_first_attempt(tmp_path: Path) -> None:
     code, observer = _dry(tmp_path)
 
-    outputs = [run.output or "" for run in observer.runs]
+    outputs = [run.output or "" for run in observer.runs if run.agent == Role.DEVELOPER]
     assert code == 0 and len(outputs) == 3
     assert '"status": "failed"' in outputs[1] and '"status": "completed"' in outputs[2]
 
@@ -88,13 +92,13 @@ def test_the_fake_agent_reports_usage_and_tools_like_a_real_cli(tmp_path: Path) 
     assert record.usage is not None and record.usage.total_input_tokens > 0 and record.usage.total_aiu > 0
     assert [tool.name for tool in record.tools] == ["view", "edit", "bash"]
     assert record.exit_code == 0 and record.native_id is not None
-    assert {run.agent for run in observer.runs} == {Role.DEVELOPER}
+    assert {run.agent for run in observer.runs} == {Role.DEVELOPER, "chore", Role.REVIEWER}
 
 
 def test_no_rework_runs_each_ticket_once(tmp_path: Path) -> None:
     code, observer = _dry(tmp_path, "--no-rework")
 
-    assert code == 0 and len(observer.runs) == 2
+    assert code == 0 and len([run for run in observer.runs if run.agent == Role.DEVELOPER]) == 2
 
 
 def test_an_explicit_endpoint_wins_over_the_default(tmp_path: Path) -> None:

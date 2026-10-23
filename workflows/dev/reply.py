@@ -6,7 +6,11 @@ import json
 from collections.abc import Callable
 from typing import Any
 
-from .records import AgentCommitSubject, TicketResult as DevResult, TicketWorkflowError as DevError
+from .records import (
+    VERDICTS, AgentCommitSubject, ChoreResult, PlannedTicket, PlanResult,
+    ReviewAxis, ReviewFinding, ReviewResult, VerifyFinding, VerifyResult,
+    TicketResult as DevResult, TicketWorkflowError as DevError,
+)
 
 
 class ContentDecodeError(Exception):
@@ -93,3 +97,110 @@ class DevResponse:
         if "identifier" in envelope and envelope["identifier"] != str(self._identifier):
             raise DevResultError(f"response identifier {envelope['identifier']!r} does not match task {self._identifier!r}")
         return parse_dev_result({**envelope, "identifier": str(self._identifier)})
+
+
+def _envelope(text: str) -> dict[str, Any]:
+    """The last `{"status": ..., "result": {...}}` object in `text`."""
+    try:
+        envelope = LastJsonObject(lambda value: "status" in value).decode(text)
+    except ContentDecodeError as exception:
+        raise DevResultError("no response object in agent output") from exception
+    if envelope["status"] not in ("completed", "failed") or not isinstance(envelope.get("result"), dict):
+        raise DevResultError(f"malformed response envelope: {envelope!r}")
+    return envelope
+
+
+def _text(result: dict[str, Any], key: str, *, required: bool = False) -> str:
+    value = result.get(key, "")
+    if isinstance(value, str) and (value.strip() or not required):
+        return value
+    raise DevResultError(f"response is missing result.{key}: {result!r}")
+
+
+def _items(result: dict[str, Any], key: str) -> list[Any]:
+    value = result.get(key, [])
+    if not isinstance(value, list):
+        raise DevResultError(f"result.{key} must be a list: {result!r}")
+    return value
+
+
+def _failure(envelope: dict[str, Any]) -> str:
+    reason = envelope["result"].get("reason")
+    if not isinstance(reason, str):
+        raise DevResultError(f"failed response is missing result.reason: {envelope['result']!r}")
+    return reason
+
+
+class PlanResponse:
+    """Decodes the planner's `{"status", "result": {"tickets": [{"title", "body", "blocked_by"}]}}` object."""
+
+    def decode(self, text: str) -> PlanResult:
+        envelope = _envelope(text)
+        if envelope["status"] == "failed":
+            return PlanResult("failed", reason=_failure(envelope))
+        tickets = []
+        for item in _items(envelope["result"], "tickets"):
+            if not isinstance(item, dict):
+                raise DevResultError(f"planned ticket must be an object: {item!r}")
+            blockers = item.get("blocked_by", [])
+            if not isinstance(blockers, list) or not all(isinstance(blocker, int) and not isinstance(blocker, bool) for blocker in blockers):
+                raise DevResultError(f"planned ticket blocked_by must be a list of indexes: {item!r}")
+            tickets.append(PlannedTicket(_text(item, "title", required=True).strip(), _text(item, "body"), tuple(blockers)))
+        return PlanResult("completed", tuple(tickets))
+
+
+class ChoreResponse:
+    """Decodes the chore agent's response; the step is best effort, so a missing or malformed response is an empty result."""
+
+    def decode(self, text: str) -> ChoreResult:
+        try:
+            envelope = _envelope(text)
+            if envelope["status"] == "failed":
+                return ChoreResult()
+            result = envelope["result"]
+            out_of_scope = tuple(str(item) for item in _items(result, "out_of_scope"))
+            return ChoreResult(_text(result, "commit_message"), _text(result, "summary"), out_of_scope)
+        except DevResultError:
+            return ChoreResult()
+
+
+class VerifyResponse:
+    """Decodes the verifier's verdict, findings and proposed fix-commit message; a failed response is `inconclusive`."""
+
+    def decode(self, text: str) -> VerifyResult:
+        envelope = _envelope(text)
+        if envelope["status"] == "failed":
+            return VerifyResult("inconclusive", summary=_failure(envelope))
+        result = envelope["result"]
+        verdict = _text(result, "verdict", required=True).strip().lower()
+        if verdict not in VERDICTS:
+            raise DevResultError(f"unknown verdict: {verdict!r}")
+        findings = []
+        for item in _items(result, "findings"):
+            if not isinstance(item, dict):
+                raise DevResultError(f"finding must be an object: {item!r}")
+            findings.append(VerifyFinding(_text(item, "summary", required=True), _text(item, "status") or "unfixed", _text(item, "reason")))
+        return VerifyResult(
+            verdict, _text(result, "summary"), _text(result, "verification"), tuple(findings), _text(result, "commit_message")
+        )
+
+
+class ReviewResponse:
+    """Decodes the reviewer's per-axis outcomes, findings, posted comment references and reviewed head."""
+
+    def decode(self, text: str) -> ReviewResult:
+        envelope = _envelope(text)
+        if envelope["status"] == "failed":
+            raise DevResultError(f"review failed: {_failure(envelope)}")
+        result = envelope["result"]
+        axes, findings = [], []
+        for item in _items(result, "axes"):
+            if not isinstance(item, dict):
+                raise DevResultError(f"axis must be an object: {item!r}")
+            axes.append(ReviewAxis(_text(item, "name", required=True), _text(item, "outcome", required=True).lower(), _text(item, "note")))
+        for item in _items(result, "findings"):
+            if not isinstance(item, dict):
+                raise DevResultError(f"finding must be an object: {item!r}")
+            findings.append(ReviewFinding(_text(item, "kind", required=True).lower(), _text(item, "summary", required=True), _text(item, "axis")))
+        posted = tuple(str(item) for item in _items(result, "posted"))
+        return ReviewResult(tuple(axes), tuple(findings), posted, _text(result, "head"))

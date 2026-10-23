@@ -100,6 +100,9 @@ class OtlpObserver:
         return self._resource_providers(resource).get_tracer(SCOPE)
 
     def _parent_context(self, cwd: Path) -> otel_context.Context | None:
+        # Explicit workflow phases take precedence over the worktree fallback.
+        if trace.get_current_span().get_span_context().is_valid:
+            return None
         span = self._worktrees.get(cwd)
         return trace.set_span_in_context(span) if span is not None else None
 

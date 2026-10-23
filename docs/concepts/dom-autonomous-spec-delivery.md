@@ -9,7 +9,32 @@ and the draft PR belong to that target. The reusable ticket workflow supplies th
 selected Ticket and refreshed Initiative history, invokes the delegate, and
 validates its typed result and exactly one final commit. Implement/Review delegates
 may amend that commit; retries restart the entire delegate after rollback.
-The process diagrams below show the default implementation delegate.
+The process diagrams below describe the Ticket delivery portion; the surrounding default phases are listed next.
+
+## Default phases
+
+`workflows/dev/definition.py` declares the eShop-style pipeline using the public
+`WorkflowBuilder`: preflight; conditional planning and Ticket creation; delivery
+and publication after each accepted Ticket; app verification; cleanup; worktree
+closure; read-only PR review; readiness checks. All delegates are supplied in the
+default `RepositoryWorkflow`; individual delegates can be omitted in custom configurations.
+
+A Spec with no sub-issues can be planned; closed or held sub-issues prevent replanning.
+The developer retains its one-commit-per-Ticket contract. Verification and cleanup
+agents leave edits for the harness to validate, commit, and push. Verification needs
+project skills and durable evidence; absent skills are explicitly skipped. Cleanup
+is best effort and restores rejected changes.
+
+Review starts after the implementation worktree closes and must cover the final
+head with completed bugs, quality, smells, and initiative axes. Blocking findings,
+unproven app verification, held Tickets, or a moved head keep the PR as a draft.
+The harness marks ready only after every readiness check passes; it never merges
+or closes the Spec. Business failures explicitly fail phase and Spec outcomes.
+
+High-level console transitions are always available. `--visualize` adds the optional
+terminal table; `--otlp-endpoint` attaches phase and agent observation to one observer.
+Details stay in telemetry/history or the DEBUG file. See
+[Dev phases](../../USAGE.md#dev-phases) for configuration and examples.
 
 ## Definition
 - **Actors:** Operator; Loop (the example `dev` Workflow); Copilot agent (one fresh headless run per Ticket); GitHub.
@@ -20,7 +45,7 @@ The process diagrams below show the default implementation delegate.
 ## Business Processes
 
 ### Run AFK Dev Service
-Actor: Operator; Trigger: the `dev` Workflow script is run for a repository board; Action: Loop lists the open Specs, skips those labelled `hitl`, and runs Develop Spec for each remaining one; Outcome: every remaining Spec was attempted. Notes: there is no dry run and no Spec-level attempt cap; failures are counted per Ticket.
+Actor: Operator; Trigger: the `dev` Workflow script is run for a repository board; Action: Loop lists the open Specs, skips those labelled `hitl`, and runs Develop Spec for each remaining one; Outcome: every remaining Spec was attempted. Notes: `--dry` fakes external dependencies; there is no Spec-level attempt cap; failures are counted per Ticket.
 
 ### Develop Spec
 Actor: Loop; Trigger: a Spec not labelled `hitl`; Action: resolve the Initiative id from the Spec title prefix and the target repository and base branch, fetch the target repository, and when no Ticket is actionable push and ensure the draft pull request and stop; when the base branch is missing on `origin` label the Spec `hitl` and stop; otherwise push earlier commits and ensure the draft pull request when ahead, create the worktree, and for each actionable Ticket record `previous_head`, render the prompt, run Deliver Ticket, then validate the response and Git; success closes the Ticket with the commit SHA, summary, and verification and resets its failure count; any failure resets the worktree to `previous_head` and counts once, retries the same Ticket until the failure cap, and at the cap labels the Ticket and the Spec `hitl` with the reason commented on both and stops; finally push and ensure the draft pull request; Outcome: all Tickets delivered — the pull request link is commented on the Spec, which stays open for the human merge — or the Spec stopped on `hitl` with its validated work pushed.

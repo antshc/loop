@@ -37,3 +37,19 @@ A Workflow opts in with `Agent().with_observer(observer)`. Loop then decorates i
 ## Validation
 
 With a fake `CliRunner`, a golden `events.jsonl`, and OpenTelemetry's in-memory exporters, a run yields one `invoke_agent` span with its `execute_tool` children, usage attributes, and metrics, nested under the caller's span; a throwing observer or garbled log leaves the run's result unchanged; a build without the extra imports `loop` and reports the missing extra only when `otlp_observer()` is called.
+
+## Optional Workflow phase reporting
+
+`WorkflowBuilder` on the public `loop` package declares phases while ordinary Python
+owns execution. `.console()` emits high-level transitions, `.visualize()` adds an
+optional Rich terminal table, and `.otel(observer)` exports workflow-owned spans.
+All three options are independent. Direct `Phases()` and existing workflow spans
+remain supported without the builder.
+
+Use the same observer with `Agent().with_observer(observer)` to connect phase and
+Agent Run traces. An active span takes precedence over the worktree fallback when
+parenting an Agent Run. Gate failures and explicit business outcomes are exported;
+the caller decides whether a failed attempt can recover or fails the whole run.
+
+See [Optional Workflow Builder](../../USAGE.md#optional-workflow-builder) for the
+runnable fake e-commerce example, lifecycle rules, and independent reporting options.
