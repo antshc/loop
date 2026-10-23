@@ -56,6 +56,39 @@ flowchart TD
 
 **Release is not the end of delivery.** Operational telemetry, customer outcomes, security findings, and incidents inform the next cycle.
 
+## Agent and human ownership by phase
+
+The following is a **recommended operating model**, not a role assignment mandated by ISO/IEC/IEEE 12207 or another industry standard.
+
+**Principle:** AI agents perform routine engineering execution; humans remain accountable for product goals, consequential decisions, and risk acceptance. Human involvement is risk-based, not an approval requirement for every automated transition.
+
+| Phase | Lead | AI-agent responsibilities | Human responsibilities | Gate or escalation |
+| --- | --- | --- | --- | --- |
+| **1. Discover** | **Human-led** | Research the problem, summarize user feedback, assess opportunities and feasibility. | Define business goals, priorities, and acceptable outcomes. | Human confirms the problem and priority. |
+| **2. Specify** | **Agent-led** | Draft requirements, acceptance criteria, constraints, and test scenarios. | Confirm expected behavior, scope, and business rules. | Human accepts the desired outcome and success criteria. |
+| **3. Design & Plan** | **Agent-led** | Explore technical alternatives, propose architecture, identify risks, and decompose work. | Resolve major architectural tradeoffs, resource constraints, and high-impact decisions. | Escalate significant or irreversible design decisions. |
+| **4. Implement** | **Agent-led** | Write code, automated tests, migrations, configurations, and documentation; fix failures. | Intervene for blocked, ambiguous, or sensitive changes. | Automated build, test, and policy checks; human involvement when required. |
+| **5. Verify & Review** | **Agent-led** | Independently test behavior, review code, run security and quality checks, and collect evidence. | Review unresolved exceptions, consequential changes, and accepted risks. | Accept, reject, or return changes for rework. |
+| **6. Release** | **Agent-led** | Package, deploy, perform health/smoke checks, and trigger policy-approved recovery. | Authorize high-risk releases or exceptions where policy requires. | Release controls and deployment health checks. |
+| **7. Operate** | **Agent-led** | Monitor telemetry, triage incidents, diagnose issues, and carry out bounded remediation. | Lead critical incidents and approve high-impact production actions. | SLOs, incident policies, and escalation thresholds. |
+| **8. Learn & Improve** | **Shared** | Analyze outcomes, incidents, delivery metrics, and recurring failures; propose improvements. | Choose product and process priorities and approve material changes to policy. | Add validated improvements to the next iteration. |
+
+### Ownership at a glance
+
+- **Human-led:** Discover.
+- **Agent-led:** Specify, Design & Plan, Implement, Verify & Review, Release, Operate.
+- **Shared:** Learn & Improve.
+
+### Human-in-the-loop principles
+
+1. **Accountability stays with humans.** Agents can execute work autonomously within delegated permissions; they do not independently redefine business objectives or accept unlimited risk.
+2. **Verification should be independent where practical.** The implementation agent should not be the sole judge of its own correctness; separate checks, tools, or reviewers provide stronger evidence.
+3. **Approvals depend on risk.** Routine, reversible changes may pass through automated gates; uncertain, security-sensitive, customer-impacting, or irreversible actions require escalation according to policy.
+4. **Evidence supports decisions.** Human or automated approval should rely on requirements, test results, review findings, and operational outcomes—not solely an agent's self-report.
+5. **Feedback loops are explicit.** Failed verification returns work to specification, design, or implementation; production findings feed discovery, maintenance, and improvement.
+
+Human and agent assignments are **operational responsibilities**, not fixed job titles or necessarily separate agent instances. The same agent may work across phases, while high-risk work may involve independent agents and human reviewers.
+
 ## Cross-cutting factory capabilities
 
 These are shared capabilities, not separate stages:
