@@ -24,7 +24,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src", ".", "tests"]
-testpaths = ["tests", "workflows/dev/tests"]
+testpaths = ["tests", "workflows/dev/tests", "workflows/babysit/tests", "workflows/pr_scheduler/tests"]
 norecursedirs = ["archive", ".*"]
 
 [tool.importlinter]
@@ -75,3 +75,4 @@ forbidden_modules = ["workflows.dev.agent", "workflows.dev.repositories", "workf
 name = "No workflow imports another workflow"
 type = "independence"
 modules = ["workflows.dev", "workflows.plan_implement", "workflows.workflow_reporting"]
+

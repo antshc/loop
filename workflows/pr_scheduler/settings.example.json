@@ -1,0 +1,17 @@
+{
+  "repositories": [
+    {
+      "name": "antshc/eShop",
+      "path": "../../../workspace/eShop",
+      "build": ["dotnet", "build"],
+      "test": ["dotnet", "test", "--no-build"]
+    }
+  ],
+  "state_dir": "../../.loop/pr-babysit",
+  "interval": 60,
+  "concurrency": 2,
+  "retries": 3,
+  "timeout": 1800,
+  "copilot_review": false,
+  "otel_endpoint": null
+}

@@ -130,6 +130,7 @@ The examples live in this repository and are not included in the installed
 | Example | Purpose |
 |---|---|
 | [Library usage](docs/usage.md#library-examples) | One-shot runs, profiles, shared worktrees, sessions, and Loop hooks |
+| [PR scheduler and babysitter](workflows/babysit/README.md) | Discover user-authored PRs and address reviews/CI with JSON recovery and scoped telemetry |
 | [Plan and implement](workflows/plan_implement.py) | Plan and implement with different models on one worktree |
 | [Dev Workflow guide](docs/usage.md#dev-workflow) | Deliver GitHub Tickets, configure multiple repositories, and customize prompts |
 | [Multi-repository Workflow](docs/usage.md#different-agent-workflows-per-repository) | Route Specs to several repositories, each with its own agent steps |
@@ -222,3 +223,4 @@ For compatibility changes, verify installation, tests, and Workflow entry points
 For bug reports and feature requests, [open an issue](https://github.com/antshc/loop/issues).
 Include reproduction steps and relevant Python and agent CLI versions for bugs;
 remove credentials and sensitive data from logs before sharing them.
+
