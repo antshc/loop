@@ -21,9 +21,11 @@ from .clis import (
     CopilotLogReader,
     CopilotText,
     ProcessCliRunner,
+    Permissions,
     SessionLogReader,
     Transcript,
     Transport,
+    UnsupportedPermissions,
     codex,
     copilot,
 )
@@ -77,6 +79,8 @@ from .run import (
     AgentRequest,
     AgentResult,
     AgentStartMode,
+    Instructions,
+    InstructionsError,
     Prompt,
     PromptError,
     RunContext,
@@ -99,6 +103,10 @@ from .workflow import Kind, Phase, Phases, Workflow, WorkflowBuilder, WorkflowRu
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 __all__ = [
+    "Instructions",
+    "InstructionsError",
+    "Permissions",
+    "UnsupportedPermissions",
     "DEFAULT",
     "Kind",
     "Phase",

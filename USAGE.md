@@ -9,6 +9,97 @@ Run repository examples from the repository root.
 - [Logging](#logging)
 - [Telemetry (optional)](#telemetry-optional)
 - [Library examples](#library-examples)
+- [Reusable agent profiles](#reusable-agent-profiles)
+
+## Reusable agent profiles
+
+Define an agent once in Python and import it into any Workflow. A profile owns
+reusable instructions, CLI settings, tool permissions, and execution defaults;
+each `AgentRequest` supplies the task.
+
+```python
+# agents/developer.py
+from pathlib import Path
+from loop import AgentProfile, Instructions, Permissions, copilot
+
+ROOT = Path(__file__).resolve().parents[1]
+
+developer = AgentProfile(
+    cli=copilot,
+    name="developer",
+    # model="your-model",  # Omit to use the installed CLI's default.
+    reasoning_effort="high",
+    instructions=Instructions.from_file(ROOT / "prompts" / "developer.md"),
+    cwd=ROOT,
+    add_dirs=(ROOT / "docs",),
+    permissions=Permissions(tools="allow-all", deny_tools=("shell(git push)",)),
+    env={"DOTNET_ENVIRONMENT": "Development", "LOG_LEVEL": "debug"},
+    timeout_sec=1800,
+    args=(),
+)
+```
+
+```python
+from agents.developer import developer
+from loop import Agent, AgentRequest, BranchStrategy, GitOptions
+
+result = Agent().create(developer).run(AgentRequest("Add cart quantity validation."))
+
+with Agent().with_git(GitOptions(strategy=BranchStrategy("cart-validation"))).open() as worktree:
+    result = worktree.agent(developer).run(AgentRequest("Add cart quantity validation."))
+```
+
+Run the included example without executing Git or agent processes:
+
+```sh
+python3 -m examples.profile_workflow
+```
+
+Instruction sources can also be literal text or a public raw-text URL:
+
+```python
+AgentProfile(copilot, instructions="Implement the task and verify the result.")
+AgentProfile(copilot, instructions=Instructions.from_url("https://example.com/developer.md"))
+```
+
+Defining or importing a profile does not read its instruction source. Client
+creation reads it once; each client keeps a snapshot. Files require absolute
+paths. HTTP(S) URLs must return raw UTF-8 text, with a 10-second fetch timeout and
+a 1 MiB response limit. Empty content, HTML responses, decoding failures, and
+read/fetch errors raise `InstructionsError` before any Agent session is registered.
+Pin remote sources to immutable revisions when reproducibility matters.
+
+Every turn, including resumed turns, receives the instructions followed by the
+task. This is ordinary prompt composition, without provider-native system-message
+priority. Template placeholders remain literal unless the Workflow explicitly
+calls `Prompt(...).render()`. Existing profiles without instructions send the
+original request unchanged. Dry runs do not read file or URL instruction sources.
+
+| Setting | Resolution |
+|---|---|
+| `cwd` | Profile overrides builder defaults for direct execution and the root of `with_git().create()` execution. An already opened workspace keeps its directory. |
+| `add_dirs`, `env`, `timeout_sec` | Configured profile fields replace builder defaults; `None` inherits them. Empty directories or environment mappings explicitly clear those overrides. |
+| Explicit `run(..., context=...)` | Replaces the execution context completely, preserving existing behavior. Git/Docker wrappers may transform it before execution. |
+| Harness start mode | Applies after target-directory resolution; adds the target directory and prefixes its navigation instruction. |
+| Process environment | Inherits the host environment, then applies configured overrides; Loop's native hook wiring takes precedence. |
+
+Profile directories must be absolute. Process timeouts must be finite and
+positive; expiration raises `subprocess.TimeoutExpired`. Environment values are
+copied when configured and are not included in Loop's execution logs.
+
+`Permissions(tools="allow-all")` maps to Copilot's `--allow-all-tools`, not its
+broader `--allow-all` flag. Alternatively, pass a tuple of native approval patterns,
+such as `Permissions(tools=("read", "shell(git diff)"))`. These patterns configure
+tool approval, not an exclusive list of available tools or an OS sandbox.
+`deny_tools` uses native deny patterns, which take precedence over approvals.
+Explicit policies remove Copilot's default broad permission flag. Conflicting
+raw tool-permission arguments raise `ValueError`; unsupported policies raise
+`UnsupportedPermissions` at client creation. Loop's Codex adapter currently rejects
+typed tool policies; use its native `args` for provider-specific settings instead.
+When `permissions=None`, the existing adapter defaults remain unchanged.
+
+Git strategies, Docker lifecycle, session storage, observation, and hooks remain
+builder-owned. Additional CLI-specific settings remain available through `args`.
 
 ## Dev Workflow
 

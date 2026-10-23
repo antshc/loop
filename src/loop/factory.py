@@ -22,6 +22,7 @@ def Agent(options: AgentOptions | None = None) -> AgentBuilder:
             git=GitRuntime(LoggingGitCli()),
             docker=LoggingDocker(DockerRuntime()),
             agent_context=agent_context,
+            dry_run=True,
         )
     return AgentBuilder(
         runner=ProcessCliRunner(),

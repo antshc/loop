@@ -5,6 +5,7 @@ from .codex_cli import CodexCli
 from .copilot_cli import CopilotCli
 from .copilot_log import CopilotLogReader
 from .observing import ObservingCliRunner, SessionLogReader
+from .permissions import Permissions, UnsupportedPermissions
 from .runner import CliRunner, ProcessCliRunner
 from .transport import CodexJson, CopilotJson, CopilotText, Transcript, Transport
 
@@ -13,6 +14,8 @@ codex = CodexCli()
 DEFAULT = AgentProfile(copilot)
 
 __all__ = [
+    "Permissions",
+    "UnsupportedPermissions",
     "AgentCli",
     "AgentProfile",
     "CliRunner",

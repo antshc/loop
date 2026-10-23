@@ -75,7 +75,7 @@ The object a Workflow sends Agent requests to, built by the agent builder for on
 _Avoid_: Agent runner, Worktree runner, Sandbox, container, environment
 
 **Agent profile**:  
-The choice of agent CLI, model, reasoning effort, and extra arguments for an Agent client.  
+The reusable choice of agent CLI, model, reasoning effort, instructions, tool permissions, extra arguments, and execution defaults for an Agent client. Defined in user-owned Python and imported into Workflows.
 _Avoid_: Agent options, config
 
 **Run lifecycle**:  

@@ -7,6 +7,7 @@ from typing import Protocol
 from ..clis import AgentProfile, CliRunner
 from ..run import AgentContext, AgentRequest, AgentResult, RunContext
 from ..run.launch import apply_start_mode
+from ..run.instructions import resolve_instructions
 from ..sessions import Resume, SessionCliMismatch, SessionName, SessionStore, Start, Turn
 
 logger = logging.getLogger(__name__)
@@ -31,24 +32,31 @@ class CliAgentClient:
         *,
         store: SessionStore | None = None,
         session: SessionName | None = None,
+        workspace: bool = False,
+        dry_run: bool = False,
     ) -> None:
         if session is not None and store is None:
             raise ValueError("session requires with_session()")
+        profile.validate_permissions()
+        self._instructions = resolve_instructions(profile.instructions, dry_run=dry_run)
         self._runner = runner
         self._profile = profile
-        self._defaults = defaults or RunContext()
+        defaults = defaults or RunContext()
+        self._defaults = replace(defaults, agent=profile.apply_context(defaults.agent, workspace=workspace))
         self._store = store
         self._session = session or (SessionName.new() if store is not None else None)
 
     def run(self, request: AgentRequest, context: AgentContext | None = None) -> AgentResult:
         if request.name is not None and self._store is not None:
             raise ValueError("request name requires a stateless client")
-        turn = self._turn()
         run_context = self._defaults if context is None else replace(self._defaults, agent=context)
+        if self._instructions is not None:
+            request = replace(request, prompt=f"## Agent instructions\n{self._instructions}\n\n## Task\n{request.prompt}")
         agent, request = apply_start_mode(run_context.agent, request)
         if agent is not run_context.agent:
             logger.info("harness start: cwd=%s worktree=%s", agent.cwd, run_context.agent.cwd)
             run_context = replace(run_context, agent=agent)
+        turn = self._turn()
         outcome = self._runner.run(self._profile, request, turn, run_context)
         if self._store is not None:
             self._store.save(turn.name, outcome.handle)
