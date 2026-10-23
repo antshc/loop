@@ -7,6 +7,7 @@ Run repository examples from the repository root.
 - [Dev Workflow](#dev-workflow)
 - [Scenario-style flow visualization (optional)](#scenario-style-flow-visualization-optional)
 - [Logging](#logging)
+- [Telemetry (optional)](#telemetry-optional)
 - [Library examples](#library-examples)
 
 ## Dev Workflow
@@ -204,6 +205,34 @@ configure_logging("DEBUG", log_file=None)                  # DEBUG without a fil
 It configures only the `loop` logger; pass `logger=""` to configure the root logger for your whole application.
 
 `dev` writes its file to `<log-dir>/dev.log`, and only with `--log-level DEBUG`.
+
+## Telemetry (optional)
+
+Install the extra, start an OTLP backend such as the standalone
+[Aspire dashboard](https://aspire.dev/dashboard/standalone/) (UI `:18888`, OTLP/HTTP `:4318`;
+see [`docker-compose.yml`](docs/prototypes/dashboard-aspire/docker-compose.yml)), and opt in on the builder:
+
+```sh
+python -m pip install -e ".[otel]"
+```
+
+```python
+from loop import Agent, AgentRequest, DEFAULT, otlp_observer
+
+observer = otlp_observer(endpoint="http://localhost:4318", service_name="my-workflow")
+with Agent().with_git(options).with_observer(observer).open() as worktree:
+    with observer.span("#1 add basket", {"loop.ticket.number": 1}):    # your own span; runs nest under it
+        worktree.agent(DEFAULT).run(AgentRequest("..."))
+```
+
+Each Agent Run becomes an `invoke_agent` span with `execute_tool` children, token, AIU and
+premium-request usage (read from the Copilot CLI's session log), and the Worktree a
+`loop.worktree` span; metrics go to the same backend. Prompts, outputs and tool arguments are
+exported only with `otlp_observer(capture_content=True)`. Without `with_observer` nothing changes.
+A span appears in the dashboard when it ends, and Codex Agent Runs carry no usage. Pass any
+object with `agent_run(record)` and `worktree(event)` methods to `with_observer` to send the
+records elsewhere. The dev Workflow opts in with `python -m workflows.dev --otlp-endpoint http://localhost:4318`.
+See [Run Observation](docs/concepts/str-run-observation.md).
 
 ## Library examples
 

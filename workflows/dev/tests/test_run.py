@@ -501,3 +501,67 @@ def test_only_the_selected_ticket_is_closed(tmp_path: Path) -> None:
     harness.run(lambda prompt: harness.commit_and_report(10) if "Checkout|10" in prompt else "")
 
     assert [c[2] for c in harness.calls("issue", "close")] == ["10"]
+
+
+class SpanRecordingObserver:
+    """Stands in for the OTLP observer: records Workflow spans and what the library reports."""
+
+    def __init__(self, endpoint: str) -> None:
+        self.endpoint = endpoint
+        self.events: list[str] = []
+
+    def span(self, name: str, attributes: dict | None = None):
+        events = self.events
+
+        class _Span:
+            def __enter__(self) -> None:
+                events.append(f"open {name}")
+
+            def __exit__(self, *exc: object) -> None:
+                events.append(f"close {name}")
+
+        return _Span()
+
+    def agent_run(self, record: object) -> None:
+        self.events.append("agent_run")
+
+    def worktree(self, event: object) -> None:
+        self.events.append(f"worktree {event.point}")  # type: ignore[attr-defined]
+
+
+def test_an_otlp_endpoint_observes_runs_and_nests_them_in_spec_and_ticket_spans(tmp_path: Path) -> None:
+    harness = DevHarness(tmp_path)
+    observers: list[SpanRecordingObserver] = []
+
+    def new_observer(endpoint: str) -> SpanRecordingObserver:
+        observers.append(SpanRecordingObserver(endpoint))
+        return observers[0]
+
+    code = harness.run(
+        lambda prompt: harness.commit_and_report(10),
+        argv=["--log-dir", str(harness.log_dir), "--otlp-endpoint", "http://collector:4318"],
+        new_observer=new_observer,
+    )
+
+    assert code == 0 and [o.endpoint for o in observers] == ["http://collector:4318"]
+    assert observers[0].events == [
+        "open spec Checkout",
+        "worktree ready",
+        "open #10 Add login form",
+        "agent_run",
+        "close #10 Add login form",
+        "worktree removing",
+        "worktree removed",
+        "close spec Checkout",
+    ]
+
+
+def test_without_an_otlp_endpoint_no_observer_is_built(tmp_path: Path) -> None:
+    harness = DevHarness(tmp_path)
+
+    def new_observer(endpoint: str) -> SpanRecordingObserver:
+        raise AssertionError("observation must be opt-in")
+
+    code = harness.run(lambda prompt: harness.commit_and_report(10), new_observer=new_observer)
+
+    assert code == 0

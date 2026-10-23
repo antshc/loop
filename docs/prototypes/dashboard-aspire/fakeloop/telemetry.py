@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+
 from opentelemetry import trace
 from opentelemetry._logs import SeverityNumber
 from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
@@ -21,6 +24,19 @@ from opentelemetry.util.types import Attributes
 # resource (`developer`, ...) because Aspire colors spans by resource.
 SERVICE_NAME = "workflow"
 SCOPE = "loop.fakeloop"
+# The logical roles a span can export as; `code` covers commit, push and GitHub reads.
+ROLES = (SERVICE_NAME, "engineer", "code", "planner", "developer", "reviewer")
+
+
+@dataclass(frozen=True)
+class ResourceNames:
+    """Maps each role to the Aspire resource it exports as; a role without an override keeps its own name."""
+
+    overrides: Mapping[str, str] = field(default_factory=dict)
+
+    def of(self, role: str) -> str:
+        """The resource name for `role`."""
+        return self.overrides.get(role, role)
 
 
 def _resource(name: str) -> Resource:
@@ -41,8 +57,9 @@ def trace_hex(span: Span) -> str:
 class Telemetry:
     """Owns the tracer, logger and meters that export to `OTEL_EXPORTER_OTLP_ENDPOINT` (default :4318)."""
 
-    def __init__(self) -> None:
-        resource = _resource(SERVICE_NAME)
+    def __init__(self, names: ResourceNames | None = None) -> None:
+        self._names = names or ResourceNames()
+        resource = _resource(self._names.of(SERVICE_NAME))
         # Simple processors export each record as it completes, so a run can be watched live.
         self._tracer_providers = {SERVICE_NAME: self._new_tracer_provider(resource)}
         self._logger_provider = LoggerProvider(resource=resource)
@@ -73,9 +90,9 @@ class Telemetry:
             "loop.phase.duration", unit="s", description="Duration of a phase, by outcome.")
 
     def tracer_for(self, role: str) -> trace.Tracer:
-        """The tracer that exports spans as the `{role}` resource."""
+        """The tracer that exports spans as the resource configured for `role`."""
         if role not in self._tracer_providers:
-            self._tracer_providers[role] = self._new_tracer_provider(_resource(role))
+            self._tracer_providers[role] = self._new_tracer_provider(_resource(self._names.of(role)))
         return self._tracer_providers[role].get_tracer(SCOPE)
 
     @staticmethod

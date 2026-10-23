@@ -62,6 +62,8 @@ class Run:
         self._root = telemetry.tracer.start_span(adw_name, attributes=attributes)
         self._parent = self._root
         self._ticket_id: int | None = None
+        self._ticket_title: str | None = None
+        self._spec_title: str | None = None
         self.adw_id = trace_hex(self._root)
         telemetry.started(self._root, "loop.session.start", attributes)
 
@@ -73,6 +75,12 @@ class Run:
         """Pauses so the dashboard can be watched live in Aspire; `--speed 0` skips the wait."""
         time.sleep(seconds * self.speed)
 
+    def set_spec(self, title: str) -> None:
+        """Names the spec this run delivers in the session span name; later spans carry `loop.spec.title`."""
+        self._spec_title = title
+        self._root.update_name(f"{self._root.name}: {title}")
+        self._root.set_attribute("loop.spec.title", title)
+
     def set_request(self, request: str) -> None:
         """Stores the engineer's request on the session span."""
         self._root.set_attribute("loop.session.request", request[:500])
@@ -80,12 +88,13 @@ class Run:
     @contextmanager
     def ticket(self, ticket_id: int, title: str) -> Iterator[None]:
         """Groups the phases entered inside it under one ticket span."""
-        attributes = {"loop.ticket.id": ticket_id, "loop.ticket.title": title}
+        attributes = {"loop.ticket.id": ticket_id, "loop.ticket.title": title,
+                      **self._spec_attributes()}
         span = self.telemetry.tracer.start_span(
             f"#{ticket_id} {title}", context=trace.set_span_in_context(self._root),
             attributes=attributes)
         self.telemetry.started(span, "loop.ticket.start", attributes, parent=self._root)
-        self._parent, self._ticket_id = span, ticket_id
+        self._parent, self._ticket_id, self._ticket_title = span, ticket_id, title
         try:
             yield
         except BaseException as exception:
@@ -95,7 +104,7 @@ class Run:
         else:
             span.set_status(Status(StatusCode.OK))
         finally:
-            self._parent, self._ticket_id = self._root, None
+            self._parent, self._ticket_id, self._ticket_title = self._root, None, None
             span.end()
 
     @contextmanager
@@ -109,8 +118,10 @@ class Run:
                       "loop.phase.role": params.role,
                       "loop.phase.description": params.description,
                       "loop.phase.retries": params.retries}
+        attributes.update(self._spec_attributes())
         if self._ticket_id is not None:
             attributes["loop.ticket.id"] = self._ticket_id
+            attributes["loop.ticket.title"] = self._ticket_title
         span = self.telemetry.tracer_for(params.role).start_span(
             params.name, context=trace.set_span_in_context(self._parent),
             attributes=attributes)
@@ -128,6 +139,9 @@ class Run:
         phase.status = "success"
         self._end(span, phase, Status(StatusCode.OK), None)
         self._record_duration(params.name, phase.status, started_at)
+
+    def _spec_attributes(self) -> dict[str, str]:
+        return {} if self._spec_title is None else {"loop.spec.title": self._spec_title}
 
     def _record_duration(self, name: str, status: str, started_at: float) -> None:
         self.telemetry.phase_duration.record(

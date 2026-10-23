@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from conftest import Capture, per_call_log, write_log
 from fakeloop.copilot_agent import CopilotAgent, CopilotOptions, ProcessResult
 from fakeloop.runner import Run
@@ -62,3 +64,38 @@ def test_dry_run_still_plays_the_scripted_workflow(capture: Capture, monkeypatch
 
     names = [span.name for span in capture.spans.get_finished_spans()]
     assert "invoke_agent planner" in names and "fix_1" in names
+
+
+def test_dev_spans_name_the_spec_and_the_ticket(capture: Capture, monkeypatch) -> None:
+    monkeypatch.setattr(run_fake, "Telemetry", lambda: capture.telemetry)
+
+    run_fake.main(["--dry", "--speed", "0", "--no-rework"])
+
+    spans = {span.name: span for span in capture.spans.get_finished_spans()}
+    assert spans["dev: Basket discount policy"].attributes["loop.spec.title"] == "Basket discount policy"
+    ticket = spans["#2 Apply the discount in BasketService"]
+    assert (ticket.attributes["loop.ticket.id"], ticket.attributes["loop.spec.title"]) == (
+        2, "Basket discount policy")
+    develop = [s for s in capture.spans.get_finished_spans() if s.name == "develop_1"][1]
+    assert develop.attributes["loop.ticket.title"] == "Apply the discount in BasketService"
+    assert develop.attributes["loop.spec.title"] == "Basket discount policy"
+
+
+def test_resource_names_are_configurable_per_role(capture: Capture, monkeypatch) -> None:
+    monkeypatch.setattr(run_fake, "Telemetry", type(capture.telemetry))
+
+    code = run_fake.main(["--dry", "--speed", "0", "--no-rework", "--resource", "planner=Spec planner",
+                          "--resource", "workflow=loop-dev"])
+
+    resources = {span.name: span.resource.attributes["service.name"]
+                 for span in capture.spans.get_finished_spans()}
+    assert code == 0
+    assert resources["plan"] == resources["invoke_agent planner"] == "Spec planner"
+    assert resources["dev: Basket discount policy"] == "loop-dev"
+    assert resources["develop_1"] == "developer"
+
+
+def test_resource_override_must_name_a_known_role(capsys) -> None:
+    with pytest.raises(SystemExit):
+        run_fake.main(["--resource", "planner"])
+    assert "expected ROLE=NAME" in capsys.readouterr().err

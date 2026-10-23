@@ -8,6 +8,8 @@ run_fake.py ──OTLP/HTTP :4318──▶ Aspire dashboard (UI/API :18888)
 
 ## Run
 
+> The library now offers this as an optional extension: `with_observer(otlp_observer(...))`, see [Run Observation](../../concepts/str-run-observation.md). This prototype stays a standalone demo of the full dashboard, including Workflow-owned session, phase and gate spans.
+
 ```
 python -m pip install -e ".[dev]"                      # from the reporoot
 cd docs/prototypes/dashboard-aspire
@@ -19,7 +21,7 @@ python run_fake.py                                     # real Copilot agents; th
 
 Real mode (the default) needs the `copilot` CLI on `PATH`, a logged-in account and network access. It spawns one `copilot -p` per agent phase, in a throwaway git repo under `/tmp` seeded with a tiny Python basket project, and bills about five premium requests per run (one planner, two developer and two reviewer calls; model `claude-haiku-4.5` unless `--model`). Agents may write files and run `git`, `python` and `pytest`; `git push` is denied. Only the `dev` workflow is real.
 
-In Aspire open **Traces** for the phase tree (each workflow is one trace; filter on the span name `dev` or `pr_babysitter`) and **Structured logs** for the start markers. Flags: `--dry`, `--workflow {dev,pr_babysitter}`, `--speed N`, `--no-rework`, `--fail-at PHASE`, `--request TEXT`, and for real mode `--model NAME`, `--agent-timeout SECONDS` and `--keep-repo`. `OTEL_EXPORTER_OTLP_ENDPOINT` overrides the default `http://localhost:4318`.
+In Aspire open **Traces** for the phase tree (each workflow is one trace; filter on the span name `dev` or `pr_babysitter`; a `dev` name continues with the spec title) and **Structured logs** for the start markers. Flags: `--dry`, `--workflow {dev,pr_babysitter}`, `--speed N`, `--no-rework`, `--fail-at PHASE`, `--request TEXT`, and for real mode `--model NAME`, `--agent-timeout SECONDS` and `--keep-repo`. `OTEL_EXPORTER_OTLP_ENDPOINT` overrides the default `http://localhost:4318`.
 
 ## Workflows
 
@@ -33,9 +35,9 @@ The session span, logs and metrics use `service.name=workflow`. Each phase expor
 
 | Span | Parent | Attributes |
 | --- | --- | --- |
-| `{workflow}` (`dev`, `pr_babysitter`) | — | `loop.session.adw_name`, `.engineer`, `.request` |
-| `#{n} {ticket title}` (dev only) | session | `loop.ticket.id`, `.title`; status ERROR if one of its phases fails |
-| `{phase name}` | session, or its ticket | `loop.phase.seq`, `.name`, `.kind`, `.owner`, `.role`, `.description`, `.retries`, `.attempt`, and `loop.ticket.id` inside a ticket; status ERROR with message on fail |
+| `{workflow}` (`dev: {spec title}`, `pr_babysitter`) | — | `loop.session.adw_name`, `.engineer`, `.request`, and in `dev` `loop.spec.title` |
+| `#{n} {ticket title}` (dev only) | session | `loop.ticket.id`, `.title`, `loop.spec.title`; status ERROR if one of its phases fails |
+| `{phase name}` | session, or its ticket | `loop.phase.seq`, `.name`, `.kind`, `.owner`, `.role`, `.description`, `.retries`, `.attempt`, `loop.spec.title` in `dev`, and `loop.ticket.id`, `.title` inside a ticket; status ERROR with message on fail |
 | `invoke_agent {agent}` | phase | `gen_ai.operation.name`, `.provider.name`, `.agent.name`, `.request.model`, `.response.model`, `.conversation.id`, `.system_instructions`, `.input.messages`, `.output.messages`, `.usage.*`, `loop.usage.*`, `loop.agent.*` |
 | `execute_tool {tool}` | agent | `gen_ai.tool.name`, `gen_ai.tool.call.id`, `.arguments`, `.result`, `loop.tool.ok` |
 | `gate {gate}` | phase | `loop.gate.name`, `.attempt`, `.passed`, `.checks` (JSON), `.violations` (JSON) |

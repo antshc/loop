@@ -66,6 +66,10 @@ _Avoid_: Hook (unqualified), Loop hook, callback, event handler
 A named moment in an agent CLI's own lifecycle at which it runs the Agent CLI hooks declared for it, such as session start or agent stop.  
 _Avoid_: Hook point (unqualified), Loop hook point, event, trigger
 
+**Run observer**:
+An optional object a Workflow passes to `with_observer` that receives a record of each Agent Run turn (usage, tool calls, timings) and each Worktree lifecycle event; it never fails or changes a run.  
+_Avoid_: Telemetry hook, Agent CLI hook, Loop hook, listener
+
 **Agent client**:  
 The object a Workflow sends Agent requests to, built by the agent builder for one agent profile and, optionally, bound to a worktree; the agent runs directly on the host with the user's own permissions, with no isolation.  
 _Avoid_: Agent runner, Worktree runner, Sandbox, container, environment

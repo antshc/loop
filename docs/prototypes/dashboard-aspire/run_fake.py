@@ -14,7 +14,7 @@ from fakeloop.model import AgentConfig
 from fakeloop.runner import AgentFactory, Run
 from fakeloop.scenario import ScenarioOptions, run_scenario
 from fakeloop.scratch_repo import ScratchRepo
-from fakeloop.telemetry import Telemetry
+from fakeloop.telemetry import ROLES, ResourceNames, Telemetry
 
 # name -> (session name, default request, runner)
 WORKFLOWS = {
@@ -31,7 +31,7 @@ def main(argv: list[str] | None = None) -> int:
     if problem:
         print(problem, file=sys.stderr)
         return 2
-    telemetry = Telemetry()
+    telemetry = Telemetry(ResourceNames(dict(args.resource)))
     adw_name, default_request, play = WORKFLOWS[args.workflow]
     repo = None if args.dry else ScratchRepo(scenario.REAL_FEATURE_BRANCH)
     run = Run(telemetry, engineer="fake-engineer" if args.dry else "engineer", adw_name=adw_name,
@@ -53,6 +53,13 @@ def main(argv: list[str] | None = None) -> int:
         if repo and not args.keep_repo:
             repo.remove()
     return code
+
+
+def _resource_override(text: str) -> tuple[str, str]:
+    role, separator, name = text.partition("=")
+    if not separator or role not in ROLES or not name.strip():
+        raise argparse.ArgumentTypeError(f"expected ROLE=NAME with ROLE one of {', '.join(ROLES)}")
+    return role, name.strip()
 
 
 def _problem(args: argparse.Namespace) -> str | None:
@@ -86,6 +93,10 @@ def _parse(argv: list[str] | None) -> argparse.Namespace:
                         help="seconds one real agent may run")
     parser.add_argument("--keep-repo", action="store_true",
                         help="keep the scratch git repo the real agents worked in")
+    parser.add_argument("--resource", action="append", default=[], type=_resource_override,
+                        metavar="ROLE=NAME",
+                        help="export a role as this Aspire resource instead of its own name, "
+                             f"e.g. planner=\"Spec planner\"; roles: {', '.join(ROLES)}")
     parser.add_argument("--workflow", choices=tuple(WORKFLOWS), default="dev",
                         help="dev: plan/develop/review; pr_babysitter: fix PR comments until closed")
     parser.add_argument("--request", help="the engineer's request; defaults per workflow and mode")

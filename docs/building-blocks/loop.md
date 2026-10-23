@@ -5,11 +5,11 @@ The `loop` Python library: a single installable package (`pip install` from this
 ## Dependencies
 
 - **Called by:** User-owned Workflows (`workflows/dev/` is the self-contained example) through the public `loop` API only.
-- **Calls (via subprocess):** `git`, the `copilot` and `codex` CLIs, and optionally `docker`. No Python dependency beyond `python-json-logger`.
+- **Calls (via subprocess):** `git`, the `copilot` and `codex` CLIs, and optionally `docker`. No Python dependency beyond `python-json-logger`; the optional `otel` extra adds the OpenTelemetry SDK and OTLP/HTTP exporter.
 
 ## Interfaces
 
-Public API re-exported from [`src/loop/__init__.py`](../../src/loop/__init__.py): `Agent()` returns an `AgentBuilder` ([Build agents with an agent builder](../adr/build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md)), configured with `with_git(GitOptions)`, `with_docker`, `with_session`, and `with_agent_cli_hooks`; `create()` yields an `AgentClient` and `open()` a `Worktree` whose `agent(profile)` yields clients. An `AgentProfile` picks the CLI (`copilot`, `codex`), model, and reasoning effort; a run takes an `AgentRequest` and returns an `AgentResult`. Replaceable seams are `CliRunner`, `GitService`, `DockerService`, and `SessionStore`. The GitHub client and the Spec/Ticket tracker are not part of the public API: dev owns them in `workflows/dev/platforms.py`.
+Public API re-exported from [`src/loop/__init__.py`](../../src/loop/__init__.py): `Agent()` returns an `AgentBuilder` ([Build agents with an agent builder](../adr/build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md)), configured with `with_git(GitOptions)`, `with_docker`, `with_session`, and `with_agent_cli_hooks`; `create()` yields an `AgentClient` and `open()` a `Worktree` whose `agent(profile)` yields clients. An `AgentProfile` picks the CLI (`copilot`, `codex`), model, and reasoning effort; a run takes an `AgentRequest` and returns an `AgentResult`. Replaceable seams are `CliRunner`, `GitService`, `DockerService`, `SessionStore`, and, when a Workflow opts in with `with_observer`, `RunObserver` and `SessionLogReader`. The GitHub client and the Spec/Ticket tracker are not part of the public API: dev owns them in `workflows/dev/platforms.py`.
 
 ## Tweaks/Configuration
 
@@ -29,15 +29,16 @@ factory.py      Agent() composition root
 builder.py      AgentBuilder, Worktree
 dryrun/         logging-only adapters for the demo
 agents/         AgentClient, AgentProfile, copilot and codex profiles, wrappers over a client
-clis/           CliRunner and the Copilot and Codex CLI adapters
+clis/           CliRunner, the Copilot and Codex CLI adapters, the observing runner and the Copilot session-log reader
 docker/         DockerRuntime and DockerService
-git/            GitOptions, BranchStrategy, MergeToHeadStrategy, HeadStrategy, GitService, git CLI
+git/            GitOptions, BranchStrategy, MergeToHeadStrategy, HeadStrategy, GitService, git CLI, observing Git service
 run/            AgentRequest, AgentResult, RunContext
 hooks/          Loop hooks (worktree-ready, worktree-removing, run-finished), Agent CLI hooks
 sessions/       SessionStore and session values
+observe/        RunObserver, AgentRunRecord, Usage, ToolCall, WorktreeEvent; otel.py is the optional OpenTelemetry observer (extra `loop[otel]`)
 ```
 
-Dependency rule (enforced by import-linter in `pyproject.toml`): a strict layering `factory` > `builder | dryrun` > `agents` > `clis | docker | git` > `run` > `hooks` > `sessions`; Workflows import only the public `loop` API, dev imports no sibling helpers, and Ticket orchestration imports no agent delegate.
+Dependency rule (enforced by import-linter in `pyproject.toml`): a strict layering `factory` > `builder | dryrun` > `agents` > `clis | docker | git` > `run` > `hooks` > `sessions` > `observe`; only `observe/otel.py` imports `opentelemetry` (checked by a unit test); Workflows import only the public `loop` API, dev imports no sibling helpers, and Ticket orchestration imports no agent delegate.
 
 ## Container view
 
@@ -65,6 +66,7 @@ C4Component
         Component(docker, "Docker", "DockerService", "Optional runtime for running the agent CLI in a container.")
         Component(hooks, "Hooks", "LoopHook, AgentCliHook", "Run Loop hooks on the host at three points; install observe-only Agent CLI hooks.")
         ComponentDb(sessions, "Sessions", "SessionStore", "Maps logical session keys to provider sessions.")
+        Component(observe, "Observation", "RunObserver, otlp_observer", "Optional: reports Agent Runs and Worktrees to an observer; exports OpenTelemetry spans and metrics.")
     }
 
     System_Ext(cli, "Agent CLI", "Copilot or Codex, headless.")
@@ -77,6 +79,8 @@ C4Component
     Rel(agents, docker, "Optionally wraps runs in")
     Rel(git, hooks, "Runs Loop hooks through")
     Rel(clis, sessions, "Resumes sessions through")
+    Rel(clis, observe, "Optionally reports runs to")
+    Rel(git, observe, "Optionally reports worktrees to")
     Rel(clis, cli, "Invokes", "CLI")
     Rel(git, gitext, "Runs worktree commands via", "git CLI")
 
@@ -88,6 +92,7 @@ C4Component
     UpdateElementStyle(docker, $fontColor="#c9d1d9", $bgColor="#2a2a2a", $borderColor="#8b949e")
     UpdateElementStyle(hooks, $fontColor="#c9d1d9", $bgColor="#2a2a2a", $borderColor="#8b949e")
     UpdateElementStyle(sessions, $fontColor="#c9d1d9", $bgColor="#2a2a2a", $borderColor="#8b949e")
+    UpdateElementStyle(observe, $fontColor="#c9d1d9", $bgColor="#2a2a2a", $borderColor="#8b949e")
     UpdateElementStyle(cli, $fontColor="#c9d1d9", $bgColor="#1a1a1a", $borderColor="#8b949e")
     UpdateElementStyle(gitext, $fontColor="#c9d1d9", $bgColor="#1a1a1a", $borderColor="#8b949e")
 
@@ -116,4 +121,5 @@ Likewise indexed in [ARCHITECTURE.md](../../ARCHITECTURE.md#architecture-decisio
 - **Agent profiles:** the CLI (Copilot, Codex), model, and reasoning effort are chosen per client; the library returns the CLI's raw stdout and the Workflow parses it.
 - **Git worktrees and hooks:** `BranchStrategy`, `MergeToHeadStrategy`, and `HeadStrategy` choose the worktree branch; Loop hooks run at `worktree-ready`, `worktree-removing`, and `run-finished`. Push, pull requests, and Ticket state stay in Workflow Python, while the agent commits each task ([Run one fresh agent per Ticket](../adr/run-one-fresh-agent-per-ticket-from-python-and-let-the-agent-commit-it.md)).
 - **Dry run:** `AgentOptions(dry_run=True)` exercises the builder with logging-only adapters.
+- **Observation (optional):** `with_observer(observer)` reports each Agent Run turn (usage and tool calls from the CLI's session log) and each Worktree to a `RunObserver`; `otlp_observer(...)` (extra `loop[otel]`) exports OpenTelemetry spans and metrics over OTLP to Aspire or any backend. Nothing changes, and `opentelemetry` is never imported, without it ([Observe Agent Runs through an optional observer seam](../adr/observe-agent-runs-through-an-optional-observer-seam-that-exports-to-opentelemetry.md)).
 - **Logging:** the library logs under the `loop` logger and stays silent until the host calls `configure_logging()`. INFO goes to the console only; DEBUG adds detail and also writes JSON lines to a configurable file (`log_file=None` disables it).

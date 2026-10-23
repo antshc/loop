@@ -1,22 +1,23 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
 from typing import Iterator
 
 from .agents import AgentClient, CliAgentClient, DockerAgent, GitAgent
-from .clis import DEFAULT, AgentProfile, CliRunner
+from .clis import DEFAULT, AgentProfile, CliRunner, CopilotLogReader, ObservingCliRunner, SessionLogReader
 from .docker import DockerService
-from .git import GitOptions, GitService
+from .git import GitOptions, GitService, ObservingGitService
 from .hooks import (
     AgentCliHook,
     SessionEndAgentCliHook,
     SessionStartAgentCliHook,
     UnsupportedAgentCliHookPoint,
 )
+from .observe import RunObserver
 from .run import AgentContext, RunContext
 from .sessions import MemorySessionStore, SessionName, SessionStore
 
@@ -65,6 +66,16 @@ class AgentBuilder:
         self._git_options: GitOptions | None = None
         self._use_docker = False
         self._use_session = False
+        self._observed = False
+
+    def with_observer(self, observer: RunObserver, *, readers: Sequence[SessionLogReader] | None = None) -> AgentBuilder:
+        """Report every Agent Run and Worktree to `observer`; `readers` default to the Copilot session-log reader."""
+        if self._observed:
+            raise ValueError("with_observer() was already called")
+        self._observed = True
+        self._runner = ObservingCliRunner(self._runner, observer, readers if readers is not None else (CopilotLogReader(),))
+        self._git = ObservingGitService(self._git, observer)
+        return self
 
     def with_git(self, options: GitOptions | None = None) -> AgentBuilder:
         self._use_git = True

@@ -12,7 +12,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "import-linter"]
+dev = ["pytest", "import-linter", "opentelemetry-sdk>=1.45", "opentelemetry-exporter-otlp-proto-http>=1.45"]
+otel = [
+    "opentelemetry-sdk>=1.45",
+    "opentelemetry-exporter-otlp-proto-http>=1.45",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -36,6 +40,7 @@ layers = [
     "run",
     "hooks",
     "sessions",
+    "observe",
 ]
 containers = ["loop"]
 
@@ -52,6 +57,7 @@ forbidden_modules = [
     "loop.factory",
     "loop.git",
     "loop.hooks",
+    "loop.observe",
     "loop.run",
     "loop.sessions",
 ]

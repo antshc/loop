@@ -85,3 +85,5 @@ Confirmed by that run on CLI 1.0.103 with `claude-haiku-4.5`:
 Not checked in Aspire yet: the usage and AIU attributes and the metrics (only the trace tree was viewed), stdout streaming of `session.usage_record`, and resumed-session summaries.
 
 One prompt problem surfaced: passing the whole plan as the ticket body made the first developer agent implement both tickets, so a later commit step found nothing to commit. Real tickets now carry their own body.
+
+Follow-up: the reusable part is now an optional library extension, `with_observer(otlp_observer(...))` ([Run Observation](../concepts/str-run-observation.md)); the session-id question is answered in [copilot-cli-session-id-with-name-and-resume.md](copilot-cli-session-id-with-name-and-resume.md).

@@ -318,6 +318,7 @@ class DevHarness:
         github_factory: Callable[[Path], object] | None = None,
         store: FileExecutionStore | None = None,
         argv: list[str] | None = None,
+        new_observer: Callable[[str], object] | None = None,
     ) -> int:
         if handler is not None:
             self.runner.handler = handler
@@ -326,6 +327,7 @@ class DevHarness:
             worktrees=self.root / "workspace" / f"{self.root.name}.worktrees",
             owner_name=RepositoryId("owner", "repo"),
         )
+        extra = {"new_observer": new_observer} if new_observer is not None else {}
         with patch.object(dev, "HARNESS", harness):
             return dev.main(
                 argv if argv is not None else ["--log-dir", str(self.log_dir)],
@@ -333,6 +335,7 @@ class DevHarness:
                 github_factory=github_factory or (lambda checkout: self.github),  # type: ignore[arg-type,return-value]
                 new_agent=new_agent_for(self.runner, self.git_service, self.root),
                 store=store or self.store,
+                **extra,  # type: ignore[arg-type]
             )
 
 

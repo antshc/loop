@@ -15,6 +15,7 @@ from .records import (
     AgentCommitSubject, AgentWorkflow, Commit, RepositoryId, Spec, Ticket,
     TicketContext, TicketResult, TicketWorkflowError,
 )
+from .telemetry import SpanFactory, no_span
 
 
 logger = logging.getLogger("workflow.tickets")
@@ -30,6 +31,7 @@ def deliver_tickets(
     store: FileExecutionStore,
     ticket_repository: RepositoryId,
     max_failures: int = 2,
+    span: SpanFactory = no_span,
 ) -> bool:
     """Delivers actionable Tickets in order, retrying failed attempts and stopping at the failure cap."""
     if max_failures < 1:
@@ -40,7 +42,7 @@ def deliver_tickets(
         while True:
             head_before = git.head(worktree.path)
             context = _ticket_context(spec, ticket, worktree.path, git)
-            result = _attempt(context, worktree, run_agents, git, head_before)
+            result = _attempt(context, worktree, run_agents, git, head_before, span)
             if isinstance(result, TicketResult):
                 spec.close_ticket(
                     ticket.number, f"Delivered in {result.commit}.\n\n{result.summary}\n\n{result.verification}"
@@ -78,9 +80,12 @@ def _attempt(
     run_agents: AgentWorkflow,
     git: GitService,
     head_before: Commit,
+    span: SpanFactory,
 ) -> TicketResult | str:
+    ticket = context.ticket
     try:
-        result = run_agents(context, worktree)
+        with span(f"#{ticket.number} {ticket.title}", {"loop.ticket.number": ticket.number, "loop.ticket.url": ticket.url}):
+            result = run_agents(context, worktree)
     except subprocess.CalledProcessError:
         return "agent process did not exit successfully"
     except TicketWorkflowError as exception:

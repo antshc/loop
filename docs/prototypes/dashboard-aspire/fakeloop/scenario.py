@@ -28,6 +28,7 @@ WORKTREE = "/tmp/loop.worktrees/fake-basket-discount"
 REAL_FEATURE_BRANCH = "feature/basket-discount"
 PHASES = ("request", "plan", "develop_1", "review_1", "fix_1", "review_2")  # develop..review_2 run per ticket
 DEFAULT_REQUEST = "Add a discount policy to the basket service."
+SPEC_TITLE = "Basket discount policy"
 REAL_REQUEST = "Add a percentage discount to the basket in basket.py, with a test."
 
 
@@ -98,6 +99,7 @@ REAL_TICKETS = (
 
 def run_scenario(run: Run, options: ScenarioOptions) -> None:
     """Plays the whole workflow, fake or real; an exception marks the run failed."""
+    run.set_spec(SPEC_TITLE)
     _request(run, options)
     plan = _plan(run, options)
     for ticket in (REAL_TICKETS if options.repo else TICKETS):

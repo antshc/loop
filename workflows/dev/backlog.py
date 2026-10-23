@@ -18,6 +18,7 @@ from .journal import FileExecutionStore
 from .platforms import GithubFactory, PullRequestClient, TicketsTracker, github_for
 from .records import Repository, RepositoryId, Spec, TicketWorkflowError as DevError
 from .repositories import RepositoryWorkflow
+from .telemetry import SpanFactory, no_span
 
 
 logger = logging.getLogger("workflow.dev")
@@ -35,7 +36,7 @@ class DevDeps:
     ticket_repository: RepositoryId
     github_factory: GithubFactory | None
     max_ticket_failures: int
-
+    span: SpanFactory = no_span
 
 class Outcome(Enum):
     SUCCESS = auto()
@@ -107,7 +108,7 @@ def _deliver_on_worktree(spec: Spec, workflow: RepositoryWorkflow, deps: DevDeps
         strategy=BranchStrategy(feature_branch, f"origin/{spec.base_branch}"),
         loop_hooks=deps.loop_hooks,
     )
-    with deps.new_agent().with_git(options).open() as worktree:
+    with deps.span(f"spec {spec.initiative}", {"loop.spec.url": spec.url}), deps.new_agent().with_git(options).open() as worktree:
         delivered = deliver_tickets(
             spec,
             worktree,
@@ -117,6 +118,7 @@ def _deliver_on_worktree(spec: Spec, workflow: RepositoryWorkflow, deps: DevDeps
             store=deps.store,
             ticket_repository=deps.ticket_repository,
             max_failures=deps.max_ticket_failures,
+            span=deps.span,
         )
         pull_request_url = _publish_pull_request(spec, workflow.repository, worktree.path, deps)
         if delivered and pull_request_url is not None:
