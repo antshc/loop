@@ -17,7 +17,7 @@ from opentelemetry.trace import Span, Status, StatusCode
 
 from loop import Prompt
 
-from .copilot_session import SessionRecord, read_session
+from .copilot_session import SessionRecord, SubagentRecord, read_session
 from .fake_agent import record_gate, start_agent_span
 from .model import AgentConfig, Attempt, GateFailure, GateReport
 from .runner import PhaseHandle
@@ -130,18 +130,91 @@ class CopilotAgent:
             raise AgentProcessError(f"no readable session log at {log}: {exception!r}") from exception
 
     def _tool_spans(self, ph: PhaseHandle, agent_span: Span, record: SessionRecord) -> None:
+        """The lead's tool spans; a `task` call's span holds the sub-agent it spawned."""
+        self._tools_of(ph, agent_span, self.config.name, None, record)
+        called = {tool.call_id for tool in record.tools}
+        for subagent in record.subagents:
+            if subagent.tool_call_id not in called:  # its `task` call never completed
+                self._subagent_span(ph, agent_span, subagent, record)
+
+    def _tools_of(self, ph: PhaseHandle, parent: Span, agent_name: str,
+                  spawned_by: str | None, record: SessionRecord) -> None:
+        """Spans for the tools one agent ran; `spawned_by` is the `task` call id of a sub-agent, None for the lead."""
+        subagents = {subagent.tool_call_id: subagent for subagent in record.subagents}
         for tool in record.tools:
+            if tool.parent_call_id != spawned_by:
+                continue
             span = ph.tracer.start_span(
-                f"execute_tool {tool.name}", context=trace.set_span_in_context(agent_span),
+                f"execute_tool {tool.name}", context=trace.set_span_in_context(parent),
                 kind=trace.SpanKind.INTERNAL, start_time=_nanos(tool.started_at),
                 attributes={
                     "gen_ai.operation.name": "execute_tool", "gen_ai.tool.name": tool.name,
                     "gen_ai.tool.call.id": tool.call_id,
                     "gen_ai.tool.call.arguments": json.dumps(tool.arguments),
                     "gen_ai.tool.call.result": tool.result,
-                    "gen_ai.agent.name": self.config.name, "loop.tool.ok": tool.ok})
+                    "gen_ai.agent.name": agent_name, "loop.tool.ok": tool.ok})
+            if tool.call_id in subagents:
+                self._subagent_span(ph, span, subagents[tool.call_id], record)
             span.set_status(Status(StatusCode.OK if tool.ok else StatusCode.ERROR))
             span.end(end_time=_nanos(tool.ended_at))
+
+    def _subagent_span(self, ph: PhaseHandle, parent: Span, subagent: SubagentRecord,
+                       record: SessionRecord) -> None:
+        """An `invoke_agent` span for one sub-agent, with its own tools and usage, under its `task` tool span."""
+        usage = subagent.usage
+        model = subagent.model or self.config.model
+        aiu = {f"loop.usage.{kind}_aiu": value for kind, value in usage.aiu_by_type.items()}
+        span = ph.tracer.start_span(
+            f"invoke_agent {subagent.name}", context=trace.set_span_in_context(parent),
+            kind=trace.SpanKind.CLIENT, start_time=_nanos(subagent.started_at),
+            attributes={
+                "gen_ai.operation.name": "invoke_agent",
+                "gen_ai.provider.name": self.config.coding_agent,
+                "gen_ai.agent.name": subagent.name, "gen_ai.agent.id": subagent.agent_id,
+                "gen_ai.agent.description": subagent.description,
+                "gen_ai.request.model": model, "gen_ai.response.model": model,
+                "gen_ai.conversation.id": self.session_id,
+                "gen_ai.input.messages": json.dumps([{
+                    "role": "user", "parts": [{"type": "text", "content": subagent.prompt or ""}]}]),
+                "gen_ai.output.messages": json.dumps([{
+                    "role": "assistant", "finish_reason": "stop" if subagent.ok else "error",
+                    "parts": [{"type": "text", "content": subagent.output_text or ""}]}]),
+                "gen_ai.usage.input_tokens": usage.total_input_tokens,
+                "gen_ai.usage.output_tokens": usage.output_tokens,
+                "loop.usage.input_tokens": usage.input_tokens,
+                "loop.usage.output_tokens": usage.output_tokens,
+                "loop.usage.reasoning_tokens": usage.reasoning_tokens,
+                "loop.usage.cache_read_tokens": usage.cache_read_tokens,
+                "loop.usage.cache_write_tokens": usage.cache_write_tokens,
+                "loop.usage.total_tokens": usage.total_input_tokens + usage.output_tokens,
+                **aiu, "loop.usage.total_aiu": usage.total_aiu,
+                "loop.agent.is_subagent": True, "loop.agent.type": subagent.agent_type,
+                "loop.agent.parent": self.config.name, "loop.agent.purpose": subagent.description,
+                "loop.agent.coding_agent": self.config.coding_agent,
+                "loop.agent.api_calls": usage.calls,
+                "loop.subagent.mode": subagent.execution_mode,
+                **_optional("loop.agent.thinking", subagent.reasoning_effort),
+                **_optional("loop.subagent.total_tool_calls", subagent.total_tool_calls),
+                **_optional("loop.subagent.duration_ms", subagent.duration_ms)})
+        self._tools_of(ph, span, subagent.name, subagent.tool_call_id, record)
+        span.set_status(Status(StatusCode.OK) if subagent.ok
+                        else Status(StatusCode.ERROR, subagent.error))
+        span.end(end_time=_nanos(subagent.ended_at))
+        self._record_subagent_metrics(ph, subagent, model)
+
+    def _record_subagent_metrics(self, ph: PhaseHandle, subagent: SubagentRecord, model: str) -> None:
+        telemetry = ph.run.telemetry
+        common = {"gen_ai.operation.name": "invoke_agent",
+                  "gen_ai.provider.name": self.config.coding_agent,
+                  "gen_ai.request.model": model, "gen_ai.agent.name": subagent.name}
+        usage = subagent.usage
+        telemetry.token_usage.record(
+            usage.total_input_tokens, {**common, "gen_ai.token.type": "input"})
+        telemetry.token_usage.record(usage.output_tokens, {**common, "gen_ai.token.type": "output"})
+        telemetry.operation_duration.record(
+            (subagent.ended_at - subagent.started_at).total_seconds(),
+            {**common, **({} if subagent.ok else {"error.type": "subagent_failed"})})
+        telemetry.aiu.add(usage.total_aiu, common)
 
     def _finish(self, ph: PhaseHandle, span: Span, record: SessionRecord, passed: bool,
                 seconds: float) -> None:
@@ -168,6 +241,7 @@ class CopilotAgent:
             **aiu, "loop.usage.total_aiu": record.total_aiu,
             "loop.usage.premium_requests": record.premium_requests,
             "loop.agent.api_calls": record.api_calls, "loop.agent.cli_version": record.cli_version,
+            "loop.agent.subagents": len(record.subagents),
             **_optional("loop.agent.thinking", record.reasoning_effort),
             **_optional("loop.agent.context_window", record.context_window),
             **_optional("loop.agent.context_tokens", record.context_tokens)})

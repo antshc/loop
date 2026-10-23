@@ -7,7 +7,7 @@ import dataclasses
 import shutil
 import sys
 
-from fakeloop import babysitter, scenario
+from fakeloop import babysitter, scenario, subagents
 from fakeloop.copilot_agent import DEFAULT_MODEL, CopilotAgent, CopilotOptions
 from fakeloop.fake_agent import FakeAgent
 from fakeloop.model import AgentConfig
@@ -20,8 +20,10 @@ from fakeloop.telemetry import ROLES, ResourceNames, Telemetry
 WORKFLOWS = {
     "dev": ("dev", scenario.DEFAULT_REQUEST, run_scenario),
     "pr_babysitter": ("pr_babysitter", babysitter.DEFAULT_REQUEST, babysitter.run_babysitter),
+    "subagents": ("subagents", subagents.DEFAULT_REQUEST, subagents.run_subagents),
 }
-PHASES = tuple(dict.fromkeys(scenario.PHASES + babysitter.PHASES))
+REAL_WORKFLOWS = ("dev", "subagents")
+PHASES = tuple(dict.fromkeys(scenario.PHASES + babysitter.PHASES + subagents.PHASES))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -39,7 +41,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"session {run.adw_id}  (trace id in Aspire)")
     if repo:
         print(f"agents work in {repo.path}")
-    request = args.request or (default_request if args.dry else scenario.REAL_REQUEST)
+    real_dev = repo is not None and args.workflow == "dev"
+    request = args.request or (scenario.REAL_REQUEST if real_dev else default_request)
     # Real gates are scripted to pass, so there is nothing to rework.
     options = ScenarioOptions(request, rework=args.dry and not args.no_rework,
                               fail_at=args.fail_at, fail_ticket=args.fail_ticket, repo=repo)
@@ -64,10 +67,12 @@ def _resource_override(text: str) -> tuple[str, str]:
 
 def _problem(args: argparse.Namespace) -> str | None:
     """Why this combination of options cannot run, if it cannot."""
+    if args.workflow == "subagents" and args.dry:
+        return "the subagents workflow has no fake; it only runs real Copilot agents"
     if args.dry:
         return None
-    if args.workflow != "dev":
-        return "real Copilot agents are only wired for --workflow dev; add --dry for the fake"
+    if args.workflow not in REAL_WORKFLOWS:
+        return "real Copilot agents are only wired for --workflow dev and subagents; add --dry for the fake"
     if shutil.which("copilot") is None:
         return "copilot is not on PATH; install the Copilot CLI or add --dry"
     return None
@@ -98,7 +103,8 @@ def _parse(argv: list[str] | None) -> argparse.Namespace:
                         help="export a role as this Aspire resource instead of its own name, "
                              f"e.g. planner=\"Spec planner\"; roles: {', '.join(ROLES)}")
     parser.add_argument("--workflow", choices=tuple(WORKFLOWS), default="dev",
-                        help="dev: plan/develop/review; pr_babysitter: fix PR comments until closed")
+                        help="dev: plan/develop/review; pr_babysitter: fix PR comments until closed; "
+                             "subagents (real only): a lead agent that spawns sub-agents")
     parser.add_argument("--request", help="the engineer's request; defaults per workflow and mode")
     parser.add_argument("--speed", type=float, default=1.0, help="delay multiplier; 0 = instant")
     parser.add_argument("--no-rework", action="store_true",

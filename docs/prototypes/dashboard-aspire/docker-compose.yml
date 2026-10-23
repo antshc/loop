@@ -10,5 +10,8 @@ services:
     environment:
       DASHBOARD__FRONTEND__AUTHMODE: Unsecured
       DASHBOARD__OTLP__AUTHMODE: Unsecured
+      # The telemetry HTTP API (/api/telemetry/*) is off by default in 13.2.
+      DASHBOARD__API__ENABLED: "true"
+      DASHBOARD__API__AUTHMODE: Unsecured
       # Envelopes and gate checks travel as JSON attributes; keep them whole.
       DASHBOARD__TELEMETRYLIMITS__MAXATTRIBUTELENGTH: "65536"
