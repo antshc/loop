@@ -1,0 +1,14 @@
+services:
+  aspire-dashboard:
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:13.2
+    # The default bridge avoids allocating a new compose network subnet.
+    network_mode: bridge
+    ports:
+      - "18888:18888"  # UI
+      - "4317:18889"   # OTLP gRPC
+      - "4318:18890"   # OTLP HTTP
+    environment:
+      DASHBOARD__FRONTEND__AUTHMODE: Unsecured
+      DASHBOARD__OTLP__AUTHMODE: Unsecured
+      # Envelopes and gate checks travel as JSON attributes; keep them whole.
+      DASHBOARD__TELEMETRYLIMITS__MAXATTRIBUTELENGTH: "65536"
