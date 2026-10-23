@@ -110,9 +110,10 @@ python my_workflow.py
 To run it for real, replace `Agent(AgentOptions(dry_run=True))` with `Agent()`.
 The example uses the CLI's default model and reasoning effort. It creates or
 reuses `loop/fix-tests`, starting a new branch from HEAD, and runs the agent in
-`.worktrees/loop/fix-tests`. On successful exit, Loop commits any remaining
-changes and removes the worktree; the branch remains for review. This strategy
-does not merge or push it.
+`.worktrees/loop/fix-tests`. Loop removes clean worktrees on success or failure;
+the local branch and its commits remain. Dirty worktrees are preserved, and a
+successful body leaving edits raises `WorktreeError`. Loop never commits or pushes
+automatically: the agent or Workflow must explicitly commit verified changes.
 
 `result.output` contains the agent's output text, not a validated task outcome.
 Your Workflow must interpret it and verify the work.
@@ -130,6 +131,7 @@ The examples live in this repository and are not included in the installed
 | Example | Purpose |
 |---|---|
 | [Library usage](docs/usage.md#library-examples) | One-shot runs, profiles, shared worktrees, sessions, and Loop hooks |
+| [PR scheduler and babysitter](workflows/pr_babysit/README.md) | Discover user-authored PRs and address reviews/CI with JSON recovery and scoped telemetry |
 | [Plan and implement](workflows/plan_implement.py) | Plan and implement with different models on one worktree |
 | [Dev Workflow guide](docs/usage.md#dev-workflow) | Deliver GitHub Tickets, configure multiple repositories, and customize prompts |
 | [Multi-repository Workflow](docs/usage.md#different-agent-workflows-per-repository) | Route Specs to several repositories, each with its own agent steps |
@@ -222,3 +224,4 @@ For compatibility changes, verify installation, tests, and Workflow entry points
 For bug reports and feature requests, [open an issue](https://github.com/antshc/loop/issues).
 Include reproduction steps and relevant Python and agent CLI versions for bugs;
 remove credentials and sensitive data from logs before sharing them.
+

@@ -19,7 +19,7 @@ def _now() -> datetime:
 
 
 class ObservingGitService:
-    """Decorates a GitService: reports `ready`, then `removing` and `removed` (with the run's outcome) around the Worktree."""
+    """Decorates a GitService: reports readiness, release attempts, and actual removal or retention."""
 
     def __init__(self, inner: GitService, observer: RunObserver, *, clock: Callable[[], datetime] = _now) -> None:
         self._inner = inner
@@ -46,10 +46,11 @@ class ObservingGitService:
             removed_ok = body_ok
         finally:
             if path is not None:
-                self._emit("removed", path, removed_ok)
+                self._emit("retained" if path.exists() else "removed", path, removed_ok)
 
     def _emit(self, point: str, path: Path, ok: bool | None) -> None:
         try:
             self._observer.worktree(WorktreeEvent(point, path, self._clock(), ok))
         except Exception as exception:  # An observer is caller code; it must never fail the run.
             logger.warning("observer failed on worktree %s: %r", point, exception)
+

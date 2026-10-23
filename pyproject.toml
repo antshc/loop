@@ -24,7 +24,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src", ".", "tests"]
-testpaths = ["tests", "workflows/dev/tests"]
+testpaths = ["tests", "workflows/dev/tests", "workflows/pr_babysit/tests"]
 norecursedirs = ["archive", ".*"]
 
 [tool.importlinter]
@@ -74,4 +74,10 @@ forbidden_modules = ["workflows.dev.agent", "workflows.dev.repositories", "workf
 [[tool.importlinter.contracts]]
 name = "No workflow imports another workflow"
 type = "independence"
-modules = ["workflows.dev", "workflows.plan_implement", "workflows.workflow_reporting"]
+modules = ["workflows.dev", "workflows.plan_implement", "workflows.workflow_reporting", "workflows.pr_babysit"]
+
+[[tool.importlinter.contracts]]
+name = "PR maintenance decisions do not depend on the discovery scheduler"
+type = "forbidden"
+source_modules = ["workflows.pr_babysit.workflow"]
+forbidden_modules = ["workflows.pr_babysit.infrastructure.scheduler"]

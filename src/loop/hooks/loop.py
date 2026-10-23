@@ -41,7 +41,7 @@ class WorktreeReadyLoopHook(LoopHook):
 
 
 class WorktreeRemovingLoopHook(LoopHook):
-    """Runs in the worktree after the safety-net commit and before its removal, on success and failure."""
+    """Runs after a successful body, before cleanliness checks and worktree removal."""
 
     point = LoopHookPoint.WORKTREE_REMOVING
 
@@ -58,3 +58,4 @@ class LoopHookError(Exception):
         self.point = point
         self.command = command
         self.output = output
+

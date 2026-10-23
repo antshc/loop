@@ -43,10 +43,10 @@ developer = AgentProfile(
 from agents.developer import developer
 from loop import Agent, AgentRequest, BranchStrategy, GitOptions
 
-result = Agent().create(developer).run(AgentRequest("Add cart quantity validation."))
+result = Agent().create(developer).run(AgentRequest("Add cart quantity validation, verify, and commit."))
 
 with Agent().with_git(GitOptions(strategy=BranchStrategy("cart-validation"))).open() as worktree:
-    result = worktree.agent(developer).run(AgentRequest("Add cart quantity validation."))
+    result = worktree.agent(developer).run(AgentRequest("Add cart quantity validation, verify, and commit."))
 ```
 
 Run the included example without executing Git or agent processes:
@@ -640,3 +640,33 @@ See [`workflows/dev/`](../workflows/dev/) for a complete Workflow,
 different models on one worktree, and
 [`workflows/dev/prompts/implement.md`](../workflows/dev/prompts/implement.md) for
 the default `dev` prompt template.
+
+
+
+## Worktree recovery and PR maintenance
+
+Loop's Git service manages worktree lifecycle only. It never stages, commits, or
+pushes changes. The Workflow or agent must explicitly commit before a successful
+worktree exit. `GitOptions.commit_message` has been removed.
+
+- Clean success or failure removes the directory and retains named-branch commits.
+- Dirty failure preserves the directory and propagates the original error.
+- A successful body leaving edits raises `WorktreeError` and preserves the directory.
+- Opening the same branch/path validates repository ownership and branch identity,
+  then reuses preserved work. Existing local commits are never silently reset.
+- An explicit `BranchStrategy(..., base_branch=...)` starts a new local branch from
+  that exact ref. Without it, an existing origin branch is preferred over HEAD.
+- Successful `MergeToHeadStrategy` runs fast-forward the host and delete the temporary
+  branch. Failed/divergent merges retain that branch for Workflow-owned recovery.
+- Stale metadata is pruned. Empty orphan directories or lone broken Git links can be
+  removed; nonempty unrecognized directories are preserved and reported.
+- The Workflow must serialize users of the same named worktree. No library lock is
+  implied. Relative roots remain inside cwd; absolute roots are explicit locations.
+
+Worktree observers emit `retained` when a directory remains, instead of claiming it
+was removed. OTLP closes the run's span and marks retention independently of disk cleanup.
+Loop has no isolated sandbox synchronization backend; patch-based sync recovery is
+not applicable to its host worktrees or Docker context adapter.
+
+See [PR maintenance](workflows/pr_babysit/README.md) for continuous PR discovery,
+Address/Maintainer profiles, JSON recovery, and workflow-owned commit/push operations.
