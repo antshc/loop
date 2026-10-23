@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
-from .agent import PROMPT, PROMPTS, PromptError, implement_ticket, load_prompt, prompt_args, render_prompt
+from .agent import (
+    PROMPT, PROMPTS, PromptError, implement_ticket, load_prompt, prompt_args, render_prompt,
+    plan_spec, verify_app, chore_pull_request, review_pull_request,
+)
 from .journal import ExecutionStoreError, FileExecutionStore
 from .records import (
     AgentWorkflow,
+    PlanContext, PlannedTicket, PlanResult, PlanWorkflow,
+    VerifyContext, VerifyFinding, VerifyResult, VerifyWorkflow,
+    ChoreContext, ChoreResult, ChoreWorkflow,
+    ReviewContext, ReviewAxis, ReviewFinding, ReviewResult, ReviewWorkflow,
     Repository,
     RepositoryId,
     TicketContext,
@@ -22,6 +29,11 @@ __all__ = [
     "PROMPT",
     "PROMPTS",
     "AgentWorkflow",
+    "PlanContext", "PlannedTicket", "PlanResult", "PlanWorkflow",
+    "VerifyContext", "VerifyFinding", "VerifyResult", "VerifyWorkflow",
+    "ChoreContext", "ChoreResult", "ChoreWorkflow",
+    "ReviewContext", "ReviewAxis", "ReviewFinding", "ReviewResult", "ReviewWorkflow",
+    "plan_spec", "verify_app", "chore_pull_request", "review_pull_request",
     "DevResponse",
     "DevResult",
     "DevResultError",

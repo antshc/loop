@@ -69,7 +69,7 @@ class DryGit(GitService):
         return sha
 
     def fetch(self, path: Path) -> None:
-        logger.info("dry-run: git fetch %s", path)
+        logger.debug("dry-run: git fetch %s", path)
 
     def remote_branch_exists(self, path: Path, branch: str) -> bool:
         return True
@@ -77,7 +77,7 @@ class DryGit(GitService):
     def push_if_ahead(self, path: Path, branch: str, base: str) -> bool:
         if len(self.commits) <= self._pushed:
             return False
-        logger.info("dry-run: git push origin %s", branch)
+        logger.debug("dry-run: git push origin %s", branch)
         self._pushed = len(self.commits)
         return True
 
@@ -86,6 +86,18 @@ class DryGit(GitService):
 
     def commits_since(self, path: Path, sha: str) -> list[Commit]:
         return self.commits[self._index(sha) + 1 :]
+
+    def branch_commits(self, path: Path, base: str) -> list[Commit]:
+        return self.commits[1:]
+
+    def status(self, path: Path) -> str:
+        return ""
+
+    def changed_files(self, path: Path) -> list[str]:
+        return []
+
+    def ref_sha(self, path: Path, ref: str) -> str:
+        return self.commits[self._pushed - 1].sha
 
     def initiative_commits(self, path: Path, base: str, prefix: str) -> list[Commit]:
         return [commit for commit in self.commits[1:] if commit.subject.startswith(prefix)]
@@ -123,12 +135,16 @@ class DryGh:
 
     def __call__(self, args: tuple[str, ...]) -> str:
         self.calls.append(args)
+        if args[:2] == ("pr", "diff"):
+            return ""
+        if args[:2] == ("pr", "ready"):
+            return ""
         if args[:2] == ("pr", "list"):
             return "[]"
         if args[:2] == ("pr", "create"):
             return f"https://github.com/{DRY_TARGET}/pull/99"
         if args[0] == "issue":
-            logger.info("dry-run: gh %s", " ".join(args[:3]))
+            logger.debug("dry-run: gh %s", " ".join(args[:3]))
             return ""
         query = next((arg for arg in args if arg.startswith("query=")), "")
         if "subIssues" in query:
@@ -160,7 +176,16 @@ class ScriptedAgent:
     def __call__(self, request: AgentRequest, context: RunContext) -> FakeReply:
         subject = _SUBJECT.search(request.prompt)
         if subject is None:
-            return FakeReply("dry-run: no commit subject in the prompt")
+            if request.prompt.startswith("# TASK"):
+                result = {"summary": "No cleanup needed", "out_of_scope": []}
+            elif request.prompt.startswith("# Review"):
+                match = re.search(r"head is commit\s+`([^`]+)`", request.prompt)
+                result = {"axes": [{"name": name, "outcome": "completed"}
+                                   for name in ("bugs", "quality", "smells", "initiative")],
+                          "head": match[1] if match else "", "findings": []}
+            else:
+                return FakeReply(json.dumps({"status": "failed", "result": {"reason": "No fake response configured"}}))
+            return FakeReply(json.dumps({"status": "completed", "result": result}))
         identifier = subject["identifier"]
         attempt = self._attempts[identifier] = self._attempts.get(identifier, 0) + 1
         title = self._title(request.prompt)

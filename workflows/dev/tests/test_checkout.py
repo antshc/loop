@@ -85,3 +85,18 @@ def test_run_command_returns_stdout_and_raises_command_error_on_failure() -> Non
         run_command(["python", "-c", "import sys; sys.exit(3)"])
     with pytest.raises(CommandError):
         run_command(["definitely-not-a-binary-xyz"])
+
+
+def test_fix_commits_stage_edits_and_preserve_their_explanation() -> None:
+    """Given verifier edits, when the harness commits, then it stages them and retains the body."""
+    script = Script(log=f"fix1{SEP_F}fix(Basket): total{SEP_F}Verified the basket total.{SEP_R}\n")
+    commit = GitService(run=script).commit(Path("/w"), "fix(Basket): total", "Verified the basket total.")
+    assert commit == Commit("fix1", "fix(Basket): total", "Verified the basket total.")
+    assert script.calls[0] == (("git", "add", "-A"), Path("/w"))
+    assert script.calls[1][0] == ("git", "commit", "-m", "fix(Basket): total", "-m", "Verified the basket total.")
+
+
+def test_changed_files_include_untracked_files_and_rename_destinations() -> None:
+    """Given edited and untracked files, when validating fixes, then all resulting paths are checked."""
+    script = Script(status=' M src/Basket.cs\n?? proof/new.json\nR  old.cs -> src/New.cs\n')
+    assert GitService(run=script).changed_files(Path("/w")) == ["src/Basket.cs", "proof/new.json", "src/New.cs"]

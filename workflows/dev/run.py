@@ -11,12 +11,13 @@ from pathlib import Path
 from loop import Agent, AgentBuilder, LoopHook, SessionLogReader, configure_logging, otlp_observer
 
 from .backlog import DevDeps, process_specs
+from .definition import dev_workflow
 from .checkout import GitService
 from .dry import SEAMS, Fakes
 from .journal import FileExecutionStore
 from .platforms import GithubFactory, TicketsTracker, github_for
 from .repositories import HARNESS, RepositoryWorkflow, configured_repositories
-from .telemetry import SpanFactory, TracingObserver, no_span
+from .telemetry import TracingObserver
 
 
 logger = logging.getLogger("workflow.dev")
@@ -41,6 +42,9 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="dev")
     parser.add_argument("--log-dir", type=Path, default=None)
     parser.add_argument("--log-level", default=LOG_LEVEL)
+    parser.add_argument("--visualize", action="store_true", help="show the phase table (needs loop[visualization])")
+    parser.add_argument("--spec", type=int, default=None, help="deliver only this Spec number")
+    parser.add_argument("--no-otel", action="store_true", help="disable telemetry, including for --dry")
     parser.add_argument(
         "--otlp-endpoint",
         default=None,
@@ -64,6 +68,8 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     if args.dry:
         args.fake = list(SEAMS)
         args.otlp_endpoint = _dry_endpoint(args.otlp_endpoint)
+    if args.no_otel:
+        args.otlp_endpoint = None
     if "git" in args.fake and "agent" not in args.fake:
         parser.error("--fake git needs --fake agent: a real agent would commit where the fake git cannot see")
     return args
@@ -82,12 +88,12 @@ def _observe(
     endpoint: str | None,
     new_observer: Callable[[str], TracingObserver],
     readers: Sequence[SessionLogReader] | None,
-) -> tuple[Callable[[], AgentBuilder], SpanFactory]:
+) -> tuple[Callable[[], AgentBuilder], TracingObserver | None]:
     """Agents and Workflow spans that share one observer; the plain pair when no endpoint is given."""
     if endpoint is None:
-        return new_agent, no_span
+        return new_agent, None
     observer = new_observer(endpoint)
-    return (lambda: new_agent().with_observer(observer, readers=readers)), observer.span
+    return (lambda: new_agent().with_observer(observer, readers=readers)), observer
 
 
 def main(
@@ -114,24 +120,50 @@ def main(
     log_dir = (args.log_dir or Path.cwd() / LOG_DIR_NAME).resolve()
     # The workflow is the application: it owns the root logger so its own records land in the same file.
     configure_logging(args.log_level, log_file=log_dir / "dev.log", logger="")
+    library_logger = logging.getLogger("loop")
+    library_logger.handlers.clear()
+    library_logger.setLevel(logging.NOTSET)
+    library_logger.propagate = True
+
+    for handler in logging.getLogger().handlers:
+        if isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler):
+            handler.addFilter(_high_level_log)
 
     try:
         github = github_for(HARNESS, github_factory)
         if repositories is None:
             repositories = configured_repositories(HARNESS)
-        agents, span = _observe(new_agent or Agent, args.otlp_endpoint, new_observer, readers)
-        deps = DevDeps(
-            tracker=TicketsTracker(HARNESS.owner_name.owner, HARNESS.owner_name.repo, gh=github.run),
-            store=store or FileExecutionStore(log_dir),
-            git=git or GitService(),
-            new_agent=agents,
-            loop_hooks=loop_hooks,
-            ticket_repository=HARNESS.owner_name,
-            github_factory=github_factory,
-            max_ticket_failures=MAX_TICKET_FAILURES,
-            span=span,
-        )
-        return process_specs(repositories, deps)
-    except Exception as exception:  # last-resort boundary: log and fail, never crash bare
-        logger.exception("unexpected error: %s", exception)
+        agents, observer = _observe(new_agent or Agent, args.otlp_endpoint, new_observer, readers)
+        workflow = dev_workflow(observer=observer, visualize=args.visualize)
+        with workflow.run() as phases:
+            deps = DevDeps(
+                tracker=TicketsTracker(HARNESS.owner_name.owner, HARNESS.owner_name.repo, gh=github.run),
+                store=store or FileExecutionStore(log_dir),
+                git=git or GitService(),
+                new_agent=agents,
+                loop_hooks=loop_hooks,
+                ticket_repository=HARNESS.owner_name,
+                github_factory=github_factory,
+                max_ticket_failures=MAX_TICKET_FAILURES,
+                phases=phases,
+                log_dir=log_dir,
+                spec_number=args.spec,
+            )
+            code = process_specs(repositories, deps)
+            if code:
+                phases.fail("A Spec failed or needs human input")
+            return code
+    except ImportError as exception:
+        logger.error("dev unavailable: %s", exception)
         return 1
+    except Exception as exception:  # last-resort boundary: log and fail, never crash bare
+        logger.error("dev failed (%s); enable DEBUG for details", type(exception).__name__)
+        logger.debug("unexpected error: %s", exception, exc_info=True)
+        return 1
+
+
+def _high_level_log(record: logging.LogRecord) -> bool:
+    return record.levelno >= logging.INFO and (
+        record.name == "loop.workflow" or
+        (record.name == "workflow.dev" and record.levelno >= logging.WARNING)
+    )

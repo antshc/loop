@@ -34,3 +34,14 @@ def test_create_draft_pull_request_asks_gh_for_a_draft_from_head_to_base() -> No
         "--body", "body",
         "--draft",
     )
+
+
+def test_reusing_a_pull_request_refreshes_its_ticket_checklist() -> None:
+    """Given an existing draft, when more Tickets land, then its body reflects the latest delivery."""
+    gh = FakeGhCli()
+    client = _client(gh)
+    first = client.create_draft_pull_request("feature/basket", "main", "Basket", "- [x] #1\n- [ ] #2")
+    updated = client.create_draft_pull_request("feature/basket", "main", "Basket", "- [x] #1\n- [x] #2")
+    assert first.number == updated.number == 99
+    assert len([call for call in gh.calls if call[:2] == ("pr", "create")]) == 1
+    assert gh.calls[-1] == ("pr", "edit", "99", "--repo", "owner/repo", "--body", "- [x] #1\n- [x] #2")

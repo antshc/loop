@@ -33,6 +33,58 @@ alias dev='PYTHONPATH=/path/to/harness python -m workflows.dev'
 dev --log-level DEBUG
 ```
 
+### Dev phases
+
+The default configuration in [`repositories.py`](workflows/dev/repositories.py)
+uses the same phases as the [eShop dev workflow](https://github.com/antshc/eShop/tree/main/tools/loop/workflows/dev):
+
+| Order | Phase | Behavior |
+|---|---|---|
+| 1 | Prepare repository | Resolve the target/base branch and fetch the repository |
+| 2 | Plan and create Tickets | When the Spec has no sub-issues, run the read-only planner, validate its plan, then create sub-issues in dependency order |
+| 3 | Deliver Tickets | Run the developer for each actionable Ticket, validate its one commit, retry rejected attempts, and close accepted Tickets |
+| 4 | Publish | Push accepted work and create/update the draft PR after each Ticket |
+| 5 | Verify application | Discover project verification skills, drive the integrated app, save evidence, and commit valid fixes |
+| 6 | Refine changes | Capture the PR diff, run cleanup, and commit/push its changes; discard failed cleanup |
+| 7 | Close worktree | Finish implementation before invoking the reviewer |
+| 8 | Review pull request | Review the final head from the checkout through the project’s `code-review` skill |
+| 9 | Check readiness | Mark ready only when delivery, verification, review axes, held Tickets, and the current head permit it |
+
+These phases run as the normal dev workflow. The default configuration supplies all
+delegates; a custom `RepositoryWorkflow` can set an individual delegate to `None` to
+skip it. A Spec with existing sub-issues, including closed or held ones, is never
+planned again. App verification is skipped when no verification skill is installed.
+
+Loop retains its developer commit contract: the developer makes one tagged commit
+per Ticket. Verifier and cleanup agents leave edits uncommitted; the harness commits
+accepted edits as separate `fix(...)` or `chore(...)` commits. Planner and reviewer
+steps must leave the target checkout unchanged.
+
+Install the project's app-verification skill and `code-review` skill in the target
+repository before using those agents. The reviewer reports all four axes (`bugs`,
+`quality`, `smells`, `initiative`) and the reviewed head. Missing/incomplete review,
+blocking bug/initiative findings, changed head, held Tickets, or an unproven app
+verdict keep the PR a draft and fail the Spec result. Cleanup is best effort.
+The workflow never merges the PR or closes the Spec.
+
+Console output contains only high-level phase transitions and outcomes. Commit
+validation, restoration, individual gates, agent output, and command details stay
+in execution history/telemetry or the DEBUG file. Add a terminal table independently:
+
+```sh
+python -m pip install -e ".[visualization]"
+python -m workflows.dev --spec 42 --visualize
+python -m workflows.dev --dry --fake-speed 0 --no-otel --visualize
+```
+
+`--spec NUMBER` selects one open Spec. `--visualize` enables the optional Rich table.
+`--no-otel` disables export even when `--dry` selected an endpoint. Existing
+`--otlp-endpoint`, fake seams, retry settings, and log-directory options remain available.
+
+Phase declarations and actor names live in
+[`definition.py`](workflows/dev/definition.py), built on the optional public
+`WorkflowBuilder`. Execution stays in the dev-owned Python helpers.
+
 ### Debugging with fakes
 
 `--fake <seam>` (repeatable) replaces one external dependency of `dev` with a fake and leaves the
@@ -64,9 +116,12 @@ By default it implements only Specs targeting the harness itself. Pass
 explicitly configured checkouts under the harness's `workspace` folder.
 Repositories must already be cloned; unknown targets are handed to a human.
 
-Each `RepositoryWorkflow` pairs a `Repository` with a function accepting
+Each `RepositoryWorkflow` pairs a `Repository` with a developer function accepting
 `(TicketContext, AgentWorkspace)` and returning a `TicketResult`. The function
-owns agent profiles, step ordering, prompt rendering, and response decoding.
+owns agent profiles, step ordering, prompt rendering, and response decoding. Optional
+`run_plan`, `run_verify`, `run_chore`, and `run_review` delegates configure the surrounding
+phases; the default configuration supplies all four. A custom instance with only the
+repository and developer function runs implementation only and leaves the PR a draft.
 For example, one repository can implement only while another implements and reviews:
 
 ```python
@@ -150,7 +205,9 @@ function-based script: prompt text, response parsing, Git reads, and orchestrati
 live together, with no sibling Workflow imports.
 There is no shared helper layer under `workflows/`; each Workflow owns the helpers it uses.
 
-- [`run.py`](../workflows/dev/run.py): logging, retry settings, Loop hooks, and dependency wiring.
+- [`run.py`](../workflows/dev/run.py): high-level logging, phase reporting, retry settings, Loop hooks, and dependency wiring.
+- [`definition.py`](workflows/dev/definition.py): named phases, actor ownership, visibility, and optional terminal/OTLP reporting.
+- [`plan.py`](workflows/dev/plan.py), [`verify.py`](workflows/dev/verify.py), [`chore.py`](workflows/dev/chore.py), and [`review.py`](workflows/dev/review.py): planning, integrated app verification, cleanup, review, and readiness checks.
 - [`repositories.py`](../workflows/dev/repositories.py): `HARNESS` and `configured_repositories`; edit its returned tuple to configure several repositories for `python -m workflows.dev`, or pass `repositories=` to `main`.
 - [`backlog.py`](../workflows/dev/backlog.py) and [`attempt.py`](../workflows/dev/attempt.py): Spec routing/publication and Ticket delivery.
 - [`agent.py`](../workflows/dev/agent.py), [`reply.py`](../workflows/dev/reply.py), and [`journal.py`](../workflows/dev/journal.py): prompt handling, response interpretation, and failure history.
@@ -334,8 +391,9 @@ verifies the integrated app, performs optional cleanup, closes the implementatio
 then reviews the PR and checks readiness. Preserve that ordering in Python. The builder
 adds no GitHub writes, commits, Ticket policy, or review logic.
 
-Loop's current `workflows/dev/` example keeps its existing behavior; it is not migrated
-as part of this example. Existing workflow-owned spans also remain supported.
+The actual [`dev` Workflow](#dev-phases) uses the builder for the default phase pipeline.
+The smaller fake example demonstrates the library independently. Existing workflow-owned
+spans also remain supported.
 
 ### Track phases without a builder
 
@@ -403,7 +461,7 @@ Name a profile from the shared `Role` vocabulary (`replace(DEFAULT, name=Role.RE
 | `CODE` | the Worktree and deterministic steps: checks, validation, Git, GitHub (`observer.span(..., role=Role.CODE)`) |
 | `PLANNER`, `DEVELOPER`, `REVIEWER` | the agents of those names (`AgentProfile(name=...)`) |
 
-`dev` uses `ENGINEER` for the Spec request, `CODE` for commit verification, ticket close and branch publication, and `DEVELOPER` for its agent; `plan_implement` names its agents `PLANNER` and `DEVELOPER`.
+`dev` uses `ENGINEER` for each Spec, `CODE` for deterministic phases, and separate planner, developer, verifier, chore, and reviewer actors for agent phases; `plan_implement` names its agents `PLANNER` and `DEVELOPER`.
 See [Run Observation](docs/concepts/str-run-observation.md).
 
 ## Library examples
