@@ -47,6 +47,7 @@ from .git import (
     GitRuntime,
     GitService,
     GitStrategy,
+    WorktreeError,
     HeadStrategy,
     MergeToHeadStrategy,
 )
@@ -153,6 +154,7 @@ __all__ = [
     "GitRuntime",
     "GitService",
     "GitStrategy",
+    "WorktreeError",
     "HeadStrategy",
     "LoggingDocker",
     "LoggingGitCli",
@@ -203,3 +205,4 @@ __all__ = [
     "otlp_observer",
     "repo_agent",
 ]
+

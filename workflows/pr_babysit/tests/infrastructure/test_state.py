@@ -5,13 +5,13 @@ from unittest.mock import patch
 
 import pytest
 
-from workflows.pr_maintenance.state import Blocked, PrState, process_lock, read_json, write_json
+from workflows.pr_babysit.infrastructure.state import Blocked, PrState, process_lock, read_json, write_json
 
 
 def test_atomic_failure_preserves_previous_state(tmp_path):
     path = tmp_path / "state.json"
     write_json(path, {"version": 1, "value": "before"})
-    with patch("workflows.pr_maintenance.state.os.replace", side_effect=OSError("interrupted")):
+    with patch("workflows.pr_babysit.infrastructure.state.os.replace", side_effect=OSError("interrupted")):
         with pytest.raises(OSError):
             write_json(path, {"version": 1, "value": "after"})
     assert read_json(path, {})["value"] == "before"

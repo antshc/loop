@@ -9,11 +9,11 @@ from pathlib import Path
 import pytest
 
 from loop import FakeCliRunner, GitCli, GitRuntime, fake_agent
-from workflows.babysit.git import Git
-from workflows.babysit.run import run
-from workflows.pr_maintenance.settings import Repository, Settings
-from workflows.pr_maintenance.state import PrState
-from test_watcher import comment, thread
+from workflows.pr_babysit.infrastructure.git import Git
+from workflows.pr_babysit.workflow.run import run
+from workflows.pr_babysit.settings import Repository, Settings
+from workflows.pr_babysit.infrastructure.state import PrState
+from .test_watcher import comment, thread
 
 
 def command(path, *args):
@@ -100,11 +100,11 @@ def scenario(tmp_path):
     return settings, bare, checkout, base
 
 
-def execute(settings, remote, runner, *, git=None, observer=None):
+def execute(settings, remote, runner, *, git=None, observer=None, verification=None):
     def wait(seconds):
         remote.closed = True
     return run(settings, "a/b", 1, github=remote, git=git or LocalGit(), observer=observer,
-               new_agent=lambda: fake_agent(runner, git=GitRuntime(GitCli())), wait=wait)
+               new_agent=lambda: fake_agent(runner, git=GitRuntime(GitCli())), wait=wait, verification=verification)
 
 
 def test_address_verifies_commits_pushes_and_replies_once(scenario):
@@ -115,7 +115,7 @@ def test_address_verifies_commits_pushes_and_replies_once(scenario):
     assert remote.replies == ["Fixed!"]
     assert command(bare, "rev-parse", "feature") != base
     assert command(checkout, "rev-parse", "HEAD") == base
-    assert not list((settings.state_dir / "worktrees" / "a--b").iterdir())
+    assert not (settings.state_dir / "worktrees" / "babysit" / "a" / "b" / "1").exists()
     state = PrState(settings.state_dir, "a/b", 1)
     assert state.data["status"] == "completed"
     assert all(item["status"] == "handled" for item in state.data["items"].values())
@@ -132,7 +132,9 @@ def test_push_failure_keeps_checkpoint_and_never_replies(scenario):
     state = PrState(settings.state_dir, "a/b", 1)
     assert state.data["batch"]["head"] != base
     assert all(item["status"] == "pending" for item in state.data["items"].values())
-    # Recovery publishes the existing commit without another agent call.
+    assert not (settings.state_dir / "worktrees" / "babysit" / "a" / "b" / "1").exists()
+    assert command(checkout, "rev-parse", "babysit/a/b/1") == state.data["batch"]["head"]
+    # Recovery recreates the worktree and publishes without another agent call.
     assert execute(settings, remote, runner) == 0
     assert runner.modes == ["group", "resolve"]
     assert remote.replies == ["Fixed!"]
@@ -165,15 +167,15 @@ def test_invalid_agent_report_does_not_publish(scenario):
 
 def test_failed_verification_keeps_edits_and_does_not_commit_or_reply(scenario):
     settings, bare, checkout, base = scenario
-    class FailAfterEdit(LocalGit):
-        def verify(self, path, repository, timeout):
+    class FailAfterEdit:
+        def __call__(self, path, repository, timeout):
             if (path / "cart.py").read_text() == "fixed = True\n":
                 raise subprocess.CalledProcessError(1, ["test"])
     remote = Remote(bare, base)
-    assert execute(settings, remote, Runner(), git=FailAfterEdit()) == 1
+    assert execute(settings, remote, Runner(), verification=FailAfterEdit()) == 1
     assert command(bare, "rev-parse", "feature") == base
     assert not remote.replies
-    retained = settings.state_dir / "worktrees" / "a--b" / "1"
+    retained = settings.state_dir / "worktrees" / "babysit" / "a" / "b" / "1"
     assert (retained / "cart.py").read_text() == "fixed = True\n"
 
 
@@ -217,3 +219,19 @@ def test_repeated_stale_ci_snapshot_does_not_spend_another_retry_or_agent_call(s
                new_agent=lambda: fake_agent(runner, git=GitRuntime(GitCli())), wait=wait) == 0
     assert remote.retries == [1]
     assert runner.modes == ["diagnose"]
+
+
+def test_named_worktree_is_serialized_by_workflow(scenario):
+    """Given a named worktree is active, when another worker opens it, then it cannot edit."""
+    from workflows.pr_babysit.workflow.workspace import open_workspace
+    from workflows.pr_babysit.infrastructure.state import Blocked
+    settings, bare, checkout, base = scenario
+    remote = Remote(bare, base)
+    state = PrState(settings.state_dir, "a/b", 1)
+    factory = lambda: fake_agent(Runner(), git=GitRuntime(GitCli()))
+    args = (settings, settings.repository("a/b"), remote.snapshot("a/b", 1), state, LocalGit(), None, factory)
+    with open_workspace(*args) as workspace:
+        with pytest.raises(Blocked, match="Another process"):
+            with open_workspace(*args):
+                pytest.fail("duplicate owner")
+        assert workspace.path.exists()

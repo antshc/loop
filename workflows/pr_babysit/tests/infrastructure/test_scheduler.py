@@ -7,11 +7,11 @@ from unittest.mock import patch
 
 import pytest
 
-from workflows.pr_maintenance.github import remote_fingerprint
-from workflows.pr_maintenance.settings import Repository, Settings
-from workflows.pr_maintenance.state import Blocked, PrState
-from workflows.pr_scheduler.registry import Registry
-from workflows.pr_scheduler.run import child_environment, serve
+from workflows.pr_babysit.infrastructure.github import remote_fingerprint
+from workflows.pr_babysit.settings import Repository, Settings
+from workflows.pr_babysit.infrastructure.state import Blocked, PrState
+from workflows.pr_babysit.infrastructure.state import Registry
+from workflows.pr_babysit.infrastructure.scheduler import child_environment, serve
 
 
 def pr(number):

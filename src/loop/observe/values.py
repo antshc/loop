@@ -83,9 +83,9 @@ class AgentRunRecord:
 
 @dataclass(frozen=True)
 class WorktreeEvent:
-    """A Worktree lifecycle moment; `ok` is None until the Worktree is removing."""
+    """A Worktree lifecycle fact; retained ends a run without deleting its directory."""
 
-    point: Literal["ready", "removing", "removed"]
+    point: Literal["ready", "removing", "removed", "retained"]
     path: Path
     at: datetime
     ok: bool | None
@@ -97,3 +97,4 @@ class RunObserver(Protocol):
     def agent_run(self, record: AgentRunRecord) -> None: ...
 
     def worktree(self, event: WorktreeEvent) -> None: ...
+

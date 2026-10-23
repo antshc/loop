@@ -17,7 +17,7 @@ One unit test group runs in the project's single test command (`pytest`). It tes
 ## Rules
 
 - MUST test every shipped component against its own boundary fake, one behavior per test.
-- MUST NOT start a real `git`, `gh`, `docker`, or agent CLI process, or reach the network, from any test; the project has no live or integration test group.
+- MUST NOT start a real `gh`, `docker`, or agent CLI process, or reach the network, from any test. Worktree lifecycle and PR publication recovery tests may use isolated temporary Git repositories and local bare remotes; they MUST NOT access user repositories or network remotes.
 - MUST drive a Workflow scenario through the Workflow's `main` with injected dependencies, with the real builder, prompt rendering, and response extraction.
 - MUST make the runner fake or injected Ticket delegate commit through the Git fake before reporting completion, so Git validation runs against fake state.
 - MUST exercise agent response parsing with raw runner output; tests of the independent Ticket delegate seam may return typed results without parsing an agent envelope.

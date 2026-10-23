@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from ..pr_maintenance.github import digest, trusted, remote_fingerprint as fingerprint
-from ..pr_maintenance.state import PrState
+from ..infrastructure.github import digest, trusted, remote_fingerprint as fingerprint
+from ..infrastructure.state import PrState
 
 FAILED = {"failure", "timed_out", "cancelled", "action_required", "startup_failure", "stale"}
 

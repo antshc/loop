@@ -1,5 +1,5 @@
 from __future__ import annotations
 
-from .agents import ADDRESS, MAINTAINER
+from .profiles import ADDRESS, MAINTAINER
 
 __all__ = ["ADDRESS", "MAINTAINER"]

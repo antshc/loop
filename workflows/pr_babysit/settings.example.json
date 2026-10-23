@@ -2,7 +2,7 @@
   "repositories": [
     {
       "name": "antshc/eShop",
-      "path": "../../../workspace/eShop",
+      "path": "../../workspace/eShop",
       "build": ["dotnet", "build"],
       "test": ["dotnet", "test", "--no-build"]
     }

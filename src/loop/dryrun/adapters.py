@@ -26,6 +26,10 @@ class LoggingGitCli(GitCli):
         _log(" ".join(command))
         return subprocess.CompletedProcess(command, 1 if "show-ref" in args else 0, "", "")
 
+    def _reuse_worktree(self, repository: Path, target: Path, branch: str) -> bool:
+        _log(f"would validate/reuse worktree {target} on branch {branch}")
+        return True
+
     def run_hook(self, hook: LoopHook, cwd: Path, repository: Path, worktree: Path) -> None:
         _log(f"loop-hook {hook.point.value} cwd={cwd} timeout={hook.timeout_sec}: {hook.command}")
 
@@ -70,3 +74,4 @@ class LoggingDocker:
         configured = self._inner.configure(context)
         _log(f"docker image={configured.docker_image}")
         return configured
+

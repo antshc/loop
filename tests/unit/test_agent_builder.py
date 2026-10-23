@@ -448,7 +448,7 @@ class GitCliTests(unittest.TestCase):
 
     def test_remote_only_branch_starts_from_origin(self) -> None:
         git = GitFixture(missing=("refs/heads/",))
-        GitCli(run=git).add_worktree(Path("/repo"), Path("/repo/.wt/a"), "a", "develop")
+        GitCli(run=git).add_worktree(Path("/repo"), Path("/repo/.wt/a"), "a")
         self.assertEqual(git.commands[-2], ["branch", "a", "origin/a"])
 
     def test_existing_local_branch_is_reused_as_is(self) -> None:
@@ -487,7 +487,7 @@ class GitRuntimeTests(unittest.TestCase):
         branch = target.name
         self.assertEqual(
             [command[0] for command in git.commands],
-            ["check-ref-format", "show-ref", "show-ref", "branch", "worktree", "add", "diff", "worktree", "merge", "branch"],
+            ["check-ref-format", "worktree", "show-ref", "branch", "worktree", "status", "worktree", "merge", "branch"],
         )
         self.assertEqual(git.commands[3], ["branch", branch, "HEAD"])
         self.assertEqual(git.commands[-3], ["worktree", "remove", str(target)])
@@ -585,7 +585,7 @@ class LoopHookTests(unittest.TestCase):
             self.assertEqual(kwargs["env"]["LOOP_WORKTREE"], "/repo/wt/loop/a")
             self.assertEqual(kwargs["env"]["LOOP_HOOK_POINT"], "worktree-ready")
 
-    def test_failing_hook_force_removes_and_skips_body(self) -> None:
+    def test_failing_hook_removes_clean_worktree_and_skips_body(self) -> None:
         git = GitFixture(missing=("refs/",), failing=("one",))
         entered = False
         with self.assertRaises(LoopHookError) as caught:
@@ -597,7 +597,7 @@ class LoopHookTests(unittest.TestCase):
         self.assertIn("worktree-ready hook failed", str(caught.exception))
         self.assertEqual(caught.exception.output, "out-err")
         self.assertEqual([hook for hook, _ in git.hooks], ["one"])
-        self.assertEqual(git.commands[-1], ["worktree", "remove", "--force", "/repo/wt/loop/a"])
+        self.assertEqual(git.commands[-1], ["worktree", "remove", "/repo/wt/loop/a"])
         names = [command[0] for command in git.commands]
         for forbidden in ("diff", "commit", "merge"):
             self.assertNotIn(forbidden, names)
@@ -617,15 +617,15 @@ class LoopHookTests(unittest.TestCase):
         self.assertNotIn(["branch", "-d"], [command[:2] for command in git.commands])
 
     @unittest.skipUnless(hasattr(Exception, "add_note"), "exception notes require Python 3.11")
-    def test_failed_forced_removal_is_noted_on_hook_error(self) -> None:
+    def test_failed_cleanup_is_noted_on_hook_error(self) -> None:
         git = GitFixture(missing=("refs/",), failing=("one",), remove_fails=True)
         with self.assertRaises(LoopHookError) as caught:
             with self.open(git, self.options("one")):
                 pass
-        self.assertTrue(any("removal" in note for note in caught.exception.__notes__))
+        self.assertTrue(any("cleanup" in note for note in caught.exception.__notes__))
 
     @unittest.skipIf(hasattr(Exception, "add_note"), "Python 3.10 logs instead of adding notes")
-    def test_failed_forced_removal_is_logged_without_masking_hook_error(self) -> None:
+    def test_failed_cleanup_is_logged_without_masking_hook_error(self) -> None:
         git = GitFixture(missing=("refs/",), failing=("one",), remove_fails=True)
         with self.assertLogs("loop.git.strategies", level="ERROR") as logs:
             with self.assertRaises(LoopHookError) as caught:
@@ -633,7 +633,7 @@ class LoopHookTests(unittest.TestCase):
                     pass
         self.assertEqual(caught.exception.command, "one")
         self.assertEqual(caught.exception.point, LoopHookPoint.WORKTREE_READY)
-        self.assertIn("forced worktree removal also failed:", logs.output[0])
+        self.assertIn("worktree cleanup also failed; retained", logs.output[0])
         self.assertIsNotNone(logs.records[0].exc_info)
 
     def builder(self, git: GitFixture, events: list[str]) -> tuple[AgentBuilder, RecordingRunner]:
@@ -717,12 +717,13 @@ class LoopHookLifecycleTests(unittest.TestCase):
     def names(self, git: GitFixture) -> list[str]:
         return [" ".join(command[:2]) for command in git.commands]
 
-    def test_removing_runs_after_commit_before_remove(self) -> None:
+    def test_removing_runs_before_cleanup_without_automatic_commit(self) -> None:
         git = GitFixture(missing=("refs/",))
         with self.open(git, self.options(WorktreeRemovingLoopHook("bye"))) as target:
             pass
         names = self.names(git)
-        self.assertLess(names.index("diff --cached"), names.index("hook bye"))
+        self.assertNotIn("diff --cached", names)
+        self.assertNotIn("commit", [command[0] for command in git.commands])
         self.assertLess(names.index("hook bye"), names.index("worktree remove"))
         _, kwargs = git.hooks[0]
         self.assertEqual(kwargs["cwd"], target)
@@ -985,3 +986,4 @@ class HookDryRunTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

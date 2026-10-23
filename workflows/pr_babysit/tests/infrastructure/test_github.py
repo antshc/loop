@@ -5,7 +5,7 @@ import subprocess
 
 import pytest
 
-from workflows.pr_maintenance.github import Github
+from workflows.pr_babysit.infrastructure.github import Github
 
 
 def test_rest_collection_paginates_and_filters_author():

@@ -1,26 +1,22 @@
 from __future__ import annotations
 
-import argparse
 import logging
 import os
-import signal
 import subprocess
 import sys
 from pathlib import Path
 from time import sleep
 
-from ..pr_maintenance.github import Github, remote_fingerprint
-from ..pr_maintenance.settings import Settings
-from ..pr_maintenance.state import Blocked, PrState, process_lock
-from .discovery import discover
-from .registry import Registry
+from .github import Github, remote_fingerprint
+from ..settings import Settings
+from .state import Blocked, PrState, Registry, process_lock
 
 logger = logging.getLogger(__name__)
 
 
 def child_command(config: Path, url: str) -> list[str]:
     """Launch an independent babysit workflow without a scheduler trace parent."""
-    return [sys.executable, "-m", "workflows.babysit", "--config", str(config), "--pr", url]
+    return [sys.executable, "-m", "workflows.pr_babysit", "--config", str(config), "--pr", url]
 
 
 def child_environment() -> dict[str, str]:
@@ -99,25 +95,6 @@ def serve(settings: Settings, config: Path, *, include_existing=False, retry: st
     return 0
 
 
-def main(argv=None) -> int:
-    """Start the scheduler with local logging and no telemetry provider."""
-    parser = argparse.ArgumentParser(description="Continuously discover and babysit user-authored PRs")
-    parser.add_argument("--config", required=True, type=Path)
-    parser.add_argument("--include-existing", action="store_true")
-    parser.add_argument("--retry", help="Explicitly retry one enrolled blocked PR URL")
-    args = parser.parse_args(argv)
-    logging.basicConfig(level=logging.INFO)
-    stopping = False
-
-    def request_stop(signum, frame):
-        nonlocal stopping
-        stopping = True
-
-    signal.signal(signal.SIGTERM, request_stop)
-    signal.signal(signal.SIGINT, request_stop)
-    try:
-        return serve(Settings.load(args.config), args.config.resolve(), include_existing=args.include_existing,
-                     retry=args.retry, stop=lambda: stopping)
-    except (Blocked, ValueError, OSError) as exception:
-        logger.error("Scheduler stopped: %s", exception)
-        return 1
+def discover(github, repositories, author: str) -> list[tuple[str, dict]]:
+    """Return a complete discovery scan before advancing the startup baseline."""
+    return [(repo.name, pr) for repo in repositories for pr in github.open_prs(repo.name, author)]

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from workflows.babysit.watcher import ci_state, observe, pending_threads
-from workflows.pr_maintenance.state import PrState
+from workflows.pr_babysit.workflow.watcher import ci_state, observe, pending_threads
+from workflows.pr_babysit.infrastructure.state import PrState
 
 
 def comment(id="c1", login="reviewer", body="Check this"):

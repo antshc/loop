@@ -5,7 +5,7 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.sdk.trace.sampling import ALWAYS_ON
 
-from test_pipeline import Remote, Runner, execute, scenario
+from .workflow.test_pipeline import Remote, Runner, execute, scenario
 
 
 def test_babysit_roots_are_independent_and_polls_are_not_exported(scenario):

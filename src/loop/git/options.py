@@ -11,13 +11,11 @@ from .strategies import GitStrategy, HeadStrategy
 class GitOptions:
     """Where the worktree lives (target = root_path/branch) and which strategy creates it."""
 
-    # Must resolve inside the agent cwd; relative paths are taken from the cwd.
+    # Relative roots must stay inside cwd; an absolute root is an explicit location.
     root_path: Path = Path(".worktrees")
     # Repository that git -C targets (multi-repository setups); None uses the agent cwd.
     repository_path: Path | None = None
     strategy: GitStrategy = HeadStrategy()
-    # Message for the safety-net commit of changes the agent left uncommitted.
-    commit_message: str = "agent: commit uncommitted changes"
     # Loop hooks of any point; each runs at its own point, in declared order.
     loop_hooks: tuple[LoopHook, ...] = ()
 
@@ -27,3 +25,4 @@ class GitOptions:
 
     def hooks_at(self, point: LoopHookPoint) -> tuple[LoopHook, ...]:
         return tuple(hook for hook in self.loop_hooks if hook.point is point)
+
