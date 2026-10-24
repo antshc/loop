@@ -157,6 +157,49 @@ contract. Agents MUST NOT bypass workflow policy by directly invoking another
 agent or publishing changes. A successful agent process is not proof that the task
 or verification succeeded.
 
+## Bundled spec and ticketing instructions (implementation task)
+
+During implementation, copy the instructions and all required references from:
+
+- [Brain `to-spec` skill](https://github.com/antshc/brain/tree/main/plugins/wf/skills/to-spec)
+- [Brain `to-tickets` skill](https://github.com/antshc/brain/tree/main/plugins/wf/skills/to-tickets)
+
+This is **planned work**: no skill instructions are bundled in Loop yet.
+The running factory MUST use repository-local copies, never fetch Brain at runtime.
+
+The implementation MUST:
+
+1. Copy the `SKILL.md` instructions and all directly required references:
+   `to-spec/github.md`, `to-tickets/references/github.md`, and
+   `to-tickets/references/issue-template.md`. Include any other substantive
+   instructions needed to make the copied guidance self-contained.
+2. Put these copies under `workflows/factory/agents/references/`.
+   Record the original GitHub URLs and source commit/SHAs for traceability.
+3. Add `agents/spec.md` and `agents/ticketing.md` as the actual agent entry
+   prompts. Each MUST reference its local instructions and templates. The agent
+   profile/builder MUST resolve and include those local files in the prompt.
+4. Adapt copied operational rules to this factory's decisions: direct requests
+   (including plans) become `spec` issues; triage reuses pre-existing sub-issues;
+   a missing ticket graph is generated automatically without user approval or
+   default `hitl`; native dependencies determine ready work; explicit
+   human-blocked tickets may use `hitl`.
+5. Keep GitHub discovery, duplicate checks, labels, child issue creation,
+   dependency links, publication, retries, and confirmation in Python handlers.
+   Agents only synthesize structured spec/ticket drafts; copied `gh` commands
+   are adapter references, not instructions for agents to publish directly.
+6. Remove or replace copied calls to other external skills (`doc-contracts`,
+   `init-wf`, etc.) with bundled instructions or explicit Python contracts.
+   No runtime dependency on the Brain repository or its skill loader remains.
+7. Keep the local copies as the source of truth for execution. Any upstream
+   changes require an explicit sync/review; do not silently overwrite locally
+   adapted policy on a new Brain commit.
+
+Current upstream `to-tickets` requires breakdown approval and `hitl` on all
+created tickets. These two rules MUST be adapted during copying; they MUST NOT
+override the automatic execution policy in this plan. Python validates agent
+results before publishing. The reference copies are guidance, not executable
+GitHub action scripts.
+
 ## GitHub and direct-user triggers
 
 Commands below are proposed exact comment commands. Accept them from configured
@@ -467,6 +510,16 @@ workflows/
       profiles.py
       triage.md
       spec.md
+      ticketing.md
+      references/
+        to-spec/
+          SKILL.md
+          github.md
+        to-tickets/
+          SKILL.md
+          references/
+            github.md
+            issue-template.md
       developer.md
       reviewer.md
       address.md
@@ -481,14 +534,20 @@ workflows/
   pr_babysit/          # Compatibility entry point during migration
 ```
 
-Profiles and complete instructions stay together in agents/. Keep state outside
-tracked files, for example .loop/factory/state.sqlite3, logs, evidence, and
-worktree roots. Do not duplicate prompts or Git/worktree lifecycle implementations.
+The tree above is the target implementation layout; its factory assets are not
+created by this plan update. Profiles and complete instructions stay together
+in agents/. Keep state outside tracked files, for example
+.loop/factory/state.sqlite3, logs, evidence, and worktree roots. Do not
+duplicate prompts or Git/worktree lifecycle implementations.
 
 ## Implementation phases
 
 ### 1. Contracts and decision flow
 
+- Copy and adapt both Brain authoring skills and required references into the
+  planned local agent-reference tree; record upstream source SHAs.
+- Wire `spec.md` and `ticketing.md` entry prompts through the agent builder
+  so local instructions/templates are included at execution time.
 - Define typed messages, work items, decisions, commands, and result validation.
 - Implement a deterministic transition function: state + message -> new state +
   commands/effect intents.
@@ -528,12 +587,13 @@ worktree roots. Do not duplicate prompts or Git/worktree lifecycle implementatio
 
 ### 5. Specification and human gates
 
-- Adapt `to-spec` for all direct requests, with or without supplied plans.
+- Use the locally bundled `to-spec` guidance for all direct requests, with or
+  without supplied plans. Do not fetch Brain at runtime.
 - Triage native sub-issues and reuse pre-existing ticket graphs unchanged.
-- Adapt `to-tickets` for unattended breakdown/publication when a spec has no
-  children. Its approval guard and mandatory-`hitl` label guard MUST change
-  (or a separate automatic handler must provide equivalent behavior). Maintain
-  idempotent creation, native blockers, and crash recovery.
+- Use locally bundled and adapted `to-tickets` guidance for unattended
+  breakdown/publication when a spec has no children. Remove the upstream
+  approval guard and mandatory-`hitl` label guard from the executable prompt;
+  maintain idempotent creation, native blockers, and crash recovery.
 - Publish no `plan` label; a supplied plan becomes content of a `spec` issue.
 - Create new children without `hitl` by default. Queue the ready frontier
   immediately; label `hitl` only for explicit human intervention blockers.
@@ -580,6 +640,10 @@ behavioral risks directly; live agents or external GitHub writes are not require
   GitHub issue labeled `spec` with routing metadata before repository work.
 - The source plan's substantive decisions survive conversion to the spec;
   no `plan` label is created or used as a trigger.
+- The factory loads its spec/ticketing agent instructions and templates entirely
+  from the local workflow package; no runtime Brain calls or missing references.
+- The copied source is adapted so agents never perform GitHub writes, solicit
+  ticket breakdown approval, or add `hitl` to ordinary generated tickets.
 - Triage automatically adopts existing native `spec` sub-issues without
   changing them; if none exist, it creates a complete ticket graph without user
   approval or default `hitl` labels.
