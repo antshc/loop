@@ -67,6 +67,10 @@ verification and publication before both paths share the new handlers.
     or route a `plan` label. Direct requests, even when they supply an
     implementation plan, are published as `spec` issues. `hitl` is a hard
     exclusion; only removing it can make a held ticket eligible for execution.
+12. Triage automatically discovers native sub-issues on each eligible `spec`.
+    If sub-issues exist, adopt their graph without regenerating it. If none
+    exist, create the ticket breakdown automatically without user approval;
+    keep all newly created tickets labeled `hitl` for manual release.
 
 ## Decision flow with user triggers
 
@@ -78,10 +82,11 @@ USER
   |
   +-- GitHub issue opened / updated / released
         +-- Current label hitl -> SKIP; wait for removal -> Re-evaluate
-        +-- spec issue -> TO-TICKETS: propose vertical-slice breakdown
-        |     +-- USER requests changes -> Revise breakdown; seek approval
-        |     +-- USER approves -> Create hitl child tickets with blockers
-        |                             +-- Wait for user to remove hitl
+        +-- spec issue -> TRIAGE: discover native sub-issues
+        |     +-- Existing sub-issues -> Reuse tickets and blocker graph
+        |     +-- No sub-issues -> TO-TICKETS automatically creates
+        |                          hitl child tickets + dependencies
+        |     +-- Wait for user to remove hitl from individual tickets
         +-- Released spec child -> Check dependencies -> Developer if ready
         +-- Other issue -> Ignore unless explicitly enrolled
 
@@ -143,7 +148,7 @@ create linked work items, rather than reopening every delivered workflow.
 | Verifier | Execute/interpret feature checks and collect evidence |
 | Monitor | Identify actionable delivery/product issues |
 | Python workflow | Validate results, transition state, schedule work, run required checks, commit/push, post replies, retry CI, persist progress |
-| Human | Resolve ambiguity, approve specs and code/evidence, authorize merge or auto-merge |
+| Human | Resolve ambiguity, release `hitl` tickets, review code/evidence, authorize merge or auto-merge |
 
 Address and Maintainer MUST delegate code fixes through the shared developer task
 contract. Agents MUST NOT bypass workflow policy by directly invoking another
@@ -157,7 +162,7 @@ authorized actors only. Use GitHub review actions for review approval/changes.
 
 | User action | Message | Workflow action |
 |---|---|---|
-| Open/relabel/reopen a `spec` issue without `hitl` | SpecTicketingRequested | Read spec; draft child-ticket breakdown; wait for explicit user approval before publication |
+| Open/relabel/reopen a `spec` issue without `hitl` | SpecTicketingRequested | Triage native sub-issues; reuse existing tickets or automatically generate/publish a `hitl` ticket graph if none exist |
 | Remove `hitl` from an issue | IssueReleased | Re-read current labels, parent links, dependencies, and readiness; enqueue only eligible child-ticket work |
 | Open a spec child ticket with `hitl` | None | Skip; do not schedule agents or other issue processing |
 | Open/relabel/reopen any other `hitl` issue | None | Skip irrespective of `spec`, command, or other labels |
@@ -165,7 +170,7 @@ authorized actors only. Use GitHub review actions for review approval/changes.
 | Submit direct user request, with or without a plan | TaskSubmitted | Persist request and plan context; triage missing scope; run `to-spec` to create/link a GitHub `spec` issue before ticketing or code changes |
 | Comment /implement on issue | ImplementationRequested | Check scope/readiness; implement or request missing decisions |
 | Comment /spec on issue | SpecificationRequested | Create/revise specification |
-| Comment /approve-spec on issue | SpecApproved | Approve the current explicitly identified spec revision |
+| Comment /approve-spec on issue | SpecApproved | Optionally record approval of an exact spec revision; ticket discovery/breakdown does not wait for this |
 | Reply to a pending question | ClarificationProvided | Resume the waiting decision |
 | Request changes on pending spec | SpecChangesRequested | Return to Spec with feedback |
 | Submit PR review requesting changes | ReviewReceived | Schedule Address |
@@ -187,23 +192,40 @@ scheduling. A still-open or unresolved `hitl` blocker prevents dependant tickets
 from becoming ready. Do not use `plan` as a routing label; a plan is input
 content, not a separate issue type.
 
-`spec` issues are planning parents. Use the `to-tickets` contract to propose
-tracer-bullet child tickets with blockers and waves. MUST obtain explicit approval
-of the current breakdown before creating/linking tickets. Every published child
-starts labeled `hitl` (including AFK slices); the user removes `hitl` to release
-each ticket. Do not implement a spec parent directly or silently remove `hitl`.
+`spec` issues are planning parents. Whenever triage receives an eligible `spec`,
+read its native GitHub sub-issues and blockers first (including closed children):
+
+- Existing sub-issues: adopt them as the authoritative ticket graph, retaining
+  their issue IDs, labels, status, dependencies, and user edits. Do not regenerate,
+  replace, relabel, or create additional children solely from a fresh breakdown.
+  Report coverage gaps or invalid dependencies for separate resolution.
+- No sub-issues: automatically use the `to-tickets` breakdown rules to derive
+  tracer-bullet child tickets, dependencies, and waves. Publish/link them without
+  requesting user approval. Every newly created child receives `hitl` (including
+  AFK slices), so publication does not authorize implementation.
+- Interrupted workflow-owned publication: reconcile persisted intended tickets
+  against children already created, finish only missing intended tickets/links,
+  and prevent duplicates. This recovery exception does not rewrite a pre-existing
+  user-managed ticket graph.
+
+The user removes `hitl` to release each ticket; release still requires satisfied
+dependencies. Do not implement a spec parent or silently remove `hitl`.
 An implementation plan can be attached to a spec or supplied through a direct
-request, but it does not create a separate issue type or bypass ticket approval.
+request, but it does not create a separate issue type or bypass these gates.
 
 Use the `to-spec` contract for every direct request, including one with a
 ready-made plan: synthesize its requirements and decisions into a GitHub
 `spec` issue with source/base routing labels, then follow the spec-to-tickets
 route. Preserve substantive plan decisions; request missing initiative/base
 metadata when required by the publication contract. Do not use a `plan` label.
-Reconcile duplicate submissions before publishing another spec. Keep the tracker issue repository distinct from the source-code repository.
+Reconcile duplicate submissions before publishing another spec. Keep the tracker
+issue repository distinct from the source-code repository.
 `to-spec` and `to-tickets` are authoring contracts to adapt into Python
-handlers; the workflow MUST preserve their publication, duplicate-prevention,
-approval, and HITL guards. Sources:
+handlers. Preserve publication, duplicate-prevention, and HITL guards. The
+current `to-tickets` skill requires explicit breakdown approval; its approval
+guard MUST be changed or replaced with an automatic workflow mode before
+reusing it here. This plan overrides only breakdown approval, not ticket release
+or PR approval. Sources:
 [to-spec](https://github.com/antshc/brain/tree/main/plugins/wf/skills/to-spec)
 and [to-tickets](https://github.com/antshc/brain/tree/main/plugins/wf/skills/to-tickets).
 
@@ -212,9 +234,11 @@ correlated with a pending question trigger issue workflow actions. PR review
 comments and review submissions are explicit review inputs. Record question IDs,
 actor identity, source object ID/revision, and the decision being answered.
 
-For spec approval, show a version/hash in the approval request and associate the
-approval with it. If the spec changed after the approval request, request fresh
-approval. Reject ambiguous replies rather than treating every comment as consent.
+A `spec` label triggers ticket discovery/breakdown without requiring spec or
+breakdown approval. A later spec edit MUST NOT silently replace existing child
+tickets; report drift and require a separate explicit change request. Where a
+separate human decision is genuinely needed, correlate it with an exact
+revision/hash; do not interpret ordinary comments as approval.
 
 Configure enrolled repositories and eligible issue/PR sources. Ingest issue
 opened, labeled, unlabeled, and reopened events (or their polling equivalents).
@@ -306,11 +330,12 @@ Representative routing:
 | Message | Handler/action |
 |---|---|
 | TaskSubmitted / WorkReopened | Apply label guard; for direct requests publish/link a spec issue; otherwise reconcile the eligible workflow |
-| SpecTicketingRequested | Apply label guard; draft ticket breakdown and wait for explicit approval |
-| TicketBreakdownApproved | Validate approved revision; publish `hitl` sub-issues and blockers |
+| SpecTicketingRequested | Apply label guard; inspect native sub-issues; adopt existing graph or trigger automatic breakdown |
+| TicketGraphMissing | Persist breakdown intent; publish/reconcile `hitl` child tickets and native blockers without approval |
+| TicketGraphDiscovered | Persist existing child IDs/dependencies; check current `hitl` and blocker state; do not recreate tickets |
 | IssueReleased | Recheck current labels, parent/dependencies, and readiness; schedule only eligible work |
 | ClarificationProvided | Resume recorded pending decision, subject to current `hitl` guard |
-| SpecApproved | Validate spec revision; schedule ticket breakdown, not direct implementation |
+| SpecApproved | Record optional revision approval; never gate automatic ticket discovery/breakdown |
 | FixRequested | Schedule developer for current branch/revision |
 | ImplementationCompleted | Validate/publish candidate; schedule review and verification |
 | ReviewReceived | Address |
@@ -325,7 +350,7 @@ Representative routing:
 ## State, gates, and concurrency
 
 Suggested lifecycle states: received, triaging, awaiting_clarification, parked,
-specifying, awaiting_spec_approval, implementing, reviewing, verifying,
+specifying, ticketing, implementing, reviewing, verifying,
 awaiting_pr_approval, ready_to_merge, awaiting_merge, deploying, delivered,
 blocked, paused, cancelled.
 
@@ -342,8 +367,10 @@ records: they may arrive concurrently even if the work item has one lifecycle st
 - Check `hitl` before processing any issue-derived event, including `/implement`
   and any previously queued action. Label removal triggers re-evaluation; do not
   automatically remove or bypass `hitl`.
-- Spec parents go through reviewed ticket breakdown; each child initially holds
-  `hitl`, and dependencies must be satisfied before released tickets implement.
+- Triage checks for existing native sub-issues before breakdown; existing graphs
+  are reused, and only a genuinely missing graph is generated automatically.
+- Workflow-created children hold `hitl`; dependencies must be satisfied before
+  released tickets implement. No human breakdown approval is required.
 - A direct request (including one with a plan) MUST first publish/link a `spec`
   issue; only released, dependency-ready child tickets enter implementation.
   `/implement` cannot bypass the spec/ticket path or label guard.
@@ -472,8 +499,9 @@ worktree roots. Do not duplicate prompts or Git/worktree lifecycle implementatio
 - Accept released spec-ticket references and justified fix requests through
   the same developer task contract.
 - Preserve dry/fake seams and reuse existing profiles/execution APIs.
-- First vertical slice: direct request/plan -> GitHub `spec` issue -> approved
-  child ticket -> user removes `hitl` -> developer -> verified draft PR.
+- First vertical slice: direct request/plan -> GitHub `spec` issue -> reuse
+  existing sub-issues or auto-create `hitl` children -> user releases ticket ->
+  developer -> verified draft PR.
 
 ### 4. PR review and CI
 
@@ -486,11 +514,14 @@ worktree roots. Do not duplicate prompts or Git/worktree lifecycle implementatio
 
 ### 5. Specification and human gates
 
-- Adapt `to-spec` for all direct requests, with or without supplied plans, and
-  `to-tickets` for spec-to-child-ticket breakdown; preserve authoring contracts.
+- Adapt `to-spec` for all direct requests, with or without supplied plans.
+- Triage native sub-issues and reuse pre-existing ticket graphs unchanged.
+- Adapt `to-tickets` for unattended breakdown/publication when a spec has no
+  children. The current skill's approval guard MUST change (or a separate
+  automatic handler must provide equivalent breakdown behavior) before
+  implementation. Maintain idempotent creation, native blockers, and crash recovery.
 - Publish no `plan` label; a supplied plan becomes content of a `spec` issue.
-- Gate every child-ticket creation on explicit approval of the latest breakdown.
-- Create children with `hitl`; re-evaluate only after a user removes the label.
+- Create new children with `hitl`; re-evaluate only after a user removes it.
 - Add triage/spec profiles and revisioned spec publication.
 - Parse authorized user commands and correlate pending-question replies.
 - Persist waiting/parked/paused states and resume without holding workers.
@@ -534,10 +565,13 @@ behavioral risks directly; live agents or external GitHub writes are not require
   GitHub issue labeled `spec` with routing metadata before repository work.
 - The source plan's substantive decisions survive conversion to the spec;
   no `plan` label is created or used as a trigger.
-- A `spec` parent produces approved child tickets; only released,
-  dependency-ready child tickets reach the developer.
-- `to-tickets` creates no tickets without explicit breakdown approval; all
-  created children carry `hitl`, even when classified AFK.
+- Triage automatically adopts existing native `spec` sub-issues without
+  changing them; if none exist, it creates a complete ticket graph without user
+  approval. New children carry `hitl`, even when classified AFK.
+- Interrupted publication reconciles intended tickets/links without duplicates;
+  pre-existing user-authored child graphs are not expanded automatically.
+- Only released, dependency-ready child tickets reach the developer; the spec
+  itself is never directly implemented.
 - Any issue with `hitl` is skipped, even on `/implement`, reopen, relabel,
   or queued retry; removing it rechecks blockers/readiness without bypassing gates.
 - Unclassified issues do not start workflows; direct requests do not bypass
