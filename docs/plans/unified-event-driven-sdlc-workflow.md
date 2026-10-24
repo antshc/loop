@@ -11,11 +11,12 @@ requests, agents, CI, and delivery monitoring. One workflow instance follows eac
 work item through triage, specification, implementation, review, verification,
 human approval, delivery, and follow-up.
 
-The developer accepts tasks from a released implementation ticket, an eligible
-plan issue, a direct user request, or a justified fix request from Address or
-Maintainer. A `spec` issue is a planning parent, not an implementation task.
-Existing dev and PR babysitting capabilities become stages and handlers in this
-unified workflow.
+The developer accepts tasks from released implementation tickets or justified
+fix requests from Address or Maintainer. A user can submit a direct request,
+including a complete implementation plan; the workflow transforms it into a
+GitHub issue labeled `spec` before ticketing or repository work. A `spec` issue
+is a planning parent, not an implementation task. Existing dev and PR babysitting
+capabilities become stages and handlers in this unified workflow.
 
 This document consolidates the event-system plan, technical stack, supplied
 decision-flow screenshots, and GitHub user triggers. It describes planned behavior;
@@ -62,43 +63,31 @@ verification and publication before both paths share the new handlers.
    implemented by the workflow runtime.
 10. The initial deployment is a single host with bounded concurrent workers.
     Cross-host workers and an external broker are deferred.
-11. GitHub issue labels determine entry routing. `hitl` is a hard execution
-    exclusion; `spec` and `plan` have distinct routes. Only removing `hitl`
-    can make a previously held ticket eligible for execution.
+11. `spec` is the single GitHub planning-entry label; do not create, require,
+    or route a `plan` label. Direct requests, even when they supply an
+    implementation plan, are published as `spec` issues. `hitl` is a hard
+    exclusion; only removing it can make a held ticket eligible for execution.
 
 ## Decision flow with user triggers
 
 ```text
-USER: Opens a GitHub issue, releases a ticket, or submits a direct request
+USER
+  +-- Direct request (may include implementation plan)
+  |     +-- TRIAGE -> Clarify or park when needed
+  |     +-- TO-SPEC -> Publish GitHub issue labeled spec
+  |
+  +-- GitHub issue opened / updated / released
+        +-- Current label hitl -> SKIP; wait for removal -> Re-evaluate
+        +-- spec issue -> TO-TICKETS: propose vertical-slice breakdown
+        |     +-- USER requests changes -> Revise breakdown; seek approval
+        |     +-- USER approves -> Create hitl child tickets with blockers
+        |                             +-- Wait for user to remove hitl
+        +-- Released spec child -> Check dependencies -> Developer if ready
+        +-- Other issue -> Ignore unless explicitly enrolled
+
+READY, RELEASED CHILD TICKET
   |
   v
-SOURCE ROUTER (GitHub guard runs before all issue actions)
-  +-- Any issue labeled hitl -> SKIP; wait for label removal -> Re-evaluate
-  +-- spec issue -> TO-TICKETS: propose vertical-slice breakdown
-  |     +-- USER approves -> Create child tickets with hitl -> Wait for release
-  |     +-- USER requests edits -> Revise breakdown; request approval again
-  +-- plan issue -> Triage with plan as implementation context
-  +-- Released spec child -> Check blockers and scope -> Developer if ready
-  +-- Direct request -> Triage
-  +-- Other issue -> Ignore unless explicitly enrolled
-  |
-  v
-TRIAGE AGENT
-  +-- Needs clarification
-  |     +-- Ask in issue -> USER replies -> Triage again
-  |
-  +-- Park
-  |     +-- Wait -> USER requests resume -> Triage again
-  |
-  +-- Needs specification
-  |     +-- TO-SPEC -> Publish spec issue (spec + repo routing labels)
-  |           +-- USER requests changes -> Revise spec
-  |           +-- Approved spec -> TO-TICKETS -> Approved child tickets
-  |                +-- Release each ticket by removing hitl -> Developer
-  |
-  +-- Ready to implement -> Developer
-        |
-        v
 DEVELOPER AGENT
   +-- Implement -> Workflow verifies -> Commit/push -> Create/update PR
         |
@@ -169,12 +158,11 @@ authorized actors only. Use GitHub review actions for review approval/changes.
 | User action | Message | Workflow action |
 |---|---|---|
 | Open/relabel/reopen a `spec` issue without `hitl` | SpecTicketingRequested | Read spec; draft child-ticket breakdown; wait for explicit user approval before publication |
-| Open/relabel/reopen a `plan` issue without `hitl` | TaskSubmitted | Use plan as task context; triage readiness and implement only when eligible |
-| Remove `hitl` from an issue | IssueReleased | Re-read current labels, parent links, dependencies, and readiness; enqueue eligible ticket/plan work |
+| Remove `hitl` from an issue | IssueReleased | Re-read current labels, parent links, dependencies, and readiness; enqueue only eligible child-ticket work |
 | Open a spec child ticket with `hitl` | None | Skip; do not schedule agents or other issue processing |
-| Open/relabel/reopen any other `hitl` issue | None | Skip irrespective of `spec`, `plan`, command, or other labels |
+| Open/relabel/reopen any other `hitl` issue | None | Skip irrespective of `spec`, command, or other labels |
 | Open unclassified GitHub issue | None | Ignore unless explicitly enrolled by configuration |
-| Submit direct user request | TaskSubmitted | Persist request; triage; use `to-spec` if spec needed; create/link tracking issue before repository work |
+| Submit direct user request, with or without a plan | TaskSubmitted | Persist request and plan context; triage missing scope; run `to-spec` to create/link a GitHub `spec` issue before ticketing or code changes |
 | Comment /implement on issue | ImplementationRequested | Check scope/readiness; implement or request missing decisions |
 | Comment /spec on issue | SpecificationRequested | Create/revise specification |
 | Comment /approve-spec on issue | SpecApproved | Approve the current explicitly identified spec revision |
@@ -196,21 +184,23 @@ transition. Skip every issue currently labeled `hitl`: no triage, specification,
 ticket breakdown, implementation, comment, or issue closure. Label removal is a
 new event, not retroactive approval; re-read labels and native dependencies before
 scheduling. A still-open or unresolved `hitl` blocker prevents dependant tickets
-from becoming ready. Treat simultaneous `spec` and `plan` labels as ambiguous
-and request reclassification without running agents.
+from becoming ready. Do not use `plan` as a routing label; a plan is input
+content, not a separate issue type.
 
 `spec` issues are planning parents. Use the `to-tickets` contract to propose
 tracer-bullet child tickets with blockers and waves. MUST obtain explicit approval
 of the current breakdown before creating/linking tickets. Every published child
 starts labeled `hitl` (including AFK slices); the user removes `hitl` to release
 each ticket. Do not implement a spec parent directly or silently remove `hitl`.
-A `plan` issue is already scoped for the developer path, subject to triage and
-normal verification/approval gates; do not assume a plan-only issue satisfies the
-`to-tickets` skill's requirement for a `spec` parent.
+An implementation plan can be attached to a spec or supplied through a direct
+request, but it does not create a separate issue type or bypass ticket approval.
 
-Use the `to-spec` contract when a direct request needs a formal spec: publish a
+Use the `to-spec` contract for every direct request, including one with a
+ready-made plan: synthesize its requirements and decisions into a GitHub
 `spec` issue with source/base routing labels, then follow the spec-to-tickets
-route. Keep the tracker issue repository distinct from the source-code repository.
+route. Preserve substantive plan decisions; request missing initiative/base
+metadata when required by the publication contract. Do not use a `plan` label.
+Reconcile duplicate submissions before publishing another spec. Keep the tracker issue repository distinct from the source-code repository.
 `to-spec` and `to-tickets` are authoring contracts to adapt into Python
 handlers; the workflow MUST preserve their publication, duplicate-prevention,
 approval, and HITL guards. Sources:
@@ -315,12 +305,12 @@ Representative routing:
 
 | Message | Handler/action |
 |---|---|
-| TaskSubmitted / WorkReopened | Apply label guard; triage eligible plan/direct requests or reconcile workflow |
+| TaskSubmitted / WorkReopened | Apply label guard; for direct requests publish/link a spec issue; otherwise reconcile the eligible workflow |
 | SpecTicketingRequested | Apply label guard; draft ticket breakdown and wait for explicit approval |
 | TicketBreakdownApproved | Validate approved revision; publish `hitl` sub-issues and blockers |
 | IssueReleased | Recheck current labels, parent/dependencies, and readiness; schedule only eligible work |
 | ClarificationProvided | Resume recorded pending decision, subject to current `hitl` guard |
-| SpecApproved | Schedule developer after revision validation |
+| SpecApproved | Validate spec revision; schedule ticket breakdown, not direct implementation |
 | FixRequested | Schedule developer for current branch/revision |
 | ImplementationCompleted | Validate/publish candidate; schedule review and verification |
 | ReviewReceived | Address |
@@ -354,8 +344,9 @@ records: they may arrive concurrently even if the work item has one lifecycle st
   automatically remove or bypass `hitl`.
 - Spec parents go through reviewed ticket breakdown; each child initially holds
   `hitl`, and dependencies must be satisfied before released tickets implement.
-- Plan issues enter implementation only after triage readiness. `/implement` is
-  not permission to skip unresolved requirements or the label guard.
+- A direct request (including one with a plan) MUST first publish/link a `spec`
+  issue; only released, dependency-ready child tickets enter implementation.
+  `/implement` cannot bypass the spec/ticket path or label guard.
 - Require verified changes before explicit commit/push and confirmed publication
   before replies that claim a fix is available.
 - Preserve GitHub-required review and CI gates. The initial workflow does not merge
@@ -473,13 +464,16 @@ worktree roots. Do not duplicate prompts or Git/worktree lifecycle implementatio
 
 ### 3. Developer path
 
-- Route direct requests and `plan` issues to the developer only after triage
-  readiness; route released spec sub-tickets only after blocker checks.
+- Route direct requests, including ones with implementation plans, through
+  `to-spec` and `to-tickets`; send only released dependency-ready child tickets
+  to the developer.
 - Adapt existing dev task execution behind the shared developer handler.
 - Align commit responsibilities with Python-owned verification/publication.
-- Accept direct requests and issue/spec references through the same task contract.
+- Accept released spec-ticket references and justified fix requests through
+  the same developer task contract.
 - Preserve dry/fake seams and reuse existing profiles/execution APIs.
-- First vertical slice: request -> triage -> developer -> verified draft PR.
+- First vertical slice: direct request/plan -> GitHub `spec` issue -> approved
+  child ticket -> user removes `hitl` -> developer -> verified draft PR.
 
 ### 4. PR review and CI
 
@@ -492,8 +486,9 @@ worktree roots. Do not duplicate prompts or Git/worktree lifecycle implementatio
 
 ### 5. Specification and human gates
 
-- Adapt `to-spec` for direct-request-to-spec publication and `to-tickets` for
-  spec-to-child-ticket breakdown, preserving the existing authoring contracts.
+- Adapt `to-spec` for all direct requests, with or without supplied plans, and
+  `to-tickets` for spec-to-child-ticket breakdown; preserve authoring contracts.
+- Publish no `plan` label; a supplied plan becomes content of a `spec` issue.
 - Gate every child-ticket creation on explicit approval of the latest breakdown.
 - Create children with `hitl`; re-evaluate only after a user removes the label.
 - Add triage/spec profiles and revisioned spec publication.
@@ -535,14 +530,18 @@ retry, and evidence references for inspection.
 Use fake agents/GitHub, temporary SQLite stores, and local Git remotes. Test the
 behavioral risks directly; live agents or external GitHub writes are not required.
 
-- Direct requests and eligible `plan` issues reach the shared developer after
-  triage; `spec` parents instead produce user-approved child-ticket breakdowns.
+- A direct request, including one with a complete plan, creates/links one
+  GitHub issue labeled `spec` with routing metadata before repository work.
+- The source plan's substantive decisions survive conversion to the spec;
+  no `plan` label is created or used as a trigger.
+- A `spec` parent produces approved child tickets; only released,
+  dependency-ready child tickets reach the developer.
 - `to-tickets` creates no tickets without explicit breakdown approval; all
   created children carry `hitl`, even when classified AFK.
 - Any issue with `hitl` is skipped, even on `/implement`, reopen, relabel,
   or queued retry; removing it rechecks blockers/readiness without bypassing gates.
-- Unclassified issues do not start workflows; conflicting `spec` + `plan`
-  labels do not start duplicate routes.
+- Unclassified issues do not start workflows; direct requests do not bypass
+  spec publication, and no separate `plan` issue route exists.
 - Address/CI repair reuses the same work item and PR branch.
 - All triage outcomes and human revision loops work.
 - Duplicate deliveries schedule one logical action; separate consumers retain
