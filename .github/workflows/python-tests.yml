@@ -13,12 +13,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.10"
+
+      - name: Configure Git identity for tests
+        run: |
+          git config --global user.name "Loop CI"
+          git config --global user.email "loop-ci@example.invalid"
 
       - name: Install development dependencies
         run: python -m pip install -e ".[dev]"
