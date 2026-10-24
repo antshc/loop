@@ -71,8 +71,16 @@ verification and publication before both paths share the new handlers.
     create tickets automatically without user approval or default `hitl` labels,
     then immediately schedule the unblocked execution frontier.
 13. `hitl` is an explicit hold for tickets needing human intervention, not a
-    default label or a representation of native ticket dependencies. A held issue
-    is skipped until `hitl` is removed and readiness is rechecked.
+    default label or a representation of native ticket dependencies. It blocks
+    execution until the user removes it and readiness is rechecked. Narrow
+    authoring/question-response actions remain allowed while held; they MUST NOT
+    schedule implementation.
+14. `/spec` requests a description edit on the comment's issue: either the
+    spec parent or an implementation ticket. Ticket scheduling remains automatic;
+    neither `/implement` nor `/approve-spec` is supported.
+15. Agents MUST ask for clarification only when an implementation ticket is
+    blocked by missing information. Python publishes the question in that
+    ticket's comments; the user answers there, then removes `hitl` to release it.
 
 ## Decision flow with user triggers
 
@@ -83,13 +91,17 @@ USER
   |     +-- TO-SPEC -> Publish GitHub issue labeled spec
   |
   +-- GitHub issue opened / updated / released
-        +-- Current label hitl -> SKIP; wait for removal -> Re-evaluate
+        +-- hitl -> HOLD execution; accept only /spec edits and answers
         +-- spec issue -> TRIAGE: discover native sub-issues
         |     +-- Existing sub-issues -> Reuse tickets and blocker graph
         |     +-- No sub-issues -> TO-TICKETS creates children + dependencies
-        |     +-- Schedule all ready tickets without waiting for approval
+        |     +-- Schedule ready tickets automatically without approval
+        |     +-- /spec: revise the spec body
         +-- Child issue -> Check labels + dependencies -> Developer if ready
-        +-- Human-blocked ticket -> Optional hitl hold -> Await user
+        |     +-- /spec: revise this ticket's description
+        |     +-- Blocked by missing clarification -> hitl
+        |           +-- COMMENT question on ticket -> USER answers there
+        |           +-- USER removes hitl -> Recheck and resume
         +-- Other issue -> Ignore unless explicitly enrolled
 
 READY, NON-HITL CHILD TICKET
@@ -103,14 +115,16 @@ PR REVIEW + CI
   +-- USER requests changes or review agent reports findings
   |     +-- ADDRESS AGENT
   |           +-- Fix needed -> Developer -> Push -> Review + CI
-  |           +-- Clarification needed -> USER replies -> Address
+  |           +-- Missing input blocks ticket -> Ask in ticket comments
+  |                 +-- USER answers + removes hitl -> Address
   |           +-- No fix needed -> Explain in PR -> Re-evaluate readiness
   |
   +-- CI fails
   |     +-- MAINTAINER AGENT
   |           +-- Code defect -> Developer -> Push -> Review + CI
   |           +-- Transient failure -> Retry CI
-  |           +-- Blocked -> USER provides input -> Resume
+  |           +-- Missing input blocks ticket -> Ask in ticket comments
+  |                 +-- USER answers + removes hitl -> Resume
   |
   +-- Review completed + CI green + verification evidence
         |
@@ -142,7 +156,7 @@ create linked work items, rather than reopening every delivered workflow.
 | Actor | Responsibility |
 |---|---|
 | Triage | Decide implement, specify, clarify, or park; explain decision |
-| Spec | Produce/revise scope, acceptance criteria, and unresolved questions |
+| Spec | Produce/revise the spec parent or a child ticket description; report the exact affected revision |
 | Developer | Implement a new task or requested code fix |
 | Code reviewer | Inspect changes and produce evidence-backed findings |
 | Address | Investigate review feedback; propose justified fixes; draft replies |
@@ -150,7 +164,7 @@ create linked work items, rather than reopening every delivered workflow.
 | Verifier | Execute/interpret feature checks and collect evidence |
 | Monitor | Identify actionable delivery/product issues |
 | Python workflow | Validate results, transition state, schedule work, run required checks, commit/push, post replies, retry CI, persist progress |
-| Human | Resolve intervention blockers, remove `hitl` holds, review code/evidence, authorize merge or auto-merge |
+| Human | Answer blocking clarification questions in ticket comments, remove `hitl` to release work, review code/evidence, authorize merge or auto-merge |
 
 Address and Maintainer MUST delegate code fixes through the shared developer task
 contract. Agents MUST NOT bypass workflow policy by directly invoking another
@@ -180,9 +194,9 @@ The implementation MUST:
    profile/builder MUST resolve and include those local files in the prompt.
 4. Adapt copied operational rules to this factory's decisions: direct requests
    (including plans) become `spec` issues; triage reuses pre-existing sub-issues;
-   a missing ticket graph is generated automatically without user approval or
-   default `hitl`; native dependencies determine ready work; explicit
-   human-blocked tickets may use `hitl`.
+   missing ticket graphs are created automatically without user approval or
+   default `hitl`; `/spec` revises a target spec/ticket; native dependencies
+   determine ready work. Do not expose a `/to-tickets` comment command.
 5. Keep GitHub discovery, duplicate checks, labels, child issue creation,
    dependency links, publication, retries, and confirmation in Python handlers.
    Agents only synthesize structured spec/ticket drafts; copied `gh` commands
@@ -195,10 +209,10 @@ The implementation MUST:
    adapted policy on a new Brain commit.
 
 Current upstream `to-tickets` requires breakdown approval and `hitl` on all
-created tickets. These two rules MUST be adapted during copying; they MUST NOT
-override the automatic execution policy in this plan. Python validates agent
-results before publishing. The reference copies are guidance, not executable
-GitHub action scripts.
+created tickets. Adapt those rules to the automatic path without approval or
+default `hitl` labels. No `/to-tickets` comment command is implemented for now.
+Python validates agent results before publishing. The reference copies are
+guidance, not executable GitHub action scripts.
 
 ## GitHub and direct-user triggers
 
@@ -215,14 +229,13 @@ a `spec` issue.
 | Open/relabel/reopen a `spec` issue without `hitl` | SpecTicketingRequested | Reuse existing sub-issues or auto-publish missing ticket graph; schedule its ready non-`hitl` frontier immediately |
 | Create or update a non-`hitl` child ticket | TicketReadyCheck | Re-read dependencies and scope; schedule automatically if ready |
 | Remove `hitl` from an issue | IssueReleased | Re-read current labels, parent links, dependencies, and readiness; enqueue eligible work |
-| Open a spec child ticket with `hitl` | None | Skip; do not schedule agents or other issue processing |
-| Open/relabel/reopen any other `hitl` issue | None | Skip irrespective of `spec`, command, or other labels |
+| Open a child ticket with `hitl` | None | Hold implementation; permit explicit `/spec` description edits and recording answers |
+| Open/relabel/reopen any other `hitl` issue | None | Hold automatic work; permit only explicitly allowed content edits and answer intake |
 | Open unclassified GitHub issue | None | Ignore unless explicitly enrolled by configuration |
-| Comment /implement on issue | ImplementationRequested | Check scope/readiness; implement or request missing decisions |
-| Comment /spec on issue | SpecificationRequested | Create/revise specification |
-| Comment /approve-spec on issue | SpecApproved | Optionally record approval of an exact spec revision; ticket discovery/breakdown does not wait for this |
-| Reply to a pending issue question | ClarificationProvided | Resume the waiting decision |
-| Request changes on pending spec | SpecChangesRequested | Return to Spec with feedback |
+| Comment `/spec` on a spec parent | SpecificationChangesRequested | Revise the parent specification using the comment's instructions; record new revision and report drift to existing tickets |
+| Comment `/spec` on a child ticket | TicketDescriptionChangesRequested | Revise that ticket's description/acceptance criteria; preserve issue identity and dependencies; recheck readiness |
+| Ticket is blocked by missing clarification | ClarificationRequested | Publish a precise question with stable ID in ticket comments, add `hitl`, await user's answer |
+| User answers the blocked ticket question in comments | ClarificationProvided | Correlate and persist answer; keep `hitl` until user removes it, then recheck readiness |
 | Comment /retry on issue | RetryRequested | Reconcile existing effects and retry eligible blocked/failed work |
 | Comment /pause on issue | PauseRequested | Stop scheduling new work; let active work reach a safe checkpoint |
 | Comment /resume on issue | ResumeRequested | Reconcile current state; resume paused/parked work |
@@ -244,13 +257,14 @@ a `spec` issue.
 | Close unmerged PR | WorkCancelled | Stop new work; preserve recovery data |
 | Reopen PR | WorkReopened | Reconcile and resume the appropriate state |
 
-For GitHub issue events, evaluate `hitl` first, before any command, agent, or
-transition. Skip every issue currently labeled `hitl`: no triage, specification,
-ticket breakdown, implementation, comment, or issue closure. Label removal is a
-new event, not retroactive approval; re-read labels and native dependencies before
-scheduling. A still-open or unresolved `hitl` blocker prevents dependant tickets
-from becoming ready. Do not use `plan` as a routing label; a plan is input
-content, not a separate issue type.
+For GitHub issue events, evaluate `hitl` before scheduling execution. A held
+issue MUST NOT be triaged for implementation, broken down automatically, assigned
+to Developer, or closed by the factory. Only `/spec` authoring changes to that
+issue, recording user answers, and non-executing status/reconciliation are
+permitted under `hitl`; they MUST preserve the hold. Removing `hitl` is the
+user's release action; re-read labels, revisions, and native dependencies before
+scheduling. An unresolved `hitl` blocker prevents dependent tickets from
+becoming ready. Do not use `plan` as a routing label.
 
 `spec` issues are planning parents. Whenever triage receives an eligible `spec`,
 read its native GitHub sub-issues and blockers first (including closed children):
@@ -261,19 +275,18 @@ read its native GitHub sub-issues and blockers first (including closed children)
   Report coverage gaps or invalid dependencies for separate resolution.
 - No sub-issues: automatically use the `to-tickets` breakdown rules to derive
   tracer-bullet child tickets, dependencies, and waves. Publish/link them without
-  requesting user approval. Do not apply `hitl` by default. Once the graph is
-  confirmed, immediately enqueue its unblocked non-`hitl` frontier for the
-  developer; advance dependent tickets as their blockers complete.
+  requesting user approval or adding `hitl` by default. Immediately enqueue
+  the non-`hitl`, dependency-ready frontier.
 - Interrupted workflow-owned publication: reconcile persisted intended tickets
   against children already created, finish only missing intended tickets/links,
-  and prevent duplicates. This recovery exception does not rewrite a pre-existing
-  user-managed ticket graph.
+  and prevent duplicates. This does not rewrite a pre-existing user-managed graph.
 
-Apply `hitl` only when human intervention is needed (for example a missing
-decision, approval, or access). Record the reason and request the needed action
-before placing the hold. Such a ticket is skipped until the user removes the
-label; recheck dependencies then. A native blocked-by edge alone does not
-require `hitl`: wait for its blocker to complete and recalculate the frontier.
+Apply `hitl` only for explicit human intervention, including a blocked ticket
+that requires clarification. Post the question and reason in the ticket comments
+when the missing information blocks progress. The user MUST answer there and
+remove `hitl` to release execution. A `/spec` description change is allowed
+while held but does not remove the hold. A native blocked-by edge alone does
+not require `hitl`: wait for its blocker to complete.
 Do not implement a spec parent or silently remove an existing `hitl`.
 An implementation plan can be attached to a spec or supplied through a direct
 request, but it does not create a separate issue type or bypass these gates.
@@ -288,23 +301,31 @@ issue repository distinct from the source-code repository.
 `to-spec` and `to-tickets` are authoring contracts to adapt into Python
 handlers. Preserve publication and duplicate-prevention guards. The current
 `to-tickets` skill requires both explicit breakdown approval and `hitl` on
-every new ticket; both rules MUST change (or an automatic workflow-specific
-handler must supply equivalent breakdown behavior) before reuse. This plan
-retains explicit human holds and PR approval, but neither approval nor manual
-release is a default prerequisite to ticket implementation. Sources:
+every new ticket; remove those defaults from the automated factory path.
+User approval/release of a truly held ticket is removing its `hitl` label. Sources:
 [to-spec](https://github.com/antshc/brain/tree/main/plugins/wf/skills/to-spec)
 and [to-tickets](https://github.com/antshc/brain/tree/main/plugins/wf/skills/to-tickets).
 
-Ordinary issue comments provide context. Only explicit commands and replies
-correlated with a pending question trigger issue workflow actions. PR review
-comments and review submissions are explicit review inputs. Record question IDs,
-actor identity, source object ID/revision, and the decision being answered.
+Agents MUST return clarification questions only when a ticket is blocked by
+missing information; they MUST NOT ask optional or speculative questions during
+normal execution. Python MUST add the question as a comment on that ticket,
+include a stable question ID, concise blocking context, and exact information
+needed, then label the ticket `hitl`. Persist the comment ID and pending
+decision. The user MUST answer in that ticket's comments. Removing `hitl`
+without answering an unresolved required question MUST NOT unblock the ticket. An explicit answer
+referencing the question ID/comment (or an unambiguous answer when only one
+question is pending) becomes `ClarificationProvided`. Store the answer while
+held, but do not resume until the user removes `hitl`. Unanswered blockers
+MUST NOT be guessed or bypassed. Ordinary comments are context, not approvals.
 
-A `spec` label triggers ticket discovery/breakdown without requiring spec or
-breakdown approval. A later spec edit MUST NOT silently replace existing child
-tickets; report drift and require a separate explicit change request. Where a
-separate human decision is genuinely needed, correlate it with an exact
-revision/hash; do not interpret ordinary comments as approval.
+A `spec` label triggers automatic ticket discovery/breakdown. A `/spec`
+comment on the spec parent revises its specification; on a child ticket, it
+revises that ticket's description and acceptance criteria. The comment MUST
+describe the requested change; otherwise, do not guess an edit. Publish the
+revised body with a versioned outcome comment. A parent spec edit MUST NOT
+silently rewrite existing children: report drift and require explicit ticket
+changes. No `/implement`, `/approve-spec`, or `/to-tickets` comment command
+is registered. User approval/release is conveyed by removing `hitl`.
 
 Configure enrolled repositories and eligible issue/PR sources. Ingest issue
 opened, labeled, unlabeled, and reopened events (or their polling equivalents).
@@ -388,8 +409,9 @@ caused_by_message_id
 
 A fix keeps the original work-item, branch, and PR identity. It does not accidentally
 create a new feature branch or duplicate PR. A new independent bug gets a linked
-work item. One work item may contain child implementation tasks; parent approval
-and readiness require completion of the relevant children.
+work item. One work item may contain child implementation tasks; parent readiness
+requires completion of the relevant children. Human release of a held child is
+its `hitl` label removal, not a comment command.
 
 Representative routing:
 
@@ -397,13 +419,15 @@ Representative routing:
 |---|---|
 | TaskSubmitted / WorkReopened | Apply label guard; for direct requests publish/link a spec issue; otherwise reconcile the eligible workflow |
 | SpecTicketingRequested | Apply label guard; inspect native sub-issues; adopt existing graph or trigger automatic breakdown |
+| SpecificationChangesRequested | Reconcile exact spec revision; apply `/spec` requested edit to parent; report drift to existing children without rewriting them |
+| TicketDescriptionChangesRequested | Revise target child description per `/spec`; invalidate stale readiness/evidence and preserve `hitl` if held |
 | TicketGraphMissing | Persist breakdown intent; publish/reconcile child tickets and native blockers without approval or default `hitl` |
 | TicketGraphDiscovered | Persist existing child IDs/dependencies; immediately schedule the non-`hitl`, dependency-ready frontier |
 | TicketCompleted | After verified integration, re-evaluate native dependants and schedule newly ready non-`hitl` tickets |
-| HumanInterventionRequired | Record reason; optionally label the blocked ticket `hitl` and stop scheduling it |
-| IssueReleased | Recheck current labels, parent/dependencies, and readiness; schedule only eligible work |
-| ClarificationProvided | Resume recorded pending decision, subject to current `hitl` guard |
-| SpecApproved | Record optional revision approval; never gate automatic ticket discovery/breakdown |
+| HumanInterventionRequired | Stop affected work; if missing clarification blocks a ticket, publish question in its comments and add `hitl` |
+| ClarificationRequested | Persist blocking ticket question and published comment ID; await user answer |
+| ClarificationProvided | Correlate user answer from ticket comments; persist it without bypassing `hitl` |
+| IssueReleased | Recheck current labels, resolved required questions, parent/dependencies, and readiness; keep unresolved tickets blocked |
 | FixRequested | Schedule developer for current branch/revision |
 | ImplementationCompleted | Validate/publish candidate; schedule review and verification |
 | ReviewReceived | Address |
@@ -432,19 +456,24 @@ records: they may arrive concurrently even if the work item has one lifecycle st
   edits or publication.
 - Bind approvals and checks to a spec revision or commit SHA. New commits invalidate
   relevant prior evidence/readiness; stale events cannot make a newer head ready.
-- Check `hitl` before processing any issue-derived event, including `/implement`
-  and any previously queued action. Label removal triggers re-evaluation; do not
-  automatically remove or bypass `hitl`.
+- Check `hitl` before implementation or ticket breakdown/publication. Allow `/spec`
+  description authoring and clarification-answer intake while held, without
+  scheduling implementation or removing the label. User removal triggers
+  re-evaluation; queued work MUST recheck the current hold.
 - Triage checks for existing native sub-issues before breakdown; existing graphs
   are reused, and only a genuinely missing graph is generated automatically.
 - Workflow-created children are not held by default. Schedule ready tickets
-  immediately after breakdown and as blockers complete; no breakdown approval
-  or ticket-release action is needed in the normal path.
-- Add `hitl` only for explicit human intervention; a native dependency blocker
-  merely delays scheduling, without requiring a label.
+  immediately after breakdown and as blockers complete.
+- Add `hitl` only for explicit human intervention. Only when missing information
+  blocks a ticket MUST an agent return a clarification question; Python posts it
+  to the ticket comments and records the pending answer. A native dependency
+  blocker merely delays scheduling, without requiring a label.
 - A direct request (including one with a plan) MUST first publish/link a `spec`
   issue; only non-`hitl`, dependency-ready children enter implementation.
-  `/implement` cannot bypass the spec/ticket path or label guard.
+  No `/implement` or `/approve-spec` comment command is recognized.
+- A `/spec` edit to a ticket MUST preserve its native dependencies and ID;
+  if the ticket is in progress, stop/reconcile work against the new description
+  rather than silently treating old verification as current.
 - Require verified changes before explicit commit/push and confirmed publication
   before replies that claim a fix is available.
 - Preserve GitHub-required review and CI gates. The initial workflow does not merge
@@ -611,8 +640,12 @@ duplicate prompts or Git/worktree lifecycle implementations.
 - Publish no `plan` label; a supplied plan becomes content of a `spec` issue.
 - Create new children without `hitl` by default. Queue the ready frontier
   immediately; label `hitl` only for explicit human intervention blockers.
-- Add triage/spec profiles and revisioned spec publication.
-- Parse authorized user commands and correlate pending-question replies.
+- Add triage/spec profiles and revisioned spec/ticket description publication.
+- Parse authorized `/spec` edits and operational commands, not `/implement`,
+  `/approve-spec`, or `/to-tickets` comments.
+- Ask clarifying questions only for tickets blocked by missing information:
+  publish the question to ticket comments, persist ID/answer, apply `hitl`,
+  and resume only after user answer plus label removal.
 - Persist waiting/parked/paused states and resume without holding workers.
 - Bind approvals to exact revisions and refresh readiness after head changes.
 
@@ -658,6 +691,7 @@ behavioral risks directly; live agents or external GitHub writes are not require
   from the local workflow package; no runtime Brain calls or missing references.
 - The copied source is adapted so agents never perform GitHub writes, solicit
   ticket breakdown approval, or add `hitl` to ordinary generated tickets.
+  No `/to-tickets` GitHub comment route is registered.
 - Triage automatically adopts existing native `spec` sub-issues without
   changing them; if none exist, it creates a complete ticket graph without user
   approval or default `hitl` labels.
@@ -668,13 +702,19 @@ behavioral risks directly; live agents or external GitHub writes are not require
   advances its dependants automatically.
 - With A blocking B, A starts automatically and B waits without `hitl`;
   once A is verified and integrated, B starts automatically.
-- Tickets needing human decisions/access may receive `hitl` with recorded
-  reason and intervention request; removing it resumes only after readiness
-  checks. Existing `hitl` labels remain authoritative.
+- Only tickets actually blocked by missing clarification receive agent questions:
+  the workflow posts a question with an ID in the ticket comments, holds with
+  `hitl`, records the user's comment answer, and waits for user label removal
+  before retrying readiness. Label removal without an answer leaves work blocked.
+- Tickets blocked for other human intervention may also use `hitl`, but no
+  clarification question is generated unless missing information blocks work.
+  Existing `hitl` labels remain authoritative.
 - Only eligible, dependency-ready child tickets reach the developer; the spec
   itself is never directly implemented.
-- Any issue with `hitl` is skipped, even on `/implement`, reopen, relabel,
-  or queued retry; removing it rechecks blockers/readiness without bypassing gates.
+- A held issue cannot execute work, even on reopen/relabel/queued retry;
+  `/spec` description edits and storing the answer to an already-pending
+  clarification are the only authoring/input exceptions. They cannot release
+  the ticket; only user removal of `hitl` can.
 - Unclassified issues do not start workflows; direct requests do not bypass
   spec publication, and no separate `plan` issue route exists.
 - Address/CI repair reuses the same work item and PR branch.
@@ -686,7 +726,12 @@ behavioral risks directly; live agents or external GitHub writes are not require
 - Lease expiry cannot create two concurrent writers.
 - New commits/spec edits invalidate stale approvals and evidence.
 - Out-of-order CI/review events do not regress current readiness.
-- Ordinary comments and unauthorized commands do not trigger execution.
+- `/spec` on the spec parent revises only the spec and reports child drift;
+  `/spec` on a ticket revises only that ticket description and invalidates
+  stale readiness. Missing change instructions produce no guessed edit.
+- `/implement`, `/approve-spec`, and `/to-tickets` are not registered issue
+  comment commands. Ordinary comments and unauthorized commands do not trigger
+  implementation; only correlated answers resolve pending ticket questions.
 - Paused/parked/blocked work resumes correctly; cancellation preserves recovery data.
 - Verification failure and push rejection prevent premature success replies.
 - PR closure/reopening and late review feedback are reconciled.
