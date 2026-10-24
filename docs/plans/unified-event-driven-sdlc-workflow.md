@@ -204,31 +204,45 @@ GitHub action scripts.
 
 Commands below are proposed exact comment commands. Accept them from configured
 authorized actors only. Use GitHub review actions for review approval/changes.
+Direct-user requests enter the GitHub Issues path by first publishing/linking
+a `spec` issue.
+
+### GitHub issues
 
 | User action | Message | Workflow action |
 |---|---|---|
+| Submit direct user request, with or without a plan | TaskSubmitted | Persist request and plan context; triage missing scope; run `to-spec` to create/link a GitHub `spec` issue before ticketing or code changes |
 | Open/relabel/reopen a `spec` issue without `hitl` | SpecTicketingRequested | Reuse existing sub-issues or auto-publish missing ticket graph; schedule its ready non-`hitl` frontier immediately |
 | Create or update a non-`hitl` child ticket | TicketReadyCheck | Re-read dependencies and scope; schedule automatically if ready |
 | Remove `hitl` from an issue | IssueReleased | Re-read current labels, parent links, dependencies, and readiness; enqueue eligible work |
 | Open a spec child ticket with `hitl` | None | Skip; do not schedule agents or other issue processing |
 | Open/relabel/reopen any other `hitl` issue | None | Skip irrespective of `spec`, command, or other labels |
 | Open unclassified GitHub issue | None | Ignore unless explicitly enrolled by configuration |
-| Submit direct user request, with or without a plan | TaskSubmitted | Persist request and plan context; triage missing scope; run `to-spec` to create/link a GitHub `spec` issue before ticketing or code changes |
 | Comment /implement on issue | ImplementationRequested | Check scope/readiness; implement or request missing decisions |
 | Comment /spec on issue | SpecificationRequested | Create/revise specification |
 | Comment /approve-spec on issue | SpecApproved | Optionally record approval of an exact spec revision; ticket discovery/breakdown does not wait for this |
-| Reply to a pending question | ClarificationProvided | Resume the waiting decision |
+| Reply to a pending issue question | ClarificationProvided | Resume the waiting decision |
 | Request changes on pending spec | SpecChangesRequested | Return to Spec with feedback |
+| Comment /retry on issue | RetryRequested | Reconcile existing effects and retry eligible blocked/failed work |
+| Comment /pause on issue | PauseRequested | Stop scheduling new work; let active work reach a safe checkpoint |
+| Comment /resume on issue | ResumeRequested | Reconcile current state; resume paused/parked work |
+| Close issue | WorkCancelled | Stop new work; preserve recovery data |
+| Reopen issue | WorkReopened | Reconcile and re-triage or resume the appropriate state |
+
+### Pull requests
+
+| User action | Message | Workflow action |
+|---|---|---|
 | Submit PR review requesting changes | ReviewReceived | Schedule Address |
 | New eligible review comment/follow-up | ReviewReceived | Schedule Address; deduplicate by comment revision |
-| Comment /retry on issue or PR | RetryRequested | Reconcile existing effects and retry eligible blocked/failed work |
-| Comment /pause | PauseRequested | Stop scheduling new work; let active work reach a safe checkpoint |
-| Comment /resume | ResumeRequested | Reconcile current state; resume paused/parked work |
 | Approve PR | PullRequestApproved | Record approval for reviewed commit; re-evaluate gates |
 | Merge PR | PullRequestMerged | Track CI/CD and delivery |
 | Explicitly enable auto-merge | AutoMergeEnabled | Let GitHub enforce required checks and approvals |
-| Close issue or close unmerged PR | WorkCancelled | Stop new work; preserve recovery data |
-| Reopen issue or PR | WorkReopened | Reconcile and re-triage or resume the appropriate state |
+| Comment /retry on PR | RetryRequested | Reconcile existing effects and retry eligible blocked/failed work |
+| Comment /pause on PR | PauseRequested | Stop scheduling new work; let active work reach a safe checkpoint |
+| Comment /resume on PR | ResumeRequested | Reconcile current state; resume paused/parked work |
+| Close unmerged PR | WorkCancelled | Stop new work; preserve recovery data |
+| Reopen PR | WorkReopened | Reconcile and resume the appropriate state |
 
 For GitHub issue events, evaluate `hitl` first, before any command, agent, or
 transition. Skip every issue currently labeled `hitl`: no triage, specification,
