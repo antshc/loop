@@ -7,7 +7,7 @@ from collections.abc import Callable, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .records import TicketWorkflowError
+from ..model.records import TicketWorkflowError
 
 
 Clock = Callable[[], datetime]

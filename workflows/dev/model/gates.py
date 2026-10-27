@@ -6,7 +6,7 @@ import re
 from collections.abc import Iterable
 from pathlib import Path
 
-from .checkout import GitService
+from workflows.shared.git import GitClient
 
 
 # The machinery that proves the app: a verification fix must never change what grades it.
@@ -29,13 +29,13 @@ _DRIVES = re.compile(r"\bdriv\w+", re.IGNORECASE)
 _PROVES = re.compile(r"\b(prove|proof)\b", re.IGNORECASE)
 
 
-def made_no_commit(git: GitService, path: Path, head_sha: str) -> str | None:
+def made_no_commit(git: GitClient, path: Path, head_sha: str) -> str | None:
     """The violation when the agent moved HEAD: agents edit, the harness commits."""
     head = git.head(path)
     return None if head.sha == head_sha else f"the agent committed ({head.sha}); only the harness commits"
 
 
-def readonly_violation(git: GitService, path: Path, head_sha: str, status_before: str) -> str | None:
+def readonly_violation(git: GitClient, path: Path, head_sha: str, status_before: str) -> str | None:
     """The violation when a read-only agent moved HEAD or changed the working tree compared with `status_before`."""
     violation = made_no_commit(git, path, head_sha)
     if violation is not None:

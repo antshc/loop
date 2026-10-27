@@ -6,7 +6,7 @@ import sys
 from copy import deepcopy
 
 import pytest
-from dishka import Provider, Scope
+from dishka import Provider
 
 from loop import GitCli, GitRuntime, fake_agent
 from workflows.pr_babysit.composition.entry import build_container, maintain_pr
@@ -15,6 +15,7 @@ from workflows.pr_babysit.monitor.pr import CheckoutGuard
 from workflows.pr_babysit.settings import Repository, Settings
 from workflows.shared.agents.launcher import AgentFactory
 from workflows.shared.github.account import GitHub
+from workflows.shared.providers import bind
 from workflows.shared.telemetry import Telemetry
 
 
@@ -29,20 +30,6 @@ def comment(id="c1", login="reviewer", body="Check this"):
 def thread(comments=None, resolved=False):
     return {"id": "t1", "isResolved": resolved, "isOutdated": False, "path": "cart.py", "line": 4,
             "comments": comments if comments is not None else [comment()]}
-
-
-def bind(*bindings: tuple[type, object]) -> Provider:
-    """An override provider binding each type to a fixed instance."""
-    provider = Provider(scope=Scope.APP)
-    for key, value in bindings:
-        provider.provide(_constant(value), provides=key, override=True)
-    return provider
-
-
-def _constant(value):
-    def factory():
-        return value
-    return factory
 
 
 class LocalGuard:

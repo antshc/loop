@@ -10,6 +10,9 @@ from typing import NamedTuple
 
 from loop import AgentWorkspace
 
+from workflows.shared.git import Commit  # noqa: F401  (re-exported for the slices)
+from workflows.shared.github.pull_requests import PullRequest  # noqa: F401
+
 
 def loop_session_name(number: int, title: str) -> str:
     """Names an agent session for its source Spec."""
@@ -53,22 +56,6 @@ class AgentCommitSubject:
     def to_subject(self) -> str:
         """The required prefix of a Ticket's delivering commit subject."""
         return f"ccode({self}): "
-
-
-@dataclass(frozen=True)
-class Commit:
-    sha: str
-    subject: str
-    body: str = ""
-
-
-@dataclass(frozen=True)
-class PullRequest:
-    number: int
-    title: str
-    url: str
-    branch: str
-    body: str = ""
 
 
 HITL_LABEL = "hitl"

@@ -5,12 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from loop import AgentWorkspace, GitOptions
+from loop import AgentWorkspace, GitOptions, Phases
 from workflows.dev.tests.doubles import DevHarness, issue, new_agent_for
-from workflows.dev.records import RepositoryId, Spec
-from workflows.dev.platforms import TicketsTracker
-from workflows.dev.records import AgentWorkflow, TicketContext, TicketResult, TicketWorkflowError
-from workflows.dev.attempt import deliver_tickets
+from workflows.dev.model.records import RepositoryId, Spec
+from workflows.dev.tracker.tickets import TicketsTracker
+from workflows.dev.model.records import AgentWorkflow, TicketContext, TicketResult, TicketWorkflowError
+from workflows.dev.deliver.tickets import TicketDeliverer
 
 
 def _deliver(harness: DevHarness, delegate: AgentWorkflow, *, spec: Spec | None = None, max_failures: int = 2) -> bool:
@@ -18,16 +18,15 @@ def _deliver(harness: DevHarness, delegate: AgentWorkflow, *, spec: Spec | None 
     spec = spec or next(iter(tracker.specs()))
     builder = new_agent_for(harness.runner, harness.git_service, harness.root)()
     with builder.with_git(GitOptions()).open() as worktree:
-        return deliver_tickets(
-            spec,
-            worktree,
-            delegate,
-            git=harness.git,  # type: ignore[arg-type]
-            tracker=tracker,
-            store=harness.store,
+        deliverer = TicketDeliverer(
+            harness.git,  # type: ignore[arg-type]
+            tracker,
+            harness.store,
+            Phases(),
             ticket_repository=RepositoryId("owner", "repo"),
             max_failures=max_failures,
         )
+        return deliverer.deliver(spec, worktree, delegate)
 
 
 def _complete(harness: DevHarness, context: TicketContext) -> TicketResult:

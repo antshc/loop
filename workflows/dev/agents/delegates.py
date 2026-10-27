@@ -1,30 +1,22 @@
-"""Named prompt templates and the default implementation agent delegate."""
+"""The agent delegates each stage runs, the profiles they run under, and their prompt arguments."""
 
 from __future__ import annotations
 
 import json
-import logging
-import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import asdict, replace
 from pathlib import Path
 
 from loop import DEFAULT, AgentRequest, AgentWorkspace, Role
 
-from .definition import Owner
-from .records import (
+from ..model.definition import Owner
+from ..model.records import (
     AgentCommitSubject, Ticket, TicketContext, TicketResult as DevResult, TicketWorkflowError as DevError,
     PlanContext, PlanResult, ChoreContext, ChoreResult, VerifyContext, VerifyResult,
-    ReviewContext, ReviewResult, loop_session_name,
+    ReviewContext, ReviewResult,
 )
-from .reply import DevResponse, PlanResponse, VerifyResponse, ChoreResponse, ReviewResponse
-
-
-logger = logging.getLogger("workflow.dev")
-
-
-PROMPTS = Path(__file__).parent / "prompts"
-PROMPT = PROMPTS / "implement.md"
+from ..model.reply import DevResponse, PlanResponse, VerifyResponse, ChoreResponse, ReviewResponse
+from .prompts import render_prompt
 
 
 DEVELOPER = replace(DEFAULT, name=Role.DEVELOPER)
@@ -32,35 +24,6 @@ PLANNER = replace(DEFAULT, name=Owner.PLANNER)
 VERIFIER = replace(DEFAULT, name=Owner.VERIFIER)
 CHORE = replace(DEFAULT, name=Owner.CHORE)
 REVIEWER = replace(DEFAULT, name=Owner.REVIEWER)
-
-
-def load_prompt(name: str) -> str:
-    """Reads a named Markdown template from the dev prompt folder."""
-    return (PROMPTS / f"{name}.md").read_text()
-
-
-class PromptError(DevError):
-    """A prompt template placeholder has no matching argument."""
-
-
-_PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
-
-
-def render_prompt(template: str, args: Mapping[str, str]) -> str:
-    """Replaces each `{{KEY}}` placeholder; a missing argument raises, an unused one is logged."""
-    used: set[str] = set()
-
-    def substitute(match: re.Match[str]) -> str:
-        key = match[1]
-        if key not in args:
-            raise PromptError(f"missing prompt argument: {key}")
-        used.add(key)
-        return args[key]
-
-    rendered = _PLACEHOLDER.sub(substitute, template)
-    for key in sorted(set(args) - used):
-        logger.warning("unused prompt argument: %s", key)
-    return rendered
 
 
 def prompt_args(

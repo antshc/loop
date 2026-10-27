@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from workflows.dev.platforms import GitHubRepo, PullRequestClient
+from workflows.shared.github.pull_requests import PullRequests as PullRequestClient
+from workflows.shared.github.repo import GitHubRepo
 from workflows.dev.tests.doubles import FakeGhCli
 
 

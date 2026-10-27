@@ -8,7 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from workflows.dev import HARNESS, PROMPT, agent, load_prompt
+from workflows.dev import HARNESS, PROMPT, load_prompt
+from workflows.dev.agents import prompts
 from workflows.dev.tests.doubles import DevHarness
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -29,7 +30,7 @@ def test_harness_and_default_prompt_paths_survive_the_package_move(
 def test_missing_named_prompt_raises_instead_of_falling_back(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(agent, "PROMPTS", tmp_path)
+    monkeypatch.setattr(prompts, "PROMPTS", tmp_path)
 
     with pytest.raises(FileNotFoundError, match="missing.md"):
         load_prompt("missing")
@@ -38,7 +39,7 @@ def test_missing_named_prompt_raises_instead_of_falling_back(
 def test_missing_default_prompt_is_logged_and_fails_before_opening_a_worktree(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(agent, "PROMPTS", tmp_path)
+    monkeypatch.setattr(prompts, "PROMPTS", tmp_path)
     harness = DevHarness(tmp_path)
 
     assert harness.run(argv=["--log-dir", str(harness.log_dir), "--log-level", "DEBUG"]) == 1
@@ -47,9 +48,10 @@ def test_missing_default_prompt_is_logged_and_fails_before_opening_a_worktree(
     assert "implement.md" in (harness.log_dir / "dev.log").read_text()
 
 
-def test_dev_runs_with_its_resources_and_no_sibling_workflow_files(tmp_path: Path) -> None:
+def test_dev_runs_with_its_resources_and_the_shared_package_but_no_sibling_workflow(tmp_path: Path) -> None:
     package = tmp_path / "workflows" / "dev"
     shutil.copytree(ROOT / "workflows/dev", package, ignore=shutil.ignore_patterns("__pycache__"))
+    shutil.copytree(ROOT / "workflows/shared", package.parent / "shared", ignore=shutil.ignore_patterns("__pycache__"))
     (package.parent / "__init__.py").write_text("")
     environment = os.environ | {"PYTHONPATH": str(ROOT / "src")}
 

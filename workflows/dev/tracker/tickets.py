@@ -1,125 +1,16 @@
-"""GitHub access, work tracking, and pull requests for dev."""
+"""The harness repo's Spec/Ticket tracker on GitHub issues and sub-issues."""
 
 from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable, Iterable
-from dataclasses import replace
-from pathlib import Path
+from collections.abc import Iterable
 from typing import Any
 
-from .commands import CommandError, cli_runner, run_command
-from .records import (
-    Comment, PlannedTicket, PullRequest, Repository, Spec, Ticket, TicketWorkflowError, _AddLabel, _Change, _CommentOn,
-)
+from workflows.shared.github.repo import GhRunner, GitHubRepo
+from workflows.shared.process import CommandError
 
-
-_SLUG_REMOTE = re.compile(r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?/?$")
-
-
-class GhCli:
-    """Wraps one `gh` invocation; the only place `gh` is started."""
-
-    def __init__(self, *, cwd: Path | None = None) -> None:
-        self._call = cli_runner("gh", cwd=cwd)
-
-    def __call__(self, args: tuple[str, ...]) -> str:
-        return self._call(args)
-
-
-GhRunner = Callable[[tuple[str, ...]], str]
-
-
-class GitHubRepo:
-    """One GitHub repository reached through `gh`; the shared seam under the issue and pull-request clients."""
-
-    def __init__(self, owner: str, name: str, *, gh: GhRunner) -> None:
-        self.owner = owner
-        self.name = name
-        self._gh = gh
-
-    @classmethod
-    def from_origin(cls, checkout: Path) -> GitHubRepo:
-        """The repo behind `checkout`'s `origin` remote; ValueError when it is not a GitHub remote."""
-        url = run_command(("git", "remote", "get-url", "origin"), cwd=checkout).strip()
-        match = _SLUG_REMOTE.search(url)
-        if match is None:
-            raise ValueError(f"unsupported remote: {url}")
-        return cls(match["owner"], match["repo"], gh=GhCli(cwd=checkout))
-
-    @property
-    def slug(self) -> str:
-        """`owner/name`, as `gh --repo` expects it."""
-        return f"{self.owner}/{self.name}"
-
-    def run(self, args: tuple[str, ...]) -> str:
-        """Runs `gh <args>` and returns its stdout."""
-        return self._gh(args)
-
-    def graphql(self, query: str, *, paginate: bool = False, scoped: bool = True, **variables: str | int) -> str:
-        """Runs a GraphQL query; `scoped` also passes the `$owner`/`$repo` variables."""
-        args = ["api", "graphql"]
-        if paginate:
-            args += ["--paginate", "--slurp"]
-        args += ["-f", f"query={query}"]
-        if scoped:
-            args += ["-f", f"owner={self.owner}", "-f", f"repo={self.name}"]
-        for name, value in variables.items():
-            flag = "-F" if isinstance(value, int) else "-f"
-            args += [flag, f"{name}={value}"]
-        return self._gh(tuple(args))
-
-
-class PullRequestClient:
-    """Creates draft PRs or reuses open PRs in one repository through `gh`."""
-
-    def __init__(self, repo: GitHubRepo) -> None:
-        self._repo = repo
-
-    def create_draft_pull_request(self, head: str, base: str, title: str, body: str = "") -> PullRequest:
-        """One draft PR per head branch: returns the open PR for `head` when there is one, else creates it."""
-        existing = self._find_pull_request(head)
-        if existing is not None:
-            if body and existing.body != body:
-                self._repo.run(("pr", "edit", str(existing.number), "--repo", self._repo.slug, "--body", body))
-                return replace(existing, body=body)
-            return existing
-        output = self._repo.run(
-            (
-                "pr", "create",
-                "--repo", self._repo.slug,
-                "--head", head,
-                "--base", base,
-                "--title", title,
-                "--body", body,
-                "--draft",
-            )
-        )
-        match = re.search(r"/pull/(\d+)", output.strip())
-        number = int(match.group(1)) if match else 0
-        return PullRequest(number=number, title=title, url=output.strip(), branch=head, body=body)
-
-    def mark_ready(self, pull_request: str) -> None:
-        """Takes a PR out of draft; `pull_request` is its number or URL."""
-        self._repo.run(("pr", "ready", pull_request, "--repo", self._repo.slug))
-
-    def _find_pull_request(self, head_branch: str) -> PullRequest | None:
-        output = self._repo.run(
-            (
-                "pr", "list",
-                "--repo", self._repo.slug,
-                "--state", "open",
-                "--head", head_branch,
-                "--json", "number,title,url,headRefName,body",
-            )
-        )
-        prs = json.loads(output)
-        if not prs:
-            return None
-        pr = prs[0]
-        return PullRequest(number=pr["number"], title=pr["title"], url=pr["url"], branch=pr["headRefName"], body=pr.get("body") or "")
-
+from ..model.records import Comment, PlannedTicket, Spec, Ticket, TicketWorkflowError, _AddLabel, _Change, _CommentOn
 
 _ISSUE_FIELDS = (
     "number title url state body labels(first: 20) { nodes { name } }"
@@ -194,6 +85,11 @@ class TicketsTracker:
         self._name = name
         self._gh = gh
 
+    @classmethod
+    def of(cls, github: GitHubRepo) -> TicketsTracker:
+        """The tracker on `github`'s issues."""
+        return cls(github.owner, github.name, gh=github.run)
+
     def specs(self) -> Iterable[Spec]:
         """Every open Spec on the harness tracker, each with its deliverable Tickets."""
         specs = []
@@ -264,17 +160,3 @@ class TicketsTracker:
             self._gh(("issue", "edit", number, "--repo", slug, "--add-label", change.label))
         else:
             self._gh(("issue", "close", number, "--repo", slug, "--comment", change.comment))
-
-
-GithubFactory = Callable[[Path], GitHubRepo]
-
-
-def github_for(repository: Repository, factory: GithubFactory | None) -> GitHubRepo:
-    """Creates the repository client, using the injected factory when supplied."""
-    if factory is not None:
-        return factory(repository.checkout)
-    return GitHubRepo(
-        repository.owner_name.owner,
-        repository.owner_name.repo,
-        gh=GhCli(cwd=repository.checkout),
-    )

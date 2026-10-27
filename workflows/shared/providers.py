@@ -32,3 +32,17 @@ class SharedProvider(Provider):
         return GhCli(run)
 
     github = provide(GitHub)
+
+
+def bind(*bindings: tuple[object, object]) -> Provider:
+    """An APP-scope override provider binding each key to a fixed instance; for test fakes and dry runs."""
+    provider = Provider(scope=Scope.APP)
+    for key, value in bindings:
+        provider.provide(_constant(value), provides=key, override=True)
+    return provider
+
+
+def _constant(value: object):
+    def factory() -> object:
+        return value
+    return factory

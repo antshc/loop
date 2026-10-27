@@ -9,17 +9,24 @@ from functools import partial
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
-from unittest.mock import patch
 
 from loop import (
     AgentBuilder, AgentContext, AgentProfile, AgentRequest, CliOutcome, DockerRuntime,
     GitOptions, LoopHookError, LoopHookPoint, NativeHandle, RunContext,
 )
-from workflows.dev import run as dev
-from workflows.dev.checkout import GitService
-from workflows.dev.journal import FileExecutionStore
-from workflows.dev.platforms import GitHubRepo
-from workflows.dev.records import AgentCommitSubject, Commit, Repository, RepositoryId
+from workflows.dev.agents.delegates import implement_ticket
+from workflows.dev.agents.prompts import load_prompt
+from workflows.dev.composition.entry import main
+from workflows.dev.composition.repositories import configured_repositories
+from workflows.dev.deliver.journal import FileExecutionStore
+from workflows.dev.model.records import AgentCommitSubject, Commit, Repository, RepositoryId
+from workflows.dev.model.repositories import GithubFactory, Harness, RepositoryWorkflow, Targets
+from workflows.shared.agents.launcher import AgentFactory
+from workflows.shared.git import GitClient
+from workflows.shared.github.repo import GitHubRepo
+from workflows.shared.process import CommandRunner
+from workflows.shared.providers import bind
+from workflows.shared.telemetry import ObserverFactory
 
 
 class FakeGhCli:
@@ -271,10 +278,11 @@ class FakeWorkflowGit:
         return not self.dirty
 
 
-class FakeRepositoryGit(GitService):
+class FakeRepositoryGit(GitClient):
     """Routes Git calls to isolated fake histories and rejects unexpected checkout or worktree paths."""
 
     def __init__(self, paths: dict[Path, FakeWorkflowGit]) -> None:
+        super().__init__(CommandRunner())
         self.paths = paths
 
     def fetch(self, path: Path) -> None:
@@ -393,24 +401,27 @@ class DevHarness:
             worktrees=self.root / "workspace" / f"{self.root.name}.worktrees",
             owner_name=RepositoryId("owner", "repo"),
         )
-        extra = {"new_observer": new_observer} if new_observer is not None else {}
-        configured = dev.configured_repositories
-        def repository_slice(repository):
+        def targets() -> Targets:
+            # Resolved inside `main`, so a missing prompt fails the run instead of the test setup.
+            if repositories is not None:
+                return Targets(repositories)  # type: ignore[arg-type]
             if all_phases:
-                return configured(repository)
-            from workflows.dev.agent import implement_ticket, load_prompt
-            from workflows.dev.repositories import RepositoryWorkflow
-            return (RepositoryWorkflow(repository, partial(implement_ticket, template=load_prompt("implement"))),)
-        with patch.object(dev, "HARNESS", harness), patch.object(dev, "configured_repositories", repository_slice):
-            return dev.main(
-                argv if argv is not None else ["--log-dir", str(self.log_dir)],
-                git=self.git,  # type: ignore[arg-type]
-                github_factory=github_factory or (lambda checkout: self.github),  # type: ignore[arg-type,return-value]
-                new_agent=new_agent_for(self.runner, self.git_service, self.root),
-                store=store or self.store,
-                repositories=repositories,
-                **extra,  # type: ignore[arg-type]
-            )
+                return configured_repositories(harness)
+            return Targets((RepositoryWorkflow(harness, partial(implement_ticket, template=load_prompt("implement"))),))
+
+        by_checkout = github_factory or (lambda checkout: self.github)
+        bindings: list[tuple[object, object]] = [
+            (Harness, Harness(harness)),
+            (GitClient, self.git),
+            (GithubFactory, lambda repository: by_checkout(repository.checkout)),
+            (AgentFactory, new_agent_for(self.runner, self.git_service, self.root)),
+            (FileExecutionStore, store or self.store),
+        ]
+        if new_observer is not None:
+            bindings.append((ObserverFactory, new_observer))
+        overrides = bind(*bindings)
+        overrides.provide(targets, provides=Targets, override=True)
+        return main(argv if argv is not None else ["--log-dir", str(self.log_dir)], providers=(overrides,))
 
 
 def crash(output: str = "") -> Handler:

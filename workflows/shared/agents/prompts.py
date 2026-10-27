@@ -23,8 +23,8 @@ def placeholders(template: str) -> set[str]:
     return set(_PLACEHOLDER.findall(template))
 
 
-def render(template: str, args: Mapping[str, str]) -> str:
-    """Replaces each `{{KEY}}` placeholder; a missing argument raises, an unused one is logged."""
+def render(template: str, args: Mapping[str, str], *, log: logging.Logger = logger) -> str:
+    """Replaces each `{{KEY}}` placeholder; a missing argument raises, an unused one is logged on `log`."""
     used: set[str] = set()
 
     def substitute(match: re.Match[str]) -> str:
@@ -36,7 +36,7 @@ def render(template: str, args: Mapping[str, str]) -> str:
 
     rendered = _PLACEHOLDER.sub(substitute, template)
     for key in sorted(set(args) - used):
-        logger.warning("unused prompt argument: %s", key)
+        log.warning("unused prompt argument: %s", key)
     return rendered
 
 

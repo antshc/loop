@@ -68,10 +68,47 @@ forbidden_modules = [
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
-name = "Ticket orchestration imports no agent workflow"
+name = "Dev stages run the delegates they are given, never a concrete agent"
 type = "forbidden"
-source_modules = ["workflows.dev.attempt"]
-forbidden_modules = ["workflows.dev.agent", "workflows.dev.repositories", "workflows.dev.run"]
+source_modules = [
+    "workflows.dev.backlog",
+    "workflows.dev.chore",
+    "workflows.dev.deliver",
+    "workflows.dev.model",
+    "workflows.dev.plan",
+    "workflows.dev.review",
+    "workflows.dev.tracker",
+    "workflows.dev.verify",
+]
+forbidden_modules = ["workflows.dev.agents"]
+
+[[tool.importlinter.contracts]]
+name = "Dev features never reach back into their composition root"
+type = "forbidden"
+source_modules = [
+    "workflows.dev.agents",
+    "workflows.dev.backlog",
+    "workflows.dev.chore",
+    "workflows.dev.deliver",
+    "workflows.dev.model",
+    "workflows.dev.plan",
+    "workflows.dev.review",
+    "workflows.dev.tracker",
+    "workflows.dev.verify",
+]
+forbidden_modules = ["workflows.dev.composition"]
+
+[[tool.importlinter.contracts]]
+name = "Dev stages are independent; only the backlog router sequences them"
+type = "independence"
+modules = [
+    "workflows.dev.chore",
+    "workflows.dev.deliver",
+    "workflows.dev.plan",
+    "workflows.dev.review",
+    "workflows.dev.tracker",
+    "workflows.dev.verify",
+]
 
 [[tool.importlinter.contracts]]
 name = "Shared workflow infrastructure imports no workflow slice"
@@ -98,6 +135,15 @@ source_modules = [
     "workflows.pr_babysit.publish",
     "workflows.pr_babysit.settings",
     "workflows.pr_babysit.watch",
+    "workflows.dev.agents",
+    "workflows.dev.backlog",
+    "workflows.dev.chore",
+    "workflows.dev.deliver",
+    "workflows.dev.model",
+    "workflows.dev.plan",
+    "workflows.dev.review",
+    "workflows.dev.tracker",
+    "workflows.dev.verify",
 ]
 forbidden_modules = ["dishka"]
 

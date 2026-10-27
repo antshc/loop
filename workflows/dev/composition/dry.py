@@ -10,8 +10,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import tempfile
 
+from dishka import Provider
+
 from loop import (
-    AgentBuilder,
     AgentRequest,
     FakeCliRunner,
     FakeReply,
@@ -24,11 +25,16 @@ from loop import (
     fake_agent,
 )
 
-from .checkout import GitService
-from .commands import run_command
-from .journal import FileExecutionStore
-from .platforms import GitHubRepo
-from .records import Commit, RepositoryId
+from workflows.shared.agents.launcher import AgentFactory
+from workflows.shared.git import Commit, GitClient
+from workflows.shared.github.repo import GitHubRepo
+from workflows.shared.process import CommandRunner
+from workflows.shared.providers import bind
+
+from ..deliver.journal import FileExecutionStore
+from ..model.records import Repository, RepositoryId
+from ..model.repositories import GithubFactory
+from .providers import SessionReaders
 
 
 logger = logging.getLogger("workflow.dev")
@@ -55,15 +61,16 @@ _SUBJECT = re.compile(r"subject `(?P<prefix>ccode\((?P<identifier>[^)|]+\|(?P<nu
 _TICKET_JSON = re.compile(r"<ticket-json>\n(?P<json>.*?)\n</ticket-json>", re.DOTALL)
 
 
-class DryGit(GitService):
+class DryGit(GitClient):
     """An in-memory history on one branch: a commit list and how much of it `origin` already holds."""
 
     def __init__(self) -> None:
+        super().__init__(CommandRunner())
         self.commits = [Commit("base0000", "base")]
         self._pushed = 1
 
-    def commit(self, subject: str) -> str:
-        """Adds a commit and returns its SHA."""
+    def commit(self, subject: str) -> str:  # type: ignore[override]
+        """Adds a commit and returns its SHA; the dry agent commits, the Workflow never does with nothing changed."""
         sha = f"c{len(self.commits):07d}"
         self.commits.append(Commit(sha, subject))
         return sha
@@ -161,8 +168,9 @@ Committer = Callable[[Path, str], str]
 
 def commit_in_worktree(cwd: Path, subject: str) -> str:
     """Makes a real empty commit in `cwd` and returns its SHA; for a fake agent over real Git."""
-    run_command(("git", "commit", "--allow-empty", "-m", subject), cwd=cwd)
-    return run_command(("git", "rev-parse", "HEAD"), cwd=cwd).strip()
+    run = CommandRunner()
+    run(("git", "commit", "--allow-empty", "-m", subject), cwd=cwd)
+    return run(("git", "rev-parse", "HEAD"), cwd=cwd).strip()
 
 
 @dataclass
@@ -258,15 +266,20 @@ class Fakes:
         commit: Committer = (lambda cwd, subject: self._git.commit(subject)) if "git" in self.seams else commit_in_worktree
         self._runner = FakeCliRunner(ScriptedAgent(commit, rework), speed=speed)
 
-    def git(self) -> GitService | None:
+    def git(self) -> GitClient | None:
         """The in-memory Git when faked, else None."""
         return self._git if "git" in self.seams else None
 
-    def github_factory(self) -> Callable[[Path], GitHubRepo] | None:
+    def github_factory(self) -> GithubFactory | None:
         """A factory of the canned GitHub repository when faked, else None."""
-        return (lambda checkout: GitHubRepo(DRY_TARGET.owner, DRY_TARGET.repo, gh=self._gh)) if "github" in self.seams else None
+        if "github" not in self.seams:
+            return None
 
-    def new_agent(self) -> Callable[[], AgentBuilder] | None:
+        def github(repository: Repository) -> GitHubRepo:
+            return GitHubRepo(DRY_TARGET.owner, DRY_TARGET.repo, gh=self._gh)
+        return github
+
+    def new_agent(self) -> AgentFactory | None:
         """Builders over the scripted agent when faked, else None; the worktree is a temporary directory only with a faked git."""
         if "agent" not in self.seams:
             return None
@@ -280,3 +293,19 @@ class Fakes:
     def store(self) -> FileExecutionStore | None:
         """A failure log in a fresh temporary directory when faked, else None."""
         return FileExecutionStore(Path(tempfile.mkdtemp(prefix="loop-fake-log-"))) if "store" in self.seams else None
+
+    def provider(self) -> Provider:
+        """Overrides exactly the faked seams; the rest keep their real registrations."""
+        git, github, new_agent, readers, store = (
+            self.git(), self.github_factory(), self.new_agent(), self.readers(), self.store()
+        )
+        bindings: list[tuple[object, object]] = []
+        if git is not None:
+            bindings.append((GitClient, git))
+        if github is not None:
+            bindings.append((GithubFactory, github))
+        if new_agent is not None:
+            bindings += [(AgentFactory, new_agent), (SessionReaders, SessionReaders(readers))]
+        if store is not None:
+            bindings.append((FileExecutionStore, store))
+        return bind(*bindings)
