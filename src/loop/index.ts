@@ -1,6 +1,6 @@
 export { type AgentClient, CliAgentClient } from './agents/client.ts';
 export { AgentWrapper, DockerAgent, GitAgent } from './agents/wrappers.ts';
-export { AgentBuilder } from './builder.ts';
+export { AgentBuilder, AgentWorkspace } from './builder.ts';
 export { type AgentCli, AgentProfile, type AgentProfileInit, type PermissionAgentCli } from './clis/base.ts';
 export { CodexCli, type CodexCliOptions } from './clis/codex-cli.ts';
 export { CopilotCli, type CopilotCliOptions } from './clis/copilot-cli.ts';
@@ -11,10 +11,15 @@ export { Permissions, type PermissionsInit, UnsupportedPermissions } from './cli
 export { type CliRunner, ProcessCliRunner } from './clis/runner.ts';
 export { CodexJson, CopilotJson, CopilotText, Transcript, type Transport } from './clis/transport.ts';
 export { DockerRuntime, type DockerService } from './docker/runtime.ts';
-export { LoggingDocker, LoggingRunner } from './dryrun/adapters.ts';
+export { LoggingDocker, LoggingGitCli, LoggingRunner } from './dryrun/adapters.ts';
 export { DirectoryGit, FakeCliRunner, type FakeCliRunnerOptions, FakeReply, FakeToolUse } from './dryrun/fakes.ts';
-export { Agent, fakeAgent } from './factory.ts';
+export { Agent, fakeAgent, repoAgent } from './factory.ts';
+export { WorktreeError } from './git/errors.ts';
+export { GitCli } from './git/git-cli.ts';
+export { ObservingGitService } from './git/observing.ts';
+export { GitRuntime } from './git/runtime.ts';
 export { GitOptions, type GitOptionsInit, type GitService } from './git/service.ts';
+export { BranchStrategy, type GitStrategy, HeadStrategy, MergeToHeadStrategy } from './git/strategies.ts';
 export {
   AgentCliHook,
   AgentCliHookPoint,
@@ -30,6 +35,16 @@ export {
   SubagentStopAgentCliHook,
   UnsupportedAgentCliHookPoint,
 } from './hooks/agent-cli.ts';
+export {
+  DEFAULT_LOOP_HOOK_TIMEOUT_SEC,
+  LoopHook,
+  LoopHookError,
+  LoopHookPoint,
+  RunFinishedLoopHook,
+  WorktreeReadyLoopHook,
+  WorktreeRemovingLoopHook,
+} from './hooks/loop.ts';
+export { addNote, notesOf } from './notes.ts';
 export { Role } from './observe/roles.ts';
 export {
   AgentRunRecord,
