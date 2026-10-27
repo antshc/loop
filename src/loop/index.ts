@@ -32,6 +32,14 @@ export {
 } from './hooks/agent-cli.ts';
 export { Role } from './observe/roles.ts';
 export {
+  isSpanObserver,
+  type PhaseSpan,
+  type PhaseSpanEnd,
+  type PhaseSpanGate,
+  type SpanAttributeValue,
+  type SpanObserver,
+} from './observe/spans.ts';
+export {
   AgentRunRecord,
   LogReading,
   type RunObserver,
@@ -70,3 +78,18 @@ export {
   type Turn,
 } from './sessions/values.ts';
 export { ValueError } from './value-error.ts';
+export type { OutputStream, VisualizeOptions } from './workflow/adapters/terminal.ts';
+export { WorkflowBuilder } from './workflow/builder.ts';
+export type { WorkflowLogger } from './workflow/logger.ts';
+export {
+  type Gate,
+  Kind,
+  Phase,
+  type PhaseAttributes,
+  type PhaseBody,
+  type PhaseOptions,
+  Phases,
+  type PhasesOptions,
+  type PhaseStatus,
+} from './workflow/phases.ts';
+export { type DeclaredPhaseOptions, type PhaseDefinition, Workflow, WorkflowRun } from './workflow/workflow.ts';
