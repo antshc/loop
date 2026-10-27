@@ -1,0 +1,32 @@
+{
+  "name": "loop",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/loop/index.ts"
+  },
+  "engines": {
+    "bun": ">=1.4.4"
+  },
+  "packageManager": "bun@1.4.4",
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "typecheck:fast": "tsgo --noEmit",
+    "test": "bun run lint && bun run typecheck && bun test"
+  },
+  "dependencies": {
+    "commander": "^15.0.0",
+    "inversify": "^8.2.3",
+    "reflect-metadata": "^0.2.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/bun": "^1.4.4",
+    "@typescript/native-preview": "^7.0.0-dev.20260707.2",
+    "eslint": "10",
+    "eslint-plugin-perfectionist": "^5.13.0",
+    "typescript": "6",
+    "typescript-eslint": "^8.72.1"
+  }
+}
