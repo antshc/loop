@@ -13,7 +13,7 @@ from workflows.pr_babysit.publish.verification import Verifier
 from workflows.shared.git import GitClient
 from workflows.shared.process import CommandRunner
 
-from .support import Remote, Runner, command, execute, fakes, thread
+from .support import Remote, Runner, bare_command, command, execute, fakes, thread
 
 
 class RejectPush(GitClient):
@@ -27,7 +27,7 @@ def test_address_verifies_commits_pushes_and_replies_once(scenario):
     assert execute(settings, remote, runner) == 0
     assert runner.modes == ["group", "resolve"]
     assert remote.replies == ["Fixed!"]
-    assert command(bare, "rev-parse", "feature") != base
+    assert bare_command(bare, "rev-parse", "feature") != base
     assert command(checkout, "rev-parse", "HEAD") == base
     assert not (settings.state_dir / "worktrees" / "babysit" / "a" / "b" / "1").exists()
     state = PrState(settings.state_dir, "a/b", 1)
@@ -56,7 +56,7 @@ def test_ci_maintainer_fixes_and_python_publishes(scenario):
     remote, runner = Remote(bare, base, reviews=False, ci_failure=True), Runner()
     assert execute(settings, remote, runner) == 0
     assert runner.modes == ["diagnose", "fix"]
-    assert command(bare, "rev-parse", "feature") != base
+    assert bare_command(bare, "rev-parse", "feature") != base
     assert not remote.replies
 
 
@@ -73,7 +73,7 @@ def test_invalid_agent_report_does_not_publish(scenario):
     remote = Remote(bare, base)
     assert execute(settings, remote, Runner(invalid=True)) == 1
     assert not remote.replies
-    assert command(bare, "rev-parse", "feature") == base
+    assert bare_command(bare, "rev-parse", "feature") == base
 
 
 def test_failed_verification_keeps_edits_and_does_not_commit_or_reply(scenario):
@@ -84,7 +84,7 @@ def test_failed_verification_keeps_edits_and_does_not_commit_or_reply(scenario):
                 raise subprocess.CalledProcessError(1, ["test"])
     remote = Remote(bare, base)
     assert execute(settings, remote, Runner(), (Verifier, FailAfterEdit())) == 1
-    assert command(bare, "rev-parse", "feature") == base
+    assert bare_command(bare, "rev-parse", "feature") == base
     assert not remote.replies
     retained = settings.state_dir / "worktrees" / "babysit" / "a" / "b" / "1"
     assert (retained / "cart.py").read_text() == "fixed = True\n"

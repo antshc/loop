@@ -23,6 +23,11 @@ def command(path, *args):
     return subprocess.run(["git", "-C", str(path), *args], check=True, capture_output=True, text=True).stdout.strip()
 
 
+def bare_command(path, *args):
+    """Runs git against a bare repository explicitly, so `safe.bareRepository=explicit` cannot refuse it."""
+    return subprocess.run(["git", f"--git-dir={path}", *args], check=True, capture_output=True, text=True).stdout.strip()
+
+
 def comment(id="c1", login="reviewer", body="Check this"):
     return {"id": id, "body": body, "author": {"login": login}, "authorAssociation": "COLLABORATOR"}
 
@@ -65,7 +70,7 @@ class Remote:
         return self
 
     def snapshot(self, number):
-        sha = command(self.bare, "rev-parse", "refs/heads/feature")
+        sha = bare_command(self.bare, "rev-parse", "refs/heads/feature")
         failed = self.ci_failure and sha == self.base
         return {"pr": {"number": number, "state": "closed" if self.closed else "open", "merged": self.closed,
                        "head": {"sha": sha, "ref": "feature", "repo": {"full_name": "a/b"}},
