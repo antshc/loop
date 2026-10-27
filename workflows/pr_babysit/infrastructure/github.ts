@@ -1,6 +1,8 @@
+import { inject, injectable } from 'inversify';
 import { createHash } from 'node:crypto';
 
 import { type ProcessRunner, processRunner, ValueError } from '../../../src/loop/index.ts';
+import { TOKENS } from '../tokens.ts';
 import { encodeSortedCompact } from './json.ts';
 
 const THREADS = `query($owner:String!,$name:String!,$number:Int!,$cursor:String){
@@ -149,10 +151,11 @@ interface RestFeedback {
 }
 
 /** Read GitHub state and perform explicit workflow-owned mutations via gh. */
+@injectable()
 export class Github implements GithubService {
   readonly #runner: ProcessRunner;
 
-  constructor(runner: ProcessRunner = processRunner) {
+  constructor(@inject(TOKENS.ProcessRunner) runner: ProcessRunner = processRunner) {
     this.#runner = runner;
   }
 

@@ -1,4 +1,7 @@
+import { inject, injectable } from 'inversify';
+
 import { type ProcessRunner, processRunner } from '../../../src/loop/index.ts';
+import { TOKENS } from '../tokens.ts';
 import { Blocked } from './state.ts';
 
 const COMMAND_TIMEOUT_SEC = 120;
@@ -24,10 +27,11 @@ export interface WorkflowGit {
 }
 
 /** Own workflow Git inspection, explicit commits, and non-forced publication. */
+@injectable()
 export class Git implements WorkflowGit {
   readonly #runner: ProcessRunner;
 
-  constructor(runner: ProcessRunner = processRunner) {
+  constructor(@inject(TOKENS.ProcessRunner) runner: ProcessRunner = processRunner) {
     this.#runner = runner;
   }
 
