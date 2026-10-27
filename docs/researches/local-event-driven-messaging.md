@@ -2,7 +2,7 @@
 
 Date: 2026-10-27
 Status: Research / recommendation
-Scope: [Unified event-driven SDLC workflow](../plans/unified-event-driven-sdlc-workflow.md)
+Scope: [Unified event-driven SDLC workflow](unified-event-driven-sdlc-workflow.md)
 
 ## Decision context
 
@@ -142,7 +142,7 @@ Those records are **not** a durable message-delivery table.
 
 ## Impact on the existing plan
 
-The [unified workflow plan](../plans/unified-event-driven-sdlc-workflow.md)
+The [unified workflow plan](unified-event-driven-sdlc-workflow.md)
 currently specifies a SQLite-backed **durable** bus with message, delivery,
 lease, and retry tables. This research proposes a smaller alternative based on
 the clarified *one local developer / low volume / no strong durability*
