@@ -11,6 +11,7 @@ import {
   TicketWorkflowError,
   type VerifyWorkflow,
 } from './records.ts';
+import { reviewDelegate } from './review-agent.ts';
 
 const ROOT = resolve(import.meta.dir, '..', '..');
 
@@ -40,6 +41,7 @@ export function configuredRepositories(harness: Repository): readonly Repository
     {
       repository: harness,
       runAgents: () => Promise.reject(new TicketWorkflowError('Ticket delivery is not ported yet')),
+      runReview: reviewDelegate(),
     },
   ];
 }
