@@ -16,6 +16,9 @@ import {
 } from '../../src/loop/index.ts';
 import { CommandError } from './commands.ts';
 import { Owner } from './definition.ts';
+import { deliverOnWorktree } from './deliver.ts';
+import { reviewTicket } from './delivery.ts';
+import { prepareSpec } from './prepare.ts';
 import { TicketWorkflowError as DevError } from './records.ts';
 
 const logger = getLogger('workflow.dev');
@@ -40,16 +43,20 @@ export const Outcome = { FAILED: 'failed', SKIPPED: 'skipped', SUCCESS: 'success
 export type Outcome = (typeof Outcome)[keyof typeof Outcome];
 
 /**
- * Extension point for the Ticket delivery (#140) and review/readiness (#141) phases: prepares the checkout, plans,
- * delivers every Ticket on a worktree, publishes the pull request and finalizes it, for a Spec routed to `workflow`.
- * It runs inside the Spec phase; throwing `CommandError`, `LoopHookError` or `ProcessFailedError` fails the Spec
- * with a comment. This placeholder delivers nothing and skips the Spec.
+ * Prepares the checkout, plans, delivers every Ticket on a worktree, publishes the pull request and settles it, for a
+ * Spec routed to `workflow`. It runs inside the Spec phase; throwing `CommandError`, `LoopHookError` or
+ * `ProcessFailedError` fails the Spec with a comment.
  */
-export function deliverSpec(spec: Spec, workflow: RepositoryWorkflow, deps: DevDeps): Promise<Outcome> {
-  logger.warning(
-    `Spec #${String(spec.number)} of ${deps.ticketRepository.toString()} was not delivered to ${workflow.repository.ownerName.toString()}: Ticket delivery is not ported yet`,
-  );
-  return Promise.resolve(Outcome.SKIPPED);
+export async function deliverSpec(spec: Spec, workflow: RepositoryWorkflow, deps: DevDeps): Promise<Outcome> {
+  if (!(await prepareSpec(spec, workflow, deps))) {
+    return spec.awaitingHuman && spec.needsPlan ? Outcome.FAILED : Outcome.SKIPPED;
+  }
+  const { delivered, delivery } = await deliverOnWorktree(spec, workflow, deps);
+  // Review, reply and readiness (#141) hook in here through `reviewTicket`, once the worktree is closed.
+  if (delivery !== null) {
+    return (await reviewTicket(spec, delivery, workflow, deps)) ? Outcome.SUCCESS : Outcome.FAILED;
+  }
+  return delivered ? Outcome.SUCCESS : Outcome.FAILED;
 }
 
 /** Routes every non-human-blocked Spec (only `deps.specNumber` when set) to its configured repository and resolves to the exit code. */
