@@ -75,11 +75,11 @@ The object a Workflow sends Agent requests to, built by the agent builder for on
 _Avoid_: Agent runner, Worktree runner, Sandbox, container, environment
 
 **Agent profile**:  
-The choice of agent CLI, model, reasoning effort, and extra arguments for an Agent client.  
+The reusable choice of agent CLI, model, reasoning effort, instructions, tool permissions, extra arguments, and execution defaults for an Agent client. Defined in user-owned Python and imported into Workflows.
 _Avoid_: Agent options, config
 
 **Run lifecycle**:  
-The ordered stages of one Workflow run on a worktree: worktree creation and `worktree-ready` Loop hooks, one or more agent runs, a safety-net commit of leftover changes, `worktree-removing` Loop hooks, worktree removal and merge, and `run-finished` Loop hooks; publication of the agent's work is the Workflow's own step.  
+The ordered stages of one Workflow run on a worktree: worktree creation and `worktree-ready` Loop hooks, one or more agent runs, successful-body `worktree-removing` Loop hooks, clean worktree removal or dirty-worktree retention, optional temporary-branch merge, and successful-run `run-finished` Loop hooks. Commits and publication are explicit agent or Workflow actions; the library never commits automatically.
 _Avoid_: Sandbox lifecycle
 
 **Agent request**:  
@@ -101,3 +101,4 @@ _Avoid_: Process lifecycle
 **Stateless execution**:  
 An Agent request on a client with no session store, so every run starts a new Agent session.  
 _Avoid_: One-shot, ephemeral run
+

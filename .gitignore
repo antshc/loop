@@ -435,3 +435,6 @@ build/
 # Atlassian preflight config (per-developer, may hold an API token) — see Concept 0008
 .atlassian
 .venv
+
+# Durable local workflow state and recovery worktrees
+.loop/

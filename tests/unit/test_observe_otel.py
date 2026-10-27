@@ -248,3 +248,14 @@ def test_the_shared_role_names_match_the_adw_vocabulary() -> None:
     from loop import Role
 
     assert Role.ALL == ("engineer", "code", "planner", "developer", "reviewer")
+
+
+
+def test_retained_worktree_closes_span_without_claiming_removal() -> None:
+    """Given retained edits, when a run fails, then its span ends with a retention fact."""
+    capture = Capture()
+    capture.observer.worktree(WorktreeEvent("ready", CWD, START, None))
+    capture.observer.worktree(WorktreeEvent("retained", CWD, START + timedelta(seconds=7), False))
+    worktree = capture.span("loop.worktree")
+    assert worktree.attributes["loop.worktree.retained"] is True
+    assert worktree.status.status_code == trace.StatusCode.ERROR

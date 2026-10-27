@@ -270,7 +270,7 @@ def test_worktree_events_wrap_a_successful_run(tmp_path: Path) -> None:
     with ObservingGitService(FakeGit(tmp_path), observer).open(tmp_path, GitOptions()) as path:
         assert path == tmp_path
 
-    assert points(observer) == [("ready", None), ("removing", True), ("removed", True)]
+    assert points(observer) == [("ready", None), ("removing", True), ("retained", True)]
 
 
 def test_worktree_events_report_a_failed_body_and_propagate_it(tmp_path: Path) -> None:
@@ -280,7 +280,7 @@ def test_worktree_events_report_a_failed_body_and_propagate_it(tmp_path: Path) -
         with ObservingGitService(FakeGit(tmp_path), observer).open(tmp_path, GitOptions()):
             raise ValueError("agent failed")
 
-    assert points(observer) == [("ready", None), ("removing", False), ("removed", False)]
+    assert points(observer) == [("ready", None), ("removing", False), ("retained", False)]
 
 
 def test_worktree_removal_failure_is_not_reported_as_ok(tmp_path: Path) -> None:
@@ -290,7 +290,7 @@ def test_worktree_removal_failure_is_not_reported_as_ok(tmp_path: Path) -> None:
         with ObservingGitService(FakeGit(tmp_path, OSError("merge")), observer).open(tmp_path, GitOptions()):
             pass
 
-    assert points(observer) == [("ready", None), ("removing", True), ("removed", False)]
+    assert points(observer) == [("ready", None), ("removing", True), ("retained", False)]
 
 
 def test_a_failing_observer_never_breaks_the_worktree(tmp_path: Path) -> None:
@@ -306,7 +306,7 @@ def test_builder_reports_the_worktree_and_the_agent_run(tmp_path: Path) -> None:
     with builder.with_git().with_observer(observer, readers=[CopilotLogReader(tmp_path)]).open() as workspace:
         workspace.agent().run(AgentRequest("go"))
 
-    assert [item.point for item in observer.worktrees] == ["ready", "removing", "removed"]
+    assert [item.point for item in observer.worktrees] == ["ready", "removing", "retained"]
     [record] = observer.records
     assert record.cwd == tmp_path and "--session-id" in inner.profiles[0].args
 
@@ -349,3 +349,4 @@ def test_loop_imports_without_opentelemetry_and_reports_the_missing_extra() -> N
     result = subprocess.run([sys.executable, "-c", script], cwd=ROOT, env={"PYTHONPATH": str(ROOT / "src")}, capture_output=True, text=True)
 
     assert result.stdout.strip() == "True", result.stderr
+

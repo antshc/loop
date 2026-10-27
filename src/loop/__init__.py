@@ -21,9 +21,11 @@ from .clis import (
     CopilotLogReader,
     CopilotText,
     ProcessCliRunner,
+    Permissions,
     SessionLogReader,
     Transcript,
     Transport,
+    UnsupportedPermissions,
     codex,
     copilot,
 )
@@ -45,6 +47,7 @@ from .git import (
     GitRuntime,
     GitService,
     GitStrategy,
+    WorktreeError,
     HeadStrategy,
     MergeToHeadStrategy,
 )
@@ -77,6 +80,8 @@ from .run import (
     AgentRequest,
     AgentResult,
     AgentStartMode,
+    Instructions,
+    InstructionsError,
     Prompt,
     PromptError,
     RunContext,
@@ -93,12 +98,23 @@ from .sessions import (
     Start,
     Turn,
 )
+from .workflow import Kind, Phase, Phases, Workflow, WorkflowBuilder, WorkflowRun
 
 # Silent until the host calls configure_logging() or sets up its own handlers.
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 __all__ = [
+    "Instructions",
+    "InstructionsError",
+    "Permissions",
+    "UnsupportedPermissions",
     "DEFAULT",
+    "Kind",
+    "Phase",
+    "Phases",
+    "Workflow",
+    "WorkflowBuilder",
+    "WorkflowRun",
     "Agent",
     "AgentBuilder",
     "AgentCli",
@@ -138,6 +154,7 @@ __all__ = [
     "GitRuntime",
     "GitService",
     "GitStrategy",
+    "WorktreeError",
     "HeadStrategy",
     "LoggingDocker",
     "LoggingGitCli",
@@ -188,3 +205,4 @@ __all__ = [
     "otlp_observer",
     "repo_agent",
 ]
+

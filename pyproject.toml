@@ -12,6 +12,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+visualization = ["rich>=13"]
 dev = ["pytest", "import-linter", "opentelemetry-sdk>=1.45", "opentelemetry-exporter-otlp-proto-http>=1.45"]
 otel = [
     "opentelemetry-sdk>=1.45",
@@ -23,7 +24,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src", ".", "tests"]
-testpaths = ["tests", "workflows/dev/tests"]
+testpaths = ["tests", "workflows/dev/tests", "workflows/pr_babysit/tests"]
 norecursedirs = ["archive", ".*"]
 
 [tool.importlinter]
@@ -33,7 +34,7 @@ root_packages = ["loop", "workflows"]
 name = "The loop library is layered: builder over agents over clis, docker and git over run over hooks over sessions"
 type = "layers"
 layers = [
-    "factory",
+    "factory | workflow",
     "builder | dryrun",
     "agents",
     "clis | docker | git",
@@ -60,6 +61,7 @@ forbidden_modules = [
     "loop.observe",
     "loop.run",
     "loop.sessions",
+    "loop.workflow",
 ]
 allow_indirect_imports = true
 
@@ -72,4 +74,10 @@ forbidden_modules = ["workflows.dev.agent", "workflows.dev.repositories", "workf
 [[tool.importlinter.contracts]]
 name = "No workflow imports another workflow"
 type = "independence"
-modules = ["workflows.dev", "workflows.plan_implement"]
+modules = ["workflows.dev", "workflows.plan_implement", "workflows.workflow_reporting", "workflows.pr_babysit"]
+
+[[tool.importlinter.contracts]]
+name = "PR maintenance decisions do not depend on the discovery scheduler"
+type = "forbidden"
+source_modules = ["workflows.pr_babysit.workflow"]
+forbidden_modules = ["workflows.pr_babysit.infrastructure.scheduler"]

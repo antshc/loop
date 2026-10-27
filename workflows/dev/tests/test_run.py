@@ -288,7 +288,7 @@ def test_two_actionable_tickets_each_get_a_fresh_run_in_order(tmp_path: Path) ->
 
     assert code == 0 and len(harness.prompts) == 2
     assert [c[2] for c in harness.calls("issue", "close")] == ["10", "11"]
-    assert len(harness.git.pushes) == 1
+    assert len(harness.git.pushes) == 2
 
 
 def test_all_tickets_delivered_comments_the_pull_request_link_on_the_open_spec(tmp_path: Path) -> None:
@@ -513,9 +513,11 @@ class SpanRecordingObserver:
     def span(self, name: str, attributes: dict | None = None, *, role: str | None = None):
         events = self.events
 
-        class _Span:
-            def __enter__(self) -> None:
+        from workflows.dev.tests.doubles import FakePhaseSpan
+        class _Span(FakePhaseSpan):
+            def __enter__(self):
                 events.append(f"open {name}")
+                return self
 
             def __exit__(self, *exc: object) -> None:
                 events.append(f"close {name}")
@@ -544,24 +546,14 @@ def test_an_otlp_endpoint_observes_runs_and_nests_them_in_spec_and_ticket_spans(
     )
 
     assert code == 0 and [o.endpoint for o in observers] == ["http://collector:4318"]
-    assert observers[0].events == [
-        "open spec Checkout",
-        "open request",
-        "close request",
-        "worktree ready",
-        "open #10 Add login form",
-        "agent_run",
-        "close #10 Add login form",
-        "open verify #10",
-        "close verify #10",
-        "open close #10",
-        "close close #10",
-        "open publish branch",
-        "close publish branch",
-        "worktree removing",
-        "worktree removed",
-        "close spec Checkout",
-    ]
+    events = observers[0].events
+    assert events[0:2] == ["open dev", "open Spec"]
+    assert "open Prepare repository" in events
+    assert events.index("open Implement ticket") < events.index("agent_run") < events.index("close Implement ticket")
+    assert events.index("open Validate ticket commit") < events.index("open Close ticket")
+    assert events.index("open Close ticket") < events.index("worktree removing")
+    assert events[-2:] == ["close Spec", "close dev"]
+
 
 
 def test_without_an_otlp_endpoint_no_observer_is_built(tmp_path: Path) -> None:

@@ -71,7 +71,7 @@ class OtlpObserver:
         self._record_metrics(record, failed)
 
     def worktree(self, event: WorktreeEvent) -> None:
-        """Holds a `loop.worktree` span open from `ready` until `removed`."""
+        """Holds a worktree span until removal or retention ends the active run."""
         if event.point == "ready":
             self._worktrees[event.path] = self._resource_tracer(Role.CODE).start_span(
                 "loop.worktree",
@@ -80,9 +80,11 @@ class OtlpObserver:
             )
             return
         span = self._worktrees.get(event.path)
-        if span is None or event.point != "removed":
+        if span is None or event.point not in {"removed", "retained"}:
             return
         del self._worktrees[event.path]
+        if event.point == "retained":
+            span.set_attribute("loop.worktree.retained", True)
         if event.ok is False:
             span.set_status(Status(StatusCode.ERROR, "worktree run failed"))
         span.end(end_time=_nanos(event.at))
@@ -100,6 +102,9 @@ class OtlpObserver:
         return self._resource_providers(resource).get_tracer(SCOPE)
 
     def _parent_context(self, cwd: Path) -> otel_context.Context | None:
+        # Explicit workflow phases take precedence over the worktree fallback.
+        if trace.get_current_span().get_span_context().is_valid:
+            return None
         span = self._worktrees.get(cwd)
         return trace.set_span_in_context(span) if span is not None else None
 
@@ -255,3 +260,4 @@ def _own_tracer_provider(resource: Resource, endpoint: str | None) -> SdkTracerP
 def _own_meter_provider(resource: Resource, endpoint: str | None) -> SdkMeterProvider:
     reader = PeriodicExportingMetricReader(OTLPMetricExporter(endpoint=_signal_endpoint(endpoint, "metrics")))
     return SdkMeterProvider(resource=resource, metric_readers=[reader])
+

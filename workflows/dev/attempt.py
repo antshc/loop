@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import logging
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
-from loop import AgentWorkspace, Role
+from loop import AgentWorkspace, Kind, Phase, Phases, Role
 
 from .checkout import GitService
 from .journal import FileExecutionStore
@@ -15,7 +16,6 @@ from .records import (
     AgentCommitSubject, AgentWorkflow, Commit, RepositoryId, Spec, Ticket,
     TicketContext, TicketResult, TicketWorkflowError,
 )
-from .telemetry import SpanFactory, no_span
 
 
 logger = logging.getLogger("workflow.tickets")
@@ -31,31 +31,40 @@ def deliver_tickets(
     store: FileExecutionStore,
     ticket_repository: RepositoryId,
     max_failures: int = 2,
-    span: SpanFactory = no_span,
+    phases: Phases | None = None,
+    publish: Callable[[], object] = lambda: None,
 ) -> bool:
     """Delivers actionable Tickets in order, retrying failed attempts and stopping at the failure cap."""
     if max_failures < 1:
         raise TicketWorkflowError("max_failures must be at least one")
+    phases = phases or Phases()
     for ticket in spec.tickets:
         if not ticket.actionable:
             continue
+        attempt = 0
         while True:
+            attempt += 1
             head_before = git.head(worktree.path)
             context = _ticket_context(spec, ticket, worktree.path, git)
-            result = _attempt(context, worktree, run_agents, git, head_before, span)
+            with phases.phase("ticket", Kind.AGENT, Role.DEVELOPER, ticket=ticket.number, attempt=attempt) as phase:
+                result = _attempt(context, worktree, run_agents, git, head_before, phases, phase)
             if isinstance(result, TicketResult):
-                with span(f"close #{ticket.number}", {"loop.ticket.number": ticket.number}, role=Role.CODE):
+                with phases.phase("close-ticket", Kind.CODE, Role.CODE, ticket=ticket.number):
                     spec.close_ticket(
                         ticket.number, f"Delivered in {result.commit}.\n\n{result.summary}\n\n{result.verification}"
                     )
                     tracker.update_spec(spec)
                     store.reset(ticket.url)
+                publish()
                 break
-            logger.warning("ticket %s failed: %s", ticket.url, result)
-            git.restore(worktree.path, head_before.sha)
+            logger.debug("ticket %s failed: %s", ticket.url, result)
+            with phases.phase("restore", Kind.CODE, Role.CODE, ticket=ticket.number):
+                git.restore(worktree.path, head_before.sha)
             if _record_failure(store, ticket_repository, ticket) >= max_failures:
-                spec.escalate(ticket.number, result)
-                tracker.update_spec(spec)
+                with phases.phase("escalate", Kind.CODE, Role.CODE, ticket=ticket.number) as escalation:
+                    spec.escalate(ticket.number, result)
+                    tracker.update_spec(spec)
+                    escalation.set(verdict="human input required")
                 return False
     return True
 
@@ -81,20 +90,25 @@ def _attempt(
     run_agents: AgentWorkflow,
     git: GitService,
     head_before: Commit,
-    span: SpanFactory,
+    phases: Phases,
+    phase: Phase,
 ) -> TicketResult | str:
     ticket = context.ticket
     try:
-        with span(f"#{ticket.number} {ticket.title}", {"loop.ticket.number": ticket.number, "loop.ticket.url": ticket.url}):
-            result = run_agents(context, worktree)
+        result = run_agents(context, worktree)
     except subprocess.CalledProcessError:
+        phase.fail("Agent process failed")
         return "agent process did not exit successfully"
     except TicketWorkflowError as exception:
+        phase.fail("Agent response was rejected")
         return str(exception)
-    with span(f"verify #{ticket.number}", {"loop.ticket.number": ticket.number}, role=Role.CODE):
+    with phases.phase("validate", Kind.CODE, Role.CODE, ticket=ticket.number) as validation:
         violation = _result_violation(context.identifier, result)
         if violation is None:
             violation = _commit_violation(git, worktree.path, head_before, context.identifier, result)
+        validation.gate("Ticket result and commit are valid", violation is None, violation or "")
+    if violation is not None:
+        phase.fail("Ticket result or commit validation failed")
     return result if violation is None else violation
 
 

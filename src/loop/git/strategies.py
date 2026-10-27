@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import logging
 import secrets
+import subprocess
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterator, Protocol
 
 from ..hooks import LoopHookPoint
+from .errors import WorktreeError
 from .git_cli import GitCli
 
 logger = logging.getLogger(__name__)
@@ -43,8 +45,6 @@ class MergeToHeadStrategy:
         branch = f"tmp_{secrets.token_hex(4)}"
         with _worktree(git, cwd, repository, options, branch, "HEAD") as target:
             yield target
-            # Safety net: the prompt normally commits; this catches edits it left behind before the worktree is removed.
-            git.commit_all(target, options.commit_message)
         # Reached only when the run succeeded; on failure the temp branch is kept unmerged.
         git.merge_ff_only(repository, branch)
         git.delete_branch(repository, branch)
@@ -52,7 +52,7 @@ class MergeToHeadStrategy:
 
 @dataclass(frozen=True)
 class BranchStrategy:
-    """Worktree on the named branch; `base_branch` is the start ref for a new branch (default HEAD)."""
+    """Reuse a local branch; a new branch starts at explicit base, else origin branch or HEAD."""
 
     branch: str
     base_branch: str | None = None
@@ -60,37 +60,46 @@ class BranchStrategy:
     @contextmanager
     def open(self, git: GitCli, cwd: Path, repository: Path, options: GitOptions) -> Iterator[Path]:
         git.fetch(repository)
-        with _worktree(git, cwd, repository, options, self.branch, self.base_branch or "HEAD") as target:
+        with _worktree(git, cwd, repository, options, self.branch, self.base_branch) as target:
             yield target
-            # Safety net: git refuses to remove a dirty worktree.
-            git.commit_all(target, options.commit_message)
 
 
 @contextmanager
 def _worktree(
-    git: GitCli, cwd: Path, repository: Path, options: GitOptions, branch: str, base: str
+    git: GitCli, cwd: Path, repository: Path, options: GitOptions, branch: str, base: str | None
 ) -> Iterator[Path]:
     root = (cwd / options.root_path).resolve()
-    if not root.is_relative_to(cwd.resolve()):
+    if not options.root_path.is_absolute() and not root.is_relative_to(cwd.resolve()):
         raise ValueError(f"worktrees root {root} must be inside {cwd}")
     target = root / branch
+    if not target.resolve().is_relative_to(root):
+        raise WorktreeError(f"Worktree path escapes its root: {target}")
+    # Validate before filesystem mutation; Git also rejects unsafe branch names.
     git.add_worktree(repository, target, branch, base)
     try:
         for hook in options.hooks_at(LoopHookPoint.WORKTREE_READY):
             git.run_hook(hook, target, repository, target)
-    except BaseException as error:
-        try:
-            git.remove_worktree(repository, target, force=True)
-        except Exception as removal:
-            note = f"forced worktree removal also failed: {removal}"
-            if hasattr(error, "add_note"):
-                error.add_note(note)
-            else:
-                logger.error(note, exc_info=True)
-        raise
-    try:
         yield target
         for hook in options.hooks_at(LoopHookPoint.WORKTREE_REMOVING):
             git.run_hook(hook, target, repository, target)
-    finally:
-        git.remove_worktree(repository, target)
+    except BaseException as exception:
+        try:
+            _cleanup(git, repository, target)
+        except (OSError, subprocess.CalledProcessError) as cleanup:
+            note = f"worktree cleanup also failed; retained {target}: {cleanup}"
+            if hasattr(exception, "add_note"):
+                exception.add_note(note)
+            else:
+                logger.error(note, exc_info=True)
+        raise
+    else:
+        if not _cleanup(git, repository, target):
+            raise WorktreeError(f"Worktree has uncommitted changes; preserved at {target}")
+
+
+def _cleanup(git: GitCli, repository: Path, target: Path) -> bool:
+    if not git.is_clean(target):
+        logger.warning("dirty worktree retained: %s", target)
+        return False
+    git.remove_worktree(repository, target)
+    return True

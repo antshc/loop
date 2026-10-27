@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 
-from .agent import implement_ticket, load_prompt
-from .records import AgentWorkflow, Repository, RepositoryId
+from .agent import implement_ticket, load_prompt, plan_spec, verify_app, chore_pull_request, review_pull_request
+from .records import AgentWorkflow, PlanWorkflow, VerifyWorkflow, ChoreWorkflow, ReviewWorkflow, Repository, RepositoryId
 
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -22,13 +22,23 @@ HARNESS: Repository = Repository(
 
 @dataclass(frozen=True)
 class RepositoryWorkflow:
-    """One allowed target repository and the agent steps used to deliver its Tickets."""
+    """One target and its developer, planner, verifier, cleanup, and reviewer delegates."""
 
     repository: Repository
     run_agents: AgentWorkflow
+    run_chore: ChoreWorkflow | None = None
+    run_plan: PlanWorkflow | None = None
+    run_verify: VerifyWorkflow | None = None
+    run_review: ReviewWorkflow | None = None
 
 
 def configured_repositories(harness: Repository) -> tuple[RepositoryWorkflow, ...]:
-    """Pairs each allowed checkout with its delegate; defaults to implementing on the harness."""
+    """Configures all eShop-style phases on the harness by default."""
     implement = partial(implement_ticket, template=load_prompt("implement"))
-    return (RepositoryWorkflow(harness, implement),)
+    return (RepositoryWorkflow(
+        harness, implement,
+        run_chore=partial(chore_pull_request, template=load_prompt("chore")),
+        run_plan=partial(plan_spec, template=load_prompt("plan")),
+        run_verify=partial(verify_app, template=load_prompt("verify")),
+        run_review=partial(review_pull_request, template=load_prompt("review")),
+    ),)

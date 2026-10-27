@@ -4,6 +4,7 @@ import logging
 from collections.abc import Callable, Sequence
 from contextlib import contextmanager
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 from typing import Iterator
 
@@ -56,6 +57,8 @@ class AgentBuilder:
         docker: DockerService,
         agent_context: AgentContext | None = None,
         sessions: SessionStore | None = None,
+        *,
+        dry_run: bool = False,
     ) -> None:
         self._runner = runner
         self._git = git
@@ -67,6 +70,7 @@ class AgentBuilder:
         self._use_docker = False
         self._use_session = False
         self._observed = False
+        self._dry_run = dry_run
 
     def with_observer(self, observer: RunObserver, *, readers: Sequence[SessionLogReader] | None = None) -> AgentBuilder:
         """Report every Agent Run and Worktree to `observer`; `readers` default to the Copilot session-log reader."""
@@ -116,10 +120,13 @@ class AgentBuilder:
             names = ", ".join(sorted(point.value for point in missing))
             raise UnsupportedAgentCliHookPoint(f"{profile.cli.name} cannot fire {names}")
 
-    def _stack(self, profile: AgentProfile, defaults: RunContext, session: SessionName | None) -> AgentClient:
+    def _stack(self, profile: AgentProfile, defaults: RunContext, session: SessionName | None, *, workspace: bool = False) -> AgentClient:
+        defaults = replace(defaults, agent=profile.apply_context(defaults.agent, workspace=workspace))
         self._validate_agent_cli_hooks(profile, defaults)
         store = self._sessions if self._use_session else None
-        client: AgentClient = CliAgentClient(self._runner, profile, defaults, store=store, session=session)
+        client: AgentClient = CliAgentClient(
+            self._runner, profile, defaults, store=store, session=session, workspace=workspace, dry_run=self._dry_run,
+        )
         if self._use_docker:
             client = DockerAgent(client, self._docker, defaults.agent)
         return client
@@ -133,11 +140,11 @@ class AgentBuilder:
         try:
             if self._use_git:
                 with self._git.open(self._defaults.agent.cwd, self._git_options or GitOptions()) as path:
-                    worktree = AgentWorkspace(path, self._stack, self._defaults, shared)
+                    worktree = AgentWorkspace(path, partial(self._stack, workspace=True), self._defaults, shared)
                     logger.info("worktree opened: %s", path)
                     yield worktree
             else:
-                worktree = AgentWorkspace(self._defaults.agent.cwd, self._stack, self._defaults, shared)
+                worktree = AgentWorkspace(self._defaults.agent.cwd, partial(self._stack, workspace=True), self._defaults, shared)
                 logger.info("worktree opened: %s", worktree.path)
                 yield worktree
         finally:
@@ -148,7 +155,8 @@ class AgentBuilder:
     def create(self, profile: AgentProfile | None = None, session: SessionName | None = None) -> AgentClient:
         """One-shot client: a separate git lifecycle per run()."""
         self._require_session_enabled(session)
-        client = self._stack(profile or DEFAULT, self._defaults, session)
+        profile = profile or DEFAULT
+        client = self._stack(profile, self._defaults, session)
         if self._use_git:
-            client = GitAgent(client, self._git, self._git_options, self._defaults.agent)
+            client = GitAgent(client, self._git, self._git_options, profile.apply_context(self._defaults.agent))
         return client

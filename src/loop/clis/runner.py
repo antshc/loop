@@ -33,7 +33,11 @@ class ProcessCliRunner:
             if context.agent_cli_hooks
             else AgentCliHookWiring()
         )
-        extra = {"env": {**os.environ, **wiring.env}} if wiring.env else {}
+        extra: dict[str, object] = {}
+        if context.agent.env is not None or wiring.env:
+            extra["env"] = {**os.environ, **(context.agent.env or {}), **wiring.env}
+        if context.agent.timeout_sec is not None:
+            extra["timeout"] = context.agent.timeout_sec
         logger.info("agent run started: cli=%s session=%s cwd=%s", profile.cli.name, turn.name.value, context.agent.cwd)
         logger.debug("agent command: %s", argv)
         with self._hook_files(wiring, context.agent.cwd):
