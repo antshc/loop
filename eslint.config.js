@@ -3,7 +3,7 @@ import perfectionist from 'eslint-plugin-perfectionist';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['archive/**', 'docs/**', 'examples/**', 'node_modules/**', 'src/**/__pycache__/**', 'workspace/**'] },
+  { ignores: ['archive/**', 'docs/**', 'examples/**', 'node_modules/**', 'workspace/**'] },
   {
     files: ['**/*.ts'],
     extends: [
