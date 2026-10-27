@@ -1,0 +1,2 @@
+{"type": "assistant.message", "data": {"content": "hi"}, "timestamp": "2026-10-23T13:00:01Z"}
+{"type": "session.usage_record", "data": {"usage": {"inputTokens": 10, "outputTokens": 2, "cacheReadTokens": 4, "cacheWriteTokens": 1, "initiator": "agent"}}, "timestamp": "2026-10-23T13:00:02Z"}

@@ -1,0 +1,11 @@
+{"type": "session.start", "data": {"sessionId": "s"}, "timestamp": "2026-10-23T13:00:00Z"}
+{"type": "tool.execution_start", "data": {"toolCallId": "a", "toolName": "one-digit", "arguments": {}}, "timestamp": "2026-10-23T13:00:01.5Z"}
+{"type": "tool.execution_complete", "data": {"toolCallId": "a", "success": true, "result": {"content": ""}}, "timestamp": "2026-10-23T13:00:01.57Z"}
+{"type": "tool.execution_start", "data": {"toolCallId": "b", "toolName": "six-digits", "arguments": {}}, "timestamp": "2026-10-23T13:00:02.123456Z"}
+{"type": "tool.execution_complete", "data": {"toolCallId": "b", "success": true, "result": null}, "timestamp": "2026-10-23T13:00:02.987654Z"}
+{"type": "tool.execution_start", "data": {"toolCallId": "c", "toolName": "nine-digits", "arguments": {"k": [1, 2]}}, "timestamp": "2026-10-23T13:00:03.123456789Z"}
+{"type": "tool.execution_complete", "data": {"toolCallId": "c", "success": 0, "result": {"content": "x"}}, "timestamp": "2026-10-23T13:00:03.9Z"}
+{"type": "tool.execution_start", "data": {"toolCallId": "d", "toolName": "offset", "arguments": {}}, "timestamp": "2026-10-23T15:00:04.000+02:00"}
+{"type": "tool.execution_complete", "data": {"toolCallId": "d", "success": true, "result": {"content": "tz"}}, "timestamp": "2026-10-23T15:00:04.25+02:00"}
+{"type": "tool.execution_start", "data": {"toolCallId": "never-completed", "toolName": "dangling", "arguments": {}}, "timestamp": "2026-10-23T13:00:05Z"}
+{"type": "session.usage_record", "data": {"usage": {"model": "claude-haiku-4.5", "inputTokens": 10, "outputTokens": 1, "cacheReadTokens": 0, "cacheWriteTokens": 0, "reasoningTokens": 5, "cost": 1.0, "initiator": "user", "reasoningEffort": "medium", "copilotUsage": {"tokenDetails": [{"tokenType": "input", "tokenCount": 10, "costPerBatch": 200000000000, "batchSize": 1000000}, {"tokenType": "output", "tokenCount": 1, "costPerBatch": 1000000000000, "batchSize": 1000000}], "totalNanoAiu": 1000000000}}}, "timestamp": "2026-10-23T13:00:06Z"}

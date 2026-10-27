@@ -1,0 +1,25 @@
+{
+  "instructions": [
+    {
+      "worktree": "/repo",
+      "instruction": "This session was started in the harness repository only to load its context. All work on the target code happens in the git worktree at: /repo\nBefore you inspect, edit, build, test or commit anything, change into it (`cd /repo`). Shell state does not persist between tool calls, so run every command from that directory (start it with `cd /repo &&`) or give it as the working directory. Keep using the harness context, but never treat the harness checkout as the target code and make no changes outside the worktree."
+    },
+    {
+      "worktree": "/a b/it's",
+      "instruction": "This session was started in the harness repository only to load its context. All work on the target code happens in the git worktree at: /a b/it's\nBefore you inspect, edit, build, test or commit anything, change into it (`cd '/a b/it'\"'\"'s'`). Shell state does not persist between tool calls, so run every command from that directory (start it with `cd '/a b/it'\"'\"'s' &&`) or give it as the working directory. Keep using the harness context, but never treat the harness checkout as the target code and make no changes outside the worktree."
+    },
+    {
+      "worktree": "/plain-path_1/x.y",
+      "instruction": "This session was started in the harness repository only to load its context. All work on the target code happens in the git worktree at: /plain-path_1/x.y\nBefore you inspect, edit, build, test or commit anything, change into it (`cd /plain-path_1/x.y`). Shell state does not persist between tool calls, so run every command from that directory (start it with `cd /plain-path_1/x.y &&`) or give it as the working directory. Keep using the harness context, but never treat the harness checkout as the target code and make no changes outside the worktree."
+    }
+  ],
+  "harness": {
+    "cwd": "/harness",
+    "addDirs": [
+      "/extra",
+      "/repo"
+    ],
+    "prompt": "This session was started in the harness repository only to load its context. All work on the target code happens in the git worktree at: /repo\nBefore you inspect, edit, build, test or commit anything, change into it (`cd /repo`). Shell state does not persist between tool calls, so run every command from that directory (start it with `cd /repo &&`) or give it as the working directory. Keep using the harness context, but never treat the harness checkout as the target code and make no changes outside the worktree.\n\ndo it",
+    "name": "loop(1) Title"
+  }
+}

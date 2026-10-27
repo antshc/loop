@@ -102,6 +102,17 @@ const seeds: Seed[] = [
     rule: 'workflows-public-loop-only',
   },
   {
+    contract: 'workflows-public-loop-only',
+    files: {
+      'src/loop/builder.ts': leaf,
+      'src/loop/index.ts': imports('./builder.ts'),
+      'workflows/dev/seed.ts': imports('../../src/loop/builder.ts'),
+    },
+    from: 'workflows/dev/seed.ts',
+    name: 'workflow imports the agent builder instead of the public entry point',
+    rule: 'workflows-public-loop-only',
+  },
+  {
     contract: 'ticket-orchestration-no-agent-workflow',
     files: { 'workflows/dev/agent.ts': leaf, 'workflows/dev/attempt.ts': imports('./agent.ts') },
     from: 'workflows/dev/attempt.ts',

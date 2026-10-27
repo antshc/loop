@@ -1,0 +1,247 @@
+{
+  "commands": [
+    {
+      "label": "copilot start",
+      "argv": [
+        "copilot",
+        "-p",
+        "p",
+        "--output-format",
+        "text",
+        "--name",
+        "n",
+        "--autopilot",
+        "--allow-all",
+        "--no-ask-user",
+        "--model",
+        "claude-opus-4.5",
+        "--reasoning-effort",
+        "high",
+        "--x"
+      ]
+    },
+    {
+      "label": "copilot resume",
+      "argv": [
+        "copilot",
+        "-p",
+        "p",
+        "--output-format",
+        "text",
+        "--resume=h",
+        "--autopilot",
+        "--allow-all",
+        "--no-ask-user",
+        "--model",
+        "claude-opus-4.5",
+        "--reasoning-effort",
+        "high",
+        "--x"
+      ]
+    },
+    {
+      "label": "copilot named start",
+      "argv": [
+        "copilot",
+        "-p",
+        "p",
+        "--output-format",
+        "text",
+        "--name",
+        "loop(7) Fix it",
+        "--autopilot",
+        "--allow-all",
+        "--no-ask-user",
+        "--model",
+        "claude-opus-4.5",
+        "--reasoning-effort",
+        "high",
+        "--x"
+      ]
+    },
+    {
+      "label": "copilot dirs and context",
+      "argv": [
+        "copilot",
+        "-p",
+        "p",
+        "--output-format",
+        "text",
+        "--name",
+        "n",
+        "--autopilot",
+        "--allow-all",
+        "--no-ask-user",
+        "--context",
+        "ctx",
+        "--add-dir",
+        "/docs",
+        "--add-dir",
+        "/shared"
+      ]
+    },
+    {
+      "label": "copilot json transport",
+      "argv": [
+        "copilot",
+        "-p",
+        "p",
+        "--output-format",
+        "json",
+        "--name",
+        "n",
+        "--autopilot",
+        "--allow-all",
+        "--no-ask-user",
+        "--model",
+        "claude-opus-4.5",
+        "--reasoning-effort",
+        "high",
+        "--x"
+      ]
+    },
+    {
+      "label": "copilot allowed tools",
+      "argv": [
+        "copilot",
+        "-p",
+        "p",
+        "--output-format",
+        "text",
+        "--name",
+        "n",
+        "--autopilot",
+        "--no-ask-user",
+        "--allow-tool",
+        "read",
+        "--allow-tool",
+        "shell(git diff)",
+        "--deny-tool",
+        "shell(git push)"
+      ]
+    },
+    {
+      "label": "copilot allow-all tools",
+      "argv": [
+        "copilot",
+        "-p",
+        "p",
+        "--output-format",
+        "text",
+        "--name",
+        "n",
+        "--autopilot",
+        "--no-ask-user",
+        "--allow-all-tools",
+        "--deny-tool",
+        "shell(rm)"
+      ]
+    },
+    {
+      "label": "codex start",
+      "argv": [
+        "codex",
+        "exec",
+        "--json",
+        "--sandbox",
+        "workspace-write",
+        "--model",
+        "gpt-5-codex",
+        "-c",
+        "model_reasoning_effort=high",
+        "--x",
+        "p"
+      ]
+    },
+    {
+      "label": "codex resume",
+      "argv": [
+        "codex",
+        "exec",
+        "resume",
+        "t1",
+        "--json",
+        "--sandbox",
+        "workspace-write",
+        "--model",
+        "gpt-5-codex",
+        "-c",
+        "model_reasoning_effort=high",
+        "--x",
+        "--add-dir",
+        "/docs",
+        "--add-dir",
+        "/shared",
+        "p"
+      ]
+    },
+    {
+      "label": "codex hooks start",
+      "argv": [
+        "codex",
+        "exec",
+        "--json",
+        "--sandbox",
+        "workspace-write",
+        "-c",
+        "hooks.SessionStart=[{matcher=\"startup|resume\",hooks=[{type=\"command\",command=\"<SHIM> --cli codex --point session-start --session n -- start\",timeout=30}]}]",
+        "-c",
+        "hooks.SessionEnd=[{hooks=[{type=\"command\",command=\"<SHIM> --cli codex --point session-end --session n -- end\",timeout=3}]}]",
+        "-c",
+        "hooks.UserPromptSubmit=[{hooks=[{type=\"command\",command=\"<SHIM> --cli codex --point prompt-submitted --session n -- 'my cmd'\",timeout=7}]}]",
+        "--dangerously-bypass-hook-trust",
+        "p"
+      ]
+    },
+    {
+      "label": "codex hooks resume",
+      "argv": [
+        "codex",
+        "exec",
+        "resume",
+        "t1",
+        "--json",
+        "--sandbox",
+        "workspace-write",
+        "-c",
+        "hooks.SessionStart=[{matcher=\"startup|resume\",hooks=[{type=\"command\",command=\"<SHIM> --cli codex --point session-start --session n -- start\",timeout=30}]}]",
+        "-c",
+        "hooks.SessionEnd=[{hooks=[{type=\"command\",command=\"<SHIM> --cli codex --point session-end --session n -- end\",timeout=3}]}]",
+        "-c",
+        "hooks.UserPromptSubmit=[{hooks=[{type=\"command\",command=\"<SHIM> --cli codex --point prompt-submitted --session n -- 'my cmd'\",timeout=7}]}]",
+        "--dangerously-bypass-hook-trust",
+        "p"
+      ]
+    }
+  ],
+  "copilotWiring": {
+    "path": ".github/hooks/loop-d1854cae.json",
+    "maskedContent": "{\n  \"version\": 1,\n  \"hooks\": {\n    \"sessionStart\": [\n      {\n        \"type\": \"command\",\n        \"bash\": \"<SHIM>\",\n        \"timeoutSec\": 30\n      }\n    ],\n    \"sessionEnd\": [\n      {\n        \"type\": \"command\",\n        \"bash\": \"<SHIM>\",\n        \"timeoutSec\": 9\n      }\n    ],\n    \"userPromptSubmitted\": [\n      {\n        \"type\": \"command\",\n        \"bash\": \"<SHIM>\",\n        \"timeoutSec\": 7\n      }\n    ]\n  }\n}",
+    "shimTails": {
+      "sessionStart": [
+        "--cli copilot --point session-start --session n -- start"
+      ],
+      "sessionEnd": [
+        "--cli copilot --point session-end --session n -- end"
+      ],
+      "userPromptSubmitted": [
+        "--cli copilot --point prompt-submitted --session n -- 'my cmd'"
+      ]
+    },
+    "env": {
+      "GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS": "true"
+    },
+    "gitExcludes": [
+      ".github/hooks/loop-*.json"
+    ]
+  },
+  "codexWiringArgs": [
+    "-c",
+    "hooks.SessionStart=[{matcher=\"startup|resume\",hooks=[{type=\"command\",command=\"<SHIM> --cli codex --point session-start --session n -- start\",timeout=30}]}]",
+    "-c",
+    "hooks.SessionEnd=[{hooks=[{type=\"command\",command=\"<SHIM> --cli codex --point session-end --session n -- end\",timeout=3}]}]",
+    "-c",
+    "hooks.UserPromptSubmit=[{hooks=[{type=\"command\",command=\"<SHIM> --cli codex --point prompt-submitted --session n -- 'my cmd'\",timeout=7}]}]",
+    "--dangerously-bypass-hook-trust"
+  ]
+}

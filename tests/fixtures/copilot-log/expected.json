@@ -1,0 +1,243 @@
+{
+  "sessionIds": {
+    "ticket-7": "f2434f76-bd94-5f50-b0ad-7ef32fe9ca07",
+    "loop-0123456789abcdef": "8be7c819-ad1e-5e1c-aa4d-7c70418e1202",
+    "aé": "261f83f3-9971-5b14-8b3a-ecc599773f5d",
+    "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "1ab7b3fb-6905-5dd6-a0af-aec780731b0e"
+  },
+  "cases": [
+    {
+      "case": "first-turn",
+      "session": "ticket-7",
+      "turn": "start",
+      "reading": {
+        "nativeId": "f2434f76-bd94-5f50-b0ad-7ef32fe9ca07",
+        "model": "claude-haiku-4.5",
+        "reasoningEffort": "medium",
+        "usage": {
+          "apiCalls": 2,
+          "inputTokens": 500,
+          "outputTokens": 100,
+          "reasoningTokens": 10,
+          "cacheReadTokens": 2100,
+          "cacheWriteTokens": 400,
+          "aiu": {
+            "input": 0.1,
+            "output": 0.1
+          },
+          "premiumRequests": 1.0,
+          "totalInputTokens": 3000,
+          "totalAiu": 0.2
+        },
+        "tools": [
+          {
+            "callId": "t1",
+            "name": "bash",
+            "arguments": {
+              "command": "git status"
+            },
+            "result": "clean",
+            "ok": true,
+            "startedAt": "2026-10-23T13:00:01.000Z",
+            "endedAt": "2026-10-23T13:00:01.500Z"
+          }
+        ]
+      }
+    },
+    {
+      "case": "resumed-turn",
+      "session": "ticket-7",
+      "turn": "resume",
+      "reading": {
+        "nativeId": "f2434f76-bd94-5f50-b0ad-7ef32fe9ca07",
+        "model": "claude-haiku-4.5",
+        "reasoningEffort": "medium",
+        "usage": {
+          "apiCalls": 1,
+          "inputTokens": 500,
+          "outputTokens": 10,
+          "reasoningTokens": 5,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "aiu": {
+            "input": 0.1,
+            "output": 0.01
+          },
+          "premiumRequests": 1.0,
+          "totalInputTokens": 500,
+          "totalAiu": 0.11
+        },
+        "tools": [
+          {
+            "callId": "t2",
+            "name": "edit",
+            "arguments": {},
+            "result": "boom",
+            "ok": false,
+            "startedAt": "2026-10-23T13:00:11.000Z",
+            "endedAt": "2026-10-23T13:00:11.250Z"
+          }
+        ]
+      }
+    },
+    {
+      "case": "first-turn-of-resumed-log",
+      "session": "ticket-7",
+      "turn": "start",
+      "reading": {
+        "nativeId": "f2434f76-bd94-5f50-b0ad-7ef32fe9ca07",
+        "model": "claude-haiku-4.5",
+        "reasoningEffort": "medium",
+        "usage": {
+          "apiCalls": 1,
+          "inputTokens": 500,
+          "outputTokens": 10,
+          "reasoningTokens": 5,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "aiu": {
+            "input": 0.1,
+            "output": 0.01
+          },
+          "premiumRequests": 1.0,
+          "totalInputTokens": 500,
+          "totalAiu": 0.11
+        },
+        "tools": [
+          {
+            "callId": "t2",
+            "name": "edit",
+            "arguments": {},
+            "result": "boom",
+            "ok": false,
+            "startedAt": "2026-10-23T13:00:11.000Z",
+            "endedAt": "2026-10-23T13:00:11.250Z"
+          }
+        ]
+      }
+    },
+    {
+      "case": "pre-1.0.95-cumulative-totals",
+      "session": "ticket-7",
+      "turn": "resume",
+      "reading": null
+    },
+    {
+      "case": "timestamp-precision",
+      "session": "ticket-7",
+      "turn": "start",
+      "reading": {
+        "nativeId": "f2434f76-bd94-5f50-b0ad-7ef32fe9ca07",
+        "model": "claude-haiku-4.5",
+        "reasoningEffort": "medium",
+        "usage": {
+          "apiCalls": 1,
+          "inputTokens": 10,
+          "outputTokens": 1,
+          "reasoningTokens": 5,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "aiu": {
+            "input": 0.002,
+            "output": 0.001
+          },
+          "premiumRequests": 1.0,
+          "totalInputTokens": 10,
+          "totalAiu": 0.003
+        },
+        "tools": [
+          {
+            "callId": "a",
+            "name": "one-digit",
+            "arguments": {},
+            "result": "",
+            "ok": true,
+            "startedAt": "2026-10-23T13:00:01.500Z",
+            "endedAt": "2026-10-23T13:00:01.570Z"
+          },
+          {
+            "callId": "b",
+            "name": "six-digits",
+            "arguments": {},
+            "result": "",
+            "ok": true,
+            "startedAt": "2026-10-23T13:00:02.123Z",
+            "endedAt": "2026-10-23T13:00:02.987Z"
+          },
+          {
+            "callId": "c",
+            "name": "nine-digits",
+            "arguments": {
+              "k": [
+                1,
+                2
+              ]
+            },
+            "result": "x",
+            "ok": false,
+            "startedAt": "2026-10-23T13:00:03.123Z",
+            "endedAt": "2026-10-23T13:00:03.900Z"
+          },
+          {
+            "callId": "d",
+            "name": "offset",
+            "arguments": {},
+            "result": "tz",
+            "ok": true,
+            "startedAt": "2026-10-23T13:00:04.000Z",
+            "endedAt": "2026-10-23T13:00:04.250Z"
+          }
+        ]
+      }
+    },
+    {
+      "case": "big-numbers",
+      "session": "ticket-7",
+      "turn": "start",
+      "reading": {
+        "nativeId": "f2434f76-bd94-5f50-b0ad-7ef32fe9ca07",
+        "model": null,
+        "reasoningEffort": null,
+        "usage": {
+          "apiCalls": 1,
+          "inputTokens": 1234567,
+          "outputTokens": 7654321,
+          "reasoningTokens": 0,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "aiu": {
+            "input": 1219.325432268192,
+            "output": 7654.4511255849375
+          },
+          "premiumRequests": 2.5,
+          "totalInputTokens": 1234567,
+          "totalAiu": 8873.776557853129
+        },
+        "tools": []
+      }
+    },
+    {
+      "case": "sparse-no-start",
+      "session": "ticket-7",
+      "turn": "start",
+      "reading": {
+        "nativeId": "f2434f76-bd94-5f50-b0ad-7ef32fe9ca07",
+        "model": null,
+        "reasoningEffort": null,
+        "usage": {
+          "apiCalls": 1,
+          "inputTokens": 5,
+          "outputTokens": 2,
+          "reasoningTokens": 0,
+          "cacheReadTokens": 4,
+          "cacheWriteTokens": 1,
+          "aiu": {},
+          "premiumRequests": 0.0,
+          "totalInputTokens": 10,
+          "totalAiu": 0
+        },
+        "tools": []
+      }
+    }
+  ]
+}

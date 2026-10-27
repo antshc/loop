@@ -1,0 +1,188 @@
+{
+  "decode": [
+    {
+      "transport": "copilot-json",
+      "case": "deltas-and-result",
+      "stdout": "{\"type\":\"assistant.message_start\"}\n{\"type\":\"assistant.message_delta\",\"data\":{\"deltaContent\":\"OK\"}}\n{\"type\":\"assistant.message_delta\",\"data\":{\"deltaContent\":\", done\"}}\n{\"type\":\"assistant.turn_end\"}\n{\"type\":\"result\",\"sessionId\":\"sess-1\",\"exitCode\":0}",
+      "transcript": {
+        "text": "OK, done",
+        "handleValue": "sess-1",
+        "exitCode": 0
+      }
+    },
+    {
+      "transport": "copilot-json",
+      "case": "noise-lines-and-nonzero-exit",
+      "stdout": "not json\n[1, 2]\n{\"type\":\"assistant.message_delta\",\"data\":{\"deltaContent\":\"partial\"}}\n{\"type\":\"result\",\"sessionId\":\"sess-2\",\"exitCode\":3}\ntrailing garbage",
+      "transcript": {
+        "text": "partial",
+        "handleValue": "sess-2",
+        "exitCode": 3
+      }
+    },
+    {
+      "transport": "copilot-json",
+      "case": "unicode-and-crlf",
+      "stdout": "{\"type\":\"assistant.message_delta\",\"data\":{\"deltaContent\":\"héllo 😀\"}}\r\n{\"type\":\"result\",\"sessionId\":\"s\",\"exitCode\":0}\r\n",
+      "transcript": {
+        "text": "héllo 😀",
+        "handleValue": "s",
+        "exitCode": 0
+      }
+    },
+    {
+      "transport": "copilot-json",
+      "case": "line-separator-inside-a-line-splits-it",
+      "stdout": "{\"type\":\"assistant.message_delta\",\"data\":{\"deltaContent\":\"a b\"}}\n{\"type\":\"result\",\"sessionId\":\"s\",\"exitCode\":0}",
+      "transcript": {
+        "text": "",
+        "handleValue": "s",
+        "exitCode": 0
+      }
+    },
+    {
+      "transport": "copilot-json",
+      "case": "no-result-event",
+      "stdout": "{\"type\":\"assistant.message_delta\",\"data\":{\"deltaContent\":\"only\"}}",
+      "transcript": {
+        "text": "only",
+        "handleValue": null,
+        "exitCode": null
+      }
+    },
+    {
+      "transport": "copilot-json",
+      "case": "empty",
+      "stdout": "",
+      "transcript": {
+        "text": "",
+        "handleValue": null,
+        "exitCode": null
+      }
+    },
+    {
+      "transport": "codex-json",
+      "case": "thread-and-last-message",
+      "stdout": "{\"type\":\"thread.started\",\"thread_id\":\"t1\"}\nnot json\n{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"first\"}}\n{\"type\":\"item.completed\",\"item\":{\"type\":\"command_execution\",\"text\":\"ignored\"}}\n{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"last\"}}\n{\"type\":\"turn.completed\"}",
+      "transcript": {
+        "text": "last",
+        "handleValue": "t1",
+        "exitCode": null
+      }
+    },
+    {
+      "transport": "codex-json",
+      "case": "no-thread",
+      "stdout": "{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"x\"}}",
+      "transcript": {
+        "text": "x",
+        "handleValue": null,
+        "exitCode": null
+      }
+    },
+    {
+      "transport": "codex-json",
+      "case": "unicode-escaped",
+      "stdout": "{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"caf\\u00e9 \\ud83d\\ude00\"}}",
+      "transcript": {
+        "text": "café 😀",
+        "handleValue": null,
+        "exitCode": null
+      }
+    },
+    {
+      "transport": "codex-json",
+      "case": "empty",
+      "stdout": "",
+      "transcript": {
+        "text": "",
+        "handleValue": null,
+        "exitCode": null
+      }
+    },
+    {
+      "transport": "copilot-text",
+      "case": "plain",
+      "stdout": "plain\ntext\n",
+      "transcript": {
+        "text": "plain\ntext\n",
+        "handleValue": null,
+        "exitCode": null
+      }
+    }
+  ],
+  "encode": [
+    {
+      "transport": "copilot-json",
+      "text": "hello",
+      "handle": "h1",
+      "encoded": "{\"type\": \"assistant.message_delta\", \"data\": {\"messageId\": \"dry-run\", \"deltaContent\": \"hello\"}}\n{\"type\": \"result\", \"sessionId\": \"h1\", \"exitCode\": 0}"
+    },
+    {
+      "transport": "copilot-json",
+      "text": "café 😀 \"quoted\" \\ \n tab\t",
+      "handle": "h-é",
+      "encoded": "{\"type\": \"assistant.message_delta\", \"data\": {\"messageId\": \"dry-run\", \"deltaContent\": \"caf\\u00e9 \\ud83d\\ude00 \\\"quoted\\\" \\\\ \\n tab\\t\"}}\n{\"type\": \"result\", \"sessionId\": \"h-\\u00e9\", \"exitCode\": 0}"
+    },
+    {
+      "transport": "copilot-json",
+      "text": "",
+      "handle": null,
+      "encoded": "{\"type\": \"assistant.message_delta\", \"data\": {\"messageId\": \"dry-run\", \"deltaContent\": \"\"}}\n{\"type\": \"result\", \"sessionId\": null, \"exitCode\": 0}"
+    },
+    {
+      "transport": "copilot-json",
+      "text": " ",
+      "handle": "x",
+      "encoded": "{\"type\": \"assistant.message_delta\", \"data\": {\"messageId\": \"dry-run\", \"deltaContent\": \"\\u007f\\u2028\"}}\n{\"type\": \"result\", \"sessionId\": \"x\", \"exitCode\": 0}"
+    },
+    {
+      "transport": "codex-json",
+      "text": "hello",
+      "handle": "h1",
+      "encoded": "{\"type\": \"thread.started\", \"thread_id\": \"h1\"}\n{\"type\": \"item.completed\", \"item\": {\"type\": \"agent_message\", \"text\": \"hello\"}}"
+    },
+    {
+      "transport": "codex-json",
+      "text": "café 😀 \"quoted\" \\ \n tab\t",
+      "handle": "h-é",
+      "encoded": "{\"type\": \"thread.started\", \"thread_id\": \"h-\\u00e9\"}\n{\"type\": \"item.completed\", \"item\": {\"type\": \"agent_message\", \"text\": \"caf\\u00e9 \\ud83d\\ude00 \\\"quoted\\\" \\\\ \\n tab\\t\"}}"
+    },
+    {
+      "transport": "codex-json",
+      "text": "",
+      "handle": null,
+      "encoded": "{\"type\": \"thread.started\", \"thread_id\": null}\n{\"type\": \"item.completed\", \"item\": {\"type\": \"agent_message\", \"text\": \"\"}}"
+    },
+    {
+      "transport": "codex-json",
+      "text": " ",
+      "handle": "x",
+      "encoded": "{\"type\": \"thread.started\", \"thread_id\": \"x\"}\n{\"type\": \"item.completed\", \"item\": {\"type\": \"agent_message\", \"text\": \"\\u007f\\u2028\"}}"
+    },
+    {
+      "transport": "copilot-text",
+      "text": "hello",
+      "handle": "h1",
+      "encoded": "hello"
+    },
+    {
+      "transport": "copilot-text",
+      "text": "café 😀 \"quoted\" \\ \n tab\t",
+      "handle": "h-é",
+      "encoded": "café 😀 \"quoted\" \\ \n tab\t"
+    },
+    {
+      "transport": "copilot-text",
+      "text": "",
+      "handle": null,
+      "encoded": ""
+    },
+    {
+      "transport": "copilot-text",
+      "text": " ",
+      "handle": "x",
+      "encoded": " "
+    }
+  ]
+}

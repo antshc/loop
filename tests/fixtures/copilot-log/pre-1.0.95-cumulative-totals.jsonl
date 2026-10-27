@@ -1,0 +1,6 @@
+{"type": "session.start", "data": {"sessionId": "s", "selectedModel": "claude-haiku-4.5"}, "timestamp": "2026-10-23T13:00:00.000Z"}
+{"type": "tool.execution_start", "data": {"toolCallId": "t1", "toolName": "bash", "arguments": {}}, "timestamp": "2026-10-23T13:00:01.000Z"}
+{"type": "tool.execution_complete", "data": {"toolCallId": "t1", "success": true, "result": {"content": "ok"}}, "timestamp": "2026-10-23T13:00:01.500Z"}
+{"type": "session.shutdown", "data": {"totalPremiumRequests": 1, "modelMetrics": {"claude-haiku-4.5": {"usage": {"inputTokens": 5000, "outputTokens": 100}}}}, "timestamp": "2026-10-23T13:00:03.200Z"}
+{"type": "session.resume", "data": {"selectedModel": "claude-haiku-4.5"}, "timestamp": "2026-10-23T13:00:10.000Z"}
+{"type": "session.shutdown", "data": {"totalPremiumRequests": 2, "modelMetrics": {"claude-haiku-4.5": {"usage": {"inputTokens": 9000, "outputTokens": 150}}}}, "timestamp": "2026-10-23T13:00:12.200Z"}
