@@ -10,6 +10,17 @@ export { ObservingCliRunner, type SessionLogReader } from './clis/observing.ts';
 export { Permissions, type PermissionsInit, UnsupportedPermissions } from './clis/permissions.ts';
 export { type CliRunner, ProcessCliRunner } from './clis/runner.ts';
 export { CodexJson, CopilotJson, CopilotText, Transcript, type Transport } from './clis/transport.ts';
+export {
+  configureLogging,
+  getLogger,
+  type LogExtra,
+  type Logger,
+  type LoggingOptions,
+  type LogLevel,
+  type LogRecord,
+  type LogSink,
+  type LogStream,
+} from './diagnostics.ts';
 export { DockerRuntime, type DockerService } from './docker/runtime.ts';
 export { LoggingDocker, LoggingGitCli, LoggingRunner } from './dryrun/adapters.ts';
 export { DirectoryGit, FakeCliRunner, type FakeCliRunnerOptions, FakeReply, FakeToolUse } from './dryrun/fakes.ts';
@@ -45,6 +56,13 @@ export {
   WorktreeRemovingLoopHook,
 } from './hooks/loop.ts';
 export { addNote, notesOf } from './notes.ts';
+export {
+  type ModuleLoader,
+  OtlpObserver,
+  otlpObserver,
+  type OtlpObserverOptions,
+  TelemetryUnavailableError,
+} from './observe/otel.ts';
 export { Role } from './observe/roles.ts';
 export {
   isSpanObserver,
