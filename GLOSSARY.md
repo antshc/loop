@@ -70,6 +70,7 @@ Product and SDLC language for user-owned workflows built **on** Loop. Warp Facto
 | **Initiative** | Coordinated product change identified by an Initiative ID; may span target repositories and their Specs. **Avoid:** generic project, epic. |
 | **Spec** | Planning Ticket containing expected behavior, scope, and acceptance criteria for an Initiative and target repository; can parent implementation Tickets. **Avoid:** implementation task, epic. |
 | **Ticket** | Platform-neutral actionable task, such as a GitHub issue or Azure DevOps work item. In the proposed unified workflow, child Tickets implement their parent Spec. **Avoid:** generic issue when role matters. |
+| **Ticket Tracker** | Domain-facing service for reading and updating Tickets, Specs, dependencies, comments, labels, and status through a provider such as GitHub Issues or Jira. The external tracker owns work state; it is not the factory execution ledger or checkpoint store. |
 | **Dependency graph** | Relationships between Tickets that constrain execution order; an eligible, unblocked Ticket belongs to the **ready frontier**. |
 | **Pull request (PR)** | Proposed code change and review surface with comments, review threads, commits, and check results. It is not itself a passing merge gate. |
 
@@ -89,8 +90,10 @@ Product and SDLC language for user-owned workflows built **on** Loop. Warp Facto
 | **Verifier** | Checks observable feature behavior and collects evidence against acceptance criteria. Distinct from a test command and a reviewer judgment. |
 | **Monitor** | Detects actionable post-delivery failures or product signals and creates new work items. |
 | **Skill** | Reusable procedural instructions, references, and scripts available to an agent. It informs behavior but is not a permission boundary. |
-| **Tool** | Capability an agent can invoke (shell, file editing, GitHub API, browser, MCP). Tool availability is distinct from its authorization and from deterministic Workflow code. |
-| **Deterministic step** | Code-controlled operation with defined inputs and results, such as commit, test command, state update, or CI lookup. **Avoid:** asking an agent to rediscover a fixed command for every run. |
+| **Tool (Agent Tool)** | Capability an agent invokes directly *during* an Agent run, such as shell, file editing, GitHub API, browser, or MCP. Tools are governed by permissions; exposing a tool does not make it a workflow decision. **Avoid:** Workflow Action. |
+| **Workflow Action** | Operation invoked by deterministic Workflow code, before or after an Agent run or without any agent, such as updating a Ticket, creating a PR, or checking CI status. Workflow code decides whether and when it runs. **Avoid:** Agent Tool, agent prompt. |
+| **Service / Adapter** | Reusable implementation behind an Agent Tool or Workflow Action. A service exposes domain operations (for example `TicketTracker`); an adapter connects those operations to GitHub, Jira, Git, or another external system. **Avoid:** equating the service with one tool call. |
+| **Deterministic step** | Code-controlled Workflow phase that may invoke one or more Workflow Actions, validate results, and record gates. **Avoid:** asking an agent to rediscover a fixed operation for every run. |
 | **Execution environment** | Host, container, VM, or managed runner supplying repository access, tools, credentials, and compute to an agent. |
 | **Sandbox** | Enforced execution or filesystem boundary. A Git worktree alone is **not** a sandbox. |
 
