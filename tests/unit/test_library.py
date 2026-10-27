@@ -24,7 +24,7 @@ def test_packaging_declares_no_scripts_and_ships_no_workflow_file() -> None:
 
 
 def test_package_supports_python_310() -> None:
-    assert distribution("loop").metadata["Requires-Python"] == ">=3.10"
+    assert distribution("loop").metadata["Requires-Python"] == ">=3.14"
 
 
 def test_import_linter_contracts_pass() -> None:

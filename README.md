@@ -27,7 +27,7 @@ It ships no command and no built-in Workflows.
 
 ## Requirements
 
-- Python 3.10 or newer (including 3.10.12), for both the library and example Workflows.
+- Python 3.14 or newer, for both the library and example Workflows.
 - Git for repository and worktree operations.
 - [Copilot CLI](https://github.com/github/copilot-cli) or
   [Codex CLI](https://github.com/openai/codex), installed and authenticated for live agent runs.
@@ -219,7 +219,7 @@ The test suite includes library tests, example Workflow tests, and import-linter
 architecture checks. See the [test strategy](docs/concepts/ops-test-strategy.md)
 for testing boundaries.
 
-For compatibility changes, verify installation, tests, and Workflow entry points on Python 3.10.12 and a newer supported interpreter; see [Python compatibility](docs/concepts/ops-test-strategy.md#python-compatibility).
+For compatibility changes, verify installation, tests, and Workflow entry points on the minimum supported interpreter (Python 3.14); see [Python compatibility](docs/concepts/ops-test-strategy.md#python-compatibility).
 
 For bug reports and feature requests, [open an issue](https://github.com/antshc/loop/issues).
 Include reproduction steps and relevant Python and agent CLI versions for bugs;

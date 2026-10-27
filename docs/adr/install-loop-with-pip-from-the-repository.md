@@ -9,6 +9,6 @@ Loop must reach users in a form whose version the project controls. It is instal
 
 ## Consequences
 
-- Users need Python 3.10 or newer and `pip` and must update by pulling the repository and reinstalling; `pyproject.toml` declares the supported minimum.
+- Users need Python 3.14 or newer and `pip` and must update by pulling the repository and reinstalling; `pyproject.toml` declares the supported minimum.
 - No package index is involved; the repository is the only distribution channel.
 - The package is named `loop` and ships no command ([Ship Loop as a workflow library with no built-in workflows](ship-loop-as-a-workflow-library-with-no-built-in-workflows.md)).

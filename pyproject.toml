@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "loop"
 version = "0.0.0"
 description = "Library for composing agent workflows on git worktrees."
-requires-python = ">=3.10"
+requires-python = ">=3.14"
 dependencies = [
     "python-json-logger>=2.0",
 ]

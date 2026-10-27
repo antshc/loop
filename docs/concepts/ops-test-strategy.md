@@ -29,7 +29,7 @@ One unit test group runs in the project's single test command (`pytest`). It tes
 
 ## Python compatibility
 
-The library and example Workflows support Python 3.10+, including 3.10.12; [package metadata](../../pyproject.toml) declares the minimum. For runtime compatibility changes, validate in isolated environments on exact Python 3.10.12 and a newer supported interpreter (currently 3.12). Use each environment's `python` for both installation and execution:
+The library and example Workflows support Python 3.14+; [package metadata](../../pyproject.toml) declares the minimum. For runtime compatibility changes, validate in an isolated environment on Python 3.14 and on any newer supported interpreter. Use each environment's `python` for both installation and execution:
 
 ```sh
 python --version
@@ -42,7 +42,7 @@ python -m workflows.plan_implement --help
 
 Run from the repository root with `git` installed. The `dev` extra includes Dishka (the `workflows` extra) for the slice Workflows. The root test command covers library tests, `workflows/shared`, the `dev` and `pr_babysit` slices, and import-linter contracts. The `--help` checks exercise Workflow imports and argument parsing without starting agents or contacting GitHub.
 
-Syntax checks alone do not prove runtime compatibility: imports, standard-library APIs, dependency resolution, and error paths must also work. Preserve hook-point string conversion, formatting, and JSON serialization across runtimes. Cleanup failures must not mask the original error: Python 3.11+ attaches exception notes; Python 3.10 logs the secondary failure with its traceback. Tests cover the applicable path on each runtime.
+Syntax checks alone do not prove runtime compatibility: imports, standard-library APIs, dependency resolution, and error paths must also work. Hook-point enums are `StrEnum`s, so string conversion, formatting, and JSON serialization yield the value. Cleanup failures must not mask the original error: the secondary failure is attached to it as an exception note.
 
 ## Example
 

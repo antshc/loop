@@ -1,16 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import ClassVar
 
 DEFAULT_LOOP_HOOK_TIMEOUT_SEC = 120.0
 
 
-class LoopHookPoint(str, Enum):
+class LoopHookPoint(StrEnum):
     """Moment in a Loop run at which a Loop hook runs."""
-
-    __str__ = str.__str__
 
     WORKTREE_READY = "worktree-ready"
     WORKTREE_REMOVING = "worktree-removing"

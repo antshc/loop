@@ -86,11 +86,7 @@ def _worktree(
         try:
             _cleanup(git, repository, target)
         except (OSError, subprocess.CalledProcessError) as cleanup:
-            note = f"worktree cleanup also failed; retained {target}: {cleanup}"
-            if hasattr(exception, "add_note"):
-                exception.add_note(note)
-            else:
-                logger.error(note, exc_info=True)
+            exception.add_note(f"worktree cleanup also failed; retained {target}: {cleanup}")
         raise
     else:
         if not _cleanup(git, repository, target):

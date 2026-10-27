@@ -4,17 +4,15 @@ import shlex
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import ClassVar
 
 from ..sessions import Turn
 
 
-class AgentCliHookPoint(str, Enum):
+class AgentCliHookPoint(StrEnum):
     """Moment in a CLI run at which a native hook fires."""
-
-    __str__ = str.__str__
 
     SESSION_START = "session-start"
     SESSION_END = "session-end"
