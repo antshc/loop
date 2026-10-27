@@ -4,5 +4,8 @@
   },
   "files.watcherExclude": {
     "**/archive/**": true
+  },
+  "chat.agentSkillsLocations": {
+    "~/.copilot/installed-plugins/brain/wf/skills": true
   }
 }
