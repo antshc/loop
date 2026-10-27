@@ -1,7 +1,9 @@
 // Self-contained Workflow: plan, implement, and report commits on one worktree without pushing.
 // Run from the harness root through a user alias: `bun workflows/plan_implement.ts "<task>"`.
 import { Command, CommanderError } from 'commander';
+import { Container, inject, injectable } from 'inversify';
 import { basename, join } from 'node:path';
+import 'reflect-metadata';
 
 import {
   Agent,
@@ -50,77 +52,170 @@ export const implementer = new AgentProfile(copilot, {
   reasoningEffort: IMPLEMENT_EFFORT,
 });
 
+/** A fresh Agent builder per run. */
+export type AgentFactory = () => AgentBuilder;
+
+/** Runs `git --no-pager <args>` in `path` and returns trimmed stdout; rejects when git fails. */
+export type GitReader = (path: string, args: readonly string[]) => Promise<string>;
 export interface Logger {
   error: (message: string) => void;
   info: (message: string) => void;
   warning: (message: string) => void;
 }
+/** Parses the command line into the task, or into the exit code to return for help or bad input. */
+export interface TaskCommandLine {
+  parse: (argv: readonly string[]) => number | string;
+}
+/** Writes text to an output stream. */
+export type TextSink = (text: string) => unknown;
+/** Eight lowercase hex characters naming the branch. */
+export type UniqueId = () => string;
 
-/** Each member replaces the shipped implementation of the same name. */
+/** The directory the worktree root is derived from. */
+export type WorkingDirectory = () => string;
+
+/** The seams of this Workflow; the composition root is the only place that binds implementations. */
+export const TOKENS = {
+  agent: Symbol.for('plan_implement.AgentFactory'),
+  commandLine: Symbol.for('plan_implement.TaskCommandLine'),
+  cwd: Symbol.for('plan_implement.WorkingDirectory'),
+  logger: Symbol.for('plan_implement.Logger'),
+  readGit: Symbol.for('plan_implement.GitReader'),
+  stderr: Symbol.for('plan_implement.ErrorStream'),
+  stdout: Symbol.for('plan_implement.OutputStream'),
+  uniqueId: Symbol.for('plan_implement.UniqueId'),
+  workflow: Symbol.for('plan_implement.PlanImplementWorkflow'),
+} as const;
+
+/** Each member rebinds the token of the shipped implementation of the same name. */
 export interface PlanImplementDependencies {
-  /** A fresh Agent builder per run. */
-  agent?: () => AgentBuilder;
-  /** The directory the worktree root is derived from. */
-  cwd?: () => string;
+  agent?: AgentFactory;
+  cwd?: WorkingDirectory;
   logger?: Logger;
-  /** Runs `git --no-pager <args>` in `path` and returns trimmed stdout; rejects when git fails. */
-  readGit?: (path: string, args: readonly string[]) => Promise<string>;
+  readGit?: GitReader;
   /** Writes usage and error text for bad input. */
-  stderr?: (text: string) => unknown;
+  stderr?: TextSink;
   /** Writes help requested on the command line. */
-  stdout?: (text: string) => unknown;
-  /** Eight lowercase hex characters naming the branch. */
-  uniqueId?: () => string;
+  stdout?: TextSink;
+  uniqueId?: UniqueId;
+}
+
+@injectable()
+class CommanderTaskCommandLine implements TaskCommandLine {
+  constructor(
+    @inject(TOKENS.stdout) private readonly stdout: TextSink,
+    @inject(TOKENS.stderr) private readonly stderr: TextSink,
+  ) {}
+
+  parse(argv: readonly string[]): number | string {
+    let task = '';
+    const program = new Command('plan_implement')
+      .description('Plan, then implement a task on one worktree without pushing.')
+      .argument('<task>', 'the task to plan and implement')
+      .configureOutput({ writeErr: this.stderr, writeOut: this.stdout })
+      .showHelpAfterError()
+      .exitOverride()
+      .action((value: string) => {
+        task = value;
+      });
+    try {
+      program.parse([...argv], { from: 'user' });
+    } catch (error) {
+      if (error instanceof CommanderError) {
+        return error.exitCode === 0 ? 0 : 2;
+      }
+      throw error;
+    }
+    return task;
+  }
+}
+
+@injectable()
+class PlanImplementWorkflow {
+  constructor(
+    @inject(TOKENS.commandLine) private readonly commandLine: TaskCommandLine,
+    @inject(TOKENS.agent) private readonly agent: AgentFactory,
+    @inject(TOKENS.cwd) private readonly cwd: WorkingDirectory,
+    @inject(TOKENS.logger) private readonly logger: Logger,
+    @inject(TOKENS.readGit) private readonly readGit: GitReader,
+    @inject(TOKENS.uniqueId) private readonly uniqueId: UniqueId,
+  ) {}
+
+  async run(argv: readonly string[]): Promise<number> {
+    const { logger, readGit } = this;
+    const parsed = this.commandLine.parse(argv);
+    if (typeof parsed === 'number') {
+      return parsed;
+    }
+    const branch = `loop/run-${this.uniqueId()}`;
+    logger.info(`branch ${branch}`);
+    const options = new GitOptions({
+      rootPath: join('workspace', `${basename(this.cwd())}.worktrees`),
+      strategy: new BranchStrategy(branch, 'origin/main'),
+    });
+
+    return this.agent()
+      .withGit(options)
+      .open(async (worktree) => {
+        const plan = await runStep(worktree, planner, `${parsed}\n\n${PLAN_INSTRUCTIONS}`, logger);
+        if (plan === null || plan === '') {
+          logger.error('planning run failed: no usable plan');
+          return 1;
+        }
+
+        const headBefore = await readGit(worktree.path, ['rev-parse', 'HEAD']);
+        const result = await runStep(worktree, implementer, `${plan}\n\n${IMPLEMENT_INSTRUCTIONS}`, logger);
+        const commits = await readGit(worktree.path, ['log', '--reverse', '--format=%H', `${headBefore}..HEAD`]);
+        logger.info(`commits: ${commits.split('\n').filter((line) => line !== '').join(', ') || 'none'}`);
+        if (result === null) {
+          logger.error('implementing run failed');
+          return 1;
+        }
+        return 0;
+      });
+  }
 }
 
 /** Without a configured host logger only warnings and errors reach stderr, as the message alone. */
-const defaultLogger: Logger = {
-  error: writeStderr,
-  info: () => undefined,
-  warning: writeStderr,
-};
+@injectable()
+class StderrLogger implements Logger {
+  error(message: string): void {
+    writeStderr(message);
+  }
+
+  info(): void {
+    // Informational records need a configured host logger.
+  }
+
+  warning(message: string): void {
+    writeStderr(message);
+  }
+}
+
+/** The composition root: binds the shipped implementations, then rebinds each token that has an override. */
+export function compose(overrides: PlanImplementDependencies = {}): Container {
+  const container = new Container();
+  container.bind<AgentFactory>(TOKENS.agent).toConstantValue(() => Agent());
+  container.bind<TaskCommandLine>(TOKENS.commandLine).to(CommanderTaskCommandLine).inSingletonScope();
+  container.bind<WorkingDirectory>(TOKENS.cwd).toConstantValue(() => process.cwd());
+  container.bind<Logger>(TOKENS.logger).to(StderrLogger).inSingletonScope();
+  container.bind<GitReader>(TOKENS.readGit).toConstantValue(gitOutput);
+  container.bind<TextSink>(TOKENS.stderr).toConstantValue(writeStderr);
+  container.bind<TextSink>(TOKENS.stdout).toConstantValue(writeStdout);
+  container.bind<UniqueId>(TOKENS.uniqueId).toConstantValue(shortId);
+  container.bind<PlanImplementWorkflow>(TOKENS.workflow).to(PlanImplementWorkflow).inSingletonScope();
+
+  for (const [name, override] of Object.entries(overrides) as [keyof PlanImplementDependencies, unknown][]) {
+    if (override !== undefined) {
+      container.rebind(TOKENS[name]).toConstantValue(override);
+    }
+  }
+  return container;
+}
 
 /** Plans and implements a task in one worktree; resolves 0 on success, 1 on step failure, or 2 on bad input. */
 export async function main(argv: readonly string[], dependencies: PlanImplementDependencies = {}): Promise<number> {
-  const {
-    agent = Agent,
-    cwd = () => process.cwd(),
-    logger = defaultLogger,
-    readGit = gitOutput,
-    stderr = writeStderr,
-    stdout = writeStdout,
-    uniqueId = shortId,
-  } = dependencies;
-  const parsed = parseCommandLine(argv, stdout, stderr);
-  if (typeof parsed === 'number') {
-    return parsed;
-  }
-  const branch = `loop/run-${uniqueId()}`;
-  logger.info(`branch ${branch}`);
-  const options = new GitOptions({
-    rootPath: join('workspace', `${basename(cwd())}.worktrees`),
-    strategy: new BranchStrategy(branch, 'origin/main'),
-  });
-
-  return agent()
-    .withGit(options)
-    .open(async (worktree) => {
-      const plan = await runStep(worktree, planner, `${parsed}\n\n${PLAN_INSTRUCTIONS}`, logger);
-      if (plan === null || plan === '') {
-        logger.error('planning run failed: no usable plan');
-        return 1;
-      }
-
-      const headBefore = await readGit(worktree.path, ['rev-parse', 'HEAD']);
-      const result = await runStep(worktree, implementer, `${plan}\n\n${IMPLEMENT_INSTRUCTIONS}`, logger);
-      const commits = await readGit(worktree.path, ['log', '--reverse', '--format=%H', `${headBefore}..HEAD`]);
-      logger.info(`commits: ${commits.split('\n').filter((line) => line !== '').join(', ') || 'none'}`);
-      if (result === null) {
-        logger.error('implementing run failed');
-        return 1;
-      }
-      return 0;
-    });
+  return await compose(dependencies).get<PlanImplementWorkflow>(TOKENS.workflow).run(argv);
 }
 
 /** Returns the text before a success tag; throws ValueError for missing or unsuccessful tags. */
@@ -143,33 +238,6 @@ async function gitOutput(path: string, args: readonly string[]): Promise<string>
     throw new Error(`git ${args.join(' ')} failed with exit status ${String(exitCode)}: ${stderr.trim()}`);
   }
   return stdout.trim();
-}
-
-/** The task, or the exit code to return when the command line is help or bad input. */
-function parseCommandLine(
-  argv: readonly string[],
-  stdout: (text: string) => unknown,
-  stderr: (text: string) => unknown,
-): number | string {
-  let task = '';
-  const program = new Command('plan_implement')
-    .description('Plan, then implement a task on one worktree without pushing.')
-    .argument('<task>', 'the task to plan and implement')
-    .configureOutput({ writeErr: stderr, writeOut: stdout })
-    .showHelpAfterError()
-    .exitOverride()
-    .action((value: string) => {
-      task = value;
-    });
-  try {
-    program.parse([...argv], { from: 'user' });
-  } catch (error) {
-    if (error instanceof CommanderError) {
-      return error.exitCode === 0 ? 0 : 2;
-    }
-    throw error;
-  }
-  return task;
 }
 
 /** Runs a fresh session and returns its response body, or logs the failure and returns null. */

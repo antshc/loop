@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 import type { OutputStream, SpanObserver } from '../../src/loop/index.ts';
 
-import { main, type WorkflowReportingDependencies } from '../../workflows/workflow_reporting.ts';
+import { compose, main, TOKENS, type WorkflowReportingDependencies } from '../../workflows/workflow_reporting.ts';
 import { SpanRecorder } from './support/span-observer.ts';
 
 interface Session {
@@ -198,5 +198,54 @@ describe('running as a script', () => {
 
     expect(result.code).toBe(2);
     expect(result.stderr).toContain('Usage: workflow_reporting [options]');
+  });
+});
+
+describe('the composition root', () => {
+  test('binds every seam with the shipped implementation', () => {
+    const container = compose();
+
+    expect(container.get<() => number>(TOKENS.clock)()).toBeGreaterThanOrEqual(0);
+    expect(container.get<() => Date>(TOKENS.now)()).toBeInstanceOf(Date);
+    expect(container.get<unknown>(TOKENS.stderr)).toBe(process.stderr);
+    expect(container.get<unknown>(TOKENS.stdout)).toBe(process.stdout);
+    expect(typeof container.get<unknown>(TOKENS.otlpObserver)).toBe('function');
+  });
+
+  test('shares one instance of each service', () => {
+    const container = compose();
+
+    expect(container.get<unknown>(TOKENS.workflow)).toBe(container.get<unknown>(TOKENS.workflow));
+    expect(container.get<unknown>(TOKENS.commandLine)).toBe(container.get<unknown>(TOKENS.commandLine));
+  });
+
+  test('each override rebinds the token of the same name', () => {
+    const { dependencies } = session({ otlpObserver: () => new SpanRecorder() });
+    const container = compose(dependencies);
+
+    expect(container.get<unknown>(TOKENS.clock)).toBe(dependencies.clock);
+    expect(container.get<unknown>(TOKENS.now)).toBe(dependencies.now);
+    expect(container.get<unknown>(TOKENS.otlpObserver)).toBe(dependencies.otlpObserver);
+    expect(container.get<unknown>(TOKENS.stderr)).toBe(dependencies.stderr);
+    expect(container.get<unknown>(TOKENS.stdout)).toBe(dependencies.stdout);
+  });
+
+  test('a missing or undefined override keeps the shipped implementation', () => {
+    const container = compose({ clock: undefined, now: () => new Date(0) });
+
+    expect(container.get<() => Date>(TOKENS.now)().getTime()).toBe(0);
+    expect(container.get<unknown>(TOKENS.stderr)).toBe(process.stderr);
+    expect(container.get<() => number>(TOKENS.clock)()).toBeGreaterThan(0);
+  });
+
+  test('the stream overrides reach the command line and the console', async () => {
+    const stderr = new Stream();
+    const stdout = new Stream();
+    const dependencies = { clock: () => 0, now: () => new Date(2026, 0, 2, 3, 4, 5, 6), stderr, stdout };
+
+    expect(await main(['--help'], dependencies)).toBe(0);
+    expect(stdout.text).toContain('Usage: workflow_reporting');
+    expect(await main([], dependencies)).toBe(0);
+    expect(records(stderr.text)[0]).toBe('INFO loop.workflow: eShop development · spec #42 started');
   });
 });

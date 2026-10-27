@@ -20,6 +20,7 @@ import {
 } from '../../src/loop/index.ts';
 import { Cancelled } from '../../src/loop/run/cancelled.ts';
 import {
+  compose,
   IMPLEMENT_EFFORT,
   IMPLEMENT_INSTRUCTIONS,
   IMPLEMENT_MODEL,
@@ -29,6 +30,8 @@ import {
   PLAN_MODEL,
   type PlanImplementDependencies,
   responseBody,
+  TOKENS,
+  type UniqueId,
 } from '../../workflows/plan_implement.ts';
 import { rejection } from './support/rejection.ts';
 
@@ -411,5 +414,65 @@ describe('running as a script', () => {
 
     expect(await child.exited).toBe(2);
     expect(await new Response(child.stderr).text()).toContain('Usage: plan_implement [options] <task>');
+  });
+});
+
+describe('the composition root', () => {
+  test('binds every seam with the shipped implementation', () => {
+    const container = compose();
+
+    expect(container.get<() => unknown>(TOKENS.agent)()).toBeInstanceOf(AgentBuilder);
+    expect(container.get<() => string>(TOKENS.cwd)()).toBe(process.cwd());
+    expect(container.get<UniqueId>(TOKENS.uniqueId)()).toMatch(/^[0-9a-f]{8}$/);
+    expect(typeof container.get<unknown>(TOKENS.readGit)).toBe('function');
+    expect(() => container.get<unknown>(TOKENS.logger)).not.toThrow();
+  });
+
+  test('shares one instance of each service', () => {
+    const container = compose();
+
+    expect(container.get<unknown>(TOKENS.workflow)).toBe(container.get<unknown>(TOKENS.workflow));
+    expect(container.get<unknown>(TOKENS.logger)).toBe(container.get<unknown>(TOKENS.logger));
+    expect(container.get<unknown>(TOKENS.commandLine)).toBe(container.get<unknown>(TOKENS.commandLine));
+  });
+
+  test('each override rebinds the token of the same name', () => {
+    const overrides = harness.dependencies();
+    const container = compose(overrides);
+
+    expect(container.get<unknown>(TOKENS.agent)).toBe(overrides.agent);
+    expect(container.get<unknown>(TOKENS.cwd)).toBe(overrides.cwd);
+    expect(container.get<unknown>(TOKENS.logger)).toBe(overrides.logger);
+    expect(container.get<unknown>(TOKENS.readGit)).toBe(overrides.readGit);
+    expect(container.get<unknown>(TOKENS.stderr)).toBe(overrides.stderr);
+    expect(container.get<unknown>(TOKENS.stdout)).toBe(overrides.stdout);
+    expect(container.get<unknown>(TOKENS.uniqueId)).toBe(overrides.uniqueId);
+  });
+
+  test('a missing or undefined override keeps the shipped implementation', () => {
+    const unique = compose({ uniqueId: () => 'fixed000' });
+    const shipped = compose({ cwd: undefined });
+
+    expect(unique.get<UniqueId>(TOKENS.uniqueId)()).toBe('fixed000');
+    expect(unique.get<() => string>(TOKENS.cwd)()).toBe(process.cwd());
+    expect(shipped.get<() => string>(TOKENS.cwd)()).toBe(process.cwd());
+  });
+
+  test('an overridden output stream reaches the command line', async () => {
+    const container = compose({ stderr: (text) => harness.stderr.push(text), stdout: (text) => harness.stdout.push(text) });
+
+    expect(await main(['--help'], { stdout: (text) => harness.stdout.push(text) })).toBe(0);
+    expect(harness.stdout.join('')).toContain('Usage: plan_implement');
+    expect(container.get<{ parse: (argv: readonly string[]) => unknown }>(TOKENS.commandLine).parse([])).toBe(2);
+    expect(harness.stderr.join('')).toContain("missing required argument 'task'");
+  });
+
+  test('an overridden unique id and agent drive a run without any other override', async () => {
+    harness.runner.script(plan(), done);
+    const { agent, cwd, logger, readGit } = harness.dependencies();
+
+    expect(await main(['task'], { agent, cwd, logger, readGit, uniqueId: () => 'feedbeef' })).toBe(0);
+
+    expect((harness.worktree.opened[0]?.strategy as BranchStrategy).branch).toBe('loop/run-feedbeef');
   });
 });
