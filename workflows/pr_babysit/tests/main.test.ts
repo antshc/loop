@@ -5,6 +5,7 @@ import { join } from 'node:path';
 
 import type { Settings } from '../settings.ts';
 
+import { FileLockUnavailableError } from '../file-lock.ts';
 import { Blocked } from '../infrastructure/state.ts';
 import { main, type MainDeps, type ServeOptions } from '../main.ts';
 
@@ -154,5 +155,17 @@ describe('failures', () => {
     const { deps } = harness({ serve: () => Promise.reject(new Error('boom')) });
     const failure = await main(['--config', config], deps).catch((error: unknown) => error);
     expect(failure).toEqual(new Error('boom'));
+  });
+});
+
+describe('startup without OS locking', () => {
+  test('reports the limitation and exits 1 instead of running unlocked', async () => {
+    const { calls, deps } = harness({
+      run: () => Promise.reject(new FileLockUnavailableError('no lock implementation for platform freebsd')),
+    });
+
+    expect(await main(['--config', config, '--pr', 'https://github.com/o/r/pull/1'], deps)).toBe(1);
+
+    expect(calls.errors).toEqual(['File locking is unavailable: no lock implementation for platform freebsd']);
   });
 });

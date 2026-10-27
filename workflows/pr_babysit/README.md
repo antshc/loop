@@ -57,6 +57,19 @@ python3 -m workflows.pr_babysit --config babysit.local.json --pr https://github.
 python3 -m workflows.pr_babysit --config babysit.local.json --retry https://github.com/owner/repo/pull/123
 ```
 
+The TypeScript port runs on Bun with the same flags, state files and exit codes:
+
+```sh
+bun workflows/pr_babysit/main.ts --config babysit.local.json
+bun workflows/pr_babysit/main.ts --config babysit.local.json --pr https://github.com/owner/repo/pull/123
+```
+
+A lock held by another process stops the run as Blocked with exit code 1. The first
+Ctrl-C or SIGTERM stops discovery and gives each worker 10 s to finish; a second
+signal force-kills the remaining worker process groups and exits immediately. A
+worker interrupted on its own records `interrupted` and exits 130 (SIGINT) or 143
+(SIGTERM).
+
 The default first scan baselines existing PRs. `--include-existing` enrolls them
 on that first scan. Future open PRs by the selected author, including drafts, start
 independent workers. The default scan/poll interval is 60 seconds; `concurrency`

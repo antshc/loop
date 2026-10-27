@@ -24,6 +24,24 @@ export function encodeJson(value: Json): string {
   return encode(value, 0);
 }
 
+/**
+ * Python's `json.dumps(value, sort_keys=True)`: keys sorted by code point, ", " and ": " separators and ASCII-only text.
+ * Digests of GitHub inputs are taken over this text, so it stays byte-identical to what the Python version hashed.
+ */
+export function encodeSortedCompact(value: unknown): string {
+  if (value === null || value === undefined) return 'null';
+  if (typeof value === 'string') return quote(value);
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  if (typeof value === 'number') return formatNumber(value);
+  if (Array.isArray(value)) return `[${value.map((item) => encodeSortedCompact(item)).join(', ')}]`;
+  if (typeof value !== 'object') throw new TypeError(`Cannot encode a ${typeof value} as JSON`);
+  const entries = Object.entries(value)
+    .filter(([, item]) => item !== undefined)
+    .sort(([left], [right]) => compareCodePoints(left, right))
+    .map(([key, item]) => `${quote(key)}: ${encodeSortedCompact(item)}`);
+  return `{${entries.join(', ')}}`;
+}
+
 function encode(value: Json, depth: number): string {
   if (value === null) return 'null';
   if (typeof value === 'string') return quote(value);
