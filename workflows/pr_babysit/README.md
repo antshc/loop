@@ -2,7 +2,8 @@
 
 This user-owned Workflow discovers new PRs and maintains them through review and CI.
 It uses only Loop's public API and is not included in the installed `loop` package.
-Run from this checkout or copy `pr_babysit/` into your harness's Workflow package.
+Run from this checkout, or copy `pr_babysit/` together with `shared/` into your harness's
+Workflow package.
 
 Native polling uses [novotnyllc/babysit-pr](https://github.com/novotnyllc/babysit-pr)
 as a behavioral reference, without installing, pinning, vendoring, or wrapping it.
@@ -10,38 +11,43 @@ Review handling follows the [Brain address skill](https://github.com/antshc/brai
 
 ## Structure
 
+Each feature is a vertical slice; Git, GitHub, process, state, prompt, and telemetry
+infrastructure comes from [`workflows/shared`](../shared). Collaborators receive
+their dependencies through constructors; only `composition/` knows the Dishka
+container. APP scope spans the process; REQUEST scope spans one maintained PR.
+
 ```text
 pr_babysit/
-    __main__.py                  # CLI and dependency wiring
+    __main__.py                  # Delegates to composition.entry.main
     settings.py
     settings.example.json
-    workflow/
-        run.py                   # Single-PR orchestration
-        definition.py            # WorkflowBuilder phases
-        watcher.py               # Discussion gate and CI decisions
-        address.py               # Review issue handling and response validation
-        maintainer.py            # CI diagnosis and repair
-        workspace.py             # Named-worktree serialization and Loop composition
-        changes.py               # Verification and publication transaction
-    infrastructure/
-        scheduler.py             # Discovery timing and worker processes
-        github.py                # GitHub queries and mutations
-        git.py                   # Git inspection, explicit commit/push, revision fetch
-        verification.py          # Build/test subprocesses
-        state.py                 # JSON checkpoints, registry, process locks
+    model.py                     # Blocked, PrTarget, PrState, locks, pacing, stop signal
+    watch/feedback.py            # Discussion gate, CI classification, fingerprints
     agents/
-        profiles.py
-        address.md
-        maintainer.md
-    tests/
-        workflow/
-        infrastructure/
-        test_telemetry.py
+        profiles.py, address.md, maintainer.md
+        workspace.py             # Named-worktree serialization and Loop composition
+        ask.py                   # One agent request with a JSON envelope
+    publish/
+        verification.py          # Build/test gates
+        changes.py               # Verification and publication transaction
+    address/reviews.py           # Review issue handling and response validation
+    maintain_ci/failures.py      # CI diagnosis, repair, and bounded reruns
+    monitor/
+        definition.py            # WorkflowBuilder phases
+        pr.py                    # Single-PR loop and checkout guard
+    discover/
+        registry.py              # Discovery baseline
+        scheduler.py             # Discovery timing
+        children.py              # Worker processes
+    composition/
+        providers.py             # Dishka registrations
+        entry.py                 # CLI, container, signals
+    tests/                       # Fakes injected as override providers
 ```
 
 ## Configure and run
 
-Install Loop and authenticate `gh` and Copilot CLI. Configure each checkout's normal
+Install Loop with the `workflows` extra (`pip install -e ".[workflows]"`, which adds Dishka) and authenticate `gh` and Copilot CLI. Configure each checkout's normal
 Git author identity. Each origin must match the configured repository. Fork-head PRs
 block instead of pushing through an unrelated remote.
 

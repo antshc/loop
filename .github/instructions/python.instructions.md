@@ -9,9 +9,9 @@ Confirm each rule below against neighboring files in the same package before tru
 
 ## Runtime compatibility
 
-- MUST keep `src/`, `workflows/`, and tests compatible with Python 3.10, including 3.10.12; `pyproject.toml` declares the supported minimum.
-- Use 3.10-compatible syntax and standard-library APIs; guard newer APIs with a tested fallback. Preserve string behavior when replacing `StrEnum`; preserve the original exception and report cleanup failures when `add_note` is unavailable.
-- Validate compatibility changes on Python 3.10.12 and a newer supported runtime per [Test Strategy](../../docs/concepts/ops-test-strategy.md#python-compatibility).
+- MUST keep `src/`, `workflows/`, and tests compatible with Python 3.14; `pyproject.toml` declares the supported minimum.
+- MAY use any 3.14 syntax and standard-library API (`StrEnum`, `Exception.add_note`, variable-fraction `datetime.fromisoformat`); no fallbacks for older runtimes.
+- Validate compatibility changes on the minimum supported runtime per [Test Strategy](../../docs/concepts/ops-test-strategy.md#python-compatibility).
 
 ## Typing & imports
 

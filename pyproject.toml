@@ -6,14 +6,15 @@ build-backend = "setuptools.build_meta"
 name = "loop"
 version = "0.0.0"
 description = "Library for composing agent workflows on git worktrees."
-requires-python = ">=3.10"
+requires-python = ">=3.14"
 dependencies = [
     "python-json-logger>=2.0",
 ]
 
 [project.optional-dependencies]
 visualization = ["rich>=13"]
-dev = ["pytest", "import-linter", "opentelemetry-sdk>=1.45", "opentelemetry-exporter-otlp-proto-http>=1.45"]
+workflows = ["dishka>=1.10"]
+dev = ["pytest", "import-linter", "dishka>=1.10", "opentelemetry-sdk>=1.45", "opentelemetry-exporter-otlp-proto-http>=1.45"]
 otel = [
     "opentelemetry-sdk>=1.45",
     "opentelemetry-exporter-otlp-proto-http>=1.45",
@@ -24,11 +25,12 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src", ".", "tests"]
-testpaths = ["tests", "workflows/dev/tests", "workflows/pr_babysit/tests"]
+testpaths = ["tests", "workflows/shared/tests", "workflows/dev/tests", "workflows/pr_babysit/tests"]
 norecursedirs = ["archive", ".*"]
 
 [tool.importlinter]
 root_packages = ["loop", "workflows"]
+include_external_packages = true
 
 [[tool.importlinter.contracts]]
 name = "The loop library is layered: builder over agents over clis, docker and git over run over hooks over sessions"
@@ -66,10 +68,100 @@ forbidden_modules = [
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
-name = "Ticket orchestration imports no agent workflow"
+name = "Dev stages run the delegates they are given, never a concrete agent"
 type = "forbidden"
-source_modules = ["workflows.dev.attempt"]
-forbidden_modules = ["workflows.dev.agent", "workflows.dev.repositories", "workflows.dev.run"]
+source_modules = [
+    "workflows.dev.backlog",
+    "workflows.dev.chore",
+    "workflows.dev.deliver",
+    "workflows.dev.model",
+    "workflows.dev.plan",
+    "workflows.dev.review",
+    "workflows.dev.tracker",
+    "workflows.dev.verify",
+]
+forbidden_modules = ["workflows.dev.agents"]
+
+[[tool.importlinter.contracts]]
+name = "Dev features never reach back into their composition root"
+type = "forbidden"
+source_modules = [
+    "workflows.dev.agents",
+    "workflows.dev.backlog",
+    "workflows.dev.chore",
+    "workflows.dev.deliver",
+    "workflows.dev.model",
+    "workflows.dev.plan",
+    "workflows.dev.review",
+    "workflows.dev.tracker",
+    "workflows.dev.verify",
+]
+forbidden_modules = ["workflows.dev.composition"]
+
+[[tool.importlinter.contracts]]
+name = "Dev stages are independent; only the backlog router sequences them"
+type = "independence"
+modules = [
+    "workflows.dev.chore",
+    "workflows.dev.deliver",
+    "workflows.dev.plan",
+    "workflows.dev.review",
+    "workflows.dev.tracker",
+    "workflows.dev.verify",
+]
+
+[[tool.importlinter.contracts]]
+name = "Shared workflow infrastructure imports no workflow slice"
+type = "forbidden"
+source_modules = ["workflows.shared"]
+forbidden_modules = ["workflows.dev", "workflows.pr_babysit", "workflows.plan_implement", "workflows.workflow_reporting"]
+
+[[tool.importlinter.contracts]]
+name = "Only composition roots and the shared provider know the container"
+type = "forbidden"
+source_modules = [
+    "workflows.shared.agents",
+    "workflows.shared.git",
+    "workflows.shared.github",
+    "workflows.shared.process",
+    "workflows.shared.state",
+    "workflows.shared.telemetry",
+    "workflows.pr_babysit.address",
+    "workflows.pr_babysit.agents",
+    "workflows.pr_babysit.discover",
+    "workflows.pr_babysit.maintain_ci",
+    "workflows.pr_babysit.model",
+    "workflows.pr_babysit.monitor",
+    "workflows.pr_babysit.publish",
+    "workflows.pr_babysit.settings",
+    "workflows.pr_babysit.watch",
+    "workflows.dev.agents",
+    "workflows.dev.backlog",
+    "workflows.dev.chore",
+    "workflows.dev.deliver",
+    "workflows.dev.model",
+    "workflows.dev.plan",
+    "workflows.dev.review",
+    "workflows.dev.tracker",
+    "workflows.dev.verify",
+]
+forbidden_modules = ["dishka"]
+
+[[tool.importlinter.contracts]]
+name = "Babysit features never reach back into their composition root"
+type = "forbidden"
+source_modules = [
+    "workflows.pr_babysit.address",
+    "workflows.pr_babysit.agents",
+    "workflows.pr_babysit.discover",
+    "workflows.pr_babysit.maintain_ci",
+    "workflows.pr_babysit.model",
+    "workflows.pr_babysit.monitor",
+    "workflows.pr_babysit.publish",
+    "workflows.pr_babysit.settings",
+    "workflows.pr_babysit.watch",
+]
+forbidden_modules = ["workflows.pr_babysit.composition"]
 
 [[tool.importlinter.contracts]]
 name = "No workflow imports another workflow"
@@ -79,5 +171,12 @@ modules = ["workflows.dev", "workflows.plan_implement", "workflows.workflow_repo
 [[tool.importlinter.contracts]]
 name = "PR maintenance decisions do not depend on the discovery scheduler"
 type = "forbidden"
-source_modules = ["workflows.pr_babysit.workflow"]
-forbidden_modules = ["workflows.pr_babysit.infrastructure.scheduler"]
+source_modules = [
+    "workflows.pr_babysit.address",
+    "workflows.pr_babysit.agents",
+    "workflows.pr_babysit.maintain_ci",
+    "workflows.pr_babysit.monitor",
+    "workflows.pr_babysit.publish",
+    "workflows.pr_babysit.watch",
+]
+forbidden_modules = ["workflows.pr_babysit.discover"]

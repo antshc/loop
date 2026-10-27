@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from workflows.dev.reply import ChoreResponse, DevResultError, PlanResponse, ReviewResponse, VerifyResponse
+from workflows.dev.model.reply import ChoreResponse, DevResultError, PlanResponse, ReviewResponse, VerifyResponse
 
 
 def _text(status: str = "completed", **result: object) -> str:

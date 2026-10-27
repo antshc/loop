@@ -9,8 +9,10 @@ import pytest
 
 from loop import AgentRunRecord, Role, WorktreeEvent
 from workflows.dev import main
-from workflows.dev.dry import DryGit, Fakes, commit_in_worktree
+from workflows.dev.composition.dry import DryGit, Fakes, commit_in_worktree
 from workflows.dev.tests.doubles import FakePhaseSpan
+from workflows.shared.providers import bind
+from workflows.shared.telemetry import ObserverFactory
 
 
 class RecordingObserver:
@@ -51,7 +53,7 @@ def _dry(tmp_path: Path, *extra: str) -> tuple[int, RecordingObserver]:
         observers.append(RecordingObserver(endpoint))
         return observers[0]
 
-    code = main(["--dry", "--fake-speed", "0", "--log-dir", str(tmp_path), *extra], new_observer=new_observer)
+    code = main(["--dry", "--fake-speed", "0", "--log-dir", str(tmp_path), *extra], providers=(bind((ObserverFactory, new_observer)),))
     return code, observers[0]
 
 

@@ -6,9 +6,11 @@ from unittest.mock import Mock
 import pytest
 
 from workflows.dev.tests.doubles import commit_file, git
-from workflows.dev.commands import CommandError
-from workflows.dev.platforms import GitHubRepo, TicketsTracker
-from workflows.dev.records import Spec
+from workflows.dev.model.records import Spec
+from workflows.dev.tracker.tickets import TicketsTracker
+from workflows.shared.git import GitClient
+from workflows.shared.github.repo import GitHubRepo
+from workflows.shared.process import CommandError, CommandRunner
 from workflows.dev.tests.doubles import FakeGhCli
 
 
@@ -53,10 +55,10 @@ def test_from_origin_reads_the_origin_remote(tmp_path: Path) -> None:
     git(repo, "config", "user.name", "Test")
     commit_file(repo, "README.md", "hello\n", "initial")
     git(repo, "remote", "add", "origin", "https://example.com/owner/repo.git")
-    with pytest.raises(ValueError, match="unsupported remote"):
-        GitHubRepo.from_origin(repo)
+    with pytest.raises(ValueError, match="unsupported"):
+        GitHubRepo.from_slug(GitClient(CommandRunner()).origin_slug(repo), FakeGhCli())
 
     git(repo, "remote", "set-url", "origin", "git@github.com:acme/harness.git")
-    github_repo = GitHubRepo.from_origin(repo)
+    github_repo = GitHubRepo.from_slug(GitClient(CommandRunner()).origin_slug(repo), FakeGhCli())
 
     assert github_repo.slug == "acme/harness"

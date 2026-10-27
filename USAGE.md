@@ -107,8 +107,9 @@ The self-contained [`workflows/dev/`](../workflows/dev/) package is an example,
 not part of the installed library. It uses GitHub Specs and Tickets to drive
 agent work, commits, draft pull requests, and Ticket updates.
 
-Before running it, configure `HARNESS` and target repositories in
-[`repositories.py`](../workflows/dev/repositories.py). The supplied configuration
+Install the `workflows` extra (`python -m pip install -e ".[workflows]"`) for the container. Before running it, configure `HARNESS` in
+[`model/repositories.py`](../workflows/dev/model/repositories.py) and target repositories in
+[`composition/repositories.py`](../workflows/dev/composition/repositories.py). The supplied configuration
 targets `antshc/loop`; it is not a read-only demo.
 
 ```sh
@@ -126,7 +127,7 @@ dev --log-level DEBUG
 
 ### Dev phases
 
-The default configuration in [`repositories.py`](workflows/dev/repositories.py)
+The default configuration in [`composition/repositories.py`](workflows/dev/composition/repositories.py)
 uses the same phases as the [eShop dev workflow](https://github.com/antshc/eShop/tree/main/tools/loop/workflows/dev):
 
 | Order | Phase | Behavior |
@@ -173,7 +174,7 @@ python -m workflows.dev --dry --fake-speed 0 --no-otel --visualize
 `--otlp-endpoint`, fake seams, retry settings, and log-directory options remain available.
 
 Phase declarations and actor names live in
-[`definition.py`](workflows/dev/definition.py), built on the optional public
+[`model/definition.py`](workflows/dev/model/definition.py), built on the optional public
 `WorkflowBuilder`. Execution stays in the dev-owned Python helpers.
 
 ### Debugging with fakes
@@ -196,14 +197,14 @@ python -m workflows.dev --dry --fake-speed 0 --no-rework        # instant, no fa
 ```
 
 By default the second Ticket fails its first attempt so the retry path shows up in the trace.
-In code, `Fakes` in [`dry.py`](workflows/dev/dry.py) builds the same fakes, and the library offers
+In code, `Fakes` in [`composition/dry.py`](workflows/dev/composition/dry.py) builds the same fakes as a Dishka override provider, and the library offers
 `fake_agent`, `FakeCliRunner` and `DirectoryGit` to run any functional slice in isolation.
 
 ### Different agent workflows per repository
 
 The example [`dev`](../workflows/dev/) reads Specs and Tickets from `HARNESS`.
 By default it implements only Specs targeting the harness itself. Pass
-`repositories=` to route Specs by their `repo:target:<owner/repo>` label to
+`providers=(use_repositories(...),)` to `main` to route Specs by their `repo:target:<owner/repo>` label to
 explicitly configured checkouts under the harness's `workspace` folder.
 Repositories must already be cloned; unknown targets are handed to a human.
 
@@ -224,7 +225,7 @@ from pathlib import Path
 from loop import AgentProfile, AgentRequest, AgentWorkspace, copilot
 from workflows.dev import (
     DevResponse, Repository, RepositoryId, RepositoryWorkflow,
-    TicketContext, TicketResult, implement_ticket, load_prompt, main,
+    TicketContext, TicketResult, implement_ticket, load_prompt, main, use_repositories,
 )
 
 workspace = Path.cwd() / "workspace"
@@ -256,7 +257,7 @@ result containing reason.
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(repositories=(
+    raise SystemExit(main(providers=(use_repositories(
         RepositoryWorkflow(
             Repository(workspace / "api", workspace / "api.worktrees", RepositoryId("acme", "api")),
             implement,
@@ -265,16 +266,16 @@ if __name__ == "__main__":
             Repository(workspace / "web", workspace / "web.worktrees", RepositoryId("acme", "web")),
             implement_and_review,
         ),
-    )))
+    ),)))
 ```
 
 Run this user-owned script from the harness root. Configure `HARNESS` in
-[`repositories.py`](../workflows/dev/repositories.py) for the repository holding your Specs and Tickets.
+[`model/repositories.py`](../workflows/dev/model/repositories.py) for the repository holding your Specs and Tickets.
 The supplied list replaces the default target; include the harness explicitly
 if it should also receive code changes. Repository identities are matched
 case-insensitively; duplicate configurations fail the run.
 
-The dev-owned [`deliver_tickets`](../workflows/dev/attempt.py) function handles Ticket
+The dev-owned [`TicketDeliverer`](../workflows/dev/deliver/tickets.py) handles Ticket
 iteration, refreshed Initiative history, retries, rollback, failure counts, and
 Ticket closure. A delegate can return a failed `TicketResult` or raise
 `TicketWorkflowError` for an expected, retryable failure; agent process failures
@@ -289,21 +290,19 @@ Without session-enabled builders, agent steps start fresh sessions.
 
 ### Dev package and named prompts
 
-All dev-owned code, prompts, tests, and fakes live in [`workflows/dev/`](../workflows/dev/).
-It depends on the public `loop` package, not sibling Workflow helpers.
-The independent [`plan_implement.py`](../workflows/plan_implement.py) is a self-contained,
-function-based script: prompt text, response parsing, Git reads, and orchestration
-live together, with no sibling Workflow imports.
-There is no shared helper layer under `workflows/`; each Workflow owns the helpers it uses.
+All dev-owned code, prompts, tests, and fakes live in [`workflows/dev/`](../workflows/dev/), a vertical
+slice: one package per feature, each a set of classes taking collaborators through their constructors.
+It depends on the public `loop` package and on [`workflows/shared/`](../workflows/shared/) (Git, GitHub,
+process, state, telemetry, and the shared Dishka provider), never on a sibling Workflow. Copy
+`workflows/shared` alongside it. The independent [`plan_implement.py`](../workflows/plan_implement.py)
+remains a self-contained, function-based script.
 
-- [`run.py`](../workflows/dev/run.py): high-level logging, phase reporting, retry settings, Loop hooks, and dependency wiring.
-- [`definition.py`](workflows/dev/definition.py): named phases, actor ownership, visibility, and optional terminal/OTLP reporting.
-- [`plan.py`](workflows/dev/plan.py), [`verify.py`](workflows/dev/verify.py), [`chore.py`](workflows/dev/chore.py), and [`review.py`](workflows/dev/review.py): planning, integrated app verification, cleanup, review, and readiness checks.
-- [`repositories.py`](../workflows/dev/repositories.py): `HARNESS` and `configured_repositories`; edit its returned tuple to configure several repositories for `python -m workflows.dev`, or pass `repositories=` to `main`.
-- [`backlog.py`](../workflows/dev/backlog.py) and [`attempt.py`](../workflows/dev/attempt.py): Spec routing/publication and Ticket delivery.
-- [`agent.py`](../workflows/dev/agent.py), [`reply.py`](../workflows/dev/reply.py), and [`journal.py`](../workflows/dev/journal.py): prompt handling, response interpretation, and failure history.
-- [`records.py`](../workflows/dev/records.py): work items, repository identities, and outcomes.
-- [`checkout.py`](../workflows/dev/checkout.py), [`platforms.py`](../workflows/dev/platforms.py), and [`commands.py`](../workflows/dev/commands.py): Git, GitHub, and subprocess access.
+- [`composition/`](../workflows/dev/composition/): the only package that knows the Dishka container. `entry.py` holds `main(argv, *, providers=())`, flags, and logging; `providers.py` holds `DevProvider` (APP scope = process, REQUEST scope = one Workflow run) and `use_repositories`; `repositories.py` holds `configured_repositories`; `dry.py` holds the `--fake`/`--dry` seams. Later providers override earlier ones, which is how tests and scripts inject fakes.
+- [`model/`](../workflows/dev/model/): `HARNESS`, work items, repository identities, outcomes, settings, named phases (`definition.py`), response decoding (`reply.py`), and commit gates.
+- [`tracker/`](../workflows/dev/tracker/): `TicketsTracker` over GitHub issues.
+- [`agents/`](../workflows/dev/agents/): named prompts and the default agent delegates.
+- [`plan/`](../workflows/dev/plan/), [`deliver/`](../workflows/dev/deliver/), [`verify/`](../workflows/dev/verify/), [`chore/`](../workflows/dev/chore/), and [`review/`](../workflows/dev/review/): `Planner`, `TicketDeliverer` (with the failure journal), `AppVerifier`, `ChoreRefiner`, and `Reviewer`/`Finalizer`. These stages never import each other or a concrete agent.
+- [`backlog/`](../workflows/dev/backlog/): `SpecRouter` and `PullRequestPublisher`, which sequence the stages per Spec.
 - [`prompts/`](../workflows/dev/prompts/): named Markdown templates; `load_prompt("implement")` reads `implement.md` relative to the package, not the current directory.
 - [`tests/`](../workflows/dev/tests/): dev tests and local fakes; run `pytest workflows/dev/tests`.
 
