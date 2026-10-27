@@ -42,7 +42,7 @@ GitHub CLI provides `gh issue create --parent`, plus `gh issue edit --add-sub-is
 | Same file | Child creation: create issue, then link under parent | Reconcile partial success; prefer atomic parent-on-create when applicable |
 | [`workflows/shared/github/repo.py`](../../workflows/shared/github/repo.py) | Generic `gh` access, no typed Issues facade | Add issue/domain adapters and repository ports |
 
-The [unified SDLC plan](../plans/unified-event-driven-sdlc-workflow.md) already makes `spec` the single planning label, `hitl` an explicit hold, native sub-issues authoritative, and dependency readiness a deterministic workflow decision. The redesign must preserve those rules.
+The [unified SDLC plan](unified-event-driven-sdlc-workflow.md) already makes `spec` the single planning label, `hitl` an explicit hold, native sub-issues authoritative, and dependency readiness a deterministic workflow decision. The redesign must preserve those rules.
 
 ## Bounded contexts
 
