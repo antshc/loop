@@ -16,8 +16,8 @@ export interface ProcessOptions {
   /** Raise ProcessFailedError on a non-zero exit. */
   check?: boolean;
   cwd?: string;
-  /** Merged over the parent environment. */
-  env?: Readonly<Record<string, string>>;
+  /** Merged over the parent environment; an `undefined` value removes the variable. */
+  env?: Readonly<Record<string, string | undefined>>;
   timeoutSec?: number;
 }
 
@@ -85,6 +85,16 @@ export function createProcessRunner(supervisor: ProcessSupervisor = defaultSuper
 /** The process-wide runner, backed by the shared supervisor. */
 export const processRunner: ProcessRunner = createProcessRunner();
 
+function mergeEnvironment(overrides: Readonly<Record<string, string | undefined>> = {}): Record<string, string> {
+  const merged: Record<string, string> = {};
+  for (const [name, value] of Object.entries({ ...process.env, ...overrides })) {
+    if (value !== undefined) {
+      merged[name] = value;
+    }
+  }
+  return merged;
+}
+
 function pollExitCode(child: { exitCode: null | number; signalCode: null | number | string }): null | number {
   if (child.exitCode !== null) {
     return child.exitCode;
@@ -114,7 +124,7 @@ function start(supervisor: ProcessSupervisor, argv: readonly string[], options: 
   const child = Bun.spawn([...argv], {
     cwd: options.cwd,
     detached: true,
-    env: { ...process.env, ...options.env },
+    env: mergeEnvironment(options.env),
     stderr: 'pipe',
     stdin: 'ignore',
     stdout: 'pipe',

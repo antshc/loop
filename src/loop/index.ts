@@ -81,6 +81,7 @@ export {
   WorktreeEvent,
 } from './observe/values.ts';
 export { ping } from './ping.ts';
+export { Cancelled, type CancelSignal } from './run/cancelled.ts';
 export {
   AgentContext,
   type AgentOptions,
@@ -89,9 +90,19 @@ export {
 } from './run/context.ts';
 export { type EntrypointEnvironment, runEntrypoint } from './run/entrypoint.ts';
 export { Instructions, InstructionsError } from './run/instructions.ts';
-export { ProcessFailedError } from './run/process.ts';
+export {
+  createProcessRunner,
+  ProcessFailedError,
+  type ProcessHandle,
+  type ProcessOptions,
+  type ProcessResult,
+  type ProcessRunner,
+  processRunner,
+  ProcessTimeoutError,
+} from './run/process.ts';
 export { Prompt, PromptError } from './run/prompt.ts';
 export { AgentRequest, AgentResult } from './run/request.ts';
+export { ProcessSupervisor } from './run/supervisor.ts';
 export {
   checkRuntime,
   compareVersions,

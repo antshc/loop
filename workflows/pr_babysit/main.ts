@@ -1,6 +1,9 @@
 import { Command, CommanderError } from 'commander';
 
-import { enforceRuntime, ValueError } from '../../src/loop/index.ts';
+import { configureLogging, enforceRuntime, runEntrypoint, ValueError } from '../../src/loop/index.ts';
+import { runScheduler, runWorker } from './composition.ts';
+import { FileLockUnavailableError } from './file-lock.ts';
+import { isOsError } from './infrastructure/os-error.ts';
 import { Blocked } from './infrastructure/state.ts';
 import { resolvePath, Settings } from './settings.ts';
 
@@ -23,14 +26,12 @@ export interface ServeOptions {
   readonly retry: string | undefined;
 }
 
-const notWired = (): Promise<number> => Promise.reject(new Error('pr_babysit execution is not wired to this entry point'));
-
 const DEFAULT_DEPS: MainDeps = {
   error: (message) => {
     process.stderr.write(`PR maintenance stopped: ${message}\n`);
   },
-  run: notWired,
-  serve: notWired,
+  run: runWorker,
+  serve: runScheduler,
   stderr: (text) => process.stderr.write(text),
   stdout: (text) => process.stdout.write(text),
 };
@@ -80,7 +81,12 @@ export async function main(argv: readonly string[], deps: Partial<MainDeps> = {}
       retry: options.retry,
     });
   } catch (failure) {
-    if (failure instanceof Blocked || failure instanceof ValueError || isOsError(failure)) {
+    if (
+      failure instanceof Blocked ||
+      failure instanceof FileLockUnavailableError ||
+      failure instanceof ValueError ||
+      isOsError(failure)
+    ) {
       error(failure.message);
       return 1;
     }
@@ -88,12 +94,10 @@ export async function main(argv: readonly string[], deps: Partial<MainDeps> = {}
   }
 }
 
-/** A filesystem or process failure carrying an errno code, the TypeScript counterpart of Python's `OSError`. */
-function isOsError(value: unknown): value is Error {
-  return value instanceof Error && 'code' in value && typeof value.code === 'string' && /^E[A-Z0-9]+$/.test(value.code);
-}
-
 if (import.meta.main) {
   enforceRuntime();
-  process.exitCode = await main(Bun.argv.slice(2));
+  configureLogging({ level: 'info', logger: 'pr_babysit' });
+  await runEntrypoint(async () => {
+    process.exitCode = await main(Bun.argv.slice(2));
+  });
 }
