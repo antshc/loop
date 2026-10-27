@@ -65,14 +65,14 @@ describe('--fake', () => {
 
     expect(code).toBe(0);
     expect(existsSync(join(logDir, 'dev.log'))).toBe(true);
-    expect(readFileSync(join(logDir, 'dev.log'), 'utf8')).toContain('"message": "Spec #1 of antshc/loop was not delivered');
+    expect(readFileSync(join(logDir, 'dev.log'), 'utf8')).toContain('"message": "dry-run: git push origin');
     expect(stderr.text).toContain('loop.workflow: Spec');
   });
 
   test('shows only high-level Workflow records on the console', async () => {
     const { dependencies, stderr } = session();
 
-    await main(['--dry', '--no-otel', '--log-level', 'DEBUG', '--log-dir', join(directory, 'logs')], dependencies);
+    await main(['--dry', '--fake-speed', '0', '--no-otel', '--log-level', 'DEBUG', '--log-dir', join(directory, 'logs')], dependencies);
 
     expect(lines(stderr.text).length).toBeGreaterThan(0);
     for (const line of lines(stderr.text)) {
@@ -98,8 +98,8 @@ describe('--dry', () => {
     const fromEnv = session({ env });
     const explicit = session({ env });
 
-    await main(['--dry'], fromEnv.dependencies);
-    await main(['--dry', '--otlp-endpoint', 'http://collector:4318'], explicit.dependencies);
+    await main(['--dry', '--fake-speed', '0'], fromEnv.dependencies);
+    await main(['--dry', '--fake-speed', '0', '--otlp-endpoint', 'http://collector:4318'], explicit.dependencies);
 
     expect(fromEnv.observers.map((observer) => observer.endpoint)).toEqual(['http://env:4318']);
     expect(explicit.observers.map((observer) => observer.endpoint)).toEqual(['http://collector:4318']);
@@ -108,10 +108,10 @@ describe('--dry', () => {
   test('opens the Workflow root and Spec spans under the shared roles', async () => {
     const { dependencies, observers } = session();
 
-    await main(['--dry'], dependencies);
+    await main(['--dry', '--fake-speed', '0'], dependencies);
 
     const spans = observers[0]?.spans ?? [];
-    expect(spans.map((span) => [span.name, span.role])).toEqual([
+    expect(spans.slice(0, 2).map((span) => [span.name, span.role])).toEqual([
       ['dev', 'code'],
       ['Spec', 'engineer'],
     ]);
@@ -126,7 +126,7 @@ describe('--dry', () => {
       },
     });
 
-    expect(await main(['--dry', '--no-otel'], dependencies)).toBe(0);
+    expect(await main(['--dry', '--fake-speed', '0', '--no-otel'], dependencies)).toBe(0);
     expect(observers).toEqual([]);
   });
 
@@ -137,20 +137,20 @@ describe('--dry', () => {
       },
     });
 
-    expect(await main(['--fake', 'agent', '--fake', 'github', '--fake', 'git', '--fake', 'store'], dependencies)).toBe(0);
+    expect(await main(['--fake', 'agent', '--fake', 'github', '--fake', 'git', '--fake', 'store', '--fake-speed', '0'], dependencies)).toBe(0);
   });
 
   test('delivers only the requested Spec', async () => {
     const { dependencies, observers } = session();
 
-    expect(await main(['--dry', '--spec', '1'], dependencies)).toBe(0);
-    expect(observers[0]?.spans.map((span) => span.name)).toEqual(['dev', 'Spec']);
+    expect(await main(['--dry', '--fake-speed', '0', '--spec', '1'], dependencies)).toBe(0);
+    expect(observers[0]?.spans.slice(0, 2).map((span) => span.name)).toEqual(['dev', 'Spec']);
   });
 
   test('exits 1 and says so when the requested Spec does not exist', async () => {
     const { dependencies, stderr } = session();
 
-    expect(await main(['--dry', '--no-otel', '--spec', '7'], dependencies)).toBe(1);
+    expect(await main(['--dry', '--fake-speed', '0', '--no-otel', '--spec', '7'], dependencies)).toBe(1);
     expect(stderr.text).toContain('ERROR workflow.dev: no open Spec #7 on antshc/loop');
   });
 });
@@ -159,7 +159,7 @@ describe('--visualize', () => {
   test('prints one final table without escape sequences when the output is redirected', async () => {
     const { dependencies, stderr } = session();
 
-    expect(await main(['--dry', '--no-otel', '--visualize'], dependencies)).toBe(0);
+    expect(await main(['--dry', '--fake-speed', '0', '--no-otel', '--visualize'], dependencies)).toBe(0);
 
     expect(stderr.text).not.toContain('\u001B');
     expect(stderr.text.match(/Workflow name/g)).toHaveLength(1);
@@ -169,7 +169,7 @@ describe('--visualize', () => {
   test('redraws the table in place on a terminal', async () => {
     const { dependencies, stderr } = session({}, new Stream(true));
 
-    await main(['--dry', '--no-otel', '--visualize'], dependencies);
+    await main(['--dry', '--fake-speed', '0', '--no-otel', '--visualize'], dependencies);
 
     expect(stderr.text).toContain('\u001B');
   });
@@ -177,7 +177,7 @@ describe('--visualize', () => {
   test('shows no table without the flag', async () => {
     const { dependencies, stderr } = session();
 
-    await main(['--dry', '--no-otel'], dependencies);
+    await main(['--dry', '--fake-speed', '0', '--no-otel'], dependencies);
 
     expect(stderr.text).not.toContain('Workflow name');
   });
@@ -188,7 +188,7 @@ describe('--log-dir and --log-level', () => {
     const { dependencies } = session();
     const custom = join(directory, 'custom-logs');
 
-    const code = await main(['--dry', '--no-otel', '--log-dir', custom, '--log-level', 'DEBUG'], dependencies);
+    const code = await main(['--dry', '--fake-speed', '0', '--no-otel', '--log-dir', custom, '--log-level', 'DEBUG'], dependencies);
 
     expect(code).toBe(0);
     expect(existsSync(join(custom, 'dev.log'))).toBe(true);
@@ -197,7 +197,7 @@ describe('--log-dir and --log-level', () => {
   test('defaults the folder to .loop under the working directory and writes no file above debug', async () => {
     const { dependencies } = session();
 
-    await main(['--dry', '--no-otel'], dependencies);
+    await main(['--dry', '--fake-speed', '0', '--no-otel'], dependencies);
 
     expect(existsSync(join(directory, '.loop', 'dev.log'))).toBe(false);
   });
@@ -221,7 +221,7 @@ describe('failure', () => {
       newObserver: () => Promise.reject(new TelemetryUnavailableError()),
     });
 
-    expect(await main(['--dry'], dependencies)).toBe(1);
+    expect(await main(['--dry', '--fake-speed', '0'], dependencies)).toBe(1);
     expect(stderr.text).toContain('ERROR workflow.dev: dev unavailable: OTLP telemetry export needs');
   });
 

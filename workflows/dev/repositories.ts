@@ -1,6 +1,7 @@
 /** Configured repositories and their agent delegates. */
 import { basename, join, resolve } from 'node:path';
 
+import { choreChangeSet, implementTicket, loadPrompt, planTickets, verifyIntegratedApp } from './agent.ts';
 import {
   type AgentWorkflow,
   type ChoreWorkflow,
@@ -8,7 +9,6 @@ import {
   type Repository,
   RepositoryId,
   type ReviewWorkflow,
-  TicketWorkflowError,
   type VerifyWorkflow,
 } from './records.ts';
 
@@ -32,14 +32,20 @@ export interface RepositoryWorkflow {
 
 /**
  * Configures all eShop-style phases on the harness by default.
- * Extension point: #140 supplies `runAgents`, `runChore`, `runPlan` and `runVerify` and #141 `runReview`,
- * each bound to its named prompt; until then `runAgents` refuses to run.
+ * Extension point: #141 supplies `runReview`, bound to its named prompt, alongside the delegates below.
  */
 export function configuredRepositories(harness: Repository): readonly RepositoryWorkflow[] {
+  const implement = loadPrompt('implement');
+  const chore = loadPrompt('chore');
+  const plan = loadPrompt('plan');
+  const verify = loadPrompt('verify');
   return [
     {
       repository: harness,
-      runAgents: () => Promise.reject(new TicketWorkflowError('Ticket delivery is not ported yet')),
+      runAgents: (context, workspace) => implementTicket(context, workspace, implement),
+      runChore: (context, workspace) => choreChangeSet(context, workspace, chore),
+      runPlan: (context, workspace) => planTickets(context, workspace, plan),
+      runVerify: (context, workspace) => verifyIntegratedApp(context, workspace, verify),
     },
   ];
 }
