@@ -26,8 +26,9 @@ await runEntrypoint(async () => {
     if (mode === 'dirty') {
       writeFileSync(join(path, 'dirty.txt'), 'unfinished');
     }
+    const child = runner.start(['sleep', '300']);
     mark(`READY ${path}`);
-    await runner.run(['sleep', '300']);
+    await child.wait();
   });
   mark('COMPLETED');
 });

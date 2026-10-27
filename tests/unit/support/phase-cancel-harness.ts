@@ -20,8 +20,9 @@ await runEntrypoint(async () => {
   await workflow.run(async (run) => {
     try {
       await run.phase('work', async () => {
+        const child = processRunner.start(['sleep', '300']);
         mark('READY');
-        await processRunner.run(['sleep', '300']);
+        await child.wait();
       });
     } finally {
       mark(`STATUS ${run.executions.filter((phase) => phase.name === 'work').map((phase) => phase.status).join(',')}`);
