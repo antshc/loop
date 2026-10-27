@@ -1,0 +1,58 @@
+{
+  "batch": {
+    "base": "b",
+    "big": 12345678901234,
+    "empty": [],
+    "flag": true,
+    "fraction": 0.1,
+    "head": "h",
+    "index": 0,
+    "keys": [
+      "b",
+      "a"
+    ],
+    "kind": "ci",
+    "none": null
+  },
+  "copilot": {
+    "sha0": "unavailable",
+    "sha1": "requested"
+  },
+  "execution": "e-1",
+  "fingerprint": "worker-crash",
+  "head": "abc",
+  "items": {
+    "": {
+      "key": "",
+      "status": "pending"
+    },
+    "thread:Z": {
+      "body": "caf\u00e9 \u2603 \ud83d\ude00 \u007f tab\t quote\" back\\ nl\n",
+      "key": "thread:Z",
+      "status": "pending"
+    },
+    "thread:a": {
+      "key": "thread:a",
+      "line": 12,
+      "path": "src/a.py",
+      "status": "handled"
+    },
+    "\uffffkey": {
+      "key": "k2",
+      "status": "pending"
+    },
+    "\ud83d\ude00key": {
+      "key": "k",
+      "status": "superseded"
+    }
+  },
+  "number": 7,
+  "reason": "Worker exited -9; explicit retry required",
+  "repo": "acme/widgets.io",
+  "retries": {
+    "0123": 0,
+    "deadbeef": 2
+  },
+  "status": "blocked",
+  "version": 1
+}
