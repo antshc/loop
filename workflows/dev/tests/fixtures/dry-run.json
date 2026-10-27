@@ -1,0 +1,244 @@
+{
+  "agent": {
+    "ticket-10-attempt-1": {
+      "prompt": "Commit with subject `ccode(Basket|10): ` then stop.\n<ticket-json>\n{\"title\": \"Add discount policy\"}\n</ticket-json>\n",
+      "output": "Implemented Add discount policy.\n\n```json\n{\"identifier\": \"Basket|10\", \"status\": \"completed\", \"result\": {\"commit\": \"sha0001\", \"summary\": \"Add discount policy\", \"verification\": \"dry-run: dotnet test -> 12 passed\"}}\n```",
+      "usage": {
+        "apiCalls": 4,
+        "inputTokens": 9000,
+        "outputTokens": 1900,
+        "cacheReadTokens": 12000,
+        "aiu": {
+          "input": 0.9,
+          "output": 1.9
+        },
+        "premiumRequests": 0.33
+      },
+      "tools": [
+        {
+          "name": "view",
+          "arguments": {
+            "path": "src/Basket.cs"
+          },
+          "result": "public class Basket { }",
+          "ok": true,
+          "seconds": 0.3
+        },
+        {
+          "name": "edit",
+          "arguments": {
+            "path": "src/Discount.cs"
+          },
+          "result": "updated",
+          "ok": true,
+          "seconds": 0.6
+        },
+        {
+          "name": "bash",
+          "arguments": {
+            "command": "dotnet test"
+          },
+          "result": "12 passed",
+          "ok": true,
+          "seconds": 1.5
+        }
+      ]
+    },
+    "ticket-11-attempt-1": {
+      "prompt": "Commit with subject `ccode(Basket|11): ` then stop.\n<ticket-json>\n{\"title\": \"Apply discount at checkout\"}\n</ticket-json>\n",
+      "output": "The checks failed.\n\n```json\n{\"identifier\": \"Basket|11\", \"status\": \"failed\", \"result\": {\"reason\": \"dry-run: tests for 'Apply discount at checkout' failed\"}}\n```",
+      "usage": {
+        "apiCalls": 4,
+        "inputTokens": 4500,
+        "outputTokens": 1000,
+        "cacheReadTokens": 12000,
+        "aiu": {
+          "input": 0.45,
+          "output": 1.0
+        },
+        "premiumRequests": 0.33
+      },
+      "tools": [
+        {
+          "name": "bash",
+          "arguments": {
+            "command": "dotnet test"
+          },
+          "result": "1 failed",
+          "ok": false,
+          "seconds": 1.2
+        }
+      ]
+    },
+    "ticket-11-attempt-2": {
+      "prompt": "Commit with subject `ccode(Basket|11): ` then stop.\n<ticket-json>\n{\"title\": \"Apply discount at checkout\"}\n</ticket-json>\n",
+      "output": "Implemented Apply discount at checkout.\n\n```json\n{\"identifier\": \"Basket|11\", \"status\": \"completed\", \"result\": {\"commit\": \"sha0002\", \"summary\": \"Apply discount at checkout\", \"verification\": \"dry-run: dotnet test -> 12 passed\"}}\n```",
+      "usage": {
+        "apiCalls": 5,
+        "inputTokens": 9500,
+        "outputTokens": 2000,
+        "cacheReadTokens": 12000,
+        "aiu": {
+          "input": 0.9500000000000001,
+          "output": 2.0
+        },
+        "premiumRequests": 0.33
+      },
+      "tools": [
+        {
+          "name": "view",
+          "arguments": {
+            "path": "src/Basket.cs"
+          },
+          "result": "public class Basket { }",
+          "ok": true,
+          "seconds": 0.3
+        },
+        {
+          "name": "edit",
+          "arguments": {
+            "path": "src/Discount.cs"
+          },
+          "result": "updated",
+          "ok": true,
+          "seconds": 0.6
+        },
+        {
+          "name": "bash",
+          "arguments": {
+            "command": "dotnet test"
+          },
+          "result": "12 passed",
+          "ok": true,
+          "seconds": 1.5
+        }
+      ]
+    },
+    "chore": {
+      "prompt": "# TASK\nclean up",
+      "output": "{\"status\": \"completed\", \"result\": {\"summary\": \"No cleanup needed\", \"out_of_scope\": []}}",
+      "usage": {
+        "apiCalls": 0,
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "aiu": {},
+        "premiumRequests": 0.0
+      },
+      "tools": []
+    },
+    "review": {
+      "prompt": "# Review\nhead is commit `abc123` done",
+      "output": "{\"status\": \"completed\", \"result\": {\"axes\": [{\"name\": \"bugs\", \"outcome\": \"completed\"}, {\"name\": \"quality\", \"outcome\": \"completed\"}, {\"name\": \"smells\", \"outcome\": \"completed\"}, {\"name\": \"initiative\", \"outcome\": \"completed\"}], \"head\": \"abc123\", \"findings\": []}}",
+      "usage": {
+        "apiCalls": 0,
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "aiu": {},
+        "premiumRequests": 0.0
+      },
+      "tools": []
+    },
+    "other": {
+      "prompt": "something else",
+      "output": "{\"status\": \"failed\", \"result\": {\"reason\": \"No fake response configured\"}}",
+      "usage": {
+        "apiCalls": 0,
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "aiu": {},
+        "premiumRequests": 0.0
+      },
+      "tools": []
+    }
+  },
+  "github": {
+    "pr-diff": {
+      "args": [
+        "pr",
+        "diff",
+        "99"
+      ],
+      "output": ""
+    },
+    "pr-ready": {
+      "args": [
+        "pr",
+        "ready",
+        "99"
+      ],
+      "output": ""
+    },
+    "pr-list": {
+      "args": [
+        "pr",
+        "list",
+        "--state",
+        "open"
+      ],
+      "output": "[]"
+    },
+    "pr-create": {
+      "args": [
+        "pr",
+        "create",
+        "--draft"
+      ],
+      "output": "https://github.com/antshc/loop/pull/99"
+    },
+    "issue-comment": {
+      "args": [
+        "issue",
+        "comment",
+        "1",
+        "--body",
+        "x"
+      ],
+      "output": ""
+    },
+    "specs": {
+      "args": [
+        "api",
+        "graphql",
+        "--paginate",
+        "--slurp",
+        "-f",
+        "query=query { issues(labels: [\"spec\"]) }"
+      ],
+      "output": "[{\"data\": {\"repository\": {\"issues\": {\"nodes\": [{\"number\": 1, \"title\": \"Basket: Discount policy\", \"url\": \"https://github.com/antshc/loop/issues/1\", \"state\": \"OPEN\", \"body\": \"Dry-run body of #1: Basket: Discount policy.\", \"labels\": {\"nodes\": [{\"name\": \"spec\"}, {\"name\": \"repo:target:antshc/loop\"}, {\"name\": \"repo:base:main\"}]}, \"comments\": {\"nodes\": []}}]}}}}]"
+    },
+    "sub-issues": {
+      "args": [
+        "api",
+        "graphql",
+        "--paginate",
+        "--slurp",
+        "-f",
+        "query=query { subIssues(first: 100) }"
+      ],
+      "output": "[{\"data\": {\"repository\": {\"issue\": {\"subIssues\": {\"nodes\": [{\"number\": 10, \"title\": \"Add discount policy\", \"url\": \"https://github.com/antshc/loop/issues/10\", \"state\": \"OPEN\", \"body\": \"Dry-run body of #10: Add discount policy.\", \"labels\": {\"nodes\": []}, \"comments\": {\"nodes\": []}}, {\"number\": 11, \"title\": \"Apply discount at checkout\", \"url\": \"https://github.com/antshc/loop/issues/11\", \"state\": \"OPEN\", \"body\": \"Dry-run body of #11: Apply discount at checkout.\", \"labels\": {\"nodes\": []}, \"comments\": {\"nodes\": []}}]}}}}}]"
+    }
+  },
+  "git": {
+    "afterTwoCommits": [
+      [
+        "base0000",
+        "base"
+      ],
+      [
+        "c0000001",
+        "one"
+      ],
+      [
+        "c0000002",
+        "two"
+      ]
+    ],
+    "head": "c0000002",
+    "refSha": "base0000",
+    "pushedFirst": true,
+    "pushedSecond": false
+  }
+}
