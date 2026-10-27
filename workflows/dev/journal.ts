@@ -1,8 +1,10 @@
 /** Persisted per-Ticket failure history. */
+import { inject, injectable } from 'inversify';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { TicketWorkflowError } from './records.ts';
+import { LOG_DIRECTORY } from './tokens.ts';
 
 export type Clock = () => Date;
 
@@ -36,12 +38,13 @@ export class ExecutionStoreError extends TicketWorkflowError {
 }
 
 /** Daily compact JSON array of failure records at `<directory>/<workflow>-execution-log-<UTC date>.json`. */
+@injectable()
 export class FileExecutionStore implements ExecutionStore {
   readonly #clock: Clock;
   readonly #directory: string;
   readonly #workflow: string;
 
-  constructor(directory: string, options: { clock?: Clock; workflow?: string } = {}) {
+  constructor(@inject(LOG_DIRECTORY) directory: string, options: { clock?: Clock; workflow?: string } = {}) {
     this.#directory = directory;
     this.#workflow = options.workflow ?? 'dev';
     this.#clock = options.clock ?? (() => new Date());

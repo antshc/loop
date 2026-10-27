@@ -1,6 +1,9 @@
 /** Git reads and publication for the dev Workflow. */
+import { inject, injectable } from 'inversify';
+
 import { CommandError, runCommand } from './commands.ts';
 import { Commit } from './records.ts';
+import { COMMAND_RUNNER } from './tokens.ts';
 
 /** Git operations on a given checkout or worktree. */
 export interface GitService {
@@ -35,10 +38,11 @@ const RECORD_SEP = '\u001E';
 const LOG_FORMAT = `%H${FIELD_SEP}%s${FIELD_SEP}%b${RECORD_SEP}`;
 
 /** The real `GitService`: the `git` CLI; `run` is the injectable process seam. */
+@injectable()
 export class CliGitService implements GitService {
   readonly #run: Run;
 
-  constructor(run: Run = (command, options) => runCommand(command, options)) {
+  constructor(@inject(COMMAND_RUNNER) run: Run = (command, options) => runCommand(command, options)) {
     this.#run = run;
   }
 
