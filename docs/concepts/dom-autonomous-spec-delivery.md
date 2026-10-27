@@ -13,7 +13,7 @@ The process diagrams below describe the Ticket delivery portion; the surrounding
 
 ## Default phases
 
-`workflows/dev/definition.py` declares the eShop-style pipeline using the public
+`workflows/dev/model/definition.py` declares the eShop-style pipeline using the public
 `WorkflowBuilder`: preflight; conditional planning and Ticket creation; delivery
 and publication after each accepted Ticket; app verification; cleanup; worktree
 closure; read-only PR review; readiness checks. All delegates are supplied in the
@@ -183,8 +183,8 @@ Decisions: [Run one fresh agent per Ticket](../adr/run-one-fresh-agent-per-ticke
 ## Implementation Map
 | Concern | Stable anchor | Semantic locator |
 |---|---|---|
-| External contract | Operator-run service for one repository board | `workflows/dev/run.py`: runnable package (`python -m workflows.dev`) `main(argv)`, options `--log-dir`, `--log-level`; run from the harness root |
-| Spec and Ticket selection | Open Specs; actionable Tickets | `workflows/dev/platforms.py`: `TicketsTracker.specs`; `workflows/dev/records.py`: `Spec.tickets` |
-| Execution | Fresh non-interactive Copilot run per Ticket by default | `loop`: `AgentBuilder`, `Worktree.agent`, `AgentClient`; `workflows/dev/agent.py`: named prompts and default delegate; `workflows/dev/reply.py`: `DevResponse` |
-| Failure bound | Per-Ticket failure count across runs | `workflows/dev/journal.py`: `FileExecutionStore` |
+| External contract | Operator-run service for one repository board | `workflows/dev/composition/entry.py`: runnable package (`python -m workflows.dev`) `main(argv, *, providers=())`, options `--log-dir`, `--log-level`; run from the harness root |
+| Spec and Ticket selection | Open Specs; actionable Tickets | `workflows/dev/tracker/tickets.py`: `TicketsTracker.specs`; `workflows/dev/model/records.py`: `Spec.tickets` |
+| Execution | Fresh non-interactive Copilot run per Ticket by default | `loop`: `AgentBuilder`, `Worktree.agent`, `AgentClient`; `workflows/dev/agents/`: named prompts and default delegates; `workflows/dev/model/reply.py`: `DevResponse` |
+| Failure bound | Per-Ticket failure count across runs | `workflows/dev/deliver/journal.py`: `FileExecutionStore` |
 | Tests | Workflow scenarios against fakes | `workflows/dev/tests/test_run.py`; local harness in `workflows/dev/tests/doubles.py` |

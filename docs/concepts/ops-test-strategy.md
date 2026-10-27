@@ -9,16 +9,16 @@ Loop's behavior is spread over the shipped library (agent builder, CLI runners, 
 One unit test group runs in the project's single test command (`pytest`). It tests one component or one Workflow rule at a time against fakes at the process boundaries; a Workflow scenario is driven through the Workflow's `main` over the same fakes, so the real builder, prompt rendering, response extraction, and Workflow logic cooperate.
 
 - **Library seams:** `CliRunner` and `GitService` (and `DockerService`) are the replaceable boundaries; tests build `AgentBuilder(runner, git, docker)` over a `FakeRunner` and `FakeGitService`.
-- **Workflow seams:** a Workflow's Git reads and publication (`GitService`) and its GitHub client (`FakeGhCli`) are injected as in-memory fakes; the `dev` Workflow takes `new_agent`, so tests supply a builder over the fake runner.
+- **Workflow seams:** a Workflow's Git reads and publication (`GitService`) and its GitHub client (`FakeGhCli`) are injected as in-memory fakes. `dev` and `pr_babysit` take them as Dishka override providers through `main(argv, *, providers=())`; `workflows.shared.providers.bind` binds each fake to its type, including an `AgentFactory` over the fake runner. Feature classes take collaborators through constructors, so a single stage is tested by constructing it directly with fakes and no container.
 - **Ticket delegate seam:** reusable Ticket orchestration is tested through `deliver_tickets` with function delegates returning typed results; multi-repository scenarios drive `dev.main` with separate histories, clients, and delegates to prove target isolation and harness-only Ticket updates.
-- **Workflow-local harness:** `workflows/dev/tests/doubles.py` holds dev's fakes, `DevHarness`, and response-envelope builders. `tests/workflow_harness.py` independently supports `plan_implement`; dev tests import no sibling harness.
+- **Workflow-local harness:** `workflows/dev/tests/doubles.py` holds dev's fakes, `DevHarness` (which translates its fakes into one override provider), and response-envelope builders; `workflows/pr_babysit/tests/support.py` does the same for babysit. `tests/workflow_harness.py` independently supports `plan_implement`; dev tests import no sibling harness.
 - **Architecture checks:** import-linter contracts run as a test.
 
 ## Rules
 
 - MUST test every shipped component against its own boundary fake, one behavior per test.
 - MUST NOT start a real `gh`, `docker`, or agent CLI process, or reach the network, from any test. Worktree lifecycle and PR publication recovery tests may use isolated temporary Git repositories and local bare remotes; they MUST NOT access user repositories or network remotes.
-- MUST drive a Workflow scenario through the Workflow's `main` with injected dependencies, with the real builder, prompt rendering, and response extraction.
+- MUST drive a Workflow scenario through the Workflow's `main` with dependencies injected as override providers, with the real builder, prompt rendering, and response extraction.
 - MUST make the runner fake or injected Ticket delegate commit through the Git fake before reporting completion, so Git validation runs against fake state.
 - MUST exercise agent response parsing with raw runner output; tests of the independent Ticket delegate seam may return typed results without parsing an agent envelope.
 - MUST assert a scenario outcome on effects at the fake boundaries — tracker writes, pushes, CLI invocations and prompts — and MUST NOT assert on Workflow internals.
@@ -40,7 +40,7 @@ python -m workflows.dev --help
 python -m workflows.plan_implement --help
 ```
 
-Run from the repository root with `git` installed. The root test command covers library tests, both example Workflows, and import-linter contracts. The `--help` checks exercise Workflow imports and argument parsing without starting agents or contacting GitHub.
+Run from the repository root with `git` installed. The `dev` extra includes Dishka (the `workflows` extra) for the slice Workflows. The root test command covers library tests, `workflows/shared`, the `dev` and `pr_babysit` slices, and import-linter contracts. The `--help` checks exercise Workflow imports and argument parsing without starting agents or contacting GitHub.
 
 Syntax checks alone do not prove runtime compatibility: imports, standard-library APIs, dependency resolution, and error paths must also work. Preserve hook-point string conversion, formatting, and JSON serialization across runtimes. Cleanup failures must not mask the original error: Python 3.11+ attaches exception notes; Python 3.10 logs the secondary failure with its traceback. Tests cover the applicable path on each runtime.
 
@@ -61,8 +61,8 @@ harness.runner.handler = harness.commit_then(lambda sha: envelope("Checkout|10",
 | Workflow wiring for tests | One local harness binds dev to fakes at every boundary | `workflows/dev/tests/doubles.py`: `DevHarness`, `FakeRunner`, `FakeGitService`, `FakeWorkflowGit` |
 | Envelope builders | Response envelopes the Workflows extract | `tests/workflow_harness.py`: `plan_envelope`, `implement_envelope`; `workflows/dev/tests/doubles.py`: `envelope` |
 | Boundary fakes | One fake per boundary | `workflows/dev/tests/doubles.py`: dev's runner, Git, and `FakeGhCli` |
-| Unit tests | Library and Workflow rules against fakes | `tests/unit` and `workflows/dev/tests`; both discovered by root `pytest` |
-| Package independence | Dev runs without sibling Workflow files and resolves its own prompts | `workflows/dev/tests/test_package.py` |
+| Unit tests | Library and Workflow rules against fakes | `tests/unit`, `workflows/shared/tests`, `workflows/dev/tests`, and `workflows/pr_babysit/tests`; all discovered by root `pytest` |
+| Package independence | Dev runs with only `workflows/shared` and no sibling Workflow files, and resolves its own prompts | `workflows/dev/tests/test_package.py` |
 | Architecture checks | Import rules enforced as a test | `tests/unit/test_library.py`: `lint-imports` |
 
 ## References

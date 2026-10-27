@@ -7,35 +7,35 @@ Let each autonomous procedure (`dev`, a review loop, a custom flow) be written a
 
 ## Concept
 
-Loop is a library of an agent builder, agent CLI adapters, git, and hooks; a **workflow** is an ordinary Python entry point that wires them and runs its own loop. The example dev Workflow is a self-contained package with its implementation, prompts, helpers, tests, and fakes together.
+Loop is a library of an agent builder, agent CLI adapters, git, and hooks; a **workflow** is an ordinary Python entry point that wires them and runs its own loop. The example `dev` and `pr_babysit` Workflows are vertical slices: one package per feature plus `model`, `agents`, and a `composition` root, over the infrastructure in `workflows/shared/` ([Structure workflows as vertical slices](../adr/structure-workflows-as-vertical-slices-over-a-shared-package-wired-by-dishka.md)).
 
 - The core of Loop is the **agent builder** and git. `Agent()` returns an `AgentBuilder`; `open()` creates a worktree under the harness's `workspace` folder on a branch strategy and yields clients that run the agent CLI directly on the host in that worktree, and removes the worktree on exit ([Build agents with an agent builder](../adr/build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md)).
-- Loop ships default implementations for git, the Copilot and Codex agent CLIs, and an in-memory session store. The replaceable seams are `CliRunner`, `GitService`, `DockerService`, and `SessionStore`; tests replace them with fakes ([Ship Loop as a workflow library](../adr/ship-loop-as-a-workflow-library-with-no-built-in-workflows.md)). Dev owns its GitHub client, Spec/Ticket tracker, response extraction, commit validation, and publication inside `workflows/dev/`.
+- Loop ships default implementations for git, the Copilot and Codex agent CLIs, and an in-memory session store. The replaceable seams are `CliRunner`, `GitService`, `DockerService`, and `SessionStore`; tests replace them with fakes ([Ship Loop as a workflow library](../adr/ship-loop-as-a-workflow-library-with-no-built-in-workflows.md)). `workflows/shared/` owns the Workflow-side Git, GitHub, subprocess, JSON-state, envelope, and telemetry helpers; dev owns its Spec/Ticket tracker, response decoding, commit validation, and publication inside `workflows/dev/`.
 - Loop ships no workflows: the user writes every workflow, `dev` included; this repository's `workflows/dev/` is only an example and test subject.
-- The example `dev` separates repository routing in `backlog.py` from Ticket orchestration in `attempt.py`. A function delegate owns the agent steps and named prompt selection for each configured repository; Ticket orchestration owns history, retries, and commit validation without importing an agent delegate.
-- A workflow imports only the public `loop` API and is a runnable script: its entry point takes an argument list and returns an exit code, and a `__main__` guard passes that code to the process exit. Dependencies enter that entry point as optional parameters that default to the shipped implementations, so tests substitute fakes ([Ship Loop as a workflow library](../adr/ship-loop-as-a-workflow-library-with-no-built-in-workflows.md)).
+- The example `dev` separates Spec routing (`backlog/`) from its stages (`plan/`, `deliver/`, `verify/`, `chore/`, `review/`). A function delegate in `agents/` owns the agent steps and named prompt selection for each configured repository; the stages receive delegates and never import `agents/` or each other.
+- A workflow imports only the public `loop` API and is a runnable script: its entry point takes an argument list and returns an exit code, and a `__main__` guard passes that code to the process exit. Feature classes receive collaborators through their constructors; the slice's `composition/` builds them in a Dishka container, and `main(argv, *, providers=())` accepts override providers so tests substitute fakes ([Structure workflows as vertical slices](../adr/structure-workflows-as-vertical-slices-over-a-shared-package-wired-by-dishka.md)).
 - Loop ships no command: the user runs a workflow script through their own shell alias (for example `alias loop-dev='python -m workflows.dev'`), with the harness as the current folder ([Ship Loop as a workflow library](../adr/ship-loop-as-a-workflow-library-with-no-built-in-workflows.md)).
-- The workflow's Python code carries its own settings: harness root, log dir, agent profiles, retry and failure bounds, prompts, and Loop hooks. Dev keeps entry-point settings in `run.py`, repository/delegate configuration in `repositories.py`, and named templates in `prompts/`. Command-line arguments are optional overrides; there is no Loop configuration file or prompt execution framework.
+- The workflow's Python code carries its own settings: harness root, log dir, agent profiles, retry and failure bounds, prompts, and Loop hooks. Dev keeps entry-point settings in `composition/entry.py`, repository/delegate configuration in `composition/repositories.py`, and named templates in `prompts/`. Command-line arguments are optional overrides; there is no Loop configuration file or prompt execution framework.
 - Inside the library, each layer imports only the layers below it; shared parts never depend on the builder or the Workflows.
 
 ## Rules
 
 - MUST ship the builder and default implementations through one public top-level `loop` API; a workflow MUST import only from it.
-- MUST expose a Protocol only where Loop's own code calls a replaceable part (`CliRunner`, `GitService`, `DockerService`, `SessionStore`); dev's concrete GitHub client and tracker live in `platforms.py`, while Spec/Ticket entities live in `records.py`, outside the Loop library.
+- MUST expose a Protocol only where Loop's own code calls a replaceable part (`CliRunner`, `GitService`, `DockerService`, `SessionStore`); the Workflow-side GitHub client lives in `workflows/shared/github/` and dev's tracker in `tracker/`, outside the Loop library.
 - MUST NOT ship workflows or a command in the `loop` package.
 - MUST let a user replace any shipped implementation (git, GitHub tracker, agent builder) with their own through the workflow's injected dependencies.
 - MUST run every agent invocation through an `AgentClient` from the builder or an opened `Worktree`; a workflow MUST NOT call the provider CLI directly.
 - MUST create the branch and worktree through `GitOptions` and a branch strategy, by default under the harness's `workspace` folder, and run the Workflow from the harness root so the worktree root is inside the process working directory.
 - MUST give each workflow a Python entry point that owns its settings and wiring, returns the exit code, and runs through a `__main__` guard; a package may use `__main__.py` and keep its implementation in local modules.
-- MUST accept every external dependency of that entry point as an optional parameter defaulting to the shipped implementation.
+- MUST let callers replace every external dependency by passing a Dishka override provider to the entry point; only `composition/` and `workflows/shared/providers.py` may import `dishka`.
 - MUST declare a workflow's settings and Loop hooks as code in the workflow module; a workflow MUST run with no command-line arguments and MUST NOT require a configuration file.
 - MUST treat command-line arguments as optional overrides of the workflow's coded settings, owned by that workflow.
-- MUST NOT couple independent workflow entry points through imports; a user-owned composition script may import a workflow's explicit composition interface, and shared orchestration must not import its agent delegates.
-- MUST keep the library layered by import direction (`factory` > `builder` > `agents` > `clis | docker | git` > `run` > `hooks` > `sessions`), and dev independent of sibling Workflow modules and helpers.
+- MUST NOT couple independent workflows through imports; both may import `workflows/shared/`, which imports no workflow. A user-owned composition script may import a workflow's explicit composition interface. Features MUST NOT import their composition root, and dev stages MUST NOT import its agent delegates or each other.
+- MUST keep the library layered by import direction (`factory` > `builder` > `agents` > `clis | docker | git` > `run` > `hooks` > `sessions`), and each workflow independent of sibling Workflows.
 - MUST keep process execution (`git`, `gh`, agent CLIs) inside shipped implementations.
 - MUST NOT run a workflow file from outside the harness-root workflows folder; running it executes its code.
-- MUST place only logic whose business meaning is identical across workflows in the shared library; dev-specific parsing, models, rules, Git reads/publication, and process helpers stay inside `workflows/dev/`. The library returns the agent CLI's raw stdout ([Build agents with an agent builder](../adr/build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md)).
-- SHOULD accept small duplication between workflows over extracting shared code that only looks similar.
+- MUST place only logic whose business meaning is identical across workflows in `workflows/shared/` (or, for every workflow, the `loop` library); workflow-specific models, rules, prompts, and orchestration stay inside the slice. The library returns the agent CLI's raw stdout ([Build agents with an agent builder](../adr/build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md)).
+- SHOULD accept small duplication between workflows over extracting shared code that only looks similar; group code by feature, not by technical layer.
 
 ## Example
 
@@ -48,33 +48,38 @@ loop/                              # public API: builder, profiles, strategies, 
 ├── GitOptions, BranchStrategy, MergeToHeadStrategy, HeadStrategy, GitService
 ├── LoopHook (three points), AgentCliHook
 └── SessionStore, MemorySessionStore
-<harness root>/workflows/         # user-written; imports only public `loop`; main(argv) -> int
-├── dev/                          # self-contained Workflow; python -m workflows.dev
-│   ├── run.py                    # settings and entry point
-│   ├── repositories.py           # harness and repository-specific delegates
-│   ├── backlog.py                # Spec routing and publication
-│   ├── attempt.py                # Ticket delivery, independent of agent steps
-│   ├── agent.py                  # default delegate and named prompt loading
-│   ├── reply.py                  # response interpretation
-│   ├── journal.py                # failure history
-│   ├── records.py                # work items, identities, outcomes
-│   ├── checkout.py               # Git reads and publication
-│   ├── platforms.py              # GitHub clients and tracker
-│   ├── commands.py               # subprocess execution
+<harness root>/workflows/         # user-written; imports only public `loop`; main(argv, *, providers=()) -> int
+├── shared/                       # infrastructure identical across workflows; imports no workflow
+│   ├── git.py, process.py, state.py, telemetry.py
+│   ├── github/                   # gh client, repository, pull requests
+│   ├── agents/                   # agent launcher, envelopes, prompt files
+│   └── providers.py              # SharedProvider and bind() for overrides
+├── dev/                          # vertical slice; python -m workflows.dev
+│   ├── composition/              # Dishka providers, entry point, repositories, dry fakes
+│   ├── model/                    # harness, records, outcomes, settings, phases, gates
+│   ├── agents/                   # default delegates and named prompt loading
+│   ├── tracker/                  # Spec/Ticket tracker
+│   ├── plan/ deliver/ verify/ chore/ review/   # independent stages
+│   ├── backlog/                  # Spec routing and publication
 │   ├── prompts/                  # named Markdown templates
 │   └── tests/                    # local tests and fakes
+├── pr_babysit/                   # vertical slice: discover, monitor, watch, address, maintain_ci, publish
 ├── plan_implement.py             # plan with one model, implement with another, on one worktree
 └── review.py                     # may call its own tracker client
 ```
 
 ```python
-def main(argv=None, *, git=None, github_factory=None, new_agent=Agent, store=None) -> int:
-    git = git or GitService()
-    ...
-    options = GitOptions(strategy=BranchStrategy(feature_branch, base_branch), loop_hooks=hooks)
-    with new_agent().with_git(options).open() as worktree:
-        output = worktree.agent(profile).run(AgentRequest(prompt)).output
-        envelope = extract_response(output)   # workflow-owned parsing
+class Planner:
+    def __init__(self, new_agent: AgentLauncher, git: GitClient, tracker: Tracker, phases: Phases) -> None: ...
+
+class DevProvider(Provider):
+    planner = provide(Planner, scope=Scope.REQUEST)   # one per Workflow run
+
+def main(argv=None, *, providers: Sequence[Provider] = ()) -> int:
+    settings = parse(argv)
+    container = make_container(SharedProvider(), DevProvider(), *providers, context={DevSettings: settings})
+    with container(context={Phases: phases}) as run:
+        return run.get(SpecRouter).run()
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))
@@ -87,26 +92,27 @@ The user's aliases (`alias loop-dev='python -m workflows.dev'`) call the script;
 **Benefits**
 
 - A workflow is a short readable script; each can choose its own topology (single loop, implement then review, planner then parallel implementers).
-- Defaults make a workflow tiny, while any piece (tracker, git, agent client) stays replaceable.
+- Defaults make a workflow tiny, while any piece (tracker, git, agent client) stays replaceable by one override provider.
 - Workflows are testable with fakes at the process boundary.
 
 **Trade-offs**
 
 - The shipped implementations are part of the compatibility surface for user-supplied workflows.
-- Workflows repeat some wiring (accepted, as Sandcastle repeats hooks across templates).
+- Workflows repeat some wiring (accepted, as Sandcastle repeats hooks across templates), and running `dev` or `pr_babysit` needs the `workflows` extra for Dishka.
 - Running workflow files from the harness workflows folder executes arbitrary code.
 
 ## Validation
 
 - Workflow tests run against fakes at every process boundary.
-- Architecture checks (import-linter) verify the library layering, that workflows import only the public `loop` API, that platforms import no workflow, and that no workflow imports another workflow.
-- The example `dev` workflow imports only the public `loop` API.
+- Architecture checks (import-linter) verify the library layering, that workflows import only the public `loop` API, that `workflows/shared` imports no workflow, that only composition roots import `dishka`, that features never import their composition root, and that no workflow imports another workflow.
+- The example workflows import only the public `loop` API and `workflows/shared`.
 
 ## Options Considered
 
 | Option | Outcome |
 |--------|---------|
-| Vertical slices over domain, contracts, and infrastructure layers (Clean Architecture) | Rejected. The use-case-over-repository shape does not fit agent workflows; layers were mostly empty. |
+| Horizontal domain, contracts, and infrastructure layers (Clean Architecture) | Rejected. The use-case-over-repository shape does not fit agent workflows; layers were mostly empty. |
+| Feature-sliced workflows over `workflows/shared/` with a Dishka composition root | Chosen for workflow internals ([Structure workflows as vertical slices](../adr/structure-workflows-as-vertical-slices-over-a-shared-package-wired-by-dishka.md)). |
 | Runtime with fixed lifecycle phases; plugins fill slots | Rejected as the base. Removes loop duplication but cannot express planner, implementer, and reviewer flows. |
 | Pipeline of replaceable steps | Rejected. Implicit coupling through shared run state and harder tracing. |
 | Plugin folders with a `Command` contract, a composition-root `command.py`, and runtime-only imports for user workflows | Rejected. The prot2 prototype shows plain scripts over a public library suffice, without the command contract or per-workflow adapters. |
