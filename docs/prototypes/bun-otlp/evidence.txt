@@ -1,0 +1,50 @@
+1.4.4
+== bun run ==
+[41ms] active span after nested awaits is agent span: true
+[43ms] flushing
+[74ms] trace forceFlush ok in 31ms
+[82ms] metrics forceFlush ok in 40ms
+[83ms] trace shutdown ok in 41ms
+[86ms] metrics shutdown ok in 43ms
+[86ms] shutdown complete
+PASS [bun-run] trace request received
+PASS [bun-run] metrics request received
+PASS [bun-run] 3 spans
+PASS [bun-run] agent is root
+PASS [bun-run] tool parent = agent
+PASS [bun-run] nested parent = tool
+PASS [bun-run] same traceId
+PASS [bun-run] loop attrs present
+[bun-run] requests: 1 trace, 2 metric; encoding=application/json
+== bun build --compile ==
+binary size: 105M
+[38ms] active span after nested awaits is agent span: true
+[38ms] flushing
+[60ms] trace forceFlush ok in 22ms
+[65ms] metrics forceFlush ok in 27ms
+[66ms] trace shutdown ok in 27ms
+[68ms] metrics shutdown ok in 29ms
+[68ms] shutdown complete
+PASS [compiled] trace request received
+PASS [compiled] metrics request received
+PASS [compiled] 3 spans
+PASS [compiled] agent is root
+PASS [compiled] tool parent = agent
+PASS [compiled] nested parent = tool
+PASS [compiled] same traceId
+PASS [compiled] loop attrs present
+[compiled] requests: 1 trace, 2 metric; encoding=application/json
+== connection refused (export timeout 2s; expect clean exit, no hang) ==
+[1237ms] trace forceFlush FAILED in 1197ms: undefined
+[2248ms] metrics forceFlush ok in 2209ms
+[2249ms] trace shutdown ok in 2210ms
+[3376ms] metrics shutdown ok in 3337ms
+[3376ms] shutdown complete
+exit=0 elapsed=3.451151583s
+== accepts but never responds (export timeout 2s; expect clean exit, no hang) ==
+[2082ms] trace forceFlush FAILED in 2038ms: undefined
+[4091ms] metrics forceFlush ok in 4048ms
+[4092ms] trace shutdown ok in 4048ms
+[6096ms] metrics shutdown ok in 6053ms
+[6096ms] shutdown complete
+exit=0 elapsed=6.195596561s
