@@ -171,7 +171,7 @@ Builds deterministic action fingerprints from PR ID, logical event, action type 
 
 ### Workflow-owned `AgentActionPolicy`
 
-The workflow must decide whether an agent may edit a human-authored description, post a comment, close a PR, resolve a thread, or merge. Keep this business authorization **outside the reusable GitHub library**, as required by the existing [unified event-driven workflow plan](../plans/unified-event-driven-sdlc-workflow.md). The library can report GitHub capabilities/permission failures, but must not invent workflow authority.
+The workflow must decide whether an agent may edit a human-authored description, post a comment, close a PR, resolve a thread, or merge. Keep this business authorization **outside the reusable GitHub library**, as required by the existing [unified event-driven workflow plan](unified-event-driven-sdlc-workflow.md). The library can report GitHub capabilities/permission failures, but must not invent workflow authority.
 
 ## Ports and application service
 
