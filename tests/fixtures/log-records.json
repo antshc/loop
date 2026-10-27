@@ -1,0 +1,42 @@
+[
+  {
+    "level": "info",
+    "logger": "loop.golden",
+    "message": "adding worktree /repo/.wt/a on branch a",
+    "extra": {},
+    "line": "{\"message\": \"adding worktree /repo/.wt/a on branch a\"}"
+  },
+  {
+    "level": "debug",
+    "logger": "loop.golden",
+    "message": "git: worktree add",
+    "extra": {
+      "exit_code": 0,
+      "cwd": "/repo"
+    },
+    "line": "{\"message\": \"git: worktree add\", \"exit_code\": 0, \"cwd\": \"/repo\"}"
+  },
+  {
+    "level": "warning",
+    "logger": "loop.golden",
+    "message": "dirty worktree retained: /repo/.wt/a",
+    "extra": {
+      "retained": true,
+      "count": 2,
+      "ratio": 0.5,
+      "none": null,
+      "tags": [
+        "a",
+        "b"
+      ]
+    },
+    "line": "{\"message\": \"dirty worktree retained: /repo/.wt/a\", \"retained\": true, \"count\": 2, \"ratio\": 0.5, \"none\": null, \"tags\": [\"a\", \"b\"]}"
+  },
+  {
+    "level": "error",
+    "logger": "loop.golden",
+    "message": "h\u00e9llo \"quoted\"\nline",
+    "extra": {},
+    "line": "{\"message\": \"h\\u00e9llo \\\"quoted\\\"\\nline\"}"
+  }
+]

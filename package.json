@@ -20,8 +20,30 @@
     "inversify": "^8.2.3",
     "reflect-metadata": "^0.2.2"
   },
+  "peerDependencies": {
+    "@opentelemetry/api": "^1.10.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.300.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.300.0",
+    "@opentelemetry/resources": "^3.0.0",
+    "@opentelemetry/sdk-metrics": "^3.0.0",
+    "@opentelemetry/sdk-trace-base": "^2.12.0"
+  },
+  "peerDependenciesMeta": {
+    "@opentelemetry/api": { "optional": true },
+    "@opentelemetry/exporter-metrics-otlp-http": { "optional": true },
+    "@opentelemetry/exporter-trace-otlp-http": { "optional": true },
+    "@opentelemetry/resources": { "optional": true },
+    "@opentelemetry/sdk-metrics": { "optional": true },
+    "@opentelemetry/sdk-trace-base": { "optional": true }
+  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@opentelemetry/api": "^1.10.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.300.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.300.0",
+    "@opentelemetry/resources": "^3.0.0",
+    "@opentelemetry/sdk-metrics": "^3.0.0",
+    "@opentelemetry/sdk-trace-base": "^2.12.0",
     "@types/bun": "^1.4.4",
     "@typescript/native-preview": "^7.0.0-dev.20260707.2",
     "dependency-cruiser": "^18.7.0",

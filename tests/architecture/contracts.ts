@@ -32,6 +32,8 @@ export const TELEMETRY_ADAPTER = '^src/loop/observe/otel(/|\\.ts$)';
 /** Tests of the adapter may drive the telemetry SDK directly. */
 const TELEMETRY_TESTS = '^(tests|workflows/[^/]+/tests)/.*(otel|telemetry)[^/]*\\.test\\.ts$';
 
+/** Modules above the cruised root are installed packages: they import each other, not Loop. */
+const OUTSIDE_ROOT = '^\\.\\./';
 const TELEMETRY_PACKAGES = '(^|/)@opentelemetry/';
 const PUBLIC_LOOP_ENTRY = '^src/loop/index\\.ts$';
 
@@ -137,7 +139,7 @@ export const CONTRACTS: readonly Contract[] = [
       {
         comment:
           'Direct only: any chain to the packages ends in a direct import, and importing the adapter itself is legitimate.',
-        from: { pathNot: [TELEMETRY_ADAPTER, TELEMETRY_TESTS] },
+        from: { pathNot: [TELEMETRY_ADAPTER, TELEMETRY_TESTS, OUTSIDE_ROOT] },
         name: 'telemetry-only-in-adapter',
         severity: 'error',
         to: { path: TELEMETRY_PACKAGES },
