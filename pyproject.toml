@@ -13,7 +13,8 @@ dependencies = [
 
 [project.optional-dependencies]
 visualization = ["rich>=13"]
-dev = ["pytest", "import-linter", "opentelemetry-sdk>=1.45", "opentelemetry-exporter-otlp-proto-http>=1.45"]
+workflows = ["dishka>=1.10"]
+dev = ["pytest", "import-linter", "dishka>=1.10", "opentelemetry-sdk>=1.45", "opentelemetry-exporter-otlp-proto-http>=1.45"]
 otel = [
     "opentelemetry-sdk>=1.45",
     "opentelemetry-exporter-otlp-proto-http>=1.45",
@@ -24,11 +25,12 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src", ".", "tests"]
-testpaths = ["tests", "workflows/dev/tests", "workflows/pr_babysit/tests"]
+testpaths = ["tests", "workflows/shared/tests", "workflows/dev/tests", "workflows/pr_babysit/tests"]
 norecursedirs = ["archive", ".*"]
 
 [tool.importlinter]
 root_packages = ["loop", "workflows"]
+include_external_packages = true
 
 [[tool.importlinter.contracts]]
 name = "The loop library is layered: builder over agents over clis, docker and git over run over hooks over sessions"
@@ -70,6 +72,25 @@ name = "Ticket orchestration imports no agent workflow"
 type = "forbidden"
 source_modules = ["workflows.dev.attempt"]
 forbidden_modules = ["workflows.dev.agent", "workflows.dev.repositories", "workflows.dev.run"]
+
+[[tool.importlinter.contracts]]
+name = "Shared workflow infrastructure imports no workflow slice"
+type = "forbidden"
+source_modules = ["workflows.shared"]
+forbidden_modules = ["workflows.dev", "workflows.pr_babysit", "workflows.plan_implement", "workflows.workflow_reporting"]
+
+[[tool.importlinter.contracts]]
+name = "Only composition roots and the shared provider know the container"
+type = "forbidden"
+source_modules = [
+    "workflows.shared.agents",
+    "workflows.shared.git",
+    "workflows.shared.github",
+    "workflows.shared.process",
+    "workflows.shared.state",
+    "workflows.shared.telemetry",
+]
+forbidden_modules = ["dishka"]
 
 [[tool.importlinter.contracts]]
 name = "No workflow imports another workflow"
