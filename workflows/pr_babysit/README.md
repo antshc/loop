@@ -12,36 +12,43 @@ Review handling follows the [Brain address skill](https://github.com/antshc/brai
 
 ```text
 pr_babysit/
-    __main__.py                  # CLI and dependency wiring
-    settings.py
+    main.ts                      # CLI (commander) and entry point
+    composition.ts               # InversifyJS composition root; tokens.ts holds the tokens
+    discovery.ts                 # Discovery service
+    worker.ts                    # Single-PR worker service
+    file-lock.ts                 # OS file locks through Bun FFI
+    settings.ts
     settings.example.json
     workflow/
-        run.py                   # Single-PR orchestration
-        definition.py            # WorkflowBuilder phases
-        watcher.py               # Discussion gate and CI decisions
-        address.py               # Review issue handling and response validation
-        maintainer.py            # CI diagnosis and repair
-        workspace.py             # Named-worktree serialization and Loop composition
-        changes.py               # Verification and publication transaction
+        run.ts                   # Single-PR orchestration
+        definition.ts            # WorkflowBuilder phases
+        watcher.ts               # Discussion gate and CI decisions
+        address.ts               # Review issue handling and response validation
+        maintainer.ts            # CI diagnosis and repair
+        maintenance.ts           # Maintenance pass wiring
+        workspace.ts             # Named-worktree serialization and Loop composition
+        changes.ts               # Verification and publication transaction
+        records.ts               # Batch and outcome records
     infrastructure/
-        scheduler.py             # Discovery timing and worker processes
-        github.py                # GitHub queries and mutations
-        git.py                   # Git inspection, explicit commit/push, revision fetch
-        verification.py          # Build/test subprocesses
-        state.py                 # JSON checkpoints, registry, process locks
+        scheduler.ts             # Discovery timing and worker processes
+        signals.ts               # Graceful stop on SIGINT and SIGTERM
+        github.ts                # GitHub queries and mutations
+        git.ts                   # Git inspection, explicit commit/push, revision fetch
+        verification.ts          # Build/test subprocesses
+        state.ts                 # JSON checkpoints, registry, process locks
     agents/
-        profiles.py
+        profiles.ts
         address.md
         maintainer.md
     tests/
         workflow/
         infrastructure/
-        test_telemetry.py
+        fixtures/
 ```
 
 ## Configure and run
 
-Install Loop and authenticate `gh` and Copilot CLI. Configure each checkout's normal
+Install Loop with `bun install` and authenticate `gh` and Copilot CLI. Configure each checkout's normal
 Git author identity. Each origin must match the configured repository. Fork-head PRs
 block instead of pushing through an unrelated remote.
 
@@ -50,18 +57,13 @@ to that file. Each repository requires build and test argument arrays, executed
 without a shell. Include dependency preparation in those commands when needed in
 a fresh worktree. Set `author` to override the authenticated GitHub user.
 
-```sh
-python3 -m workflows.pr_babysit --config babysit.local.json
-python3 -m workflows.pr_babysit --config babysit.local.json --include-existing
-python3 -m workflows.pr_babysit --config babysit.local.json --pr https://github.com/owner/repo/pull/123
-python3 -m workflows.pr_babysit --config babysit.local.json --retry https://github.com/owner/repo/pull/123
-```
-
-The TypeScript port runs on Bun with the same flags, state files and exit codes:
+Run from the harness root, directly or through your own alias:
 
 ```sh
 bun workflows/pr_babysit/main.ts --config babysit.local.json
+bun workflows/pr_babysit/main.ts --config babysit.local.json --include-existing
 bun workflows/pr_babysit/main.ts --config babysit.local.json --pr https://github.com/owner/repo/pull/123
+bun workflows/pr_babysit/main.ts --config babysit.local.json --retry https://github.com/owner/repo/pull/123
 ```
 
 A lock held by another process stops the run as Blocked with exit code 1. The first
@@ -80,7 +82,7 @@ green CI is a milestone, so open PRs continue watching for late feedback.
 while starting discovery. Blocked executions otherwise resume only on changed head,
 review, or CI inputs. A crashed worker without a recorded outcome requires explicit retry.
 
-For telemetry, install `loop[otel]` and configure `otel_endpoint`, for example
+For telemetry, install the optional OpenTelemetry packages (`bun add @opentelemetry/api @opentelemetry/exporter-metrics-otlp-http @opentelemetry/exporter-trace-otlp-http @opentelemetry/resources @opentelemetry/sdk-metrics @opentelemetry/sdk-trace-base`) and configure `otel_endpoint`, for example
 `http://localhost:4318`. Without it no exporter is created. `copilot_review` defaults
 to false; enabling it requests a best-effort Copilot review once per SHA. Pending
 review prevents the readiness milestone, while unavailable Copilot does not block work.
@@ -92,14 +94,14 @@ review prevents the readiness milestone, while unavailable Copilot does not bloc
 | Loop library | Create/reuse named worktrees; remove clean directories; preserve dirty work; retain branch commits; prune stale metadata |
 | Address | Group review feedback, investigate with evidence, edit justified fixes, draft replies |
 | Maintainer | Diagnose CI read-only, fix branch defects, identify transient failures |
-| Workflow Python | Verify, explicitly commit/push, post replies, retry CI, persist checkpoints, serialize named-worktree use |
+| Workflow code | Verify, explicitly commit/push, post replies, retry CI, persist checkpoints, serialize named-worktree use |
 
 Profiles and complete Markdown instructions stay together under `agents/`.
 Agents must not commit, push, change branches, or use GitHub clients. Native deny
-rules reinforce the prompts, and Python checks actual HEAD changes. Host agent
+rules reinforce the prompts, and the Workflow checks actual HEAD changes. Host agent
 execution is not a sandbox.
 
-Python commits each verified review issue and pushes once per batch, confirms the
+The Workflow commits each verified review issue and pushes once per batch, confirms the
 remote SHA, then replies. Rejected pushes produce no replies. Threads remain open
 for reviewers; no code merges PRs. Maintainer uses the same explicit publication
 sequence. Three transient retry cycles per SHA are allowed by default; repeated
@@ -169,9 +171,11 @@ root, shared with agent observations; routine polls/sleeps create no phase spans
 Retained worktrees end their active telemetry span without claiming disk removal.
 
 ```sh
-python3 -m pytest workflows/pr_babysit/tests
-python3 -m pytest
+bun test workflows/pr_babysit/tests
+bun run test
 ```
 
 Tests use fake GitHub/agent responses, isolated local Git remotes, JSON failures,
-and in-memory spans. They never invoke live agents or contact GitHub.
+and in-memory spans. They never invoke live agents or contact GitHub. Signal handling,
+process-group kill, and FFI locking are verified on Linux; macOS and Windows behavior is untested,
+and Bun marks FFI experimental.

@@ -13,7 +13,7 @@ The process diagrams below describe the Ticket delivery portion; the surrounding
 
 ## Default phases
 
-`workflows/dev/definition.py` declares the eShop-style pipeline using the public
+`workflows/dev/definition.ts` declares the eShop-style pipeline using the public
 `WorkflowBuilder`: preflight; conditional planning and Ticket creation; delivery
 and publication after each accepted Ticket; app verification; cleanup; worktree
 closure; read-only PR review; readiness checks. All delegates are supplied in the
@@ -178,13 +178,13 @@ flowchart LR
 
 A solid edge is automatic; a dotted edge is a separately initiated step, labelled with its initiator.
 
-Decisions: [Run one fresh agent per Ticket](../adr/run-one-fresh-agent-per-ticket-from-python-and-let-the-agent-commit-it.md) (per-Ticket run, task commit, Git validation, Python owns push, pull request, and Ticket state), [Build agents with an agent builder](../adr/build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md) (the library returns raw output; the `dev` Workflow extracts the response envelope).
+Decisions: [Run one fresh agent per Ticket](../adr/run-one-fresh-agent-per-ticket-from-the-workflow-and-let-the-agent-commit-it.md) (per-Ticket run, task commit, Git validation, the Workflow owns push, pull request, and Ticket state), [Build agents with an agent builder](../adr/build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md) (the library returns raw output; the `dev` Workflow extracts the response envelope).
 
 ## Implementation Map
 | Concern | Stable anchor | Semantic locator |
 |---|---|---|
-| External contract | Operator-run service for one repository board | `workflows/dev/run.py`: runnable package (`python -m workflows.dev`) `main(argv)`, options `--log-dir`, `--log-level`; run from the harness root |
-| Spec and Ticket selection | Open Specs; actionable Tickets | `workflows/dev/platforms.py`: `TicketsTracker.specs`; `workflows/dev/records.py`: `Spec.tickets` |
-| Execution | Fresh non-interactive Copilot run per Ticket by default | `loop`: `AgentBuilder`, `Worktree.agent`, `AgentClient`; `workflows/dev/agent.py`: named prompts and default delegate; `workflows/dev/reply.py`: `DevResponse` |
-| Failure bound | Per-Ticket failure count across runs | `workflows/dev/journal.py`: `FileExecutionStore` |
-| Tests | Workflow scenarios against fakes | `workflows/dev/tests/test_run.py`; local harness in `workflows/dev/tests/doubles.py` |
+| External contract | Operator-run service for one repository board | `workflows/dev/main.ts`: runnable entry point (`bun workflows/dev/main.ts`) `main(argv, dependencies)`, options `--log-dir`, `--log-level`, `--spec`, `--visualize`, `--otlp-endpoint`, `--fake`, `--dry`; run from the harness root |
+| Spec and Ticket selection | Open Specs; actionable Tickets | `workflows/dev/platforms.ts`: `TicketsTracker.specs`; `workflows/dev/records.ts`: `Spec.tickets` |
+| Execution | Fresh non-interactive Copilot run per Ticket by default | `loop`: `AgentBuilder`, `AgentWorkspace.agent`, `AgentClient`; `workflows/dev/agent.ts`: named prompts and default delegate; `workflows/dev/responses.ts`: `DevResponse` |
+| Failure bound | Per-Ticket failure count across runs | `workflows/dev/journal.ts`: `FileExecutionStore` |
+| Tests | Workflow scenarios against fakes | `workflows/dev/tests/delivery.test.ts`, `workflows/dev/tests/main.test.ts`; local harness in `workflows/dev/tests/support/harness.ts` |

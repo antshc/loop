@@ -24,26 +24,23 @@ The orchestration layer owns when and where the agent runs. The agent owns the t
 
 ## Example
 
-```python
-import subprocess
+```ts
+async function runHeadlessAgent(worktree: string, prompt: string) {
+  const child = Bun.spawn(['copilot', '-p', prompt], { cwd: worktree, stdout: 'pipe', stderr: 'pipe' });
+  const timer = setTimeout(() => child.kill(), 1_800_000);
+  const [stdout, stderr, exitCode] = await Promise.all([child.stdout.text(), child.stderr.text(), child.exited]);
+  clearTimeout(timer);
+  return { exitCode, stderr, stdout };
+}
 
-def run_headless_agent(worktree: str, prompt: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["copilot", "-p", prompt],
-        cwd=worktree,
-        text=True,
-        capture_output=True,
-        timeout=1800,
-        check=False,
-    )
+const result = await runHeadlessAgent(
+  'workspace/loop.worktrees/task-42',
+  'Implement issue #42, verify it, commit the result, then exit.',
+);
 
-result = run_headless_agent(
-    worktree="/tmp/loop/task-42",
-    prompt="Implement issue #42, verify it, commit the result, then exit.",
-)
-
-if result.returncode != 0:
-    raise RuntimeError(result.stderr)
+if (result.exitCode !== 0) {
+  throw new Error(result.stderr);
+}
 ```
 
 Loop can create the worktree and invoke the agent; a Ralph option can decide when to invoke it again in a fresh session.

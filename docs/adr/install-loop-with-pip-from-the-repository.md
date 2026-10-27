@@ -1,5 +1,7 @@
 # Install Loop with pip from the repository
 
+> Superseded by [Port Loop and Workflows to TypeScript on Bun in one cutover](port-loop-and-workflows-to-typescript-on-bun-in-one-cutover.md).
+
 Loop must reach users in a form whose version the project controls. It is installed with `pip` from this repository (`pip install -e ".[dev]"` for development), so the repository revision defines the delivered version.
 
 ## Considered Options

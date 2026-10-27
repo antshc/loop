@@ -4,120 +4,94 @@
 
 # Loop
 
-Python library for composing autonomous coding-agent Workflows on Git worktrees.
+TypeScript library, run by Bun, for composing autonomous coding-agent Workflows on Git worktrees.
 
-Use Loop to run Copilot CLI or Codex from Python, manage branches and worktrees,
+Use Loop to run Copilot CLI or Codex from TypeScript, manage branches and worktrees,
 and coordinate multiple agent steps. You own the prompts, control flow, and
 interpretation of results; Loop provides the execution and lifecycle building blocks.
 It ships no command and no built-in Workflows.
 
-[Installation](#installation) | [Quick start](#quick-start) | [Examples](#examples) | [Documentation](#documentation) | [Contributing](#contributing)
+[Installation](#installation) | [Quick start](#quick-start) | [Running the examples](#running-the-examples) | [Examples](#examples) | [Documentation](#documentation) | [Contributing](#contributing)
 
 ## Features
 
 - **Composable agents:** choose a CLI, model, and reasoning effort per agent profile.
-- **Reusable Python profiles:** import instructions, tool permissions, directories,
+- **Reusable TypeScript profiles:** import instructions, tool permissions, directories,
   environment, and timeouts into your Workflows. See [profile examples](USAGE.md#reusable-agent-profiles).
 - **Git lifecycle management:** use a named-branch worktree, a temporary branch
   merged back into HEAD, or the repository directory directly.
 - **Multi-step Workflows:** share a worktree across agents and optionally resume sessions.
 - **Lifecycle commands:** run host shell commands at `worktree-ready`,
   `worktree-removing`, and `run-finished` Loop hook points.
+- **Ctrl-C and SIGTERM handling:** the agent's whole process tree is ended and
+  worktree cleanup runs; exit codes are 130 and 143.
 - **Dry runs:** log Git and agent operations before enabling real execution.
 
 ## Requirements
 
-- Python 3.10 or newer (including 3.10.12), for both the library and example Workflows.
+- [Bun](https://bun.sh) 1.4.4 or newer, for both the library and the example Workflows. Node.js is unsupported.
 - Git for repository and worktree operations.
 - [Copilot CLI](https://github.com/github/copilot-cli) or
   [Codex CLI](https://github.com/openai/codex), installed and authenticated for live agent runs.
 - [GitHub CLI](https://cli.github.com/) (`gh`), authenticated, only for examples
   that interact with GitHub.
+- Optional: the OpenTelemetry packages, only to export telemetry over OTLP.
 
 ## Installation
 
-Install from this repository, not from PyPI. In a shell:
+Install from this repository; there is no package index. TypeScript source is consumed
+directly, so there is no build step. In a shell:
 
 ```sh
 git clone https://github.com/antshc/loop.git
 cd loop
-python -m venv .venv
+bun install
 ```
 
-Activate the virtual environment:
+To use Loop from your own harness, add it as a Bun package pinned to a revision;
+`bun.lock` pins it further:
 
 ```sh
-# Linux / macOS
-source .venv/bin/activate
+bun add github:antshc/loop#<revision>
 ```
 
-```powershell
-# Windows PowerShell
-.venv\Scripts\Activate.ps1
-```
-
-Upgrade the packaging tools first. Old `pip`/`setuptools` cannot read
-`pyproject.toml` metadata and silently install an empty `UNKNOWN-0.0.0` package:
-
-```sh
-python -m pip install --upgrade pip "setuptools>=68" wheel
-```
-
-Then install the library:
-
-```sh
-python -m pip install .
-```
-
-To install without cloning, run `python -m pip install git+https://github.com/antshc/loop`
-after the upgrade. Verify with `python -m pip show loop`: the name must be `loop`, not `UNKNOWN`.
-If `UNKNOWN` was installed, run `python -m pip uninstall UNKNOWN` and reinstall.
-
-The repository revision determines the installed version. To update, pull the
-desired revision and reinstall. For an editable development installation, see
-[Contributing](#contributing).
-
-## Bun toolchain (TypeScript port in progress)
-
-Requires Bun 1.4.4 or newer; Node.js is unsupported. `bun install` then `bun run test`
-runs lint, type-check and `bun test`. TypeScript source is consumed directly (no build step).
+The repository revision determines the installed version. To update, move the pinned
+revision and reinstall. Telemetry export needs the optional OpenTelemetry packages
+(`@opentelemetry/api`, `@opentelemetry/sdk-trace-base`, `@opentelemetry/sdk-metrics`,
+`@opentelemetry/resources`, `@opentelemetry/exporter-trace-otlp-http`,
+`@opentelemetry/exporter-metrics-otlp-http`); requesting OTLP export without them fails
+at startup with an install message.
 
 ## Quick start
 
-Save this as `my_workflow.py` and run it from the Git repository you want to work
-on. It starts in **dry-run mode**: Git and agent operations are logged, not executed.
+Save this as `my-workflow.ts` in your harness and run it from the Git repository you want
+to work on. It starts in **dry-run mode**: Git and agent operations are logged, not executed.
 
-```python
-from loop import (
-    Agent,
-    AgentOptions,
-    AgentProfile,
-    AgentRequest,
-    BranchStrategy,
-    GitOptions,
-    configure_logging,
-    copilot,
-)
+```ts
+import { Agent, AgentProfile, AgentRequest, BranchStrategy, configureLogging, copilot, GitOptions } from 'loop';
 
-configure_logging()
-options = GitOptions(strategy=BranchStrategy("loop/fix-tests"))
+configureLogging();
+const options = new GitOptions({ strategy: new BranchStrategy('loop/fix-tests') });
 
-with Agent(AgentOptions(dry_run=True)).with_git(options).open() as worktree:
-    agent = worktree.agent(AgentProfile(copilot))
-    result = agent.run(AgentRequest("Fix the failing tests, verify, and commit. Do not push."))
-    print(result.output)
+await Agent({ dryRun: true })
+  .withGit(options)
+  .open(async (worktree) => {
+    const agent = worktree.agent(new AgentProfile(copilot));
+    const result = await agent.run(new AgentRequest('Fix the failing tests, verify, and commit. Do not push.'));
+    console.log(result.output);
+  });
 ```
 
 ```sh
-python my_workflow.py
+bun my-workflow.ts
 ```
 
-To run it for real, replace `Agent(AgentOptions(dry_run=True))` with `Agent()`.
+To run it for real, replace `Agent({ dryRun: true })` with `Agent()`.
 The example uses the CLI's default model and reasoning effort. It creates or
 reuses `loop/fix-tests`, starting a new branch from HEAD, and runs the agent in
 `.worktrees/loop/fix-tests`. Loop removes clean worktrees on success or failure;
 the local branch and its commits remain. Dirty worktrees are preserved, and a
-successful body leaving edits raises `WorktreeError`. Loop never commits or pushes
+successful body leaving edits rejects with `WorktreeError`. Loop never commits or pushes
 automatically: the agent or Workflow must explicitly commit verified changes.
 
 `result.output` contains the agent's output text, not a validated task outcome.
@@ -128,105 +102,70 @@ Your Workflow must interpret it and verify the work.
 > Copilot adapter allows all tools. Use trusted repositories and prompts, and
 > review changes before publishing them.
 
+## Running the examples
+
+Each Workflow is a plain script run by Bun from the harness root, usually through your own alias:
+
+```sh
+bun workflows/dev/main.ts --help
+bun workflows/plan_implement.ts "Add cart quantity validation"
+bun workflows/pr_babysit/main.ts --config babysit.local.json
+bun workflows/workflow_reporting.ts --visualize
+
+alias loop-dev='bun /path/to/harness/workflows/dev/main.ts'
+```
+
+Each Workflow parses its own flags, prints generated help, and exits with code 2 and usage on bad input.
+See [USAGE.md](USAGE.md) for the flags of each Workflow.
+
 ## Examples
 
-The examples live in this repository and are not included in the installed
-`loop` package.
+The examples live in this repository and are not part of the `loop` package.
 
 | Example | Purpose |
 |---|---|
-| [Library usage](docs/usage.md#library-examples) | One-shot runs, profiles, shared worktrees, sessions, and Loop hooks |
+| [Library usage](USAGE.md#library-examples) | One-shot runs, profiles, shared worktrees, sessions, and Loop hooks |
 | [PR scheduler and babysitter](workflows/pr_babysit/README.md) | Discover user-authored PRs and address reviews/CI with JSON recovery and scoped telemetry |
-| [Plan and implement](workflows/plan_implement.py) | Plan and implement with different models on one worktree |
-| [Dev Workflow guide](docs/usage.md#dev-workflow) | Deliver GitHub Tickets, configure multiple repositories, and customize prompts |
-| [Multi-repository Workflow](docs/usage.md#different-agent-workflows-per-repository) | Route Specs to several repositories, each with its own agent steps |
-| [Scenario-style dev Workflow](workflows/dev_bdd/README.md) | Dummy BDD-style Workflow demonstrating nested scenarios, live flow visualization and Allure results |
+| [Plan and implement](workflows/plan_implement.ts) | Plan and implement with different models on one worktree |
+| [Dev Workflow guide](USAGE.md#dev-workflow) | Deliver GitHub Tickets, configure multiple repositories, and customize prompts |
+| [Multi-repository Workflow](USAGE.md#different-agent-workflows-per-repository) | Route Specs to several repositories, each with its own agent steps |
+| [Workflow reporting](workflows/workflow_reporting.ts) | A fake delivery that demonstrates optional phase reporting, the terminal table, and spans |
 
 The dev Workflow can create commits, push branches, open draft pull requests,
 and update Tickets. Read its configuration guide before running it.
 
-### Multi-repository example
+## Platform support and known gaps
 
-The dev Workflow routes Specs by their `repo:target:<owner/repo>` label to
-repositories you configure. Each `RepositoryWorkflow` pairs a checkout with a
-function that owns its agent steps; here `api` only implements while `web`
-implements and then reviews. Repositories must already be cloned under
-`workspace/`, and unknown targets are handed to a human.
-
-```python
-from functools import partial
-from pathlib import Path
-
-from workflows.dev import (
-    Repository, RepositoryId, RepositoryWorkflow, implement_ticket, load_prompt, main,
-)
-
-workspace = Path.cwd() / "workspace"
-implement = partial(implement_ticket, template=load_prompt("implement"))
-
-
-def implement_and_review(context, worktree):
-    result = implement(context, worktree)
-    ...  # run a reviewer agent on result.commit; return a TicketResult
-    return result
-
-
-if __name__ == "__main__":
-    raise SystemExit(main(repositories=(
-        RepositoryWorkflow(
-            Repository(workspace / "api", workspace / "api.worktrees", RepositoryId("acme", "api")),
-            implement,
-        ),
-        RepositoryWorkflow(
-            Repository(workspace / "web", workspace / "web.worktrees", RepositoryId("acme", "web")),
-            implement_and_review,
-        ),
-    )))
-```
-
-Run it from the harness root. The [usage guide](docs/usage.md#different-agent-workflows-per-repository)
-has the complete reviewer step and delivery rules.
-
-### Optional: visualize flows with scenarios (BDD style)
-
-`workflows/dev_bdd` is a dummy Workflow (no GitHub, Git or agent calls) showing a
-delivery flow structured as readable nested scenarios over named steps. It prints a live, colored progress tree
-and can write [Allure](https://allurereport.org/) results. This is optional: the
-`loop` library does not depend on it, and Allure is an extra (`pip install -e ".[reports]"`).
-
-```sh
-python -m workflows.dev_bdd            # live progress, Allure results in .loop/allure-results
-python -m workflows.dev_bdd --quiet --no-allure
-```
-
-To restructure your own project this way, use the reusable
-[restructuring prompt](docs/prompts/restructure-to-scenarios.md). See the
-[usage guide](USAGE.md#scenario-style-flow-visualization-optional) for options.
+Signal delivery, process-group kill, and OS file locking are verified on Linux; macOS and Windows
+behavior is untested. Telemetry is verified against in-memory exporters, not a real collector, and
+the OpenTelemetry packages are not officially supported on Bun. Docker agent behavior under Bun is
+unspecified. `pr_babysit`'s single-instance lock uses Bun's FFI, which Bun marks experimental.
 
 ## Documentation
 
-- [Usage guide](docs/usage.md): advanced examples, logging, and dev Workflow configuration.
+- [Usage guide](USAGE.md): advanced examples, logging, and dev Workflow configuration.
 - [Domain glossary](CONTEXT.md): project terminology.
 - [Architecture](ARCHITECTURE.md): codebase structure, design decisions, and concepts.
 - [System context](docs/building-blocks/system-context.md): context and container diagrams.
-- [Installation decision](docs/adr/install-loop-with-pip-from-the-repository.md): distribution and versioning.
+- [Bun and TypeScript decision](docs/adr/port-loop-and-workflows-to-typescript-on-bun-in-one-cutover.md): runtime, distribution, and versioning.
 
 ## Contributing
 
-From the repository root, with your virtual environment active:
+From the repository root:
 
 ```sh
-python -m pip install -e ".[dev]"
-python -m pytest
+bun install
+bun run test
 ```
 
-The test suite includes library tests, example Workflow tests, and import-linter
-architecture checks. See the [test strategy](docs/concepts/ops-test-strategy.md)
+`bun run test` runs ESLint, the TypeScript compiler, and `bun test`, which covers library tests,
+example Workflow tests, and the dependency-cruiser architecture checks. `bun run lint` and
+`bun run typecheck` run the first two alone. See the [test strategy](docs/concepts/ops-test-strategy.md)
 for testing boundaries.
 
-For compatibility changes, verify installation, tests, and Workflow entry points on Python 3.10.12 and a newer supported interpreter; see [Python compatibility](docs/concepts/ops-test-strategy.md#python-compatibility).
+For compatibility changes, run the suite on the pinned minimum Bun and on the latest Bun; see
+[Runtime compatibility](docs/concepts/ops-test-strategy.md#runtime-compatibility).
 
 For bug reports and feature requests, [open an issue](https://github.com/antshc/loop/issues).
-Include reproduction steps and relevant Python and agent CLI versions for bugs;
+Include reproduction steps and relevant Bun and agent CLI versions for bugs;
 remove credentials and sensitive data from logs before sharing them.
-

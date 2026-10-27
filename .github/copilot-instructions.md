@@ -5,7 +5,7 @@
 Single repo: docs and codebase live together at the reporoot. There is no `workspace/` split and no `.harness.env`.
 
 - **Docs & decisions:** `CONTEXT.md` (domain glossary) and `ARCHITECTURE.md` (ADR index, Concept index, and Codebase Structure), with ADRs under `docs/adr/` and Crosscutting Concepts under `docs/concepts/`.
-- **Code:** `src/loop/` (the `loop` library), `workflows/dev/` (self-contained dev Workflow, named prompts, helpers, and tests), other examples under `workflows/`, and library/sibling tests under `tests/`. Loop is a library with no command. The layout is documented under **Codebase Structure** in `ARCHITECTURE.md`.
+- **Code:** `src/loop/` (the `loop` library, TypeScript consumed directly by Bun), `workflows/dev/` (self-contained dev Workflow with `main.ts`, named prompts, helpers, and tests), other examples under `workflows/`, and library tests under `tests/`. Loop is a library with no command. The layout is documented under **Codebase Structure** in `ARCHITECTURE.md`.
 - **Archive:** `archive/` holds retired prototypes as a parts source only. It is excluded from editor search and file watching (see `.vscode/settings.json`) — do not navigate into it, edit it, or import from it.
 
 Within this file, resolve conflicts in this order: **safety and repository targeting → authoritative sources → navigation → build and validation → documentation conventions.** This ordering scopes only the rules in this file; it does not override `AGENTS.md`, path-scoped instructions, or user instructions.
@@ -15,7 +15,7 @@ Within this file, resolve conflicts in this order: **safety and repository targe
 Before the first `git`/`gh` write action in a session (including `git worktree add`), run this check and stop if it fails:
 
 ```
-python -c 'import re,subprocess,sys; url=subprocess.run(["git","remote","get-url","origin"],capture_output=True,text=True,check=True).stdout.strip(); slug=re.sub(r"\.git$","",re.sub(r"^(git@github\.com:|https://github\.com/)","",url)); sys.exit(0 if slug=="antshc/loop" else 1)'
+test "$(git remote get-url origin | sed -E 's#^(git@github\.com:|https://github\.com/)##; s#\.git$##')" = "antshc/loop"
 ```
 
 Confirm the repo root with `git rev-parse --show-toplevel`. Origin: `antshc/loop`.
@@ -36,10 +36,10 @@ Consult these before searching the code:
 
 ## 5. Build and validation policy
 
-- Runtime: Python 3.10+ for the library and example Workflows; preserve the minimum declared in `pyproject.toml`.
-- Install: `python -m pip install -e ".[dev]"` from the reporoot.
-- Test: `python -m pytest` from the reporoot (configured in `pyproject.toml`, `testpaths = ["tests", "workflows/dev/tests"]`); it includes the import-linter architecture checks.
-- For compatibility changes, follow [Test Strategy: Python compatibility](../docs/concepts/ops-test-strategy.md#python-compatibility); a newer local interpreter alone does not verify the minimum.
+- Runtime: Bun with TypeScript for the library and example Workflows; preserve the minimum Bun declared in `package.json` (`engines`, `packageManager`). Node.js is unsupported.
+- Install: `bun install` from the reporoot.
+- Test: `bun run test` from the reporoot (lint, type-check, then `bun test`, configured by `package.json`, `eslint.config.js`, `tsconfig.json`, and `bunfig.toml`); it includes the dependency-cruiser architecture checks.
+- For compatibility changes, follow [Test Strategy: Runtime compatibility](../docs/concepts/ops-test-strategy.md#runtime-compatibility); the latest local Bun alone does not verify the minimum.
 
 ## 6. Documentation conventions
 

@@ -60,9 +60,9 @@ Keep `SKILL.md` body under 300 lines.
 
 Keep up to two category files at skill root; otherwise use the matching resource folder.
 
-**Bundled paths:** resolve `scripts/`, `references/`, `assets/`, and `templates/` from the skill base directory, never the caller CWD. Example: **Run `./scripts/run.py` from this skill's base directory**.
+**Bundled paths:** resolve `scripts/`, `references/`, `assets/`, and `templates/` from the skill base directory, never the caller CWD. Example: **Run `./scripts/run.ts` from this skill's base directory**.
 
-Prefer Python over shell-specific scripts for cross-platform automation. Use the repository-supported Python command.
+Prefer TypeScript run by Bun over shell-specific scripts for cross-platform automation. Use the repository-supported Bun command (`bun scripts/run.ts`).
 
 ## Template ownership
 
