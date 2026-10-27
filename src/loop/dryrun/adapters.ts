@@ -3,9 +3,12 @@ import { join } from 'node:path';
 import type { AgentCli, AgentProfile } from '../clis/base.ts';
 import type { CliRunner } from '../clis/runner.ts';
 import type { DockerService } from '../docker/runtime.ts';
+import type { LoopHook } from '../hooks/loop.ts';
 import type { AgentContext, RunContext } from '../run/context.ts';
+import type { ProcessResult } from '../run/process.ts';
 import type { AgentRequest } from '../run/request.ts';
 
+import { GitCli } from '../git/git-cli.ts';
 import { ordered } from '../hooks/agent-cli.ts';
 import { CliOutcome, NativeHandle, Resume, type Turn } from '../sessions/values.ts';
 
@@ -25,6 +28,32 @@ export class LoggingDocker implements DockerService {
     const configured = await this.#inner.configure(context);
     this.#log(`docker image=${String(configured.dockerImage)}`);
     return configured;
+  }
+}
+
+/** Dry-run GitCli: logs each git command instead of running it; show-ref reports a missing ref. */
+export class LoggingGitCli extends GitCli {
+  readonly #log: Log;
+
+  constructor(log: Log = dryRunLog) {
+    super();
+    this.#log = log;
+  }
+
+  override runHook(hook: LoopHook, cwd: string): Promise<void> {
+    this.#log(`loop-hook ${hook.point} cwd=${cwd} timeout=${String(hook.timeoutSec)}: ${hook.command}`);
+    return Promise.resolve();
+  }
+
+  protected override invoke(repository: string, args: readonly string[]): Promise<ProcessResult> {
+    const argv = ['git', '-C', repository, ...args];
+    this.#log(argv.join(' '));
+    return Promise.resolve({ argv, exitCode: args.includes('show-ref') ? 1 : 0, signal: null, stderr: '', stdout: '' });
+  }
+
+  protected override reuseWorktree(_repository: string, target: string, branch: string): Promise<boolean> {
+    this.#log(`would validate/reuse worktree ${target} on branch ${branch}`);
+    return Promise.resolve(true);
   }
 }
 

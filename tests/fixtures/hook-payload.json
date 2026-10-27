@@ -1,0 +1,119 @@
+[
+  {
+    "name": "copilot resumed session start",
+    "cli": "copilot",
+    "point": "session-start",
+    "session": "s1",
+    "stdin": "{\"sessionId\": \"abc\", \"cwd\": \"/w\", \"source\": \"resume\"}",
+    "received": "{\"point\": \"session-start\", \"cli\": \"copilot\", \"handle\": \"abc\", \"cwd\": \"/w\", \"resumed\": true, \"reason\": null, \"tool\": null, \"session\": \"s1\"}\n",
+    "env": "s1|copilot|session-start"
+  },
+  {
+    "name": "codex new session start",
+    "cli": "codex",
+    "point": "session-start",
+    "session": "s1",
+    "stdin": "{\"session_id\": \"abc\", \"cwd\": \"/w\", \"source\": \"startup\"}",
+    "received": "{\"point\": \"session-start\", \"cli\": \"codex\", \"handle\": \"abc\", \"cwd\": \"/w\", \"resumed\": false, \"reason\": null, \"tool\": null, \"session\": \"s1\"}\n",
+    "env": "s1|codex|session-start"
+  },
+  {
+    "name": "copilot session end with reason",
+    "cli": "copilot",
+    "point": "session-end",
+    "session": "feat-1",
+    "stdin": "{\"sessionId\": \"s\", \"cwd\": \"/w\", \"reason\": \"complete\"}",
+    "received": "{\"point\": \"session-end\", \"cli\": \"copilot\", \"handle\": \"s\", \"cwd\": \"/w\", \"resumed\": false, \"reason\": \"complete\", \"tool\": null, \"session\": \"feat-1\"}\n",
+    "env": "feat-1|copilot|session-end"
+  },
+  {
+    "name": "copilot pre-tool",
+    "cli": "copilot",
+    "point": "pre-tool",
+    "session": "s1",
+    "stdin": "{\"sessionId\": \"s\", \"cwd\": \"/w\", \"toolName\": \"edit\"}",
+    "received": "{\"point\": \"pre-tool\", \"cli\": \"copilot\", \"handle\": \"s\", \"cwd\": \"/w\", \"resumed\": false, \"reason\": null, \"tool\": \"edit\", \"session\": \"s1\"}\n",
+    "env": "s1|copilot|pre-tool"
+  },
+  {
+    "name": "codex pre-tool",
+    "cli": "codex",
+    "point": "pre-tool",
+    "session": "s1",
+    "stdin": "{\"session_id\": \"s\", \"cwd\": \"/w\", \"tool_name\": \"bash\"}",
+    "received": "{\"point\": \"pre-tool\", \"cli\": \"codex\", \"handle\": \"s\", \"cwd\": \"/w\", \"resumed\": false, \"reason\": null, \"tool\": \"bash\", \"session\": \"s1\"}\n",
+    "env": "s1|codex|pre-tool"
+  },
+  {
+    "name": "camelCase wins over snake_case",
+    "cli": "copilot",
+    "point": "post-tool",
+    "session": "s1",
+    "stdin": "{\"sessionId\": \"camel\", \"session_id\": \"snake\", \"cwd\": \"/w\"}",
+    "received": "{\"point\": \"post-tool\", \"cli\": \"copilot\", \"handle\": \"camel\", \"cwd\": \"/w\", \"resumed\": false, \"reason\": null, \"tool\": null, \"session\": \"s1\"}\n",
+    "env": "s1|copilot|post-tool"
+  },
+  {
+    "name": "explicit null keeps null",
+    "cli": "codex",
+    "point": "agent-stop",
+    "session": "s1",
+    "stdin": "{\"session_id\": null, \"reason\": null}",
+    "received": "{\"point\": \"agent-stop\", \"cli\": \"codex\", \"handle\": null, \"cwd\": null, \"resumed\": false, \"reason\": null, \"tool\": null, \"session\": \"s1\"}\n",
+    "env": "s1|codex|agent-stop"
+  },
+  {
+    "name": "non-ASCII cwd is escaped",
+    "cli": "copilot",
+    "point": "prompt-submitted",
+    "session": "s1",
+    "stdin": "{\"sessionId\": \"s\", \"cwd\": \"/wörk/日本\"}",
+    "received": "{\"point\": \"prompt-submitted\", \"cli\": \"copilot\", \"handle\": \"s\", \"cwd\": \"/w\\u00f6rk/\\u65e5\\u672c\", \"resumed\": false, \"reason\": null, \"tool\": null, \"session\": \"s1\"}\n",
+    "env": "s1|copilot|prompt-submitted"
+  },
+  {
+    "name": "empty object",
+    "cli": "copilot",
+    "point": "session-start",
+    "session": "s1",
+    "stdin": "{}",
+    "received": "{\"point\": \"session-start\", \"cli\": \"copilot\", \"handle\": null, \"cwd\": null, \"resumed\": false, \"reason\": null, \"tool\": null, \"session\": \"s1\"}\n",
+    "env": "s1|copilot|session-start"
+  },
+  {
+    "name": "empty stdin",
+    "cli": "copilot",
+    "point": "session-start",
+    "session": "s1",
+    "stdin": "",
+    "received": "{\"point\": \"session-start\", \"cli\": \"copilot\", \"handle\": null, \"cwd\": null, \"resumed\": false, \"reason\": null, \"tool\": null, \"session\": \"s1\"}\n",
+    "env": "s1|copilot|session-start"
+  },
+  {
+    "name": "invalid json",
+    "cli": "codex",
+    "point": "session-start",
+    "session": "s1",
+    "stdin": "not json",
+    "received": "{\"point\": \"session-start\", \"cli\": \"codex\", \"handle\": null, \"cwd\": null, \"resumed\": false, \"reason\": null, \"tool\": null, \"session\": \"s1\"}\n",
+    "env": "s1|codex|session-start"
+  },
+  {
+    "name": "non-object json",
+    "cli": "codex",
+    "point": "session-start",
+    "session": "s1",
+    "stdin": "[1, 2]",
+    "received": "{\"point\": \"session-start\", \"cli\": \"codex\", \"handle\": null, \"cwd\": null, \"resumed\": false, \"reason\": null, \"tool\": null, \"session\": \"s1\"}\n",
+    "env": "s1|codex|session-start"
+  },
+  {
+    "name": "source other than resume",
+    "cli": "copilot",
+    "point": "session-start",
+    "session": "s1",
+    "stdin": "{\"sessionId\": \"s\", \"source\": \"new\"}",
+    "received": "{\"point\": \"session-start\", \"cli\": \"copilot\", \"handle\": \"s\", \"cwd\": null, \"resumed\": false, \"reason\": null, \"tool\": null, \"session\": \"s1\"}\n",
+    "env": "s1|copilot|session-start"
+  }
+]
