@@ -4,7 +4,8 @@ import json
 
 import pytest
 
-from workflows.shared.github.client import GitHub, GitHubRepo
+from workflows.shared.github.account import GitHub
+from workflows.shared.github.repo import GitHubRepo
 from workflows.shared.github.pull_requests import PullRequests
 
 
@@ -86,3 +87,21 @@ def test_the_account_reaches_repositories_by_slug_and_reports_its_login() -> Non
     assert github.repository("https://github.com/o/r.git").slug == "o/r"
     with pytest.raises(ValueError):
         github.repository("not-a-slug")
+
+
+def test_the_account_reads_one_pull_request_of_a_repository() -> None:
+    gh = Gh(lambda args: '{"number": 7, "state": "open"}')
+
+    pull = GitHub(gh).pull_requests("o/r").pull(7)
+
+    assert pull["number"] == 7
+    assert gh.calls[-1][:2] == ("api", "repos/o/r/pulls/7")
+
+
+def test_a_closed_pull_request_snapshot_skips_reviews_and_checks() -> None:
+    gh = Gh(lambda args: '{"number": 7, "state": "closed"}')
+
+    snapshot = _pulls(gh).snapshot(7)
+
+    assert snapshot["pr"]["state"] == "closed" and snapshot["threads"] == [] and snapshot["checks"] == []
+    assert len(gh.calls) == 1

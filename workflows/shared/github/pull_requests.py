@@ -6,7 +6,7 @@ import json
 import re
 from dataclasses import dataclass, replace
 
-from .client import GitHubRepo
+from .repo import GitHubRepo
 
 
 @dataclass(frozen=True)
@@ -106,10 +106,14 @@ class PullRequests:
                 return result
             cursor = connection["pageInfo"]["endCursor"]
 
+    def pull(self, number: int) -> dict:
+        """The REST representation of one PR."""
+        return self._repo.json("api", f"repos/{self.slug}/pulls/{number}")
+
     def snapshot(self, number: int) -> dict:
         """A PR with its review threads, other discussion, checks, statuses, and current-head workflow runs."""
         slug = self.slug
-        pr = self._repo.json("api", f"repos/{slug}/pulls/{number}")
+        pr = self.pull(number)
         result = {"pr": pr, "threads": [], "other": [], "runs": [], "checks": [], "statuses": []}
         if pr["state"] != "open":
             return result

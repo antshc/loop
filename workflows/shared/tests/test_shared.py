@@ -9,7 +9,8 @@ from dishka import Provider, Scope, make_container, provide
 from workflows.shared.agents.envelope import ContentDecodeError, LastJsonObject
 from workflows.shared.agents.prompts import PromptError, PromptLibrary, placeholders, render
 from workflows.shared.git import GitClient
-from workflows.shared.github.client import GhRunner, GitHub
+from workflows.shared.github.account import GitHub
+from workflows.shared.github.repo import GhRunner
 from workflows.shared.process import CommandRunner, Runner
 from workflows.shared.providers import SharedProvider
 from workflows.shared.state import JsonFile, StateError, process_lock

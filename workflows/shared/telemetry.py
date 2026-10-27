@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from contextlib import AbstractContextManager
+from dataclasses import dataclass
 from typing import Protocol
 
 from loop import RunObserver, otlp_observer
@@ -18,6 +19,13 @@ class TracingObserver(RunObserver, Protocol):
 
 
 ObserverFactory = Callable[[str], TracingObserver]
+
+
+@dataclass(frozen=True)
+class Telemetry:
+    """The process's span observer; `observer` is None when telemetry is off."""
+
+    observer: TracingObserver | None = None
 
 
 class OtlpObserverFactory:

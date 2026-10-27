@@ -73,18 +73,3 @@ class GitHubRepo:
             flag = "-F" if isinstance(value, int) else "-f"
             args += [flag, f"{name}={value}"]
         return self._gh(tuple(args))
-
-
-class GitHub:
-    """The authenticated `gh` account and the repositories it reaches."""
-
-    def __init__(self, gh: GhRunner) -> None:
-        self._gh = gh
-
-    def login(self) -> str:
-        """The authenticated actor."""
-        return json.loads(self._gh(("api", "user")))["login"]
-
-    def repository(self, slug: str) -> GitHubRepo:
-        """The repository named `owner/name`."""
-        return GitHubRepo.from_slug(slug, self._gh)

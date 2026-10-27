@@ -5,7 +5,8 @@ from __future__ import annotations
 from dishka import Provider, Scope, provide
 
 from .git import GitClient
-from .github.client import GhCli, GhRunner, GitHub
+from .github.account import GitHub
+from .github.repo import GhCli, GhRunner
 from .process import CommandRunner, Runner
 
 

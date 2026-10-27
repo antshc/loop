@@ -1,18 +1,9 @@
 from __future__ import annotations
 
-from copy import deepcopy
+from workflows.pr_babysit.model import PrState
+from workflows.pr_babysit.watch.feedback import ci_state, observe, pending_threads
 
-from workflows.pr_babysit.workflow.watcher import ci_state, observe, pending_threads
-from workflows.pr_babysit.infrastructure.state import PrState
-
-
-def comment(id="c1", login="reviewer", body="Check this"):
-    return {"id": id, "body": body, "author": {"login": login}, "authorAssociation": "COLLABORATOR"}
-
-
-def thread(comments=None, resolved=False):
-    return {"id": "t1", "isResolved": resolved, "isOutdated": False, "path": "cart.py", "line": 4,
-            "comments": comments if comments is not None else [comment()]}
+from .support import comment, thread
 
 
 def test_gate_skips_fixed_and_resolved_but_accepts_followups_and_self_notes():

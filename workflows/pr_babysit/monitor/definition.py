@@ -1,10 +1,12 @@
+"""The babysit Workflow: only meaningful PR maintenance phases are reported."""
+
 from __future__ import annotations
 
-from loop import Kind, Workflow, WorkflowBuilder
+from loop import Kind, RunObserver, Workflow, WorkflowBuilder
 
 
-def babysit_workflow(*, observer=None, visualize: bool = False) -> Workflow:
-    """Declare only meaningful PR maintenance phases for reporting."""
+def babysit_workflow(*, observer: RunObserver | None = None, visualize: bool = False) -> Workflow:
+    """Declares the reportable phases; quiet polls never open one."""
     builder = (WorkflowBuilder("babysit")
                .phase("prepare", "Prepare repository", Kind.CODE, "code")
                .phase("address", "Address review feedback", Kind.AGENT, "address")

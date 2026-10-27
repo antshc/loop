@@ -89,8 +89,33 @@ source_modules = [
     "workflows.shared.process",
     "workflows.shared.state",
     "workflows.shared.telemetry",
+    "workflows.pr_babysit.address",
+    "workflows.pr_babysit.agents",
+    "workflows.pr_babysit.discover",
+    "workflows.pr_babysit.maintain_ci",
+    "workflows.pr_babysit.model",
+    "workflows.pr_babysit.monitor",
+    "workflows.pr_babysit.publish",
+    "workflows.pr_babysit.settings",
+    "workflows.pr_babysit.watch",
 ]
 forbidden_modules = ["dishka"]
+
+[[tool.importlinter.contracts]]
+name = "Babysit features never reach back into their composition root"
+type = "forbidden"
+source_modules = [
+    "workflows.pr_babysit.address",
+    "workflows.pr_babysit.agents",
+    "workflows.pr_babysit.discover",
+    "workflows.pr_babysit.maintain_ci",
+    "workflows.pr_babysit.model",
+    "workflows.pr_babysit.monitor",
+    "workflows.pr_babysit.publish",
+    "workflows.pr_babysit.settings",
+    "workflows.pr_babysit.watch",
+]
+forbidden_modules = ["workflows.pr_babysit.composition"]
 
 [[tool.importlinter.contracts]]
 name = "No workflow imports another workflow"
@@ -100,5 +125,12 @@ modules = ["workflows.dev", "workflows.plan_implement", "workflows.workflow_repo
 [[tool.importlinter.contracts]]
 name = "PR maintenance decisions do not depend on the discovery scheduler"
 type = "forbidden"
-source_modules = ["workflows.pr_babysit.workflow"]
-forbidden_modules = ["workflows.pr_babysit.infrastructure.scheduler"]
+source_modules = [
+    "workflows.pr_babysit.address",
+    "workflows.pr_babysit.agents",
+    "workflows.pr_babysit.maintain_ci",
+    "workflows.pr_babysit.monitor",
+    "workflows.pr_babysit.publish",
+    "workflows.pr_babysit.watch",
+]
+forbidden_modules = ["workflows.pr_babysit.discover"]

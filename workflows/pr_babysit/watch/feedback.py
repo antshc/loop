@@ -1,26 +1,59 @@
+"""The Address gate over review feedback, CI classification, and remote fingerprints."""
+
 from __future__ import annotations
 
-from ..infrastructure.github import digest, trusted, remote_fingerprint as fingerprint
-from ..infrastructure.state import PrState
+import hashlib
+import json
+
+from ..model import PrState
+
+
+TRUSTED = {"OWNER", "MEMBER", "COLLABORATOR"}
+
+
+BOTS = {"copilot", "copilot-pull-request-reviewer", "chatgpt-codex-connector", "coderabbitai", "claude", "bugbot"}
+
 
 FAILED = {"failure", "timed_out", "cancelled", "action_required", "startup_failure", "stale"}
 
 
+def trusted(comment: dict, login: str) -> bool:
+    """Accepts repository collaborators, the operator, and known review automation."""
+    author = comment.get("author", {})
+    name = author.get("login", "") if isinstance(author, dict) else author
+    return (name == login or comment.get("authorAssociation", comment.get("author_association")) in TRUSTED
+            or name.lower().removesuffix("[bot]") in BOTS)
+
+
+def digest(value: object) -> str:
+    """A stable key for remote work and blocked-run recovery."""
+    return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
+
+
+def fingerprint(snapshot: dict) -> str:
+    """Identifies changed review and CI inputs without scheduler telemetry."""
+    return digest({"sha": snapshot["pr"]["head"]["sha"], "state": snapshot["pr"]["state"],
+                   "threads": snapshot["threads"], "other": snapshot["other"],
+                   "checks": [(c["id"], c["status"], c.get("conclusion")) for c in snapshot["checks"]],
+                   "statuses": [(s["id"], s["state"]) for s in snapshot["statuses"]],
+                   "runs": [(r["id"], r["status"], r.get("conclusion"), r.get("run_attempt")) for r in snapshot["runs"]]})
+
+
 def pending_threads(threads: list[dict], login: str) -> list[dict]:
-    """Apply the Address gate before exposing comment bodies to an agent."""
+    """Applies the Address gate before exposing comment bodies to an agent."""
     pending = []
     for thread in threads:
         comments = thread["comments"]
         if thread["isResolved"] or not comments or not trusted(comments[0], login):
             continue
-        latest = comments[-1]
-        own = (latest.get("author") or {}).get("login") == login
+        latest_comment = comments[-1]
+        own = (latest_comment.get("author") or {}).get("login") == login
         self_note = len(comments) == 1 and own
-        if own and not self_note and "fix!:" not in latest["body"].lower():
+        if own and not self_note and "fix!:" not in latest_comment["body"].lower():
             continue
         last_reply = max((i for i, c in enumerate(comments[:-1])
                           if (c.get("author") or {}).get("login") == login), default=-1)
-        pending.append({"key": f"thread:{thread['id']}:{latest['id']}", "kind": "thread",
+        pending.append({"key": f"thread:{thread['id']}:{latest_comment['id']}", "kind": "thread",
                         "thread_id": thread["id"], "path": thread["path"],
                         "line": thread.get("line") or thread.get("originalLine"),
                         "outdated": thread.get("isOutdated", False),
@@ -30,7 +63,7 @@ def pending_threads(threads: list[dict], login: str) -> list[dict]:
 
 
 def observe(snapshot: dict, state: PrState, login: str) -> list[dict]:
-    """Persist newly observed work independently of successful handling."""
+    """Persists newly observed work independently of successful handling; returns the pending items."""
     pending = pending_threads(snapshot["threads"], login)
     active = {item["key"] for item in pending}
     for item in snapshot["other"]:
@@ -48,7 +81,7 @@ def observe(snapshot: dict, state: PrState, login: str) -> list[dict]:
 
 
 def latest(items: list[dict], key) -> list[dict]:
-    """Select the latest occurrence of each check or workflow."""
+    """The latest occurrence of each check or workflow."""
     result = {}
     for item in sorted(items, key=lambda value: value["id"], reverse=True):
         result.setdefault(key(item), item)
@@ -56,7 +89,7 @@ def latest(items: list[dict], key) -> list[dict]:
 
 
 def ci_state(snapshot: dict) -> dict:
-    """Separate pending, failed, and green signals on the current PR head."""
+    """Separates pending, failed, and green signals on the current PR head."""
     checks = latest(snapshot["checks"], lambda c: (c["name"], (c.get("app") or {}).get("id")))
     statuses = latest(snapshot["statuses"], lambda s: s["context"])
     runs = latest(snapshot["runs"], lambda r: (r["workflow_id"], r.get("event")))
