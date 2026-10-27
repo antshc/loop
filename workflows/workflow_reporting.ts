@@ -5,6 +5,8 @@ import { Command, CommanderError } from 'commander';
 import {
   enforceRuntime,
   Kind,
+  type OtlpObserver,
+  otlpObserver,
   type OutputStream,
   Role,
   runEntrypoint,
@@ -12,6 +14,8 @@ import {
   WorkflowBuilder,
   type WorkflowLogger,
 } from '../src/loop/index.ts';
+
+type ShutdownObserver = SpanObserver & { shutdown: () => Promise<void> };
 
 const DESCRIPTION = 'A fake e-commerce delivery that demonstrates optional phase reporting.';
 
@@ -22,7 +26,7 @@ export interface WorkflowReportingDependencies {
   /** Wall-clock time stamped on every console record. */
   now?: () => Date;
   /** Builds the observer that exports phase spans to an OTLP collector at `endpoint`. */
-  otlpObserver?: (endpoint: string) => SpanObserver;
+  otlpObserver?: (endpoint: string) => Promise<ShutdownObserver> | Promise<SpanObserver> | SpanObserver;
   /** Receives console records, the visualization, and usage for bad input. */
   stderr?: OutputStream;
   /** Receives requested help. */
@@ -40,7 +44,7 @@ export async function main(argv: readonly string[], dependencies: WorkflowReport
   const {
     clock = () => performance.now(),
     now = () => new Date(),
-    otlpObserver = unavailableOtlpObserver,
+    otlpObserver = defaultOtlpObserver,
     stderr = process.stderr,
     stdout = process.stdout,
   } = dependencies;
@@ -61,10 +65,40 @@ export async function main(argv: readonly string[], dependencies: WorkflowReport
   if (options.visualize) {
     builder.visualize({ clock, stream: stderr });
   }
-  if (options.otelEndpoint !== undefined) {
-    builder.otel(otlpObserver(options.otelEndpoint));
+  const observer = options.otelEndpoint === undefined ? undefined : await otlpObserver(options.otelEndpoint);
+  if (observer !== undefined) {
+    builder.otel(observer);
   }
 
+  try {
+    return await deliver(builder, options);
+  } finally {
+    if (observer !== undefined && isShutdownObserver(observer)) {
+      await observer.shutdown();
+    }
+  }
+}
+
+/** Console records as `<time> <LEVEL> loop.workflow: <message>`, one per line. */
+function consoleLogger(stream: OutputStream, now: () => Date): WorkflowLogger {
+  const write = (level: string, message: string): void => {
+    stream.write(`${timestamp(now())} ${level} loop.workflow: ${message}\n`);
+  };
+  return {
+    info: (message) => {
+      write('INFO', message);
+    },
+    warn: (message) => {
+      write('WARNING', message);
+    },
+  };
+}
+
+function defaultOtlpObserver(endpoint: string): Promise<OtlpObserver> {
+  return otlpObserver({ endpoint, serviceName: 'workflow_reporting' });
+}
+
+function deliver(builder: WorkflowBuilder, options: Options): Promise<number> {
   return builder.build().run({ spec: 42 }, async (run) => {
     await run.phase('prepare', () => undefined);
     const basket: string[] = [];
@@ -122,19 +156,8 @@ export async function main(argv: readonly string[], dependencies: WorkflowReport
   });
 }
 
-/** Console records as `<time> <LEVEL> loop.workflow: <message>`, one per line. */
-function consoleLogger(stream: OutputStream, now: () => Date): WorkflowLogger {
-  const write = (level: string, message: string): void => {
-    stream.write(`${timestamp(now())} ${level} loop.workflow: ${message}\n`);
-  };
-  return {
-    info: (message) => {
-      write('INFO', message);
-    },
-    warn: (message) => {
-      write('WARNING', message);
-    },
-  };
+function isShutdownObserver(observer: SpanObserver): observer is ShutdownObserver {
+  return typeof (observer as Partial<ShutdownObserver>).shutdown === 'function';
 }
 
 function parseCommandLine(argv: readonly string[], stdout: OutputStream, stderr: OutputStream): number | Options {
@@ -168,13 +191,10 @@ function timestamp(date: Date): string {
   return `${day} ${time},${String(date.getMilliseconds()).padStart(3, '0')}`;
 }
 
-function unavailableOtlpObserver(): SpanObserver {
-  throw new Error('OTLP export is not available in this build of Loop');
-}
-
 if (import.meta.main) {
   enforceRuntime();
   await runEntrypoint(async () => {
     process.exitCode = await main(process.argv.slice(2));
   });
 }
+
