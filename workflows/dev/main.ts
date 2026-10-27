@@ -2,9 +2,10 @@
 // Run from the harness root through a user alias: `bun workflows/dev/main.ts [--dry | --fake <seam>] [--spec <number>]`.
 import { enforceRuntime, runEntrypoint } from '../../src/loop/index.ts';
 import { parseCommandLine } from './args.ts';
-import { type DevDependencies, runDev } from './run.ts';
+import { type DevDependencies } from './dependencies.ts';
+import { runDev } from './run.ts';
 
-export type { DevDependencies } from './run.ts';
+export type { DevDependencies } from './dependencies.ts';
 
 /**
  * Delivers harness Specs through configured repositories, defaulting to implementation on the harness;
