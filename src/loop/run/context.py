@@ -2,17 +2,15 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 
 from ..hooks import AgentCliHook
 from .settings import freeze_env, validate_timeout
 
 
-class AgentStartMode(str, Enum):
+class AgentStartMode(StrEnum):
     """Where an agent CLI process starts relative to the worktree it works on."""
-
-    __str__ = str.__str__
 
     # Launch directly in the worktree.
     WORKTREE = "worktree"

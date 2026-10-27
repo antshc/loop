@@ -7,11 +7,16 @@ import pytest
 from loop import AgentProfile, AgentRequest, AgentWorkspace, copilot
 from workflows.dev.tests.doubles import FakeGitService, FakeRepositoryGh, FakeRepositoryGit, FakeRunner, FakeWorkflowGit, issue, new_agent_for
 from workflows import dev
-from workflows.dev import agent, platforms, run
-from workflows.dev.records import Commit
-from workflows.dev.records import Repository, RepositoryId
+from workflows.dev.agents import prompts as prompt_files
+from workflows.dev.model.repositories import GithubFactory, Harness, Targets
+from workflows.shared.agents.launcher import AgentFactory
+from workflows.shared.git import GitClient
+from workflows.shared.github.repo import GitHubRepo
+from workflows.shared.providers import bind
+from workflows.dev.model.records import Commit
+from workflows.dev.model.records import Repository, RepositoryId
 from workflows.dev.tests.doubles import FakeGhCli
-from workflows.dev.records import TicketContext, TicketResult
+from workflows.dev.model.records import TicketContext, TicketResult
 
 
 @pytest.mark.parametrize("first_fails", [False, True])
@@ -23,7 +28,7 @@ def test_harness_specs_route_to_separate_repositories_and_agent_delegates(
     (prompts / "first.md").write_text("Implement {{TITLE}} for the first repository")
     (prompts / "second.md").write_text("Implement {{TITLE}} for the second repository")
     (prompts / "review.md").write_text("Review {{COMMIT}}")
-    monkeypatch.setattr(agent, "PROMPTS", prompts)
+    monkeypatch.setattr(prompt_files, "PROMPTS", prompts)
     harness = Repository(tmp_path, tmp_path / "workspace/harness.worktrees", RepositoryId("owner", "harness"))
     one = Repository(tmp_path / "workspace/one", tmp_path / "workspace/one.worktrees", RepositoryId("owner", "one"))
     two = Repository(tmp_path / "workspace/two", tmp_path / "workspace/two.worktrees", RepositoryId("owner", "two"))
@@ -45,9 +50,9 @@ def test_harness_specs_route_to_separate_repositories_and_agent_delegates(
     githubs = {harness.checkout: tracker_gh, one.checkout: one_gh, two.checkout: two_gh}
     github_paths: list[Path] = []
 
-    def github_cli(*, cwd: Path) -> FakeGhCli:
-        github_paths.append(cwd)
-        return githubs[cwd]
+    def github_for(repository: Repository) -> GitHubRepo:
+        github_paths.append(repository.checkout)
+        return GitHubRepo(repository.owner_name.owner, repository.owner_name.repo, gh=githubs[repository.checkout])
 
     implementer = AgentProfile(copilot, "implementation-model")
     reviewer = AgentProfile(copilot, "review-model")
@@ -85,13 +90,12 @@ def test_harness_specs_route_to_separate_repositories_and_agent_delegates(
         two_git.commits[-1] = amended
         return TicketResult(str(context.identifier), "completed", amended.sha, "second reviewed", "tested and reviewed")
 
-    monkeypatch.setattr(run, "HARNESS", harness)
-    monkeypatch.setattr(platforms, "GhCli", github_cli)
     code = dev.main(
         ["--log-dir", str(tmp_path / "logs")],
-        git=git,
-        new_agent=lambda: next(builders),
-        repositories=(dev.RepositoryWorkflow(one, implement_only), dev.RepositoryWorkflow(two, implement_review)),
+        providers=(bind(
+            (Harness, Harness(harness)), (GithubFactory, github_for), (GitClient, git),
+            (AgentFactory, lambda: next(builders)),
+        ), dev.use_repositories(dev.RepositoryWorkflow(one, implement_only), dev.RepositoryWorkflow(two, implement_review))),
     )
 
     assert code == int(first_fails)
@@ -133,11 +137,13 @@ def test_duplicate_case_insensitive_repository_configuration_fails_before_proces
     def delegate(_context: TicketContext, _worktree: AgentWorkspace) -> TicketResult:
         pytest.fail("duplicate configuration must not invoke a delegate")
 
-    monkeypatch.setattr(run, "HARNESS", harness)
-    monkeypatch.setattr(platforms, "GhCli", lambda **_kwargs: github)
+    targets = Targets((dev.RepositoryWorkflow(harness, delegate), dev.RepositoryWorkflow(duplicate, delegate)))
     code = dev.main(
         ["--log-dir", str(tmp_path / "logs"), "--log-level", "DEBUG"],
-        repositories=(dev.RepositoryWorkflow(harness, delegate), dev.RepositoryWorkflow(duplicate, delegate)),
+        providers=(bind(
+            (Harness, Harness(harness)), (Targets, targets),
+            (GithubFactory, lambda repository: GitHubRepo("owner", "repo", gh=github)),
+        ),),
     )
 
     assert code == 1

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -126,6 +125,4 @@ def _tools(window: list[dict[str, object]]) -> tuple[ToolCall, ...]:
 
 
 def _when(event: dict[str, object]) -> datetime:
-    # Python 3.10's fromisoformat needs exactly 3 or 6 fractional digits; the CLI sometimes writes 2.
-    stamp = re.sub(r"\.(\d+)", lambda match: "." + match[1].ljust(6, "0")[:6], str(event["timestamp"]))
-    return datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    return datetime.fromisoformat(str(event["timestamp"]))

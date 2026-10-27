@@ -10,10 +10,11 @@ import pytest
 from loop import BranchStrategy
 from workflows.dev.tests.doubles import COMPLETED, DevHarness, crash, envelope, hook_error, issue
 from workflows import dev
-from workflows.dev import agent
+from workflows.dev.agents import prompts
 from workflows.dev import FileExecutionStore
-from workflows.dev.records import AgentCommitSubject, Spec
-from workflows.dev.platforms import GitHubRepo, TicketsTracker
+from workflows.dev.model.records import AgentCommitSubject, Spec
+from workflows.dev.tracker.tickets import TicketsTracker
+from workflows.shared.github.repo import GitHubRepo
 from workflows.dev.tests.doubles import FakeGhCli
 
 _PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
@@ -252,7 +253,7 @@ def test_a_failing_worktree_hook_fails_the_spec_with_its_reason(tmp_path: Path) 
 def test_a_prompt_placeholder_with_no_argument_fails_the_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     template = tmp_path / "implement.md"
     template.write_text("Task {{UNKNOWN}}")
-    monkeypatch.setattr(agent, "PROMPTS", tmp_path)
+    monkeypatch.setattr(prompts, "PROMPTS", tmp_path)
     harness = DevHarness(tmp_path)
 
     code = harness.run()

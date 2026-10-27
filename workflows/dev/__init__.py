@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from .agent import (
-    PROMPT, PROMPTS, PromptError, implement_ticket, load_prompt, prompt_args, render_prompt,
-    plan_spec, verify_app, chore_pull_request, review_pull_request,
+from .agents.delegates import (
+    chore_pull_request, implement_ticket, plan_spec, prompt_args, review_pull_request, verify_app,
 )
-from .journal import ExecutionStoreError, FileExecutionStore
-from .records import (
+from .agents.prompts import PROMPT, PROMPTS, PromptError, load_prompt, render_prompt
+from .composition.entry import main
+from .composition.providers import use_repositories
+from .deliver.journal import ExecutionStoreError, FileExecutionStore
+from .model.records import (
     AgentWorkflow,
     PlanContext, PlannedTicket, PlanResult, PlanWorkflow,
     VerifyContext, VerifyFinding, VerifyResult, VerifyWorkflow,
@@ -20,9 +22,8 @@ from .records import (
     TicketResult as DevResult,
     TicketWorkflowError,
 )
-from .reply import DevResponse, DevResultError, parse_dev_result
-from .repositories import HARNESS, RepositoryWorkflow
-from .run import main
+from .model.reply import DevResponse, DevResultError, parse_dev_result
+from .model.repositories import HARNESS, RepositoryWorkflow
 
 __all__ = [
     "HARNESS",
@@ -52,4 +53,5 @@ __all__ = [
     "parse_dev_result",
     "prompt_args",
     "render_prompt",
+    "use_repositories",
 ]

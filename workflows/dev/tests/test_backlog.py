@@ -4,8 +4,8 @@ from dataclasses import replace
 
 import pytest
 
-from workflows.dev.records import Spec
-from workflows.dev.platforms import TicketsTracker
+from workflows.dev.model.records import Spec
+from workflows.dev.tracker.tickets import TicketsTracker
 from workflows.dev.tests.doubles import FakeGhCli
 
 
