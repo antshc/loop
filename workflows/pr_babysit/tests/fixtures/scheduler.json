@@ -1,0 +1,27 @@
+{
+  "author": "octo\u00e9",
+  "initialized": true,
+  "prs": {
+    "acme/Widgets#2": {
+      "number": 2,
+      "repo": "acme/Widgets",
+      "url": "https://github.com/acme/Widgets/pull/2"
+    },
+    "acme/widgets.io#7": {
+      "number": 7,
+      "repo": "acme/widgets.io",
+      "url": "https://github.com/acme/widgets.io/pull/7"
+    },
+    "z/z#10": {
+      "number": 10,
+      "repo": "z/z",
+      "url": "https://github.com/z/z/pull/10"
+    }
+  },
+  "repositories": [
+    "acme/Widgets",
+    "acme/widgets.io",
+    "z/z"
+  ],
+  "version": 1
+}

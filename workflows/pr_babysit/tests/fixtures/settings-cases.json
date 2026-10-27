@@ -1,0 +1,408 @@
+[
+  {
+    "name": "full",
+    "text": "{\n  \"repositories\": [\n    {\n      \"name\": \"acme/widgets\",\n      \"path\": \"../checkouts/widgets\",\n      \"build\": [\n        \"dotnet\",\n        \"build\"\n      ],\n      \"test\": [\n        \"dotnet\",\n        \"test\",\n        \"--no-build\"\n      ]\n    },\n    {\n      \"name\": \"Org_1/re.po-x\",\n      \"path\": \"/abs/elsewhere\",\n      \"build\": [\n        \"a\"\n      ],\n      \"test\": [\n        \"b\",\n        \"c\"\n      ]\n    }\n  ],\n  \"state_dir\": \"../state\",\n  \"author\": \"octocat\",\n  \"interval\": 15.5,\n  \"concurrency\": 4,\n  \"retries\": 0,\n  \"timeout\": 900,\n  \"copilot_review\": true,\n  \"otel_endpoint\": \"http://localhost:4318\"\n}",
+    "result": {
+      "settings": {
+        "author": "octocat",
+        "concurrency": 4,
+        "copilotReview": true,
+        "interval": 15.5,
+        "otelEndpoint": "http://localhost:4318",
+        "retries": 0,
+        "stateDir": "/state",
+        "timeout": 900.0,
+        "repositories": [
+          {
+            "name": "acme/widgets",
+            "path": "/checkouts/widgets",
+            "build": [
+              "dotnet",
+              "build"
+            ],
+            "test": [
+              "dotnet",
+              "test",
+              "--no-build"
+            ]
+          },
+          {
+            "name": "Org_1/re.po-x",
+            "path": "/abs/elsewhere",
+            "build": [
+              "a"
+            ],
+            "test": [
+              "b",
+              "c"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "minimal",
+    "text": "{\n  \"repositories\": [\n    {\n      \"name\": \"acme/widgets\",\n      \"path\": \"../checkouts/widgets\",\n      \"build\": [\n        \"make\"\n      ],\n      \"test\": [\n        \"make\",\n        \"test\"\n      ]\n    }\n  ]\n}",
+    "result": {
+      "settings": {
+        "author": "",
+        "concurrency": 2,
+        "copilotReview": false,
+        "interval": 60.0,
+        "otelEndpoint": null,
+        "retries": 3,
+        "stateDir": "/config/.loop/pr-babysit",
+        "timeout": 1800.0,
+        "repositories": [
+          {
+            "name": "acme/widgets",
+            "path": "/checkouts/widgets",
+            "build": [
+              "make"
+            ],
+            "test": [
+              "make",
+              "test"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "null-optionals",
+    "text": "{\n  \"repositories\": [\n    {\n      \"name\": \"acme/widgets\",\n      \"path\": \"../checkouts/widgets\",\n      \"build\": [\n        \"make\"\n      ],\n      \"test\": [\n        \"make\",\n        \"test\"\n      ]\n    }\n  ],\n  \"author\": null,\n  \"otel_endpoint\": null\n}",
+    "result": {
+      "settings": {
+        "author": null,
+        "concurrency": 2,
+        "copilotReview": false,
+        "interval": 60.0,
+        "otelEndpoint": null,
+        "retries": 3,
+        "stateDir": "/config/.loop/pr-babysit",
+        "timeout": 1800.0,
+        "repositories": [
+          {
+            "name": "acme/widgets",
+            "path": "/checkouts/widgets",
+            "build": [
+              "make"
+            ],
+            "test": [
+              "make",
+              "test"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "string-numbers",
+    "text": "{\n  \"repositories\": [\n    {\n      \"name\": \"acme/widgets\",\n      \"path\": \"../checkouts/widgets\",\n      \"build\": [\n        \"make\"\n      ],\n      \"test\": [\n        \"make\",\n        \"test\"\n      ]\n    }\n  ],\n  \"interval\": \"2.5\",\n  \"concurrency\": \"3\",\n  \"retries\": \"1\",\n  \"timeout\": \" 10 \"\n}",
+    "result": {
+      "settings": {
+        "author": "",
+        "concurrency": 3,
+        "copilotReview": false,
+        "interval": 2.5,
+        "otelEndpoint": null,
+        "retries": 1,
+        "stateDir": "/config/.loop/pr-babysit",
+        "timeout": 10.0,
+        "repositories": [
+          {
+            "name": "acme/widgets",
+            "path": "/checkouts/widgets",
+            "build": [
+              "make"
+            ],
+            "test": [
+              "make",
+              "test"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "truncated-int",
+    "text": "{\n  \"repositories\": [\n    {\n      \"name\": \"acme/widgets\",\n      \"path\": \"../checkouts/widgets\",\n      \"build\": [\n        \"make\"\n      ],\n      \"test\": [\n        \"make\",\n        \"test\"\n      ]\n    }\n  ],\n  \"concurrency\": 2.9,\n  \"retries\": 1.5\n}",
+    "result": {
+      "settings": {
+        "author": "",
+        "concurrency": 2,
+        "copilotReview": false,
+        "interval": 60.0,
+        "otelEndpoint": null,
+        "retries": 1,
+        "stateDir": "/config/.loop/pr-babysit",
+        "timeout": 1800.0,
+        "repositories": [
+          {
+            "name": "acme/widgets",
+            "path": "/checkouts/widgets",
+            "build": [
+              "make"
+            ],
+            "test": [
+              "make",
+              "test"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "truthy-review",
+    "text": "{\n  \"repositories\": [\n    {\n      \"name\": \"acme/widgets\",\n      \"path\": \"../checkouts/widgets\",\n      \"build\": [\n        \"make\"\n      ],\n      \"test\": [\n        \"make\",\n        \"test\"\n      ]\n    }\n  ],\n  \"copilot_review\": \"no\"\n}",
+    "result": {
+      "settings": {
+        "author": "",
+        "concurrency": 2,
+        "copilotReview": true,
+        "interval": 60.0,
+        "otelEndpoint": null,
+        "retries": 3,
+        "stateDir": "/config/.loop/pr-babysit",
+        "timeout": 1800.0,
+        "repositories": [
+          {
+            "name": "acme/widgets",
+            "path": "/checkouts/widgets",
+            "build": [
+              "make"
+            ],
+            "test": [
+              "make",
+              "test"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "falsy-review",
+    "text": "{\n  \"repositories\": [\n    {\n      \"name\": \"acme/widgets\",\n      \"path\": \"../checkouts/widgets\",\n      \"build\": [\n        \"make\"\n      ],\n      \"test\": [\n        \"make\",\n        \"test\"\n      ]\n    }\n  ],\n  \"copilot_review\": 0\n}",
+    "result": {
+      "settings": {
+        "author": "",
+        "concurrency": 2,
+        "copilotReview": false,
+        "interval": 60.0,
+        "otelEndpoint": null,
+        "retries": 3,
+        "stateDir": "/config/.loop/pr-babysit",
+        "timeout": 1800.0,
+        "repositories": [
+          {
+            "name": "acme/widgets",
+            "path": "/checkouts/widgets",
+            "build": [
+              "make"
+            ],
+            "test": [
+              "make",
+              "test"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "bool-numbers",
+    "text": "{\n  \"repositories\": [\n    {\n      \"name\": \"acme/widgets\",\n      \"path\": \"../checkouts/widgets\",\n      \"build\": [\n        \"make\"\n      ],\n      \"test\": [\n        \"make\",\n        \"test\"\n      ]\n    }\n  ],\n  \"interval\": true,\n  \"concurrency\": true,\n  \"retries\": false\n}",
+    "result": {
+      "settings": {
+        "author": "",
+        "concurrency": 1,
+        "copilotReview": false,
+        "interval": 1.0,
+        "otelEndpoint": null,
+        "retries": 0,
+        "stateDir": "/config/.loop/pr-babysit",
+        "timeout": 1800.0,
+        "repositories": [
+          {
+            "name": "acme/widgets",
+            "path": "/checkouts/widgets",
+            "build": [
+              "make"
+            ],
+            "test": [
+              "make",
+              "test"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "bad-name",
+    "text": "{\n  \"repositories\": [\n    {\n      \"name\": \"not a repo\",\n      \"path\": \"../checkouts/widgets\",\n      \"build\": [\n        \"make\"\n      ],\n      \"test\": [\n        \"make\",\n        \"test\"\n      ]\n    }\n  ]\n}",
+    "result": {
+      "error": "repository name must be owner/repo"
+    }
+  },
+  {
+    "name": "bad-name-extra-slash",
+    "text": "{\n  \"repositories\": [\n    {\n      \"name\": \"a/b/c\",\n      \"path\": \"../checkouts/widgets\",\n      \"build\": [\n        \"make\"\n      ],\n      \"test\": [\n        \"make\",\n        \"test\"\n      ]\n    }\n  ]\n}",
+    "result": {
+      "error": "repository name must be owner/repo"
+    }
+  },
+  {
+    "name": "build-not-list",
+    "text": "{\n  \"repositories\": [\n    {\n      \"name\": \"acme/widgets\",\n      \"path\": \"../checkouts/widgets\",\n      \"build\": \"make\",\n      \"test\": [\n        \"make\",\n        \"test\"\n      ]\n    }\n  ]\n}",
+    "result": {
+      "error": "each repository requires build and test argument arrays"
+    }
+  },
+  {
+    "name": "build-empty",
+    "text": "{\n  \"repositories\": [\n    {\n      \"name\": \"acme/widgets\",\n      \"path\": \"../checkouts/widgets\",\n      \"build\": [],\n      \"test\": [\n        \"make\",\n        \"test\"\n      ]\n    }\n  ]\n}",
+    "result": {
+      "error": "each repository requires build and test argument arrays"
+    }
+  },
+  {
+    "name": "test-empty-part",
+    "text": "{\n  \"repositories\": [\n    {\n      \"name\": \"acme/widgets\",\n      \"path\": \"../checkouts/widgets\",\n      \"build\": [\n        \"make\"\n      ],\n      \"test\": [\n        \"make\",\n        \"\"\n      ]\n    }\n  ]\n}",
+    "result": {
+      "error": "each repository requires build and test argument arrays"
+    }
+  },
+  {
+    "name": "test-non-string-part",
+    "text": "{\n  \"repositories\": [\n    {\n      \"name\": \"acme/widgets\",\n      \"path\": \"../checkouts/widgets\",\n      \"build\": [\n        \"make\"\n      ],\n      \"test\": [\n        \"make\",\n        1\n      ]\n    }\n  ]\n}",
+    "result": {
+      "error": "each repository requires build and test argument arrays"
+    }
+  },
+  {
+    "name": "no-repositories",
+    "text": "{\n  \"repositories\": []\n}",
+    "result": {
+      "error": "configure at least one repository, without duplicates"
+    }
+  },
+  {
+    "name": "duplicates",
+    "text": "{\n  \"repositories\": [\n    {\n      \"name\": \"acme/widgets\",\n      \"path\": \"../checkouts/widgets\",\n      \"build\": [\n        \"make\"\n      ],\n      \"test\": [\n        \"make\",\n        \"test\"\n      ]\n    },\n    {\n      \"name\": \"acme/widgets\",\n      \"path\": \"../checkouts/widgets\",\n      \"build\": [\n        \"make\"\n      ],\n      \"test\": [\n        \"make\",\n        \"test\"\n      ]\n    }\n  ]\n}",
+    "result": {
+      "error": "configure at least one repository, without duplicates"
+    }
+  },
+  {
+    "name": "zero-interval",
+    "text": "{\n  \"repositories\": [\n    {\n      \"name\": \"acme/widgets\",\n      \"path\": \"../checkouts/widgets\",\n      \"build\": [\n        \"make\"\n      ],\n      \"test\": [\n        \"make\",\n        \"test\"\n      ]\n    }\n  ],\n  \"interval\": 0\n}",
+    "result": {
+      "error": "invalid interval, concurrency, retries, or timeout"
+    }
+  },
+  {
+    "name": "negative-interval",
+    "text": "{\n  \"repositories\": [\n    {\n      \"name\": \"acme/widgets\",\n      \"path\": \"../checkouts/widgets\",\n      \"build\": [\n        \"make\"\n      ],\n      \"test\": [\n        \"make\",\n        \"test\"\n      ]\n    }\n  ],\n  \"interval\": -1\n}",
+    "result": {
+      "error": "invalid interval, concurrency, retries, or timeout"
+    }
+  },
+  {
+    "name": "infinite-interval",
+    "text": "{\n  \"repositories\": [\n    {\n      \"name\": \"acme/widgets\",\n      \"path\": \"../checkouts/widgets\",\n      \"build\": [\n        \"make\"\n      ],\n      \"test\": [\n        \"make\",\n        \"test\"\n      ]\n    }\n  ],\n  \"interval\": \"inf\"\n}",
+    "result": {
+      "error": "invalid interval, concurrency, retries, or timeout"
+    }
+  },
+  {
+    "name": "nan-timeout",
+    "text": "{\n  \"repositories\": [\n    {\n      \"name\": \"acme/widgets\",\n      \"path\": \"../checkouts/widgets\",\n      \"build\": [\n        \"make\"\n      ],\n      \"test\": [\n        \"make\",\n        \"test\"\n      ]\n    }\n  ],\n  \"timeout\": \"nan\"\n}",
+    "result": {
+      "error": "invalid interval, concurrency, retries, or timeout"
+    }
+  },
+  {
+    "name": "zero-concurrency",
+    "text": "{\n  \"repositories\": [\n    {\n      \"name\": \"acme/widgets\",\n      \"path\": \"../checkouts/widgets\",\n      \"build\": [\n        \"make\"\n      ],\n      \"test\": [\n        \"make\",\n        \"test\"\n      ]\n    }\n  ],\n  \"concurrency\": 0\n}",
+    "result": {
+      "error": "invalid interval, concurrency, retries, or timeout"
+    }
+  },
+  {
+    "name": "negative-retries",
+    "text": "{\n  \"repositories\": [\n    {\n      \"name\": \"acme/widgets\",\n      \"path\": \"../checkouts/widgets\",\n      \"build\": [\n        \"make\"\n      ],\n      \"test\": [\n        \"make\",\n        \"test\"\n      ]\n    }\n  ],\n  \"retries\": -1\n}",
+    "result": {
+      "error": "invalid interval, concurrency, retries, or timeout"
+    }
+  },
+  {
+    "name": "zero-timeout",
+    "text": "{\n  \"repositories\": [\n    {\n      \"name\": \"acme/widgets\",\n      \"path\": \"../checkouts/widgets\",\n      \"build\": [\n        \"make\"\n      ],\n      \"test\": [\n        \"make\",\n        \"test\"\n      ]\n    }\n  ],\n  \"timeout\": 0\n}",
+    "result": {
+      "error": "invalid interval, concurrency, retries, or timeout"
+    }
+  },
+  {
+    "name": "bad-float",
+    "text": "{\n  \"repositories\": [\n    {\n      \"name\": \"acme/widgets\",\n      \"path\": \"../checkouts/widgets\",\n      \"build\": [\n        \"make\"\n      ],\n      \"test\": [\n        \"make\",\n        \"test\"\n      ]\n    }\n  ],\n  \"interval\": \"soon\"\n}",
+    "result": {
+      "error": "could not convert string to float: 'soon'"
+    }
+  },
+  {
+    "name": "bad-int",
+    "text": "{\n  \"repositories\": [\n    {\n      \"name\": \"acme/widgets\",\n      \"path\": \"../checkouts/widgets\",\n      \"build\": [\n        \"make\"\n      ],\n      \"test\": [\n        \"make\",\n        \"test\"\n      ]\n    }\n  ],\n  \"concurrency\": \"2.5\"\n}",
+    "result": {
+      "error": "invalid literal for int() with base 10: '2.5'"
+    }
+  },
+  {
+    "name": "unicode-names",
+    "text": "{\"repositories\": [{\"name\": \"café/über\", \"path\": \"x\", \"build\": [\"b\"], \"test\": [\"t\"]}]}",
+    "result": {
+      "settings": {
+        "author": "",
+        "concurrency": 2,
+        "copilotReview": false,
+        "interval": 60.0,
+        "otelEndpoint": null,
+        "retries": 3,
+        "stateDir": "/config/.loop/pr-babysit",
+        "timeout": 1800.0,
+        "repositories": [
+          {
+            "name": "café/über",
+            "path": "/config/x",
+            "build": [
+              "b"
+            ],
+            "test": [
+              "t"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "not-json",
+    "text": "{",
+    "result": {
+      "error": "Expecting property name enclosed in double quotes: line 1 column 2 (char 1)"
+    }
+  },
+  {
+    "name": "bom",
+    "text": "﻿{\"repositories\": [{\"name\": \"acme/widgets\", \"path\": \"../checkouts/widgets\", \"build\": [\"make\"], \"test\": [\"make\", \"test\"]}]}",
+    "result": {
+      "error": "Unexpected UTF-8 BOM (decode using utf-8-sig): line 1 column 1 (char 0)"
+    }
+  }
+]
