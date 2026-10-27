@@ -1,47 +1,29 @@
 import { Command, CommanderError } from 'commander';
 
 import { configureLogging, enforceRuntime, runEntrypoint, ValueError } from '../../src/loop/index.ts';
-import { runScheduler, runWorker } from './composition.ts';
+import { createContainer, type MainDeps } from './composition.ts';
+import { type DiscoveryService } from './discovery.ts';
 import { FileLockUnavailableError } from './file-lock.ts';
 import { isOsError } from './infrastructure/os-error.ts';
 import { Blocked } from './infrastructure/state.ts';
 import { resolvePath, Settings } from './settings.ts';
+import { TOKENS } from './tokens.ts';
+import { type WorkerService } from './worker.ts';
+
+export type { MainDeps } from './composition.ts';
+export type { ServeOptions } from './discovery.ts';
 
 const PR_URL = /^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/([0-9]+)\/?$/;
-
-/** Everything `main` touches outside its own parsing; tests and the entry point supply the doubles or real parts. */
-export interface MainDeps {
-  /** Operator-facing diagnostics, one message per call. */
-  error: (message: string) => void;
-  /** Maintain one explicit PR; resolves to the process exit code. */
-  run: (settings: Settings, repo: string, number: number) => Promise<number>;
-  /** Discover PRs continuously; resolves to the process exit code. */
-  serve: (settings: Settings, config: string, options: ServeOptions) => Promise<number>;
-  stderr: (text: string) => void;
-  stdout: (text: string) => void;
-}
-
-export interface ServeOptions {
-  readonly includeExisting: boolean;
-  readonly retry: string | undefined;
-}
-
-const DEFAULT_DEPS: MainDeps = {
-  error: (message) => {
-    process.stderr.write(`PR maintenance stopped: ${message}\n`);
-  },
-  run: runWorker,
-  serve: runScheduler,
-  stderr: (text) => process.stderr.write(text),
-  stdout: (text) => process.stdout.write(text),
-};
 
 /**
  * Start discovery or maintain one explicit PR with the same configuration.
  * Resolves to the exit code: 0 on success or `--help`, 1 for a blocked or unreadable configuration, 2 for bad input.
  */
-export async function main(argv: readonly string[], deps: Partial<MainDeps> = {}): Promise<number> {
-  const { error, run, serve, stderr, stdout } = { ...DEFAULT_DEPS, ...deps };
+export async function main(argv: readonly string[], deps: MainDeps = {}): Promise<number> {
+  const container = createContainer(deps);
+  const error = container.get<(message: string) => void>(TOKENS.ErrorReporter);
+  const stderr = container.get<(text: string) => void>(TOKENS.StderrWriter);
+  const stdout = container.get<(text: string) => void>(TOKENS.StdoutWriter);
   const program = new Command('pr_babysit')
     .description('Discover PRs continuously or babysit one PR')
     .requiredOption('--config <path>')
@@ -75,8 +57,8 @@ export async function main(argv: readonly string[], deps: Partial<MainDeps> = {}
   try {
     const settings = Settings.load(options.config);
     const [, repo, number] = match ?? [];
-    if (repo !== undefined && number !== undefined) return await run(settings, repo, Number(number));
-    return await serve(settings, resolvePath(options.config), {
+    if (repo !== undefined && number !== undefined) return await container.get<WorkerService>(TOKENS.WorkerService).run(settings, repo, Number(number));
+    return await container.get<DiscoveryService>(TOKENS.DiscoveryService).serve(settings, resolvePath(options.config), {
       includeExisting: options.includeExisting === true,
       retry: options.retry,
     });
