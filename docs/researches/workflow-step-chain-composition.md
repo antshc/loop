@@ -2,7 +2,7 @@
 
 Date: 2026-10-27
 Status: Research / design recommendation
-Scope: Loop composition primitives and the [unified event-driven factory](../plans/unified-event-driven-sdlc-workflow.md)
+Scope: Loop composition primitives and the [unified event-driven factory](unified-event-driven-sdlc-workflow.md)
 
 ## Recommendation
 
@@ -162,5 +162,5 @@ This respects Loop's established separation: user-owned Python workflows control
 - [Loop Workflow and WorkflowRun](https://github.com/antshc/loop/blob/main/src/loop/workflow/workflow.py)
 - [Loop Phase and Phase.gate](https://github.com/antshc/loop/blob/main/src/loop/workflow/phases.py)
 - [Loop Glossary](https://github.com/antshc/loop/blob/main/GLOSSARY.md)
-- [Unified event-driven SDLC plan](https://github.com/antshc/loop/blob/main/docs/plans/unified-event-driven-sdlc-workflow.md)
+- [Unified event-driven SDLC plan](https://github.com/antshc/loop/blob/main/docs/researches/unified-event-driven-sdlc-workflow.md)
 - [Local event-driven messaging research](https://github.com/antshc/loop/blob/main/docs/researches/local-event-driven-messaging.md)
