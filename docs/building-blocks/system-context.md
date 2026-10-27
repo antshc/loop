@@ -14,13 +14,13 @@ C4Context
 
     Person(author, "Workflow author", "Writes and runs Workflow scripts through their own shell alias.")
 
-    System(loop, "Loop", "Python library for composing autonomous agent Workflows on Git worktrees.")
+    System(loop, "Loop", "TypeScript library for composing autonomous agent Workflows on Git worktrees, run by Bun.")
 
     System_Ext(github, "GitHub", "Hosts the repository, Specs, Tickets, review threads, and pull requests.")
     System_Ext(copilot, "Copilot CLI", "Headless coding agent that does the Crew's work.")
     System_Ext(git, "Git", "Local repository, worktrees, commits, and pushes.")
 
-    Rel(author, loop, "Runs Workflows built on", "Python")
+    Rel(author, loop, "Runs Workflows built on", "TypeScript")
     Rel(loop, github, "Reads Tickets and writes pull requests via", "gh CLI")
     Rel(loop, copilot, "Runs prompts through", "CLI, JSON events")
     Rel(loop, git, "Creates worktrees, commits, and pushes via", "git CLI")
@@ -51,10 +51,10 @@ C4Container
 
     Person(author, "Workflow author", "Writes and runs Workflow scripts through their own shell alias.")
 
-    Container_Ext(workflow, "Workflow script", "Python script", "User-owned runnable script on the public loop API; the repository's dev Workflow is only an example.")
+    Container_Ext(workflow, "Workflow script", "Bun script", "User-owned runnable script on the public loop API; the repository's dev Workflow is only an example.")
 
     System_Boundary(system, "Loop") {
-        Container(loop, "loop library", "Python package", "Agent runner, agent clients, git services, stores, and shared policy for composing Workflows.")
+        Container(loop, "loop library", "TypeScript package", "Agent runner, agent clients, git services, stores, and shared policy for composing Workflows.")
     }
 
     System_Ext(github, "GitHub", "Hosts the repository, Specs, Tickets, and pull requests.")
@@ -62,7 +62,7 @@ C4Container
     System_Ext(git, "Git", "Local repository and worktrees.")
 
     Rel(author, workflow, "Runs", "Shell alias")
-    Rel(workflow, loop, "Composes Agent Runs with", "Python import")
+    Rel(workflow, loop, "Composes Agent Runs with", "TypeScript import")
     Rel(loop, github, "Reads Tickets and writes pull requests via", "gh CLI")
     Rel(loop, copilot, "Runs prompts through", "CLI, JSON events")
     Rel(loop, git, "Creates worktrees, commits, and pushes via", "git CLI")

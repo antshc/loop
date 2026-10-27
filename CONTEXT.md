@@ -5,7 +5,7 @@ AFK automated development loop and PR review-comment automation driven by Copilo
 ## Language
 
 **Loop**  
-A library, not a CLI: an orchestration framework for Headless AI Agents using Git worktrees, installed with `pip` from this repository. It handles running agents against a single repository or multiple repositories, Git branch/worktree lifecycle, and iterative agent execution.
+A library, not a CLI: an orchestration framework for Headless AI Agents using Git worktrees, written in TypeScript, run by Bun, and installed as a Bun package from this repository. It handles running agents against a single repository or multiple repositories, Git branch/worktree lifecycle, and iterative agent execution.
 
 **Ralph**  
 The orchestrator: it drives the autonomous development loop, repeatedly invoking Crew agents in fresh sessions. Each iteration reconstructs progress from durable external state such as Tickets, Git commits, source files, and tests, performs bounded work, persists the result, and continues until explicit completion criteria are met.
@@ -47,7 +47,7 @@ A Ticket that groups the Tickets one dev run delivers for one Initiative and one
 _Avoid_: Epic, parent issue
 
 **Workflow**:  
-One autonomous procedure, such as `dev`, written by the user as a Python script on the Loop library and run through the user's own shell alias.  
+One autonomous procedure, such as `dev`, written by the user as a TypeScript script on the Loop library and run by Bun through the user's own shell alias.  
 _Avoid_: Slice, feature, template, plugin, built-in workflow
 
 **Loop hook**:
@@ -67,7 +67,7 @@ A named moment in an agent CLI's own lifecycle at which it runs the Agent CLI ho
 _Avoid_: Hook point (unqualified), Loop hook point, event, trigger
 
 **Run observer**:
-An optional object a Workflow passes to `with_observer` that receives a record of each Agent Run turn (usage, tool calls, timings) and each Worktree lifecycle event; it never fails or changes a run.  
+An optional object a Workflow passes to `withObserver` that receives a record of each Agent Run turn (usage, tool calls, timings) and each Worktree lifecycle event; it never fails or changes a run.  
 _Avoid_: Telemetry hook, Agent CLI hook, Loop hook, listener
 
 **Agent client**:  
@@ -75,7 +75,7 @@ The object a Workflow sends Agent requests to, built by the agent builder for on
 _Avoid_: Agent runner, Worktree runner, Sandbox, container, environment
 
 **Agent profile**:  
-The reusable choice of agent CLI, model, reasoning effort, instructions, tool permissions, extra arguments, and execution defaults for an Agent client. Defined in user-owned Python and imported into Workflows.
+The reusable choice of agent CLI, model, reasoning effort, instructions, tool permissions, extra arguments, and execution defaults for an Agent client. Defined in user-owned TypeScript and imported into Workflows.
 _Avoid_: Agent options, config
 
 **Run lifecycle**:  

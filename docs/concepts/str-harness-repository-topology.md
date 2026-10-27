@@ -7,33 +7,32 @@ The harness contains agent instructions, skills, Specs, and Tickets. The dev wor
 
 ## Harness and target repositories
 
-`workflows/dev/` reads Specs and Tickets from the immutable `HARNESS: Repository` configured in `repositories.py`.
+`workflows/dev/` reads Specs and Tickets from the immutable `HARNESS: Repository` configured in `repositories.ts`.
 Each target is an explicit `RepositoryWorkflow` pairing a `Repository` with an
 agent delegate. With no target configuration, the workflow defaults to
 implementation on the harness repository.
 
-```python
-class RepositoryId(NamedTuple):
-    owner: str
-    repo: str
+```ts
+class RepositoryId {
+  constructor(readonly owner: string, readonly repo: string) {}
 
-    def __str__(self) -> str:
-        return f"{self.owner}/{self.repo}"
+  toString(): string {
+    return `${this.owner}/${this.repo}`;
+  }
+}
 
+interface Repository {
+  readonly checkout: string;
+  readonly worktrees: string;
+  readonly ownerName: RepositoryId;
+}
 
-@dataclass(frozen=True)
-class Repository:
-    checkout: Path
-    worktrees: Path
-    owner_name: RepositoryId
-
-
-ROOT = Path(__file__).resolve().parents[2]  # workflows/dev/repositories.py
-HARNESS = Repository(
-    checkout=ROOT,
-    worktrees=ROOT / "workspace" / f"{ROOT.name}.worktrees",
-    owner_name=RepositoryId("antshc", "loop"),
-)
+const ROOT = resolve(import.meta.dir, '..', '..'); // workflows/dev/repositories.ts
+const HARNESS: Repository = {
+  checkout: ROOT,
+  worktrees: join(ROOT, 'workspace', `${basename(ROOT)}.worktrees`),
+  ownerName: new RepositoryId('antshc', 'loop'),
+};
 ```
 
 - MUST resolve each Spec's `repo:target:<owner/repo>` label against the configured repositories, case-insensitively.
@@ -41,9 +40,9 @@ HARNESS = Repository(
 - MUST reject duplicate repository configurations rather than choose one delegate implicitly.
 - MUST use the selected repository's `checkout` for Git fetch and repository operations; the agent edits only its worktree.
 - MUST create feature-branch worktrees beneath the selected repository's `worktrees`, one directory per branch.
-- MUST keep Spec/Ticket reads, updates, and execution-log identities on `HARNESS.owner_name`.
+- MUST keep Spec/Ticket reads, updates, and execution-log identities on `HARNESS.ownerName`.
 - MUST publish PRs to the selected target's GitHub repository; create its `PullRequestClient` only when Git has work to publish, and keep it out of Ticket orchestration.
-- `PullRequestClient` exposes only `create_draft_pull_request`; finding an existing open PR is internal, and PR editing and review-thread operations are outside this ticket-delivery module.
+- `PullRequestClient` exposes only `createDraftPullRequest`; finding an existing open PR is internal, and PR editing and review-thread operations are outside this ticket-delivery module.
 - MUST NOT clone a missing repository or fall back to a different target when a Spec label does not match.
 
 ## Directory layout
@@ -82,5 +81,5 @@ and the open `AgentWorkspace`, not the Spec or tracker. Ticket iteration,
 Initiative history, retry/rollback, and one-commit validation do not vary with
 the delegate. There is no directory discovery or repository cloning.
 
-See the [multi-repository example](../../README.md#different-agent-workflows-per-repository)
+See the [multi-repository example](../../USAGE.md#different-agent-workflows-per-repository)
 for configuration and an Implement/Review delegate.

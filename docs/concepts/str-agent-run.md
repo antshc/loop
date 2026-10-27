@@ -9,33 +9,33 @@ Define Loop's smallest agent-execution unit so workflows can compose planner, im
 
 An **Agent Run** is one bounded invocation of one Headless AI Agent with one request on one prepared worktree.
 
-The library owns the Run boundary: an `AgentClient` built for one `AgentProfile` (CLI, model, reasoning effort) takes an `AgentRequest(prompt)`, runs the agent CLI on the host in the worktree, and returns one `AgentResult` with the raw output. A Workflow owns topology by composing Runs with ordinary Python control flow such as sequence, branching, iteration, and concurrency. A Run does not encode workflow roles such as planner, implementer, or reviewer.
+The library owns the Run boundary: an `AgentClient` built for one `AgentProfile` (CLI, model, reasoning effort) takes an `AgentRequest(prompt)`, runs the agent CLI on the host in the worktree, and resolves to one `AgentResult` with the raw output. A Workflow owns topology by composing Runs with ordinary TypeScript control flow such as sequence, branching, iteration, and concurrency (`await`, loops, `Promise.all`). A Run does not encode workflow roles such as planner, implementer, or reviewer.
 
 ## Rules
 
 - MUST treat one Agent Run as the smallest executable runtime unit: one agent profile, one prompt, one worktree, and one result.
-- MUST obtain the client from the builder (`Agent().create()`) or from an opened `Worktree` (`worktree.agent(profile)`) before invoking the agent.
+- MUST obtain the client from the builder (`Agent().create()`) or from an opened `AgentWorkspace` (`worktree.agent(profile)`) before invoking the agent.
 - MUST invoke the agent provider through the `AgentClient` contract.
 - MUST choose the agent per client through its `AgentProfile`; Runs on one worktree MAY use different profiles ([Build agents with an agent builder](../adr/build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md)).
 - MUST return the agent CLI's raw output; a Workflow that expects a response envelope extracts and validates it itself.
 - MUST keep workflow topology in Workflow code rather than in the Run abstraction.
 - MUST let a Workflow decide subsequent Runs from prior Run results and external state.
 - MUST keep a Run prompt scoped to that Run's agent task rather than workflow orchestration.
-- MUST compose Workflows with ordinary Python control flow rather than a separate workflow DSL.
+- MUST compose Workflows with ordinary TypeScript control flow rather than a separate workflow DSL.
 - MUST NOT encode planner, implementer, reviewer, or other workflow-specific roles into the Run contract.
 
 ### Variant: Shared Worktree
 **Selected when:** multiple Runs operate on the same evolving workspace and later Runs depend on changes or results produced by earlier Runs.
 
-- MUST open one `Worktree` and take every dependent Run's client from it.
+- MUST open one worktree scope (`builder.open(callback)`) and take every dependent Run's client from it.
 - MUST preserve each Run as a separate agent invocation with its own prompt and result.
-- MAY continue one conversation across Runs by enabling `with_session()` and reusing the session name.
+- MAY continue one conversation across Runs by enabling `withSession()` and reusing the session name.
 - SHOULD execute dependent Runs sequentially in workflow-defined order.
 
 ### Variant: Separate Worktrees
 **Selected when:** Runs operate on independent units of work that do not require a shared mutable workspace.
 
-- MUST open a separate `Worktree` for each independent unit of work.
+- MUST open a separate worktree scope for each independent unit of work.
 - MUST keep mutable workspace state separate between those worktrees.
 - MAY execute independent Runs concurrently when the Workflow allows it.
 
@@ -44,9 +44,10 @@ The library owns the Run boundary: an `AgentClient` built for one `AgentProfile`
 Shared worktree:
 
 ```text
-with builder.open() as worktree:
-  ├─ worktree.agent(plan_profile).run(AgentRequest(prompt))
-  └─ worktree.agent(implement_profile).run(AgentRequest(prompt))
+await builder.open(async (worktree) => {
+  ├─ await worktree.agent(planProfile).run(new AgentRequest(prompt))
+  └─ await worktree.agent(implementProfile).run(new AgentRequest(prompt))
+})
 ```
 
 Separate worktrees:
@@ -64,7 +65,7 @@ The Workflow selects the variant, sequence, conditions, and concurrency. Each Ru
 
 **Benefits**
 
-- Workflows stay explicit and readable because orchestration is normal Python control flow.
+- Workflows stay explicit and readable because orchestration is normal TypeScript control flow.
 - Agent-provider details stay behind one library boundary.
 - New workflow shapes can reuse the same Run primitive without expanding the library contract.
 
@@ -88,5 +89,5 @@ The `plan_implement` Workflow runs a planning Run and an implementation Run with
 | Concern | Stable anchor | Semantic locator |
 |---|---|---|
 | Agent invocation | One request crosses the library agent boundary and returns one result | `loop`: `AgentClient`, `AgentRequest`, `AgentResult` |
-| Worktree binding | A worktree hands out clients per profile | `loop`: `AgentBuilder.open`, `Worktree.agent` |
+| Worktree binding | A worktree scope hands out clients per profile | `loop`: `AgentBuilder.open`, `AgentWorkspace.agent` |
 | Workflow ownership | Workflow code decides repeated and conditional agent execution | `workflows`: `dev`, `plan_implement` |

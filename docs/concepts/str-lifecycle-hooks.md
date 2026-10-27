@@ -9,9 +9,9 @@ Let a repository prepare a fresh worktree (copy `.env`, install dependencies) an
 
 A Loop hook is a user-declared shell command that Loop runs at a named Loop hook point in a run's lifecycle. Loop defines three points, each a `LoopHook` subclass that fixes its point: `worktree-ready` (in the created or reused worktree, before the agent starts), `worktree-removing` (after a successful body, before cleanliness checks and removal), and `run-finished` (in the repository after the worktree is merged and removed, only when the run succeeded). Loop hooks run on the host, so a hook that needs a different environment carries that in its own command.
 
-The workflow declares its hooks as code in `GitOptions(loop_hooks=...)`; the worktree strategy runs them at each point in declared order. A failing or timed-out hook raises `LoopHookError` carrying the point, command, and output; a failing `worktree-ready` hook removes a clean worktree but preserves uncommitted changes. Cleanup failures are reported without masking the original hook error. Loop hooks need a worktree strategy, not `HeadStrategy`.
+The workflow declares its hooks as code in `new GitOptions({ loopHooks: [...] })`; the worktree strategy runs them at each point in declared order. A failing or timed-out hook raises `LoopHookError` carrying the point, command, and output; a failing `worktree-ready` hook removes a clean worktree but preserves uncommitted changes. Cleanup failures are reported without masking the original hook error. Loop hooks need a worktree strategy, not `HeadStrategy`.
 
-Modelled on Sandcastle's host-side `onWorktreeReady` hook ([research](../research/sandcastle-agent-invocation-and-extension-points.md)). Hooks that an agent CLI fires natively are Agent CLI hooks (`with_agent_cli_hooks`), a separate term: they only observe and never fail or steer a run.
+Modelled on Sandcastle's host-side `onWorktreeReady` hook ([research](../research/sandcastle-agent-invocation-and-extension-points.md)). Hooks that an agent CLI fires natively are Agent CLI hooks (`withAgentCliHooks`), a separate term: they only observe and never fail or steer a run.
 
 ## Rules
 

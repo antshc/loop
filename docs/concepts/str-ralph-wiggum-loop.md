@@ -32,58 +32,50 @@ Repeatedly invoke one coding agent with a stable prompt. Each iteration is fresh
 - MUST stop early when the agent emits `<promise>COMPLETE</promise>`, which means no actionable issues remain.
 - MUST stop when the iteration limit is reached even if completion was not signaled.
 
-#### Python example
+#### TypeScript example
 
-```python
-from pathlib import Path
-import subprocess
+```ts
+import { readFileSync } from 'node:fs';
 
-MAX_ITERATIONS = 3
-PROMPT_FILE = Path(".loop/prompt.md")
-COMPLETION_SIGNAL = "<promise>COMPLETE</promise>"
+const MAX_ITERATIONS = 3;
+const PROMPT_FILE = '.loop/prompt.md';
+const COMPLETION_SIGNAL = '<promise>COMPLETE</promise>';
 
-def sh(*args: str) -> str:
-    return subprocess.run(
-        args,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
+async function sh(...args: string[]): Promise<string> {
+  const child = Bun.spawn(args, { stdout: 'pipe', stderr: 'inherit' });
+  const [stdout, exitCode] = await Promise.all([child.stdout.text(), child.exited]);
+  if (exitCode !== 0) {
+    throw new Error(`${args.join(' ')} failed with exit status ${exitCode}`);
+  }
+  return stdout.trim();
+}
 
-def build_prompt() -> str:
-    template = PROMPT_FILE.read_text()
+async function buildPrompt(): Promise<string> {
+  const template = readFileSync(PROMPT_FILE, 'utf8');
 
-    # Re-evaluated every iteration.
-    open_issues = sh("python", "scripts/list_tasks.py")
-    recent_ralph_commits = sh(
-        "git", "log", "--oneline", "--grep=RALPH", "-10"
-    )
+  // Re-evaluated every iteration.
+  const openIssues = await sh('bun', 'scripts/list-tasks.ts');
+  const recentRalphCommits = await sh('git', 'log', '--oneline', '--grep=RALPH', '-10');
 
-    return (
-        template
-        .replace("{{LIST_TASKS_COMMAND}}", open_issues)
-        .replace(
-            '{{GIT_HISTORY}}',
-            recent_ralph_commits,
-        )
-    )
+  return template
+    .replace('{{LIST_TASKS_COMMAND}}', openIssues)
+    .replace('{{GIT_HISTORY}}', recentRalphCommits);
+}
 
-def run_agent(prompt: str) -> str:
-    # New process => fresh agent session.
-    result = subprocess.run(
-        ["copilot", "-p", prompt],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    return result.stdout
+async function runAgent(prompt: string): Promise<string> {
+  // New process => fresh agent session.
+  const child = Bun.spawn(['copilot', '-p', prompt], { stdout: 'pipe', stderr: 'inherit' });
+  const [stdout] = await Promise.all([child.stdout.text(), child.exited]);
+  return stdout;
+}
 
-for _ in range(MAX_ITERATIONS):
-    prompt = build_prompt()
-    output = run_agent(prompt)
+for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+  const output = await runAgent(await buildPrompt());
 
-    if COMPLETION_SIGNAL in output:
-        break
+  if (output.includes(COMPLETION_SIGNAL)) {
+    break;
+  }
+}
 ```
 
 The stable prompt carries the per-iteration workflow:

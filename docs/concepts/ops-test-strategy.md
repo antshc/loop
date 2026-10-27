@@ -6,67 +6,83 @@ Loop's behavior is spread over the shipped library (agent builder, CLI runners, 
 
 ## Approach
 
-One unit test group runs in the project's single test command (`pytest`). It tests one component or one Workflow rule at a time against fakes at the process boundaries; a Workflow scenario is driven through the Workflow's `main` over the same fakes, so the real builder, prompt rendering, response extraction, and Workflow logic cooperate.
+One test group runs in the project's single test command (`bun run test`: ESLint, the TypeScript compiler, then `bun test`). It tests one component or one Workflow rule at a time against doubles injected at the process boundaries; a Workflow scenario is driven through the Workflow's `main(argv, dependencies)` over the same doubles, so the real builder, prompt rendering, response extraction, and Workflow logic cooperate.
 
-- **Library seams:** `CliRunner` and `GitService` (and `DockerService`) are the replaceable boundaries; tests build `AgentBuilder(runner, git, docker)` over a `FakeRunner` and `FakeGitService`.
-- **Workflow seams:** a Workflow's Git reads and publication (`GitService`) and its GitHub client (`FakeGhCli`) are injected as in-memory fakes; the `dev` Workflow takes `new_agent`, so tests supply a builder over the fake runner.
-- **Ticket delegate seam:** reusable Ticket orchestration is tested through `deliver_tickets` with function delegates returning typed results; multi-repository scenarios drive `dev.main` with separate histories, clients, and delegates to prove target isolation and harness-only Ticket updates.
-- **Workflow-local harness:** `workflows/dev/tests/doubles.py` holds dev's fakes, `DevHarness`, and response-envelope builders. `tests/workflow_harness.py` independently supports `plan_implement`; dev tests import no sibling harness.
-- **Architecture checks:** import-linter contracts run as a test.
+- **Library seams:** `CliRunner`, `GitService`, and `DockerService` are the replaceable boundaries; tests build `new AgentBuilder(runner, git, docker)` over recording doubles (`tests/unit/support/doubles.ts`: `RecordingRunner`, `RecordingGit`, `RecordingDocker`).
+- **Workflow seams:** a Workflow's Git reads and publication (`GitService`) and its GitHub client (`FakeGh` behind `gh`) are injected as in-memory fakes; each Workflow's composition root binds its seams by token, so a test passes the doubles as `main`'s dependencies ([Compose dependencies with InversifyJS](../adr/compose-dependencies-with-inversifyjs-constructor-injection-and-a-composition-root-per-workflow.md)).
+- **Optional-module, output, and log seams:** an injected module loader replaces the dynamic import of the telemetry packages, an injected output stream with a TTY flag replaces console patching for the visualization, and an in-memory log sink captures records. Monkeypatching globals is a last resort where no injectable seam exists.
+- **Ticket delegate seam:** reusable Ticket orchestration is tested through `deliverTickets` with function delegates returning typed results; multi-repository scenarios drive the dev `main` with separate histories, clients, and delegates to prove target isolation and harness-only Ticket updates.
+- **Workflow-local harness:** `workflows/dev/tests/support/harness.ts` holds dev's fakes, `DevHarness`, and response-envelope builders; the dev tests import no sibling Workflow harness.
+- **Per-test state:** every test that touches disk creates its own temporary directory and removes it afterwards; no test shares or reads the user's files.
+- **Architecture checks:** dependency-cruiser runs inside the suite against `tests/architecture/contracts.ts`.
 
 ## Rules
 
-- MUST test every shipped component against its own boundary fake, one behavior per test.
+- MUST test every shipped component against its own boundary double, one behavior per test.
 - MUST NOT start a real `gh`, `docker`, or agent CLI process, or reach the network, from any test. Worktree lifecycle and PR publication recovery tests may use isolated temporary Git repositories and local bare remotes; they MUST NOT access user repositories or network remotes.
 - MUST drive a Workflow scenario through the Workflow's `main` with injected dependencies, with the real builder, prompt rendering, and response extraction.
-- MUST make the runner fake or injected Ticket delegate commit through the Git fake before reporting completion, so Git validation runs against fake state.
+- MUST make the runner double or injected Ticket delegate commit through the Git double before reporting completion, so Git validation runs against fake state.
 - MUST exercise agent response parsing with raw runner output; tests of the independent Ticket delegate seam may return typed results without parsing an agent envelope.
 - MUST assert a scenario outcome on effects at the fake boundaries — tracker writes, pushes, CLI invocations and prompts — and MUST NOT assert on Workflow internals.
-- MUST state each scenario as Given/when/then in its docstring, and name each test as a sentence of the behavior it proves.
-- MUST keep fakes and Workflow wiring in the owning Workflow's test harness; a test module MUST NOT rebuild them.
-- MUST run the architecture checks (library layering, Workflows import only the public `loop` API, dev imports no sibling helpers, Ticket orchestration imports no agent delegate) inside the test run.
-- MUST keep test fakes out of the public `loop` API.
+- MUST state each scenario as Given/when/then in a comment or `describe` name, and name each test as a sentence of the behavior it proves.
+- MUST keep doubles and Workflow wiring in the owning Workflow's test support; a test file MUST NOT rebuild them.
+- MUST verify persisted and emitted formats (PR state, scheduler registry, dev execution log, settings, Copilot session log, event streams, log records, span and metric names and attributes, hook payload) against golden fixtures under `tests/fixtures/` and each Workflow's own `tests/fixtures/`.
+- MUST run the architecture checks inside the test run, and MUST prove each contract with a seeded violation that fails it.
+- MUST keep test-only doubles out of the public `loop` API; the dry-run fakes (`FakeCliRunner`, `DirectoryGit`, `fakeAgent`) ship because `--fake` and `--dry` runs use them.
 
-## Python compatibility
+## Architecture checks
 
-The library and example Workflows support Python 3.10+, including 3.10.12; [package metadata](../../pyproject.toml) declares the minimum. For runtime compatibility changes, validate in isolated environments on exact Python 3.10.12 and a newer supported interpreter (currently 3.12). Use each environment's `python` for both installation and execution:
+`tests/architecture/contracts.ts` declares every contract as dependency-cruiser rules: the library layering (generated as one rule per layer boundary from a single ordered layer list), forbidden imports, Workflow independence, Ticket orchestration importing no agent delegate, Workflows importing only the public `src/loop/index.ts`, and only the telemetry adapter (`src/loop/observe/otel.ts`) importing the OpenTelemetry packages. Every contract also checks indirect imports (`reachable`), except the Workflows-to-public-`loop` contract, which is direct-only because the public entry point legitimately reaches private modules. `architecture.test.ts` fails on any violation in the repository; `seeded-violations.test.ts` writes a violating fixture for each contract and expects the contract to fail.
+
+## Runtime compatibility
+
+The library and example Workflows run on Bun only and pin the minimum Bun in package metadata (`engines.bun` and `packageManager` in `package.json`; `MINIMUM_BUN_VERSION` in `src/loop/runtime-guard.ts`). The suite runs on that minimum and on the latest Bun, each with its own installation:
 
 ```sh
-python --version
-python -m pip install -e ".[dev]"
-python -m pip check
-python -m pytest
-python -m workflows.dev --help
-python -m workflows.plan_implement --help
+bun --version
+bun install --frozen-lockfile
+bun run test
+bun workflows/dev/main.ts --help
+bun workflows/plan_implement.ts --help
 ```
 
-Run from the repository root with `git` installed. The root test command covers library tests, both example Workflows, and import-linter contracts. The `--help` checks exercise Workflow imports and argument parsing without starting agents or contacting GitHub.
+Run from the repository root with `git` installed. The root command covers library tests, all four example Workflows, lint, type-check, and the architecture contracts. The `--help` checks exercise Workflow imports and command-line parsing without starting agents or contacting GitHub.
 
-Syntax checks alone do not prove runtime compatibility: imports, standard-library APIs, dependency resolution, and error paths must also work. Preserve hook-point string conversion, formatting, and JSON serialization across runtimes. Cleanup failures must not mask the original error: Python 3.11+ attaches exception notes; Python 3.10 logs the secondary failure with its traceback. Tests cover the applicable path on each runtime.
+A type-check alone does not prove runtime compatibility: Bun APIs, dependency resolution, and error paths must also run on both versions. Node.js is unsupported and is not tested.
+
+## Known gaps
+
+- Signal delivery, process-group kill, and OS file locking are verified on Linux; macOS and Windows behavior is untested.
+- Telemetry is verified against in-memory exporters and a golden span and metric contract; export to a real collector, including protobuf and gRPC, is untested, and the OpenTelemetry packages are not officially supported on Bun.
+- Docker agent behavior under Bun is unspecified and untested.
+- `pr_babysit`'s lock uses Bun's FFI, which Bun marks experimental.
 
 ## Example
 
-A `dev` scenario drives `main` through `DevHarness`: the runner fake commits through the workflow Git fake and answers with the raw response envelope, and the test asserts on tracker writes and publication.
+A `dev` scenario drives `main` through `DevHarness`: the runner double commits through the Workflow Git double and answers with the raw response envelope, and the test asserts on tracker writes and publication.
 
-```python
-harness = DevHarness(tmp_path)
-harness.runner.handler = harness.commit_then(lambda sha: envelope("Checkout|10", result={**COMPLETED, "commit": sha}))
-# run dev.main over the harness, then assert on harness.writes() and harness.git.pushed_count
+```ts
+const harness = new DevHarness(directory);
+const code = await harness.run(() => harness.commitAndReport(10));
+expect(code).toBe(0);
+// then assert on harness.calls('issue', ...) and harness.git.pushedCount
 ```
 
 ## Implementation Map
 
 | Concern | Stable anchor | Semantic locator |
 |---|---|---|
-| Workflow wiring for tests | One local harness binds dev to fakes at every boundary | `workflows/dev/tests/doubles.py`: `DevHarness`, `FakeRunner`, `FakeGitService`, `FakeWorkflowGit` |
-| Envelope builders | Response envelopes the Workflows extract | `tests/workflow_harness.py`: `plan_envelope`, `implement_envelope`; `workflows/dev/tests/doubles.py`: `envelope` |
-| Boundary fakes | One fake per boundary | `workflows/dev/tests/doubles.py`: dev's runner, Git, and `FakeGhCli` |
-| Unit tests | Library and Workflow rules against fakes | `tests/unit` and `workflows/dev/tests`; both discovered by root `pytest` |
-| Package independence | Dev runs without sibling Workflow files and resolves its own prompts | `workflows/dev/tests/test_package.py` |
-| Architecture checks | Import rules enforced as a test | `tests/unit/test_library.py`: `lint-imports` |
+| Workflow wiring for tests | One local harness binds dev to fakes at every boundary | `workflows/dev/tests/support/harness.ts`: `DevHarness`, `FakeRunner`, `FakeWorkflowGit`, `DirectoryWorktree` |
+| Envelope builders | Response envelopes the Workflows extract | `workflows/dev/tests/support/harness.ts`: `envelope`, `COMPLETED` |
+| Boundary fakes | One double per boundary | `workflows/dev/tests/support/fake-gh.ts`: `FakeGh`; `tests/unit/support/doubles.ts`: `RecordingRunner`, `RecordingGit`, `RecordingDocker` |
+| Unit tests | Library and Workflow rules against doubles | `tests/unit/*.test.ts` and `workflows/dev/tests/*.test.ts`; discovered by root `bun test` |
+| Golden fixtures | Persisted and emitted formats | `tests/fixtures/`, `workflows/dev/tests/fixtures/`, `workflows/pr_babysit/tests/fixtures/` |
+| Package independence | Ticket orchestration imports no agent delegate; the named prompts render as the fixtures pin | `workflows/dev/tests/boundary.test.ts`, `workflows/dev/tests/prompts.test.ts` |
+| Architecture checks | Import rules enforced as a test, each proven by a seeded violation | `tests/architecture/contracts.ts`, `architecture.test.ts`, `seeded-violations.test.ts` |
 
 ## References
 
 - [Loop Library Workflow Architecture](str-loop-library-workflow-architecture.md)
 - [Autonomous Spec Delivery](dom-autonomous-spec-delivery.md)
 - [Agent Client](str-agent-client.md)
+- [Port Loop and Workflows to TypeScript on Bun](../adr/port-loop-and-workflows-to-typescript-on-bun-in-one-cutover.md)
