@@ -69,6 +69,7 @@ export {
   AgentStartMode,
   RunContext,
 } from './run/context.ts';
+export { type EntrypointEnvironment, runEntrypoint } from './run/entrypoint.ts';
 export { Instructions, InstructionsError } from './run/instructions.ts';
 export { ProcessFailedError } from './run/process.ts';
 export { Prompt, PromptError } from './run/prompt.ts';
