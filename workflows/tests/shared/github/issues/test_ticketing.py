@@ -49,6 +49,17 @@ def test_edges_are_added_before_their_ticket_is_linked_to_the_spec() -> None:
     )
 
 
+def test_the_existing_tickets_and_links_are_read_once_however_many_drafts_there_are() -> None:
+    gh, issues, ticketing = _setup()
+    spec = next(iter(issues.specs()))
+    gh.calls.clear()
+
+    ticketing.create(spec, _DRAFTS)
+
+    listings = [call for call in gh.calls if call[-1].startswith(("repos/owner/repo/issues?", "repos/owner/repo/issues/1/sub_issues?"))]
+    assert len(listings) == 2
+
+
 def test_a_retry_after_creating_everything_creates_no_ticket_and_no_second_edge_or_link() -> None:
     gh, issues, ticketing = _setup()
     spec = next(iter(issues.specs()))

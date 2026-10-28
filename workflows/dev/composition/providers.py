@@ -64,12 +64,16 @@ class DevProvider(Provider):
         return github
 
     @provide(scope=Scope.APP)
-    def tracker(self, harness: Harness, github_for: GithubFactory) -> Tracker:
+    def issues(self, harness: Harness, github_for: GithubFactory) -> Issues:
         return Issues(github_for(harness))
 
     @provide(scope=Scope.APP)
-    def ticketing(self, tracker: Tracker) -> SpecTicketingService:
-        return SpecTicketingService(tracker)
+    def tracker(self, issues: Issues) -> Tracker:
+        return issues
+
+    @provide(scope=Scope.APP)
+    def ticketing(self, issues: Issues) -> SpecTicketingService:
+        return SpecTicketingService(issues)
 
     @provide(scope=Scope.APP)
     def store(self, settings: DevSettings) -> FileExecutionStore:

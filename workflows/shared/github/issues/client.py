@@ -41,17 +41,21 @@ class Issues:
         """Closes the issue with `comment` unless it is closed."""
         self._commands.close(number, comment)
 
-    def find_ticket(self, spec: SpecGraphSnapshot, key: str) -> Ticket | None:
-        """The open issue already created for `key` of `spec`, linked or not."""
-        return self._commands.find_ticket(spec, key)
+    def find_tickets(self, spec: SpecGraphSnapshot) -> dict[str, Ticket]:
+        """The open issues already created for `spec` by planned-Ticket key, linked or not."""
+        return self._commands.find_tickets(spec)
 
     def create_ticket(self, spec: SpecGraphSnapshot, key: str, title: str, body: str) -> Ticket:
         """Creates a marked, unlinked issue for `key` of `spec`."""
         return self._commands.create_ticket(spec, key, title, body)
 
-    def link_ticket(self, spec: SpecGraphSnapshot, ticket: Ticket) -> None:
-        """Makes `ticket` a sub-issue of `spec` unless it already is one."""
-        self._commands.link_ticket(spec, ticket)
+    def sub_issue_numbers(self, spec: SpecGraphSnapshot) -> frozenset[int]:
+        """The numbers of every sub-issue of `spec`, open or closed."""
+        return self._commands.sub_issue_numbers(spec)
+
+    def link_ticket(self, spec: SpecGraphSnapshot, ticket: Ticket, linked: frozenset[int] | None = None) -> None:
+        """Makes `ticket` a sub-issue of `spec` unless it already is one; `linked` spares re-reading the sub-issues."""
+        self._commands.link_ticket(spec, ticket, linked)
 
     def add_blocked_by(self, ticket: Ticket, blocker: Ticket) -> None:
         """Makes `ticket` wait for `blocker` as a native blocked-by dependency unless it already does."""

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Protocol
 
 from ...process import CommandError
+from .client import Issues
 from .errors import IssueError
 from .graph import BlockedByRelation, SpecGraphSnapshot
 from .spec import Ticket
@@ -38,35 +38,27 @@ class TicketingError(IssueError):
         self.created = created
 
 
-class TicketWriter(Protocol):
-    """The tracker commands Ticket creation needs; each takes effect at once and a retry skips what is already applied."""
-
-    def find_ticket(self, spec: SpecGraphSnapshot, key: str) -> Ticket | None: ...
-
-    def create_ticket(self, spec: SpecGraphSnapshot, key: str, title: str, body: str) -> Ticket: ...
-
-    def link_ticket(self, spec: SpecGraphSnapshot, ticket: Ticket) -> None: ...
-
-    def add_blocked_by(self, ticket: Ticket, blocker: Ticket) -> None: ...
-
-
 class SpecTicketingService:
     """Creates a Spec's planned Tickets idempotently; a Ticket is linked to its Spec only after its blocked-by edges exist."""
 
-    def __init__(self, writer: TicketWriter) -> None:
-        self._writer = writer
+    def __init__(self, issues: Issues) -> None:
+        self._issues = issues
 
     def create(self, spec: SpecGraphSnapshot, drafts: Sequence[TicketDraft]) -> TicketedSpec:
         """Finds or creates each draft's Ticket, adds its blocked-by edges, then links it; a retry repeats none of that."""
         tickets: list[Ticket] = []
         edges: list[BlockedByRelation] = []
         try:
+            # Read once, before this call's writes, so a retry still sees what an earlier attempt left behind.
+            existing = self._issues.find_tickets(spec)
+            linked = self._issues.sub_issue_numbers(spec)
             for draft in drafts:
-                ticket = self._writer.find_ticket(spec, draft.key) or self._writer.create_ticket(spec, draft.key, draft.title, draft.body)
+                ticket = existing.get(draft.key) or self._issues.create_ticket(spec, draft.key, draft.title, draft.body)
                 for index in draft.blocked_by:
-                    self._writer.add_blocked_by(ticket, tickets[index])
+                    self._issues.add_blocked_by(ticket, tickets[index])
                     edges.append(BlockedByRelation(ticket.ref, tickets[index].ref))
-                self._writer.link_ticket(spec, ticket)
+                self._issues.link_ticket(spec, ticket, linked)
+                linked |= {ticket.number}
                 tickets.append(ticket)
         except (CommandError, IssueError) as exception:
             made = ", ".join(f"#{ticket.number}" for ticket in tickets) or "none"

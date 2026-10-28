@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-
+import re
 from ..repo import GitHubRepo
 from .errors import IncompleteReadError, IssueError
 from .graph import SpecGraphSnapshot
@@ -21,6 +21,9 @@ def _fingerprint(purpose: str, body: str) -> str:
 def _ticket_marker(spec: SpecGraphSnapshot, key: str) -> str:
     """A hidden marker tying a Ticket body to its Spec and planned-Ticket key."""
     return f"<!-- loop:ticket spec={spec.number} key={key} -->"
+
+
+_TICKET_MARKER = re.compile(r"<!-- loop:ticket spec=(?P<spec>\d+) key=(?P<key>.+?) -->")
 
 
 class IssueCommands:
@@ -61,13 +64,14 @@ class IssueCommands:
         if self._reader.summary(number).state == IssueState.OPEN:
             self._repo.run(("issue", "close", str(number), "--repo", self._repo.slug, "--comment", comment))
 
-    def find_ticket(self, spec: SpecGraphSnapshot, key: str) -> Ticket | None:
-        """The open issue already created for `key` of `spec`, whether or not it is linked, else None."""
-        marker = _ticket_marker(spec, key)
+    def find_tickets(self, spec: SpecGraphSnapshot) -> dict[str, Ticket]:
+        """The open issues already created for `spec`, by planned-Ticket key, whether or not they are linked."""
+        found: dict[str, Ticket] = {}
         for issue in self._reader.open_issues(self._routing_label(spec)):
-            if marker in issue.body and issue.number != spec.number:
-                return Ticket.of(issue)
-        return None
+            marker = _TICKET_MARKER.search(issue.body)
+            if marker is not None and int(marker["spec"]) == spec.number and issue.number != spec.number:
+                found.setdefault(marker["key"], Ticket.of(issue))
+        return found
 
     def create_ticket(self, spec: SpecGraphSnapshot, key: str, title: str, body: str) -> Ticket:
         """Creates an open issue for `key` of `spec`, marked so a retry finds it; it is not yet linked to `spec`."""
@@ -79,14 +83,18 @@ class IssueCommands:
         )
         return Ticket.of(self._reader.created(node))
 
-    def link_ticket(self, spec: SpecGraphSnapshot, ticket: Ticket) -> None:
-        """Makes `ticket` a sub-issue of `spec`, unless it already is one."""
-        if ticket.number in self._reader.sub_issue_numbers(spec.number):
+    def link_ticket(self, spec: SpecGraphSnapshot, ticket: Ticket, linked: frozenset[int] | None = None) -> None:
+        """Makes `ticket` a sub-issue of `spec`, unless it already is one; `linked` is the sub-issue numbers the caller already read."""
+        if ticket.number in (self.sub_issue_numbers(spec) if linked is None else linked):
             return
         self._repo.run((
             "api", "--method", "POST", f"repos/{self._repo.slug}/issues/{spec.number}/sub_issues",
             "-F", f"sub_issue_id={ticket.identity.id}",
         ))
+
+    def sub_issue_numbers(self, spec: SpecGraphSnapshot) -> frozenset[int]:
+        """The numbers of every sub-issue of `spec`, open or closed."""
+        return self._reader.sub_issue_numbers(spec.number)
 
     def add_blocked_by(self, ticket: Ticket, blocker: Ticket) -> None:
         """Makes `ticket` wait for `blocker` as a native blocked-by dependency, unless it already does."""

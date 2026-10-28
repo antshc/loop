@@ -156,7 +156,7 @@ def test_a_crash_between_creating_and_linking_a_ticket_is_completed_on_retry_wit
     with pytest.raises(CommandError):
         issues.link_ticket(spec, created)
 
-    found = issues.find_ticket(spec, "0-add-basket")
+    found = issues.find_tickets(spec).get("0-add-basket")
     assert found is not None and found.number == created.number
     issues.link_ticket(spec, found)
 
@@ -230,29 +230,29 @@ def test_a_blocked_by_dependency_is_not_added_when_the_existing_ones_cannot_be_r
     assert gh.writes()[-1][3].endswith("/issues") and gh.blockers_of(second.number) == []
 
 
-def test_find_ticket_ignores_other_keys_other_specs_and_closed_issues() -> None:
+def test_find_tickets_ignores_other_specs_and_closed_issues() -> None:
     gh = _empty_spec_gh()
     issues = _issues(gh)
     spec = next(iter(issues.specs()))
     created = issues.create_ticket(spec, "0-add-basket", "Add basket", "Create a basket")
 
-    assert issues.find_ticket(spec, "1-add-coffee") is None
+    assert list(issues.find_tickets(spec)) == ["0-add-basket"]
     other = next(iter(_issues(FakeGhCli(specs=[issue(2, "Other", labels=_SPEC_LABELS)], tickets={})).specs()))
-    assert issues.find_ticket(other, "0-add-basket") is None
+    assert issues.find_tickets(other) == {}
     issues.close(created.number, "done")
-    assert issues.find_ticket(spec, "0-add-basket") is None
+    assert issues.find_tickets(spec) == {}
 
 
-def test_find_ticket_follows_every_page_of_the_routing_label_listing() -> None:
+def test_find_tickets_follows_every_page_of_the_routing_label_listing() -> None:
     gh = FakeGhCli(tickets={1: []}, specs=[issue(1, "Add login page", labels=_SPEC_LABELS)], page_size=1)
     issues = _issues(gh)
     spec = next(iter(issues.specs()))
-    issues.create_ticket(spec, "0-first", "First", "one")
-    wanted = issues.create_ticket(spec, "1-second", "Second", "two")
+    first = issues.create_ticket(spec, "0-first", "First", "one")
+    second = issues.create_ticket(spec, "1-second", "Second", "two")
 
-    found = issues.find_ticket(spec, "1-second")
+    found = issues.find_tickets(spec)
 
-    assert found is not None and found.number == wanted.number
+    assert {key: ticket.number for key, ticket in found.items()} == {"0-first": first.number, "1-second": second.number}
 
 
 def test_a_created_ticket_carries_the_routing_label_a_hidden_marker_and_a_stable_identity() -> None:
