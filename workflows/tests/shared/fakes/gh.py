@@ -219,7 +219,7 @@ class FakeGhCli:
 
 
 _WRITES = (
-    ("issue", "edit"), ("issue", "close"), ("api", "--method"),
+    ("issue", "edit"), ("issue", "close"), ("api", "--method"), ("pr", "create"), ("pr", "edit"), ("pr", "close"), ("pr", "reopen"),
 )
 
 

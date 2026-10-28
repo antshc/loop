@@ -14,6 +14,8 @@ from .reader import PullRequestReader
 
 _REPLY = ("query=mutation($id:ID!,$body:String!){addPullRequestReviewThreadReply("
           "input:{pullRequestReviewThreadId:$id,body:$body}){comment{id}}}")
+_RESOLVE = "query=mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{id isResolved}}}"
+_UNRESOLVE = "query=mutation($id:ID!){unresolveReviewThread(input:{threadId:$id}){thread{id isResolved}}}"
 
 
 class PullRequests:
@@ -32,7 +34,7 @@ class PullRequests:
         existing = self.find_open(head)
         if existing is not None:
             if body and existing.body != body:
-                self._repo.run(("pr", "edit", str(existing.number), "--repo", self.slug, "--body", body))
+                self.update_description(existing.number, body)
                 return replace(existing, body=body)
             return existing
         output = self._repo.run(
@@ -82,9 +84,29 @@ class PullRequests:
         """Replies to a review thread, leaving it open."""
         self._repo.json("api", "graphql", "-f", _REPLY, "-f", f"id={thread_id}", "-f", f"body={body}")
 
+    def resolve_thread(self, thread_id: str) -> None:
+        """Marks a review thread resolved."""
+        self._repo.json("api", "graphql", "-f", _RESOLVE, "-f", f"id={thread_id}")
+
+    def unresolve_thread(self, thread_id: str) -> None:
+        """Marks a review thread unresolved."""
+        self._repo.json("api", "graphql", "-f", _UNRESOLVE, "-f", f"id={thread_id}")
+
     def comment(self, number: int, body: str) -> None:
         """Comments on the PR conversation."""
         self._repo.json("api", f"repos/{self.slug}/issues/{number}/comments", "-X", "POST", "-f", f"body={body}")
+
+    def update_description(self, number: int, body: str) -> None:
+        """Replaces the PR description with `body`, overwriting any human edit without a conflict check."""
+        self._repo.run(("pr", "edit", str(number), "--repo", self.slug, "--body", body))
+
+    def close(self, number: int) -> None:
+        """Closes the PR without merging it."""
+        self._repo.run(("pr", "close", str(number), "--repo", self.slug))
+
+    def reopen(self, number: int) -> None:
+        """Reopens a closed PR."""
+        self._repo.run(("pr", "reopen", str(number), "--repo", self.slug))
 
     def failed_logs(self, run_ids: Iterable[int]) -> str:
         """The failed-step logs of the given workflow runs."""

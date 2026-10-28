@@ -223,6 +223,7 @@ class FakePullRequestHost:
         self.retries: list[int] = []
         self.requested: list[int] = []
         self.reply_failure: str | None = None
+        self.thread_failure: str | None = None
 
     def add(self, number: int, **options: Any) -> FakePull:
         """Stores a new open pull request."""
@@ -284,6 +285,12 @@ class FakePullRequestHost:
         if args[:2] == ("pr", "edit") and "--add-reviewer" in args and int(args[2]) in self.pulls:
             self.requested.append(int(args[2]))
             return ""
+        if args[:2] == ("pr", "edit") and "--body" in args and int(args[2]) in self.pulls:
+            self._pull(int(args[2])).body = args[args.index("--body") + 1]
+            return ""
+        if args[:2] in (("pr", "close"), ("pr", "reopen")) and int(args[2]) in self.pulls:
+            self._pull(int(args[2])).state = "closed" if args[1] == "close" else "open"
+            return ""
         return None
 
     def _graphql(self, args: tuple[str, ...]) -> str:
@@ -291,6 +298,8 @@ class FakePullRequestHost:
         query = fields["query"]
         if "addPullRequestReviewThreadReply" in query:
             return self._reply(fields["id"], fields["body"])
+        if "resolveReviewThread" in query:
+            return self._set_resolved(fields["id"], resolved="unresolveReviewThread" not in query)
         if "reviewThreads" in query:
             return self._threads(self._pull(int(fields["number"])), fields.get("cursor"))
         thread = self._thread(fields["id"])
@@ -316,6 +325,13 @@ class FakePullRequestHost:
         thread["comments"].append(comment)
         self.replies.append(body)
         return json.dumps({"data": {"addPullRequestReviewThreadReply": {"comment": {"id": comment["id"]}}}})
+
+    def _set_resolved(self, thread_id: str, *, resolved: bool) -> str:
+        if self.thread_failure:
+            return json.dumps({"errors": [{"message": self.thread_failure}]})
+        thread = self._thread(thread_id)
+        thread["isResolved"] = resolved
+        return json.dumps({"data": {"resolveReviewThread": {"thread": {"id": thread_id, "isResolved": resolved}}}})
 
     def _thread(self, thread_id: str) -> dict:
         for pull in self.pulls.values():
