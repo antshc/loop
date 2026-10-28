@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from workflows.shared.github.pull_requests.lifecycle import PullRequestLifecycleError
 from workflows.shared.github.pull_requests.model import PullRequestState
 from workflows.shared.process import CommandError
 
@@ -179,6 +180,27 @@ def test_a_pull_request_is_closed_and_reopened() -> None:
     assert gh.writes() == [("pr", "close", "1", "--repo", "a/b"), ("pr", "reopen", "1", "--repo", "a/b")]
 
 
+def test_closing_a_closed_pull_request_and_reopening_an_open_one_write_nothing() -> None:
+    client, host, gh = _host_client()
+
+    client.reopen(1)
+    client.close(1)
+    gh.calls.clear()
+    client.close(1)
+
+    assert gh.writes() == [] and host.pulls[1].state == "closed"
+
+
+def test_a_merged_pull_request_cannot_be_reopened() -> None:
+    client, host, gh = _host_client()
+    host.pulls[1].close(merged=True)
+
+    with pytest.raises(PullRequestLifecycleError, match="already merged"):
+        client.reopen(1)
+
+    assert gh.writes() == []
+
+
 @pytest.mark.parametrize(
     ("command", "failing"),
     [
@@ -188,9 +210,8 @@ def test_a_pull_request_is_closed_and_reopened() -> None:
         (lambda client: client.comment(1, "x"), ("api", "repos/a/b/issues/1/comments")),
         (lambda client: client.update_description(1, "x"), ("pr", "edit")),
         (lambda client: client.close(1), ("pr", "close")),
-        (lambda client: client.reopen(1), ("pr", "reopen")),
     ],
-    ids=["reply", "resolve", "unresolve", "comment", "description", "close", "reopen"],
+    ids=["reply", "resolve", "unresolve", "comment", "description", "close"],
 )
 def test_a_failed_write_raises_from_the_command(command, failing) -> None:
     client, host, gh = _host_client()
@@ -200,6 +221,17 @@ def test_a_failed_write_raises_from_the_command(command, failing) -> None:
         command(client)
 
     assert host.replies == [] and host.pulls[1].body == "Body" and host.pulls[1].state == "open"
+
+
+def test_a_failed_reopen_raises_from_the_command_and_leaves_the_pull_request_closed() -> None:
+    client, host, gh = _host_client()
+    host.pulls[1].close()
+    gh.fail_on("pr", "reopen")
+
+    with pytest.raises(CommandError):
+        client.reopen(1)
+
+    assert host.pulls[1].state == "closed"
 
 
 def test_a_draft_whose_pull_request_exists_with_a_different_body_overwrites_it_without_a_conflict_check() -> None:

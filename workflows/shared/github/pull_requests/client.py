@@ -8,6 +8,7 @@ from collections.abc import Iterable
 from dataclasses import replace
 
 from ..repo import GitHubRepo
+from .lifecycle import LifecycleAction, LifecycleDecision, PullRequestLifecycleError, PullRequestLifecyclePolicy
 from .model import PublishedPullRequest, PullRequest, PullRequestSnapshot, ReviewThread
 from .reader import PullRequestReader
 
@@ -101,12 +102,19 @@ class PullRequests:
         self._repo.run(("pr", "edit", str(number), "--repo", self.slug, "--body", body))
 
     def close(self, number: int) -> None:
-        """Closes the PR without merging it."""
-        self._repo.run(("pr", "close", str(number), "--repo", self.slug))
+        """Closes the PR without merging it; closing a closed PR does nothing."""
+        self._change(number, LifecycleAction.CLOSE)
 
     def reopen(self, number: int) -> None:
-        """Reopens a closed PR."""
-        self._repo.run(("pr", "reopen", str(number), "--repo", self.slug))
+        """Reopens a closed PR; reopening an open PR does nothing, and reopening a merged one raises PullRequestLifecycleError."""
+        self._change(number, LifecycleAction.REOPEN)
+
+    def _change(self, number: int, action: LifecycleAction) -> None:
+        decision = PullRequestLifecyclePolicy().decide(self._reader.pull_request(number), action)
+        if decision is LifecycleDecision.INVALID:
+            raise PullRequestLifecycleError(f"cannot {action} pull request #{number}: it is already merged")
+        if decision is LifecycleDecision.VALID:
+            self._repo.run(("pr", action.value, str(number), "--repo", self.slug))
 
     def failed_logs(self, run_ids: Iterable[int]) -> str:
         """The failed-step logs of the given workflow runs."""
