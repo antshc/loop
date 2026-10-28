@@ -150,6 +150,8 @@ class DryGh:
             return "[]"
         if args[:2] == ("pr", "create"):
             return f"https://github.com/{DRY_TARGET}/pull/99"
+        if args[:2] == ("issue", "view"):
+            return json.dumps({"state": "OPEN", "labels": [], "comments": []})
         if args[0] == "issue":
             logger.debug("dry-run: gh %s", " ".join(args[:3]))
             return ""

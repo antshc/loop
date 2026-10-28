@@ -5,12 +5,14 @@ from __future__ import annotations
 import logging
 import subprocess
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 from loop import AgentWorkspace, Kind, Phase, Phases, Role
 
 from workflows.shared.git import Commit, GitClient
 
+from ..model.handoff import close_ticket, escalate
 from ..model.records import (
     AgentCommitSubject, AgentWorkflow, RepositoryId, Spec, Ticket, TicketContext, TicketResult, TicketWorkflowError,
 )
@@ -19,6 +21,14 @@ from .journal import FileExecutionStore
 
 
 logger = logging.getLogger("workflow.tickets")
+
+
+@dataclass(frozen=True)
+class TicketsDelivered:
+    """The Spec as it stands after delivery, and whether every Ticket was delivered."""
+
+    spec: Spec
+    complete: bool
 
 
 class TicketDeliverer:
@@ -42,9 +52,13 @@ class TicketDeliverer:
         self._max_failures = max_failures
 
     def deliver(
-        self, spec: Spec, worktree: AgentWorkspace, run_agents: AgentWorkflow, publish: Callable[[], object] = lambda: None
-    ) -> bool:
-        """Retries failed attempts and stops at the failure cap; `publish` runs after each closed Ticket."""
+        self,
+        spec: Spec,
+        worktree: AgentWorkspace,
+        run_agents: AgentWorkflow,
+        publish: Callable[[Spec], object] = lambda spec: None,
+    ) -> TicketsDelivered:
+        """Retries failed attempts and stops at the failure cap; `publish` runs with the current Spec after each closed Ticket."""
         if self._max_failures < 1:
             raise TicketWorkflowError("max_failures must be at least one")
         for ticket in spec.tickets:
@@ -59,23 +73,24 @@ class TicketDeliverer:
                     result = self._attempt(context, worktree, run_agents, head_before, phase)
                 if isinstance(result, TicketResult):
                     with self._phases.phase("close-ticket", Kind.CODE, Role.CODE, ticket=ticket.number):
-                        spec.close_ticket(
-                            ticket.number, f"Delivered in {result.commit}.\n\n{result.summary}\n\n{result.verification}"
+                        spec = close_ticket(
+                            self._tracker,
+                            spec,
+                            ticket.number,
+                            f"Delivered in {result.commit}.\n\n{result.summary}\n\n{result.verification}",
                         )
-                        self._tracker.update_spec(spec)
                         self._store.reset(ticket.url)
-                    publish()
+                    publish(spec)
                     break
                 logger.debug("ticket %s failed: %s", ticket.url, result)
                 with self._phases.phase("restore", Kind.CODE, Role.CODE, ticket=ticket.number):
                     self._git.restore(worktree.path, head_before.sha)
                 if self._record_failure(ticket) >= self._max_failures:
                     with self._phases.phase("escalate", Kind.CODE, Role.CODE, ticket=ticket.number) as escalation:
-                        spec.escalate(ticket.number, result)
-                        self._tracker.update_spec(spec)
+                        spec = escalate(self._tracker, spec, ticket.number, result)
                         escalation.set(verdict="human input required")
-                    return False
-        return True
+                    return TicketsDelivered(spec, False)
+        return TicketsDelivered(spec, True)
 
     def _context(self, spec: Spec, ticket: Ticket, path: Path) -> TicketContext:
         base_branch, feature_branch = spec.base_branch, spec.feature_branch

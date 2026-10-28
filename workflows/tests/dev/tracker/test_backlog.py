@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import FrozenInstanceError, replace
 
 import pytest
 
+from workflows.dev.model.handoff import announce_delivered, block, close_ticket, escalate, hand_to_human
 from workflows.dev.model.records import Spec
 from workflows.dev.tracker.tickets import TicketsTracker
 from workflows.tests.shared.fakes import FakeGhCli
@@ -71,21 +72,24 @@ def test_a_comment_whose_author_account_was_deleted_is_attributed_to_ghost() -> 
     assert spec.comments[0].author == "ghost"
 
 
-def test_hand_to_human_labels_then_comments_on_update_spec() -> None:
+def _writes(gh: FakeGhCli) -> list[tuple[str, ...]]:
+    return [call[1:] for call in gh.writes()]
+
+
+def test_hand_to_human_labels_then_comments_immediately() -> None:
     gh = FakeGhCli()
     tracker = _tracker(gh)
-    spec = _spec()
+    spec = next(iter(tracker.specs()))
 
-    spec.hand_to_human("stuck")
-    assert gh.calls == []
-    tracker.update_spec(spec)
+    handed = hand_to_human(tracker, spec, "stuck")
 
-    assert spec.awaiting_human
-    assert gh.calls == [
-        ("issue", "edit", "7", "--repo", "owner/repo", "--add-label", "hitl"),
-        ("issue", "comment", "7", "--repo", "owner/repo", "--body", "stuck"),
+    assert handed.awaiting_human and not spec.awaiting_human
+    assert [(call[0], call[1], call[-2]) for call in _writes(gh)] == [
+        ("edit", "1", "--add-label"),
+        ("comment", "1", "--body"),
     ]
-    assert spec.pending_changes == ()
+    assert _writes(gh)[0][-1] == "hitl"
+    assert _writes(gh)[1][-1].startswith("stuck")
 
 
 def test_block_hands_the_spec_to_a_human_only_when_it_has_tickets() -> None:
@@ -93,64 +97,64 @@ def test_block_hands_the_spec_to_a_human_only_when_it_has_tickets() -> None:
     tracker = _tracker(gh)
     spec = next(iter(tracker.specs()))
 
-    calls_before = len(gh.calls)
-    empty = replace(spec, tickets=())
-    empty.block("nothing blocked")
-    tracker.update_spec(empty)
-    assert len(gh.calls) == calls_before
+    empty = block(tracker, replace(spec, tickets=()), "nothing blocked")
+    assert gh.writes() == [] and not empty.awaiting_human
 
-    spec.block("blocked")
-    tracker.update_spec(spec)
-    assert gh.calls[-1] == ("issue", "comment", "1", "--repo", "owner/repo", "--body", "blocked")
+    blocked = block(tracker, spec, "blocked")
+    assert blocked.awaiting_human
+    assert _writes(gh)[-1][-1].startswith("blocked")
 
 
-def test_close_ticket_closes_it_in_the_spec_and_persists_on_update_spec() -> None:
+def test_close_ticket_closes_it_on_github_and_in_the_returned_snapshot() -> None:
     gh = FakeGhCli()
     tracker = _tracker(gh)
     spec = next(iter(tracker.specs()))
-    calls_before = len(gh.calls)
 
-    spec.close_ticket(10, "done")
+    closed = close_ticket(tracker, spec, 10, "done")
 
-    assert spec.tickets[0].state == "closed"
-    assert not spec.has_work
-    assert len(gh.calls) == calls_before
-    tracker.update_spec(spec)
-    assert gh.calls[calls_before:] == [("issue", "close", "10", "--repo", "owner/repo", "--comment", "done")]
+    assert spec.tickets[0].state == "open" and spec.has_work
+    assert closed.tickets[0].state == "closed" and not closed.has_work
+    assert _writes(gh) == [("close", "10", "--repo", "owner/repo", "--comment", "done")]
 
 
-def test_escalate_hands_the_ticket_then_the_spec_to_a_human() -> None:
+def test_escalate_hands_the_ticket_then_the_spec_to_a_human_in_that_order() -> None:
     gh = FakeGhCli()
     tracker = _tracker(gh)
     spec = next(iter(tracker.specs()))
-    calls_before = len(gh.calls)
 
-    spec.escalate(10, "boom")
-    tracker.update_spec(spec)
+    escalated = escalate(tracker, spec, 10, "boom")
 
-    assert ("hitl" in spec.tickets[0].labels) and spec.awaiting_human
-    assert [call[2] for call in gh.calls[calls_before:]] == ["10", "10", "1", "1"]
-    assert gh.calls[-1][-1] == "dev: boom"
+    assert ("hitl" in escalated.tickets[0].labels) and escalated.awaiting_human
+    assert [call[1] for call in _writes(gh)] == ["10", "10", "1", "1"]
+    assert _writes(gh)[-1][-1].startswith("dev: boom")
 
 
 def test_announce_delivered_comments_the_pull_request_on_the_spec() -> None:
     gh = FakeGhCli()
-    spec = _spec()
 
-    spec.announce_delivered("https://github.com/o/r/pull/3")
-    _tracker(gh).update_spec(spec)
+    tracker = _tracker(gh)
 
-    assert gh.calls == [
-        (
-            "issue", "comment", "7", "--repo", "owner/repo", "--body",
-            "dev: all Tickets delivered; draft pull request: https://github.com/o/r/pull/3",
-        )
-    ]
+    announce_delivered(tracker, next(iter(tracker.specs())), "https://github.com/o/r/pull/3")
+
+    [write] = _writes(gh)
+    assert write[:2] == ("comment", "1")
+    assert write[-1].startswith("dev: all Tickets delivered; draft pull request: https://github.com/o/r/pull/3")
 
 
 def test_a_ticket_outside_the_spec_cannot_be_changed_through_it() -> None:
+    gh = FakeGhCli()
+
     with pytest.raises(ValueError):
-        _spec().close_ticket(99, "done")
+        close_ticket(_tracker(gh), _spec(), 99, "done")
+
+    assert gh.writes() == []
+
+
+def test_a_spec_snapshot_is_immutable() -> None:
+    spec = _spec()
+
+    with pytest.raises(FrozenInstanceError):
+        spec.labels = ("hitl",)  # type: ignore[misc]
 
 
 def test_spec_initiative_and_bare_title_split_on_the_first_colon() -> None:

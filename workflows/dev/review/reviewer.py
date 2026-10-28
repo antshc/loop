@@ -80,8 +80,7 @@ class Finalizer:
             phase.set(ready=ready)
             if not ready:
                 phase.fail("PR remains a draft: readiness checks did not pass")
-            spec.comment(_summary(delivery, outcome, ready, blockers))
-            self._tracker.update_spec(spec)
+            self._tracker.comment(spec.number, "review-summary", _summary(delivery, outcome, ready, blockers))
         return ready
 
 

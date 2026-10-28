@@ -3,7 +3,7 @@
 ## Purpose
 Loop delivers the approved Tickets of every open Spec to a draft pull request without an operator in the session and escalates a Ticket to a human once it keeps failing. The default agent delegate uses one fresh implementation run per Ticket attempt; configured repositories may compose several agent steps per attempt.
 
-Specs and Tickets are read and updated on the harness tracker. Each Spec's target
+Specs and Tickets are read as immutable snapshots on the harness tracker and changed only by explicit commands (Comment, label, close, create Ticket, link Ticket), each applied on GitHub at once and in order. A failing command raises, earlier writes stay, and a retry re-reads GitHub and skips what is already applied. Each Spec's target
 selects an explicitly configured repository and its agent delegate; Git operations
 and the draft PR belong to that target. The reusable ticket workflow supplies the
 selected Ticket and refreshed Initiative history, invokes the delegate, and

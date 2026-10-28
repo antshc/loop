@@ -27,7 +27,7 @@ def _deliver(harness: DevHarness, delegate: AgentWorkflow, *, spec: Spec | None 
             ticket_repository=RepositoryId("owner", "repo"),
             max_failures=max_failures,
         )
-        return deliverer.deliver(spec, worktree, delegate)
+        return deliverer.deliver(spec, worktree, delegate).complete
 
 
 def _complete(harness: DevHarness, context: TicketContext) -> TicketResult:
@@ -111,8 +111,8 @@ def test_delegate_results_are_validated_without_relying_on_a_response_parser(
 def test_ticket_workflow_skips_non_actionable_tickets_it_is_given(tmp_path: Path) -> None:
     harness = DevHarness(tmp_path, tickets={1: [issue(10, "Closed"), issue(11, "Blocked"), issue(12, "Ready")]})
     spec = next(iter(TicketsTracker("owner", "repo", gh=harness.gh).specs()))
-    spec.tickets[0].state = "closed"
-    spec.tickets[1].labels = ("hitl",)
+    first, second, third = spec.tickets
+    spec = replace(spec, tickets=(replace(first, state="closed"), replace(second, labels=("hitl",)), third))
     attempted: list[int] = []
 
     def delegate(context: TicketContext, _worktree: AgentWorkspace) -> TicketResult:

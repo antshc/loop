@@ -10,8 +10,8 @@ from typing import NewType, Protocol
 from workflows.shared.github.repo import GitHubRepo
 
 from .records import (
-    AgentWorkflow, ChoreWorkflow, PlannedTicket, PlanWorkflow, Repository, RepositoryId, ReviewWorkflow, Spec, Ticket,
-    TicketWorkflowError, VerifyWorkflow,
+    AgentWorkflow, ChoreWorkflow, PlanWorkflow, Repository, RepositoryId, ReviewWorkflow, Spec, Ticket, TicketWorkflowError,
+    VerifyWorkflow,
 )
 
 
@@ -63,10 +63,20 @@ GithubFactory = Callable[[Repository], GitHubRepo]
 
 
 class Tracker(Protocol):
-    """Where Specs and Tickets live and where their pending changes are persisted."""
+    """Where Specs and Tickets live; each command takes effect on GitHub at once, and a retry skips what is already applied."""
 
     def specs(self) -> Iterable[Spec]: ...
 
-    def update_spec(self, spec: Spec) -> None: ...
+    def comment(self, number: int, purpose: str, body: str) -> None: ...
 
-    def create_tickets(self, spec: Spec, planned: Iterable[PlannedTicket]) -> tuple[Ticket, ...]: ...
+    def add_label(self, number: int, label: str) -> None: ...
+
+    def remove_label(self, number: int, label: str) -> None: ...
+
+    def close(self, number: int, comment: str) -> None: ...
+
+    def find_ticket(self, spec: Spec, key: str) -> Ticket | None: ...
+
+    def create_ticket(self, spec: Spec, key: str, title: str, body: str) -> Ticket: ...
+
+    def link_ticket(self, spec: Spec, ticket: Ticket) -> None: ...

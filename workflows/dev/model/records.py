@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
-from dataclasses import dataclass, field
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import NamedTuple
 
@@ -91,29 +91,8 @@ class Comment:
 
 
 @dataclass(frozen=True)
-class _CommentOn:
-    number: int
-    body: str
-
-
-@dataclass(frozen=True)
-class _AddLabel:
-    number: int
-    label: str
-
-
-@dataclass(frozen=True)
-class _Close:
-    number: int
-    comment: str
-
-
-_Change = _CommentOn | _AddLabel | _Close
-
-
-@dataclass
 class Spec:
-    """Aggregate root: its Tickets change only through it, and `TicketsTracker.update_spec` persists the changes."""
+    """An immutable snapshot of a Spec and its deliverable Tickets; every change to GitHub goes through the tracker's commands."""
 
     number: int
     title: str
@@ -125,8 +104,6 @@ class Spec:
     tickets: tuple[Ticket, ...] = ()
     sub_issue_total: int = 0
     held_tickets: tuple[int, ...] = ()
-    # Changes made since the last update_spec, in the order GitHub must see them.
-    _changes: list[_Change] = field(default_factory=list, init=False, repr=False, compare=False)
 
     @property
     def awaiting_human(self) -> bool:
@@ -143,51 +120,32 @@ class Spec:
         """Has no sub-issues or locally supplied Tickets."""
         return self.sub_issue_total == 0 and not self.tickets
 
-    @property
-    def pending_changes(self) -> tuple[_Change, ...]:
-        """Changes not yet persisted, oldest first."""
-        return tuple(self._changes)
+    def labeled(self, label: str) -> Spec:
+        """This snapshot carrying `label`."""
+        return replace(self, labels=_with_label(self.labels, label))
 
-    def acknowledge(self, change: _Change) -> None:
-        """Marks the oldest occurrence of `change` as persisted."""
-        self._changes.remove(change)
+    def ticket_labeled(self, ticket_number: int, label: str) -> Spec:
+        """This snapshot with the Ticket carrying `label`."""
+        return self._with_ticket(self.ticket(ticket_number).labeled(label))
 
-    def comment(self, message: str) -> None:
-        """Comments `message` on the Spec."""
-        self._changes.append(_CommentOn(self.number, message))
+    def ticket_closed(self, ticket_number: int) -> Spec:
+        """This snapshot with the Ticket closed."""
+        return self._with_ticket(replace(self.ticket(ticket_number), state="closed"))
 
-    def hand_to_human(self, message: str) -> None:
-        """Labels the Spec `hitl` and comments `message` on it."""
-        self.labels = _with_label(self.labels, HITL_LABEL)
-        self._changes += [_AddLabel(self.number, HITL_LABEL), _CommentOn(self.number, message)]
+    def with_created(self, created: Iterable[Ticket]) -> Spec:
+        """This snapshot with newly created Tickets appended."""
+        created = tuple(created)
+        return replace(self, tickets=(*self.tickets, *created), sub_issue_total=self.sub_issue_total + len(created))
 
-    def block(self, message: str) -> None:
-        """Hands the Spec to a human, but only when there is work it is blocking."""
-        if self.has_work:
-            self.hand_to_human(message)
-
-    def escalate(self, ticket_number: int, reason: str) -> None:
-        """Hands both the Ticket and the Spec to a human."""
-        message = f"dev: {reason}"
-        ticket = self._ticket(ticket_number)
-        ticket.labels = _with_label(ticket.labels, HITL_LABEL)
-        self._changes += [_AddLabel(ticket_number, HITL_LABEL), _CommentOn(ticket_number, message)]
-        self.hand_to_human(message)
-
-    def close_ticket(self, ticket_number: int, comment: str) -> None:
-        """Closes a delivered Ticket with `comment`."""
-        self._ticket(ticket_number).state = "closed"
-        self._changes.append(_Close(ticket_number, comment))
-
-    def announce_delivered(self, pull_request_url: str) -> None:
-        """Tells the Spec that all its Tickets are delivered and where the draft PR is."""
-        self.comment(f"dev: all Tickets delivered; draft pull request: {pull_request_url}")
-
-    def _ticket(self, number: int) -> Ticket:
+    def ticket(self, number: int) -> Ticket:
+        """The Ticket numbered `number`; raises when it does not belong to this Spec."""
         for ticket in self.tickets:
             if ticket.number == number:
                 return ticket
         raise ValueError(f"ticket #{number} does not belong to spec #{self.number}")
+
+    def _with_ticket(self, changed: Ticket) -> Spec:
+        return replace(self, tickets=tuple(changed if ticket.number == changed.number else ticket for ticket in self.tickets))
 
     @property
     def initiative(self) -> str:
@@ -210,6 +168,12 @@ class Spec:
         return values[0]
 
     @property
+    def target_label(self) -> str | None:
+        """The `repo:target:<owner/name>` label that routes the Spec, or None when `target` is."""
+        target = self.target
+        return None if target is None else f"{_TARGET_PREFIX}{target}"
+
+    @property
     def base_branch(self) -> str | None:
         """The single `repo:base:<branch>` label's value, or None when missing/empty/duplicated."""
         values = [label[len(_BASE_PREFIX) :] for label in self.labels if label.startswith(_BASE_PREFIX)]
@@ -226,7 +190,7 @@ class Spec:
         return slug if match is None else f"{match[1].replace('.', '_')}_{slug}"
 
 
-@dataclass
+@dataclass(frozen=True)
 class Ticket:
     number: int
     title: str
@@ -240,6 +204,10 @@ class Ticket:
     def actionable(self) -> bool:
         """Open and carrying neither the `hitl` nor the `spec` label."""
         return self.state == "open" and not ({label.casefold() for label in self.labels} & _BLOCKING_LABELS)
+
+    def labeled(self, label: str) -> Ticket:
+        """This snapshot carrying `label`."""
+        return replace(self, labels=_with_label(self.labels, label))
 
 
 def _with_label(labels: tuple[str, ...], label: str) -> tuple[str, ...]:

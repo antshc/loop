@@ -17,6 +17,7 @@ from workflows.shared.github.pull_requests import PullRequests
 from ..chore.cleanup import ChoreRefiner
 from ..deliver.tickets import TicketDeliverer
 from ..model.definition import Owner
+from ..model.handoff import announce_delivered, block, hand_to_human
 from ..model.outcomes import SKIPPED, ChoreReport, Delivery
 from ..model.records import Repository, Spec, TicketWorkflowError as DevError
 from ..model.repositories import GithubFactory, Harness, RepositoryWorkflow, Targets, Tracker
@@ -130,26 +131,25 @@ class SpecRouter:
     def _route(self, spec: Spec, targets: Mapping[str, RepositoryWorkflow]) -> Outcome:
         target = spec.target
         if target is None or spec.base_branch is None:
-            spec.block(f"dev: cannot resolve repo:target/repo:base labels on {spec.url}")
-            self._tracker.update_spec(spec)
+            block(self._tracker, spec, f"dev: cannot resolve repo:target/repo:base labels on {spec.url}")
             return Outcome.SKIPPED
         workflow = targets.get(target.casefold())
         if workflow is None:
-            spec.block(f"dev: repo:target:{target} is not configured for harness {self._harness.owner_name}")
-            self._tracker.update_spec(spec)
+            block(self._tracker, spec, f"dev: repo:target:{target} is not configured for harness {self._harness.owner_name}")
             return Outcome.SKIPPED
         try:
-            if not self._prepare(spec, workflow):
-                return Outcome.FAILED if spec.awaiting_human and spec.needs_plan else Outcome.SKIPPED
-            return self._deliver_on_worktree(spec, workflow)
+            prepared = self._prepare(spec, workflow)
+            if isinstance(prepared, Outcome):
+                return prepared
+            return self._deliver_on_worktree(prepared, workflow)
         except (LoopHookError, subprocess.CalledProcessError) as exception:
             logger.error("Spec #%s failed (%s)", spec.number, type(exception).__name__)
             logger.debug("Spec failure details: %s", exception, exc_info=True)
-            spec.comment(f"dev: {_describe(exception)}")
-            self._tracker.update_spec(spec)
+            self._tracker.comment(spec.number, "failure", f"dev: {_describe(exception)}")
             return Outcome.FAILED
 
-    def _prepare(self, spec: Spec, workflow: RepositoryWorkflow) -> bool:
+    def _prepare(self, spec: Spec, workflow: RepositoryWorkflow) -> Spec | Outcome:
+        """The Spec ready for delivery (planned when it had no Tickets), or the outcome that ends its run."""
         repository, git, phases = workflow.repository, self._git, self._phases
         with phases.phase("preflight", Kind.CODE, Owner.CODE, spec=spec.number) as phase:
             git.fetch(repository.checkout)
@@ -159,27 +159,28 @@ class SpecRouter:
             if spec.needs_plan and workflow.run_plan is not None:
                 if not git.remote_branch_exists(repository.checkout, base_branch):
                     self._hand_over_missing_base(spec, phase, base_branch)
-                    return False
-                if not self._planner.plan(spec, repository.checkout, workflow.run_plan):
+                    return Outcome.FAILED
+                planned = self._planner.plan(spec, repository.checkout, workflow.run_plan)
+                if planned is None:
                     phase.fail("Planning failed; human input required")
-                    return False
+                    return Outcome.FAILED
+                spec = planned
             else:
                 reason = "No planner configured" if workflow.run_plan is None else "Spec already has Tickets"
                 _skip(phases, "plan", Kind.AGENT, Owner.PLANNER, reason)
                 _skip(phases, "create-tickets", Kind.CODE, Owner.CODE, reason)
             if not spec.has_work:
                 self._publisher.publish(spec, repository, repository.checkout)
-                return False
+                return Outcome.SKIPPED
             if not git.remote_branch_exists(repository.checkout, base_branch):
                 self._hand_over_missing_base(spec, phase, base_branch)
-                return False
+                return Outcome.SKIPPED
             # Publish earlier runs' commits from the checkout before the worktree opens.
             self._publisher.publish(spec, repository, repository.checkout)
-            return True
+            return spec
 
     def _hand_over_missing_base(self, spec: Spec, phase, base_branch: str) -> None:
-        spec.hand_to_human(f"dev: target branch {base_branch!r} does not exist on {spec.target}")
-        self._tracker.update_spec(spec)
+        hand_to_human(self._tracker, spec, f"dev: target branch {base_branch!r} does not exist on {spec.target}")
         phase.fail("base branch missing")
 
     def _deliver_on_worktree(self, spec: Spec, workflow: RepositoryWorkflow) -> Outcome:
@@ -196,24 +197,24 @@ class SpecRouter:
         delivery: Delivery | None = None
         published: list[str] = []
 
-        def publish(worktree_path: Path) -> None:
-            url = self._publisher.publish(spec, repository, worktree_path)
+        def publish(current: Spec, worktree_path: Path) -> None:
+            url = self._publisher.publish(current, repository, worktree_path)
             if url is not None:
                 published.append(url)
 
         with phases.phase("deliver", Kind.CODE, Owner.CODE, spec=spec.number) as phase:
             with self._new_agent().with_git(options).open() as worktree:
-                delivered = self._deliverer.deliver(
-                    spec, worktree, workflow.run_agents, publish=lambda: publish(worktree.path)
+                result = self._deliverer.deliver(
+                    spec, worktree, workflow.run_agents, publish=lambda current: publish(current, worktree.path)
                 )
+                spec, delivered = result.spec, result.complete
                 if not delivered:
                     phase.fail("Ticket delivery exhausted its retries")
-                publish(worktree.path)
+                publish(spec, worktree.path)
                 # Tickets are published as they land, so the last publish may have found nothing new to push.
                 pull_request_url = published[-1] if published else None
                 if delivered and pull_request_url is not None:
-                    spec.announce_delivered(pull_request_url)
-                    self._tracker.update_spec(spec)
+                    announce_delivered(self._tracker, spec, pull_request_url)
                     verification = SKIPPED
                     if workflow.run_verify is not None:
                         verification = self._verifier.verify(spec, pull_request_url, worktree, workflow.run_verify)

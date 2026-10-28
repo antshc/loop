@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from workflows.dev.tracker.tickets import TicketsTracker
 from workflows.tests.dev.doubles import DevHarness, clean_review, crash, envelope
 from workflows.tests.shared.fakes import issue
 
@@ -74,6 +75,26 @@ def test_default_planner_creates_subissues_and_delivers_in_dependency_order(tmp_
     assert [call[2] for call in harness.calls("issue", "close")] == ["101", "102"]
     assert len(harness.git.pushes) == 2
     assert [profile.name for profile in harness.runner.profiles] == ["planner", "developer", "developer", "chore", "reviewer"]
+
+
+def test_a_retry_after_a_crash_between_creating_and_linking_a_ticket_links_it_instead_of_creating_another(
+    tmp_path: Path,
+) -> None:
+    """Given a Ticket created but not linked, when the human releases the Spec and dev reruns, then that Ticket is linked."""
+    harness = DevHarness(tmp_path, tickets={1: []})
+    harness.runner.plan_handler = lambda prompt: envelope("", result={"tickets": [{"title": "Add basket", "body": "Create a basket"}]})
+    harness.gh.fail_on("api", "--method", "POST")
+    assert harness.run(all_phases=True) == 1
+    assert len(harness.calls("issue", "create")) == 1
+    assert harness.calls("issue", "edit")[0][-1] == "hitl"
+    TicketsTracker("owner", "repo", gh=harness.gh).remove_label(1, "hitl")
+    harness.gh.calls.clear()
+
+    assert harness.run(lambda prompt: harness.commit_and_report(101), all_phases=True) == 0
+
+    assert not harness.calls("issue", "create")
+    assert len(harness.calls("api", "--method", "POST")) == 1
+    assert [call[2] for call in harness.calls("issue", "close")] == ["101"]
 
 
 @pytest.mark.parametrize("reply", ["no JSON", envelope("", result={"tickets": []}),

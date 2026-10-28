@@ -119,5 +119,4 @@ class AppVerifier:
             lines.append(f"Fix commit: {report.fix_commit}")
         if report.unfixed:
             lines += ["", "Unfixed findings:", *(f"- {item}" for item in report.unfixed)]
-        spec.comment("\n".join(lines))
-        self._tracker.update_spec(spec)
+        self._tracker.comment(spec.number, "verification", "\n".join(lines))
