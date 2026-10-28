@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..identity import IssueIdentity, IssueRef, RepositoryId
+from ..identity import IssueIdentity, IssueRef
 from ..issues.issue import Comment, comment_from_rest
 from ..repo import GitHubRepo
 from .model import (
@@ -50,18 +50,13 @@ class PullRequestReader:
     def __init__(self, repo: GitHubRepo) -> None:
         self._repo = repo
 
-    @property
-    def repository(self) -> RepositoryId:
-        """The repository this reader addresses."""
-        return RepositoryId(self._repo.owner, self._repo.name)
-
     def pull_request(self, number: int) -> PullRequest:
         """The pull request itself, with GitHub's current mergeability."""
-        return self._pull(self._repo.json("api", self._endpoint(f"pulls/{number}")))
+        return self._pull(self._repo.json("api", self._repo.endpoint(f"pulls/{number}")))
 
     def open_by(self, author: str) -> tuple[PullRequest, ...]:
         """Every open pull request authored by `author`, drafts included; a listing reports no mergeability, so it is unknown."""
-        nodes = self._repo.pages(self._endpoint(f"pulls?state=open&{_PER_PAGE}"))
+        nodes = self._repo.pages(self._repo.endpoint(f"pulls?state=open&{_PER_PAGE}"))
         pulls = (self._pull(node) for node in nodes)
         return tuple(pull for pull in pulls if pull.author.lower() == author.lower())
 
@@ -103,7 +98,7 @@ class PullRequestReader:
         # `repo` is null once the fork a pull request came from is deleted.
         head_repository = (head.get("repo") or {}).get("full_name")
         return PullRequest(
-            ref=IssueRef(self.repository, node["number"]),
+            ref=IssueRef(self._repo.repository, node["number"]),
             identity=IssueIdentity(node["id"], node["node_id"]),
             title=node["title"],
             body=node.get("body") or "",
@@ -143,11 +138,11 @@ class PullRequestReader:
         )
 
     def _comments(self, pull: IssueRef) -> tuple[Comment, ...]:
-        nodes = self._repo.pages(self._endpoint(f"issues/{pull.number}/comments?{_PER_PAGE}"))
+        nodes = self._repo.pages(self._repo.endpoint(f"issues/{pull.number}/comments?{_PER_PAGE}"))
         return tuple(comment_from_rest(pull, node) for node in nodes)
 
     def _reviews(self, number: int) -> tuple[PullRequestReview, ...]:
-        nodes = self._repo.pages(self._endpoint(f"pulls/{number}/reviews?{_PER_PAGE}"))
+        nodes = self._repo.pages(self._repo.endpoint(f"pulls/{number}/reviews?{_PER_PAGE}"))
         return tuple(
             PullRequestReview(
                 id=node["id"],
@@ -162,16 +157,15 @@ class PullRequestReader:
         )
 
     def _check_runs(self, sha: str) -> list[CheckResult]:
-        pages = self._repo.json("api", "--paginate", "--slurp", self._endpoint(f"commits/{sha}/check-runs?{_PER_PAGE}"))
+        nodes = self._repo.pages(self._repo.endpoint(f"commits/{sha}/check-runs?{_PER_PAGE}"), items="check_runs")
         return [
             CheckResult(CheckKind.CHECK_RUN, node["id"], node["name"], node.get("head_sha", sha),
                         _outcome(node["status"], node.get("conclusion")), payload=node)
-            for page in pages
-            for node in page["check_runs"]
+            for node in nodes
         ]
 
     def _statuses(self, sha: str) -> list[CheckResult]:
-        nodes = self._repo.pages(self._endpoint(f"commits/{sha}/statuses?{_PER_PAGE}"))
+        nodes = self._repo.pages(self._repo.endpoint(f"commits/{sha}/statuses?{_PER_PAGE}"))
         return [
             CheckResult(CheckKind.STATUS, node["id"], node["context"], sha,
                         _STATUS_OUTCOMES.get(node["state"], CheckOutcome.FAILED), payload=node)
@@ -179,16 +173,12 @@ class PullRequestReader:
         ]
 
     def _workflow_runs(self, sha: str) -> list[CheckResult]:
-        pages = self._repo.json("api", "--paginate", "--slurp", self._endpoint(f"actions/runs?head_sha={sha}&{_PER_PAGE}"))
+        nodes = self._repo.pages(self._repo.endpoint(f"actions/runs?head_sha={sha}&{_PER_PAGE}"), items="workflow_runs")
         return [
             CheckResult(CheckKind.WORKFLOW_RUN, node["id"], node.get("name", ""), node["head_sha"],
                         _outcome(node["status"], node.get("conclusion")), payload=node)
-            for page in pages
-            for node in page["workflow_runs"]
+            for node in nodes
         ]
-
-    def _endpoint(self, path: str) -> str:
-        return f"repos/{self._repo.slug}/{path}"
 
 
 def _login(user: dict[str, Any] | None) -> str:

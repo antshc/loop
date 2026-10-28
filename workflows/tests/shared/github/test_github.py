@@ -5,8 +5,9 @@ import json
 import pytest
 
 from workflows.shared.github.account import GitHub
-from workflows.shared.github.repo import GitHubRepo
+from workflows.shared.github.repo import GitHubRepo, denied
 from workflows.shared.github.pull_requests import PullRequests
+from workflows.shared.process import CommandError
 from workflows.tests.shared.fakes import FakeGhCli, FakePullRequestHost, ScriptedGh
 
 
@@ -31,6 +32,29 @@ def test_a_missing_draft_pull_request_is_created_as_a_draft() -> None:
 
     assert (pr.number, pr.url, pr.branch) == (7, "https://github.com/a/b/pull/7", "feat")
     assert gh.calls[-1][-1] == "--draft" and ("--repo", "a/b") == gh.calls[-1][2:4]
+
+
+def test_every_reader_rejects_a_page_that_is_not_a_list_the_same_way() -> None:
+    repo = GitHubRepo("a", "b", gh=ScriptedGh(lambda args: json.dumps([{"unexpected": 1}])))
+
+    with pytest.raises(ValueError, match="expected a list of pages"):
+        repo.pages("repos/a/b/pulls")
+    with pytest.raises(ValueError, match="expected a list of pages"):
+        PullRequests(repo).open_by("me")
+    with pytest.raises(ValueError, match="expected a list of pages"):
+        repo.pages("repos/a/b/actions/runs", items="workflow_runs")
+
+
+def test_pages_collects_the_named_list_of_each_object_page() -> None:
+    pages = [{"check_runs": [{"id": 1}]}, {"check_runs": [{"id": 2}]}]
+    repo = GitHubRepo("a", "b", gh=ScriptedGh(lambda args: json.dumps(pages)))
+
+    assert repo.pages("repos/a/b/commits/x/check-runs", items="check_runs") == [{"id": 1}, {"id": 2}]
+
+
+@pytest.mark.parametrize(("output", "expected"), [("HTTP 403", True), ("gh: Not Found (HTTP 404)", True), ("HTTP 500", False)])
+def test_gh_refusing_a_request_is_told_from_the_request_failing(output: str, expected: bool) -> None:
+    assert denied(CommandError("gh api x", 1, output)) is expected
 
 
 def test_the_account_reaches_repositories_by_slug_and_reports_its_login() -> None:
