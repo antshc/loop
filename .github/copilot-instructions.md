@@ -4,7 +4,7 @@
 
 Single repo: docs and codebase live together at the reporoot. There is no `workspace/` split and no `.harness.env`.
 
-- **Docs & decisions:** `CONTEXT.md` (domain glossary) and `ARCHITECTURE.md` (ADR index, Concept index, and Codebase Structure), with ADRs under `docs/adr/` and Crosscutting Concepts under `docs/concepts/`.
+- **Docs & decisions:** `GLOSSARY.md` (domain glossary) and `ARCHITECTURE.md` (ADR index, Concept index, and Codebase Structure), with ADRs under `docs/adr/` and Crosscutting Concepts under `docs/concepts/`.
 - **Code:** `src/loop/` (the `loop` library), `workflows/dev/` and `workflows/pr_babysit/` (vertical-slice Workflows, each with a Dishka `composition/` root and its own tests), `workflows/shared/` (infrastructure shared by those Workflows), other examples under `workflows/`, and library/sibling tests under `tests/`. Loop is a library with no command. The layout is documented under **Codebase Structure** in `ARCHITECTURE.md`.
 - **Archive:** `archive/` holds retired prototypes as a parts source only. It is excluded from editor search and file watching (see `.vscode/settings.json`) — do not navigate into it, edit it, or import from it.
 
@@ -24,7 +24,7 @@ Confirm the repo root with `git rev-parse --show-toplevel`. Origin: `antshc/loop
 
 Consult these before searching the code:
 
-- **Domain glossary:** [`CONTEXT.md`](../CONTEXT.md).
+- **Domain glossary:** [`GLOSSARY.md`](../GLOSSARY.md).
 - **Architecture:** [`ARCHITECTURE.md`](../ARCHITECTURE.md) — ADR index, Concept index, and Codebase Structure.
 
 ## 4. Navigation policy
@@ -43,5 +43,5 @@ Consult these before searching the code:
 
 ## 6. Documentation conventions
 
-- Author all docs (`CONTEXT.md`, `ARCHITECTURE.md`, ADRs, Crosscutting Concepts) at the reporoot.
-- Keep `CONTEXT.md` and `ARCHITECTURE.md` high-level — no implementation details, specs, or scratch notes.
+- Author all docs (`GLOSSARY.md`, `ARCHITECTURE.md`, ADRs, Crosscutting Concepts) at the reporoot.
+- Keep `GLOSSARY.md` and `ARCHITECTURE.md` high-level — no implementation details, specs, or scratch notes.

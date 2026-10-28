@@ -206,7 +206,7 @@ To restructure your own project this way, use the reusable
 ## Documentation
 
 - [Usage guide](docs/usage.md): advanced examples, logging, and dev Workflow configuration.
-- [Domain glossary](CONTEXT.md): project terminology.
+- [Domain glossary](GLOSSARY.md): project terminology.
 - [Architecture](ARCHITECTURE.md): codebase structure, design decisions, and concepts.
 - [System context](docs/building-blocks/system-context.md): context and container diagrams.
 - [Installation decision](docs/adr/install-loop-with-pip-from-the-repository.md): distribution and versioning.

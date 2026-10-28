@@ -8,7 +8,7 @@ Build a headless AI development environment that orchestrates coding agents acro
 
 ## Context
 
-Shared language is defined in [CONTEXT.md](CONTEXT.md). The system context and solution container diagrams are in [docs/building-blocks/system-context.md](docs/building-blocks/system-context.md).
+Shared language is defined in [GLOSSARY.md](GLOSSARY.md). The system context and solution container diagrams are in [docs/building-blocks/system-context.md](docs/building-blocks/system-context.md).
 
 ## Solution strategy
 
