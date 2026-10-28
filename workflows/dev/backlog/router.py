@@ -26,7 +26,7 @@ from ..model.outcomes import SKIPPED, ChoreReport, Delivery
 from ..model.records import Repository, TicketWorkflowError as DevError
 from ..model.repositories import GithubFactory, Harness, RepositoryWorkflow, Targets, Tracker
 from ..model.settings import DevSettings
-from ..plan.planner import Planner
+from ..plan.planner import Planner, unfinished_plan
 from ..review.reviewer import Finalizer, Reviewer
 from ..verify.verifier import AppVerifier
 
@@ -166,7 +166,7 @@ class SpecRouter:
             base_branch = spec.base_branch
             if base_branch is None:
                 raise DevError(f"cannot resolve base branch for Spec {spec.url}")
-            if spec.needs_plan and workflow.run_plan is not None:
+            if (spec.needs_plan or unfinished_plan(spec) is not None) and workflow.run_plan is not None:
                 if not git.remote_branch_exists(repository.checkout, base_branch):
                     self._hand_over_missing_base(spec, phase, base_branch)
                     return Outcome.FAILED

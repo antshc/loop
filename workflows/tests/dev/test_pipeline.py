@@ -95,8 +95,33 @@ def test_a_retry_after_a_crash_between_creating_and_linking_a_ticket_links_it_in
     assert harness.run(lambda prompt: harness.commit_and_report(101), all_phases=True) == 0
 
     assert not harness.gh.created_issues()
+    assert len(harness.runner.plan_prompts) == 1
     assert len(harness.calls("api", "--method", "POST", "repos/owner/repo/issues/1/sub_issues")) == 1
     assert [call[2] for call in harness.calls("issue", "close")] == ["101"]
+
+
+def test_a_retry_after_the_second_ticket_failed_to_link_finishes_the_persisted_plan_instead_of_delivering_a_partial_set(
+    tmp_path: Path,
+) -> None:
+    """Given the Spec already has its first Ticket linked, when linking the second failed, then the retry completes the plan."""
+    harness = DevHarness(tmp_path, tickets={1: []})
+    harness.runner.plan_handler = lambda prompt: envelope("", result={"tickets": [
+        {"title": "Add basket", "body": "Create a basket --> <b>safe</b>"},
+        {"title": "Add coffee", "body": "Add a product", "blocked_by": [0]},
+    ]})
+    harness.gh.fail_on("api", "--method", "POST", "repos/owner/repo/issues/1/sub_issues", after=1)
+    assert harness.run(all_phases=True) == 1
+    assert [title for title, _ in harness.gh.created_issues()] == ["Add basket", "Add coffee"]
+    assert harness.git.pushes == [] and not harness.calls("issue", "close")
+    harness.tracker.remove_label(1, "hitl")
+    harness.gh.calls.clear()
+    numbers = iter((101, 102))
+
+    assert harness.run(lambda prompt: harness.commit_and_report(next(numbers)), all_phases=True) == 0
+
+    assert not harness.gh.created_issues()
+    assert len(harness.runner.plan_prompts) == 1
+    assert [call[2] for call in harness.calls("issue", "close")] == ["101", "102"]
 
 
 def test_a_planned_spec_is_not_replanned_and_its_edges_are_not_added_again(tmp_path: Path) -> None:
