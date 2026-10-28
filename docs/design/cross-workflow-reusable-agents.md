@@ -43,7 +43,7 @@ The seam under debate is **where the agent's interface lives** (slice, `workflow
 2. Import-linter: "Dev stages run the delegates they are given, never a concrete agent" (`workflows.dev.{backlog,chore,deliver,model,plan,review,tracker,verify}` ↛ `workflows.dev.agents`).
 3. Import-linter: "Shared workflow infrastructure imports no workflow slice" (`workflows.shared` ↛ `workflows.dev`, `workflows.pr_babysit`, …).
 
-The design constraints applied (one per option, per *Design It Twice*): **A** minimize the interface; **B** maximize flexibility; **C** make the most common caller trivial; **D** ports & adapters for the cross-seam dependency.
+The design constraints applied (one per option, per *Design It Twice*): **A** minimize the interface; **B** maximize flexibility; **C** make the most common caller trivial; **D** ports & adapters for the cross-seam dependency. **E** is a hybrid that applies A's minimal interface to agents and adds a reusable stages layer, borrowing from D only the stage-owned ports that earn two adapters.
 
 ---
 
@@ -773,25 +773,365 @@ A true port: two adapters per capability (Copilot adapter in production, in-memo
 
 ---
 
+## Option E — `software_factory` package with role agents and a reusable stages layer (hybrid of A and D)
+
+Workflows move into their own `software_factory` package (`src/factory/`) that depends on `loop`. That package has four layers:
+
+- **agents:** Option A's typed catalog, grouped by **Agent role** rather than by Workflow, with the same `TypedAgent` contract.
+- **stages:** a new layer holding each **Stage** that two or more Workflows run. Each one is a deep module with a single `run`. It owns its gates, rollback and commits, and returns a report instead of publishing.
+- **workflows:** the vertical slices, without agents.
+- **shared:** infrastructure.
+
+From Option D it takes only the stage-owned ports with two adapters (`Checkpoint`). It skips agent ports, publishing ports, and the `AgentsProvider`.
+
+### Interface
+
+```python
+# factory/agents/contract.py — identical to Option A
+class AgentReplyError(ValueError): ...
+@dataclass(frozen=True)
+class TypedAgent[RequestT, ReplyT]:
+    def run(self, workspace: AgentWorkspace, request: RequestT, *, session: str | None = None) -> ReplyT: ...
+    def tuned(self, **profile: Any) -> TypedAgent[RequestT, ReplyT]: ...
+    def with_template(self, template: str) -> TypedAgent[RequestT, ReplyT]: ...
+```
+
+```python
+# factory/stages/errors.py
+class StageBlocked(Exception):
+    """The stage cannot proceed; the Workflow maps it to its own policy."""
+
+    def __init__(self, stage: str, reason: str) -> None: ...
+```
+
+```python
+# factory/stages/verify/stage.py
+@dataclass(frozen=True)
+class VerifyTarget:
+    """What to verify; Workflow-neutral strings, mapped from a Spec or a pull request by the slice."""
+
+    title: str
+    context_json: str
+    base_branch: str
+    feature_branch: str
+    pull_request_url: str
+    session: str | None = None
+
+
+@dataclass(frozen=True)
+class VerifyReport:
+    """The settled verdict, evidence location, unfixed findings, and the fix commit, if any."""
+
+    verdict: Literal["pass", "partial", "fail", "inconclusive", "skipped"]
+    summary: str
+    evidence_dir: Path | None
+    unfixed: tuple[str, ...]
+    fix_commit: str
+
+    @property
+    def blocks_ready(self) -> bool: ...
+
+
+class Verify:
+    """Runs the verifier, applies the no-commit, evidence, and protected-path gates, and commits allowed fixes."""
+
+    def __init__(
+        self,
+        git: GitClient,
+        phases: Phases,
+        *,
+        evidence_root: Path,
+        agent: TypedAgent[VerifyRequest, VerifyReply] = VERIFIER,
+    ) -> None: ...
+
+    def run(self, workspace: AgentWorkspace, target: VerifyTarget) -> VerifyReport: ...
+```
+
+```python
+# factory/stages/address/ports.py — the only stage port; two production adapters
+class Checkpoint(Protocol):
+    """Durable progress of one address batch, so a restarted run resumes mid-batch."""
+
+    def load(self) -> AddressBatch | None: ...
+    def save(self, batch: AddressBatch) -> None: ...
+    def clear(self) -> None: ...
+
+
+# factory/stages/address/stage.py
+@dataclass(frozen=True)
+class Feedback:
+    """One review comment or thread to address."""
+
+    key: str
+    author: str
+    body: str
+    path: str | None = None
+    line: int | None = None
+
+
+@dataclass(frozen=True)
+class AddressOutcome:
+    """One reply per feedback key, the commits made, and whether any issue stayed unclear."""
+
+    replies: Mapping[str, str]
+    commits: tuple[str, ...]
+    unclear: bool
+
+
+Baseline = Callable[[Path], None]  # raises StageBlocked when the repository's checks fail before editing
+
+
+class Address:
+    """Groups feedback into issues, resolves each in turn, and commits fixes; the Workflow publishes the outcome."""
+
+    def __init__(
+        self,
+        git: GitClient,
+        phases: Phases,
+        baseline: Baseline,
+        *,
+        group: TypedAgent[AddressGroupRequest, AddressGroupReply] = ADDRESS_GROUP,
+        resolve: TypedAgent[AddressResolveRequest, AddressResolveReply] = ADDRESS_RESOLVE,
+    ) -> None: ...
+
+    def run(self, workspace: AgentWorkspace, feedback: Sequence[Feedback], checkpoint: Checkpoint) -> AddressOutcome: ...
+```
+
+Invariants and error modes:
+
+- **Agents:**
+  - Option A's invariants and error modes apply unchanged.
+  - Agents never publish, and never import a stage or a Workflow.
+- **Stages:**
+  - A stage never imports a Workflow, a tracker, or GitHub, and stages are independent of each other.
+  - A stage takes its agents as constructor arguments that default to the role's catalog entry.
+  - Skipped, inconclusive, and unclear are returned as values.
+  - `AgentReplyError` inside `Verify` becomes `verdict="inconclusive"`.
+  - `Address` raises `StageBlocked` for a dirty worktree, a failed baseline, an invalid reply, or incomplete feedback coverage.
+- **Order inside `Verify`:**
+  1. Discover verification skills, and skip if there are none.
+  2. Run the agent.
+  3. No-commit gate.
+  4. Evidence gate.
+  5. Protected-path rollback.
+  6. Commit and push the fixes.
+- **Order inside `Address`:**
+  1. Clean-tree check.
+  2. Baseline.
+  3. Group.
+  4. For each issue: resolve, gate on the agent's head, then commit or record, then save the checkpoint.
+  5. Return the outcome; the caller publishes it and then clears the checkpoint.
+- **Promotion rule:** a slice becomes a stage only when a second Workflow runs it. One consumer means it stays in the slice. Reject any stage flag that only one Workflow sets.
+
+### Delta class diagram
+
+```mermaid
+%%{init: {'themeVariables': {'lineColor': '#8b949e'}}}%%
+%% diagram-id: option-e-role-agents-and-stages-delta
+classDiagram
+    namespace factory_agents {
+        class TypedAgent {
+            +profile : AgentProfile
+            +prompt : Prompt
+            +decode : Callable
+            +run(workspace: AgentWorkspace, request: RequestT, session: str) ReplyT
+            +tuned(profile_fields) TypedAgent
+            +with_template(template: str) TypedAgent
+        }
+        class AgentReplyError
+    }
+    namespace factory_stages {
+        class Verify {
+            -git : GitClient
+            -phases : Phases
+            -agent : TypedAgent
+            +run(workspace: AgentWorkspace, target: VerifyTarget) VerifyReport
+        }
+        class Address {
+            -git : GitClient
+            -phases : Phases
+            -baseline : Baseline
+            -group : TypedAgent
+            -resolve : TypedAgent
+            +run(workspace: AgentWorkspace, feedback: Sequence~Feedback~, checkpoint: Checkpoint) AddressOutcome
+        }
+        class Checkpoint {
+            <<Interface>>
+            +load() AddressBatch
+            +save(batch: AddressBatch)
+            +clear()
+        }
+        class VerifyTarget
+        class VerifyReport
+        class Feedback
+        class AddressOutcome
+        class StageBlocked
+    }
+    namespace factory_workflows_dev {
+        class AppVerifier
+        class DevVerifySlice {
+            +verify(spec: Spec, pull_request_url: str, worktree: AgentWorkspace) VerifyReport
+        }
+        class MemoryCheckpoint
+    }
+    namespace factory_workflows_pr_babysit {
+        class ReviewAddresser {
+            [add] -address : Address
+            [rem] -profile : AgentProfile
+        }
+        class StateCheckpoint
+        class ask
+        class profiles
+    }
+
+    Verify o-- TypedAgent
+    Address o-- TypedAgent
+    Address ..> Checkpoint : Use
+    Verify ..> VerifyTarget : Use
+    Verify ..> VerifyReport : Use
+    Address ..> Feedback : Use
+    Address ..> AddressOutcome : Use
+    Address ..> StageBlocked : Use
+    TypedAgent ..> AgentReplyError : Use
+    MemoryCheckpoint ..|> Checkpoint
+    StateCheckpoint ..|> Checkpoint
+    DevVerifySlice o-- Verify
+    ReviewAddresser o-- Address
+
+    note for Verify "Replaces dev AppVerifier; reusable by pr_babysit before publishing"
+    note for DevVerifySlice "Maps Spec to VerifyTarget and posts the report on the Spec"
+
+    class TypedAgent:::added
+    class AgentReplyError:::added
+    class Verify:::added
+    class Address:::added
+    class Checkpoint:::added
+    class VerifyTarget:::added
+    class VerifyReport:::added
+    class Feedback:::added
+    class AddressOutcome:::added
+    class StageBlocked:::added
+    class DevVerifySlice:::added
+    class MemoryCheckpoint:::added
+    class StateCheckpoint:::added
+    class AppVerifier:::removed
+    class ask:::removed
+    class profiles:::removed
+    class ReviewAddresser:::memberChanged
+
+    classDef default fill:#242424,stroke:#8b949e,color:#c9d1d9,stroke-width:1px
+    classDef added stroke:#4a7a5a,stroke-width:1px
+    classDef removed stroke:#8a4a4a,stroke-width:1px
+    classDef memberChanged stroke:#8b949e,stroke-width:1px,stroke-dasharray:5 5
+```
+
+`DevVerifySlice` is the thin dev `verify/` slice that replaces [`AppVerifier`](../../workflows/dev/verify/verifier.py). The resume state machine in [`ReviewAddresser`](../../workflows/pr_babysit/address/reviews.py) moves into `Address`.
+
+### Package layout
+
+```text
+software_factory/
+├── pyproject.toml                       # depends on loop; own extras (dishka)
+├── src/factory/
+│   ├── agents/                          # by Agent role; imports loop + factory.shared only
+│   │   ├── __init__.py                  # TypedAgent, Prompt, AgentReplyError + catalog re-exports
+│   │   ├── contract.py
+│   │   ├── _kit/                        # private: launcher, envelope decoders (strict, best-effort), render
+│   │   ├── planner.py  developer.py  verifier.py  reviewer.py
+│   │   ├── addresser.py  maintainer.py  chore.py   # Request/Reply types + catalog constants
+│   │   └── prompts/*.md
+│   ├── stages/                          # Stages used by ≥2 Workflows; imports agents, shared, loop
+│   │   ├── errors.py                    # StageBlocked
+│   │   ├── verify/{stage,gates}.py
+│   │   └── address/{stage,ports}.py     # ports = Checkpoint
+│   ├── workflows/                       # vertical slices; no agents/ package
+│   │   ├── dev/{plan,deliver,backlog,chore,review,verify,model,tracker,composition}/
+│   │   └── pr_babysit/{discover,monitor,watch,address,maintain_ci,publish,composition}/ model.py
+│   └── shared/{git,process,state,telemetry,providers}.py  github/  specs/   # specs = Spec/Ticket per the shared-model ADR
+└── tests/{agents,stages,shared,workflows/dev,workflows/pr_babysit,architecture}/   # mirrors src
+```
+
+### What hides behind the seam
+
+- **Agents:** everything listed under Option A, plus the decoder flavour (strict envelope or best-effort).
+- **Stages:**
+  - Phase and gate recording.
+  - Verification-skill discovery and the evidence directory layout.
+  - Commit, restore, and protected-path rules.
+  - The address resume state machine.
+- **Workflows:** Spec/Ticket/PR models, tracker and review-thread semantics, sequencing, delivery and escalation policy, and publishing reports.
+
+### Dependency strategy
+
+| Dependency | Category | Treatment |
+|------------|----------|-----------|
+| Prompt rendering, envelope decoding, gates, model → target mapping | In-process | Merged behind `TypedAgent.run` and `Stage.run`; tested directly |
+| `Phases` / `WorkflowRun` | In-process | `loop` type passed in; `WorkflowRun` is a `Phases` |
+| Git, worktrees, filesystem | Local-substitutable | No port; stage tests use a real repository under `tmp_path` |
+| Address resume state | In-process, two production adapters | `Checkpoint` port in `stages/address/ports.py`; `StateCheckpoint` (pr_babysit JSON state) and `MemoryCheckpoint` (dev) |
+| Baseline command | Local-substitutable | `Baseline` callable; repository command runner or test stub |
+| Agent CLI | True external, already ported by `loop` | Injected `AgentWorkspace`; tests use Loop's fake runner with canned envelopes |
+| GitHub, tracker | True external | Stays in the Workflows. Stages never see it; ports live in each Workflow model, with `shared/github` adapters and fakes |
+
+### How slices consume it
+
+- **dev:**
+  - `verify/` maps `Spec` to `VerifyTarget`, calls `Verify.run`, posts the report on the Spec, and escalates on `blocks_ready`.
+  - `deliver/`, `plan/`, and `chore/` call catalog agents through slice-local delegates, which keeps stages as delegate runners as in Option A.
+- **pr_babysit:**
+  - `ReviewAddresser` maps review items to `Feedback`, calls `Address.run(workspace, feedback, StateCheckpoint(state))`, publishes the replies and commits through `ChangePublisher`, maps `StageBlocked` to `Blocked`, and then clears the checkpoint.
+  - It can call `Verify.run` before publishing by mapping the pull request to `VerifyTarget`.
+- **Composition:** each `workflows/<w>/composition/` builds `Verify` and `Address` from their constructors and tunes agents with `tuned(...)` or `with_template(...)`. `--fake` and `--dry` replace only the agent runner and remote adapters.
+
+### Policy / import-linter changes
+
+- **Repository:** Workflows leave the `loop` repository for `software_factory`, so [Ship Loop as a workflow library](../adr/ship-loop-as-a-workflow-library-with-no-built-in-workflows.md) holds more strictly. This needs a new ADR that supersedes both the per-slice `agents` package and the `workflows/shared` location in the [vertical-slice ADR](../adr/structure-workflows-as-vertical-slices-over-a-shared-package-wired-by-dishka.md).
+- **Concept rule 1** becomes: "Reusable agents live in `factory/agents/` by Agent role. Stages reused by two or more Workflows live in `factory/stages/`. Workflow-specific models, policy, sequencing, publishing, and model-to-target mapping stay in the slice."
+- **New `layers` contract:** `factory.workflows | factory.stages | factory.agents | factory.shared`.
+- **`independence` contracts:**
+  - `factory.workflows.dev` and `factory.workflows.pr_babysit`.
+  - Every `factory.stages.*` package.
+  - Every agent role module.
+- **New `forbidden` contract:** `factory.stages` and `factory.workflows` must not import `factory.agents._kit`.
+- **Rule 2:**
+  - Dev features other than `verify/` still must not import `factory.agents`.
+  - `verify/` may import `factory.stages.verify`.
+- **Rule 3:** unchanged in meaning: `factory.shared` imports no other factory layer.
+- **`dishka` rule:** unchanged in meaning: only `composition/` and `shared/providers.py` import it.
+
+### Trade-offs
+
+- **+** Two reuse levels:
+  - Any Workflow can import an agent by role.
+  - Gate-heavy activities (`Verify`, `Address`) are reused with one `run` call, so a gate or rollback fix applies to every Workflow.
+- **+** Stages return reports and don't publish, so they are tested once through `run` with a real repository and fake agents. The `AppVerifier` and `ReviewAddresser` unit tests are replaced, not kept alongside.
+- **+** The stages layer grows only through the promotion rule, so it can't fill up with single-use code.
+- **−** Each consuming slice writes a model → target mapping (`Spec` → `VerifyTarget`, review item → `Feedback`).
+- **−** Changing dev `AppVerifier` to return its report instead of posting it moves Spec-comment posting into the slice. That is a behaviour-preserving migration, but it touches dev tests.
+- **−** Adding a stage means updating the stage-independence contract.
+- **−** Highest migration cost: a new repository, a new package root, and every import path changes.
+
+---
+
 ## Comparison
 
-| | A — Typed agent catalog | B — Shared engine | C — Mode personas | D — Agent ports |
-|---|---|---|---|---|
-| Home | new `workflows/agents/` | `workflows/shared/agents/` | new `workflows/agents/` | new `workflows/agents/` |
-| Reusable unit | Whole agent (profile + prompt + typed reply) | Persona + mechanics | Persona + modes | Capability port + default adapter |
-| Interface size | 1 generic class, 1 method (+2 tuners) | 4 parts to assemble | 1 method, untyped | 1 Protocol per capability |
-| Depth (leverage) | High | Low | Medium (decoding left to callers) | High per port, wide overall |
-| Locality of a reply-shape fix | `workflows/agents/<agent>/` | each slice | each consumer | `workflows/agents/copilot/` |
-| Typed request/reply | Yes, agent-owned | Yes, slice-owned | No (dicts) | Yes, port-owned |
-| Envelope decoding | Inside each agent's decoder | Shared `EnvelopeDecoder` + slice `parse` | Inside `ask` (JSON only) | Inside adapters |
-| Slice parameterization | `tuned(...)`, `with_template(...)` | Composition assembles parts | `tuned(...)`, payload | Adapter ctor args via providers |
-| dev delegates | Kept as thin mappers | Replaced by `PromptedAgent` instances (same callable shape) | Kept, build payloads | Removed; stages take ports |
-| `dev/model/reply.py` | Moves into agent `reply.py` modules | Shrinks to `parse_*` functions | Stays (parses dicts) | Moves into adapters |
-| Stage contract (rule 2) | Kept, also forbids `workflows.agents` | Kept/dropped (module gone) | Kept, also forbids `workflows.agents` | Replaced by "ports, never adapters" |
-| Shared imports no slice (rule 3) | Kept + `layers` contract | Kept | Kept + `layers` contract | Kept + `layers` contract |
-| Concept rule 1 | Revised: agents move up | Narrow revision: personas only | Revised: personas move up | Revised: ports + adapters move up |
-| `dishka` rule | Unchanged | Unchanged | Unchanged | Widened |
-| Migration cost | Medium | Low | High (dev prompts rewritten) | High |
+| | A — Typed agent catalog | B — Shared engine | C — Mode personas | D — Agent ports | E — Role agents + stages |
+|---|---|---|---|---|---|
+| Home | new `workflows/agents/` | `workflows/shared/agents/` | new `workflows/agents/` | new `workflows/agents/` | `software_factory`: `factory/agents/` + `factory/stages/` |
+| Reusable unit | Whole agent (profile + prompt + typed reply) | Persona + mechanics | Persona + modes | Capability port + default adapter | Whole agent (as A) + whole Stage (gates, commits) |
+| Interface size | 1 generic class, 1 method (+2 tuners) | 4 parts to assemble | 1 method, untyped | 1 Protocol per capability | As A for agents; 1 `run` per stage + `Checkpoint` port |
+| Depth (leverage) | High | Low | Medium (decoding left to callers) | High per port, wide overall | High (agents and stages) |
+| Locality of a reply-shape fix | `workflows/agents/<agent>/` | each slice | each consumer | `workflows/agents/copilot/` | `factory/agents/<role>.py`; gate fixes in `factory/stages/<stage>/` |
+| Typed request/reply | Yes, agent-owned | Yes, slice-owned | No (dicts) | Yes, port-owned | Yes, agent-owned; stage targets/reports stage-owned |
+| Envelope decoding | Inside each agent's decoder | Shared `EnvelopeDecoder` + slice `parse` | Inside `ask` (JSON only) | Inside adapters | Inside each agent's decoder (`_kit` strict / best-effort) |
+| Slice parameterization | `tuned(...)`, `with_template(...)` | Composition assembles parts | `tuned(...)`, payload | Adapter ctor args via providers | `tuned(...)`, `with_template(...)`, stage ctor args |
+| dev delegates | Kept as thin mappers | Replaced by `PromptedAgent` instances (same callable shape) | Kept, build payloads | Removed; stages take ports | Kept as thin mappers; `verify/` calls `Verify` |
+| `dev/model/reply.py` | Moves into agent `reply.py` modules | Shrinks to `parse_*` functions | Stays (parses dicts) | Moves into adapters | Moves into agent role modules |
+| Stage contract (rule 2) | Kept, also forbids `workflows.agents` | Kept/dropped (module gone) | Kept, also forbids `workflows.agents` | Replaced by "ports, never adapters" | Kept; dev `verify/` may import `factory.stages.verify` |
+| Shared imports no slice (rule 3) | Kept + `layers` contract | Kept | Kept + `layers` contract | Kept + `layers` contract | Kept + 4-layer `layers` contract |
+| Concept rule 1 | Revised: agents move up | Narrow revision: personas only | Revised: personas move up | Revised: ports + adapters move up | Revised: agents by role and reused stages move up |
+| `dishka` rule | Unchanged | Unchanged | Unchanged | Widened | Unchanged |
+| Migration cost | Medium | Low | High (dev prompts rewritten) | High | Highest (new repository + stages extraction) |
 
 ## Recommendation
 
