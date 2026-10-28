@@ -194,13 +194,10 @@ def test_cleanup_failure_is_discarded_and_does_not_block_a_clean_review(tmp_path
     assert "Chore: discarded" in harness.comments()[-1]
 
 
-@pytest.mark.parametrize("mode", ["bug", "wrong-head", "missing-axis", "crash", "checkout-change", "held-ticket"])
+@pytest.mark.parametrize("mode", ["bug", "wrong-head", "missing-axis", "crash", "checkout-change"])
 def test_review_and_readiness_blockers_keep_the_draft(tmp_path: Path, mode: str) -> None:
     """Given a review blocker, when readiness is checked, then dev fails without publishing readiness."""
-    tickets = {1: [issue(10, "Add basket")]}
-    if mode == "held-ticket":
-        tickets[1].append(issue(11, "Human decision", labels=("hitl",)))
-    harness = DevHarness(tmp_path, tickets=tickets)
+    harness = DevHarness(tmp_path, tickets={1: [issue(10, "Add basket")]})
     def review(prompt: str) -> str:
         result = json.loads(clean_review(harness.git.commits[-1].sha))
         if mode == "bug":
@@ -216,6 +213,18 @@ def test_review_and_readiness_blockers_keep_the_draft(tmp_path: Path, mode: str)
     assert _deliver(harness) == 1
     assert not harness.calls("pr", "ready")
     assert "left as a draft" in harness.comments()[-1]
+
+
+def test_a_spec_with_a_held_ticket_is_published_but_not_announced_verified_or_reviewed(tmp_path: Path) -> None:
+    """Given a Ticket still held for a human, when the ready Tickets land, then dev stops at the draft PR instead of claiming completion."""
+    harness = DevHarness(tmp_path, tickets={1: [issue(10, "Add basket"), issue(11, "Human decision", labels=("hitl",))]})
+    harness.runner.review_handler = crash()
+
+    assert _deliver(harness) == 0
+
+    assert [profile.name for profile in harness.runner.profiles] == ["developer"]
+    assert not any("all Tickets delivered" in comment for comment in harness.comments())
+    assert not harness.calls("pr", "ready")
 
 
 def test_spec_selection_and_visualization_report_the_default_pipeline(tmp_path: Path, capsys) -> None:

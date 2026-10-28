@@ -122,7 +122,7 @@ def test_ticket_workflow_skips_non_actionable_tickets_it_is_given(tmp_path: Path
         attempted.append(context.ticket.number)
         return _complete(harness, context)
 
-    assert _deliver(harness, delegate, spec=spec)
+    assert not _deliver(harness, delegate, spec=spec)
     assert attempted == [12]
 
 

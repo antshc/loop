@@ -27,10 +27,11 @@ logger = logging.getLogger("workflow.tickets")
 
 @dataclass(frozen=True)
 class TicketsDelivered:
-    """The Spec as it stands after delivery, and whether every Ticket was delivered."""
+    """The Spec as it stands after delivery; `complete` is true only when no Ticket is left open or held, and `failed` when a Ticket exhausted its retries."""
 
     spec: SpecGraphSnapshot
     complete: bool
+    failed: bool = False
 
 
 def _next_ready(spec: SpecGraphSnapshot) -> Ticket | None:
@@ -94,8 +95,9 @@ class TicketDeliverer:
                     with self._phases.phase("escalate", Kind.CODE, Role.CODE, ticket=ticket.number) as escalation:
                         spec = escalate(self._tracker, spec, ticket.number, result)
                         escalation.set(verdict="human input required")
-                    return TicketsDelivered(spec, False)
-        return TicketsDelivered(spec, True)
+                    return TicketsDelivered(spec, False, failed=True)
+        # A Ticket that is blocked, unread, or awaiting a human is not delivered, so the Spec is not complete.
+        return TicketsDelivered(spec, not spec.held_tickets)
 
     def _context(self, spec: SpecGraphSnapshot, ticket: Ticket, path: Path) -> TicketContext:
         base_branch, feature_branch = spec.base_branch, feature_branch_of(spec)

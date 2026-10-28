@@ -218,8 +218,8 @@ class SpecRouter:
                 result = self._deliverer.deliver(
                     spec, worktree, workflow.run_agents, publish=lambda current: publish(current, worktree.path)
                 )
-                spec, delivered = result.spec, result.complete
-                if not delivered:
+                spec, delivered, failed = result.spec, result.complete, result.failed
+                if failed:
                     phase.fail("Ticket delivery exhausted its retries")
                 publish(spec, worktree.path)
                 # Tickets are published as they land, so the last publish may have found nothing new to push.
@@ -259,7 +259,7 @@ class SpecRouter:
             _skip(phases, "finalize", Kind.CODE, Owner.CODE, "PR remains a draft without review")
             if delivery.verification.blocks_ready:
                 return Outcome.FAILED
-        return Outcome.SUCCESS if delivered else Outcome.FAILED
+        return Outcome.FAILED if failed else Outcome.SUCCESS
 
 
 def _log_held_tickets(spec: SpecGraphSnapshot) -> None:
