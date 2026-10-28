@@ -16,6 +16,7 @@ from workflows.shared.github.pull_requests.model import (
     PullRequestReview,
     PullRequestSnapshot,
     PullRequestState,
+    ReviewDecision,
     ReviewThread,
     ReviewVerdict,
 )
@@ -116,7 +117,7 @@ def build_pull_request_snapshot(
         mergeability=mergeability,
         merge_state=merge_state,
     )
-    return PullRequestSnapshot(pull, threads, reviews, (), checks, review_decision)
+    return PullRequestSnapshot(pull, threads, reviews, (), checks, ReviewDecision(review_decision))
 
 
 def build_review(id: int, reviewer: str, verdict: ReviewVerdict, *, commit: str = "head") -> PullRequestReview:

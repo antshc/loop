@@ -12,6 +12,7 @@ from workflows.shared.github.pull_requests.model import (
     MergeState,
     PullRequestState,
     ReviewComment,
+    ReviewDecision,
     ReviewVerdict,
 )
 from workflows.shared.process import CommandError
@@ -257,7 +258,17 @@ def test_an_open_snapshot_carries_the_review_decision_and_merge_status() -> None
 
     snapshot = _read(host)[0].snapshot(1)
 
-    assert (snapshot.review_decision, snapshot.merge_state_status) == ("CHANGES_REQUESTED", "BLOCKED")
+    assert (snapshot.review_decision, snapshot.merge_state_status) == (ReviewDecision.CHANGES_REQUESTED, MergeState.BLOCKED)
+
+
+def test_a_review_decision_or_merge_status_github_does_not_name_reads_as_unknown() -> None:
+    host = FakePullRequestHost()
+    pull = host.add(1)
+    pull.review_decision, pull.merge_state_status = "SOMETHING_NEW", "SOMETHING_NEW"
+
+    snapshot = _read(host)[0].snapshot(1)
+
+    assert (snapshot.review_decision, snapshot.merge_state_status) == (ReviewDecision.UNKNOWN, MergeState.UNKNOWN)
 
 
 def test_a_read_that_cannot_complete_raises_instead_of_returning_less() -> None:

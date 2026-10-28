@@ -21,7 +21,7 @@ def babysit_snapshot(snapshot: PullRequestSnapshot) -> dict[str, Any]:
     projected: dict[str, Any] = {"pr": dict(pull.payload), "threads": [], "other": [], "runs": [], "checks": [], "statuses": []}
     if not pull.is_open:
         return projected
-    projected["review"] = {"mergeStateStatus": snapshot.merge_state_status, "reviewDecision": snapshot.review_decision}
+    projected["review"] = {"mergeStateStatus": snapshot.merge_state_status.value.upper(), "reviewDecision": snapshot.review_decision.value}
     projected["threads"] = [_thread(thread) for thread in snapshot.threads]
     projected["other"] = [*_comments(snapshot.comments), *_reviews(snapshot.reviews)]
     current = snapshot.current_checks

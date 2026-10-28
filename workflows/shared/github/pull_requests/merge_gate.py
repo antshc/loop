@@ -6,7 +6,16 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from .merge_policy import MergePolicySnapshot
-from .model import CheckKind, CheckOutcome, CheckResult, Mergeability, MergeState, PullRequestSnapshot, ReviewVerdict
+from .model import (
+    CheckKind,
+    CheckOutcome,
+    CheckResult,
+    Mergeability,
+    MergeState,
+    PullRequestSnapshot,
+    ReviewDecision,
+    ReviewVerdict,
+)
 
 
 class ReadinessStatus(StrEnum):
@@ -132,7 +141,7 @@ class MergeGateEvaluator:
             reasons.append(MergeReason(ReasonCode.INCOMPLETE_INPUT, f"policy of {policy.base_ref}, base is {pull.base_ref}"))
         if not pull.head_sha:
             reasons.append(MergeReason(ReasonCode.INCOMPLETE_INPUT, "head commit"))
-        if policy.code_owner_review and not snapshot.review_decision:
+        if policy.code_owner_review and snapshot.review_decision is ReviewDecision.UNKNOWN:
             reasons.append(MergeReason(ReasonCode.INCOMPLETE_INPUT, "review decision"))
         if policy.up_to_date and pull.merge_state is MergeState.BEHIND:
             reasons.append(MergeReason(ReasonCode.BRANCH_BEHIND))
@@ -169,7 +178,7 @@ class MergeGateEvaluator:
         approvals = sum(1 for verdict in verdicts.values() if verdict is ReviewVerdict.APPROVED)
         if approvals < policy.required_approvals:
             reasons.append(MergeReason(ReasonCode.APPROVALS_MISSING, f"{approvals} of {policy.required_approvals}"))
-        if policy.code_owner_review and snapshot.review_decision == "REVIEW_REQUIRED":
+        if policy.code_owner_review and snapshot.review_decision is ReviewDecision.REVIEW_REQUIRED:
             reasons.append(MergeReason(ReasonCode.CODE_OWNER_REVIEW_MISSING))
         return reasons
 

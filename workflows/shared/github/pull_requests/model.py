@@ -52,6 +52,22 @@ class MergeState(StrEnum):
 
     @classmethod
     def _missing_(cls, value: object) -> MergeState:
+        # GraphQL names the same states in upper case.
+        if isinstance(value, str) and value.lower() in cls._value2member_map_:
+            return cls(value.lower())
+        return cls.UNKNOWN
+
+
+class ReviewDecision(StrEnum):
+    """GitHub's review decision of a pull request; absent or anything it does not name is UNKNOWN, whose value is empty."""
+
+    APPROVED = "APPROVED"
+    CHANGES_REQUESTED = "CHANGES_REQUESTED"
+    REVIEW_REQUIRED = "REVIEW_REQUIRED"
+    UNKNOWN = ""
+
+    @classmethod
+    def _missing_(cls, value: object) -> ReviewDecision:
         return cls.UNKNOWN
 
 
@@ -194,8 +210,8 @@ class PullRequestSnapshot:
     reviews: tuple[PullRequestReview, ...] = ()
     comments: tuple[Comment, ...] = ()
     checks: tuple[CheckResult, ...] = ()
-    review_decision: str = ""
-    merge_state_status: str = ""
+    review_decision: ReviewDecision = ReviewDecision.UNKNOWN
+    merge_state_status: MergeState = MergeState.UNKNOWN
 
     def checks_of(self, kind: CheckKind) -> tuple[CheckResult, ...]:
         """The check results of `kind`, in the order GitHub listed them."""

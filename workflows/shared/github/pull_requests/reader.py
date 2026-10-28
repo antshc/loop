@@ -18,6 +18,7 @@ from .model import (
     PullRequestSnapshot,
     PullRequestState,
     ReviewComment,
+    ReviewDecision,
     ReviewThread,
     ReviewVerdict,
 )
@@ -89,8 +90,8 @@ class PullRequestReader:
             reviews=reviews,
             comments=comments,
             checks=(*self._check_runs(sha), *self._statuses(sha), *self._workflow_runs(sha)),
-            review_decision=summary.get("reviewDecision") or "",
-            merge_state_status=summary.get("mergeStateStatus") or "",
+            review_decision=ReviewDecision(summary.get("reviewDecision") or ""),
+            merge_state_status=MergeState(summary.get("mergeStateStatus") or ""),
         )
 
     def _pull(self, node: dict[str, Any]) -> PullRequest:
