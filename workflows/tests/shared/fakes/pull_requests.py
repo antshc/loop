@@ -113,9 +113,12 @@ def check_run(id: int, name: str, *, status: str = "completed", conclusion: str 
     return run
 
 
-def commit_status(id: int, context: str, *, state: str = "success") -> dict:
-    """A commit status in the REST shape."""
-    return {"id": id, "context": context, "state": state, "target_url": f"https://ci.example/{id}"}
+def commit_status(id: int, context: str, *, state: str = "success", commit: str | None = None) -> dict:
+    """A commit status in the REST shape; `commit` (default: the head commit) is the commit it was posted on, which the REST payload itself does not carry."""
+    status = {"id": id, "context": context, "state": state, "target_url": f"https://ci.example/{id}"}
+    if commit is not None:
+        status["_commit"] = commit
+    return status
 
 
 def workflow_run(
@@ -211,6 +214,8 @@ class FakePull:
         self.base_ref = "main"
         self.head_ref = head_ref
         self.head_sha = head_sha
+        # The commits of the pull request before its head, oldest first.
+        self.earlier_commits: list[str] = []
         self.head_repo = "a/b"
         self.state = "open"
         self.merged = False
@@ -329,14 +334,23 @@ class FakePullRequestHost:
         if (match := re.fullmatch(r"(issues|pulls)/(\d+)/(comments|reviews)", path)) and int(match[2]) in self.pulls:
             pull = self._pull(int(match[2]))
             return self._paged(pull.comments if match[3] == "comments" else pull.reviews)
+        if (match := re.fullmatch(r"pulls/(\d+)/commits", path)) and int(match[1]) in self.pulls:
+            pull = self._pull(int(match[1]))
+            return self._paged([{"sha": sha} for sha in (*pull.earlier_commits, pull.sha)])
         if match := re.fullmatch(r"commits/([^/]+)/(check-runs|statuses)", path):
-            pull = self._pull_at(match[1])
-            return self._wrapped("check_runs", _items(pull.check_runs)) if match[2] == "check-runs" else self._paged(_items(pull.statuses))
+            pull, sha = self._pull_at(match[1]), match[1]
+            if match[2] == "check-runs":
+                return self._wrapped("check_runs", [run for run in _items(pull.check_runs) if run.get("head_sha", pull.sha) == sha])
+            return self._paged([
+                {key: value for key, value in status.items() if key != "_commit"}
+                for status in _items(pull.statuses)
+                if status.get("_commit", pull.sha) == sha
+            ])
         if path.startswith("rules/branches/"):
             return self._paged(self.rules.get(path.removeprefix("rules/branches/"), []))
         if path == "actions/runs":
-            pull = self._pull_at(query.split("head_sha=")[1].split("&")[0])
-            return self._wrapped("workflow_runs", _items(pull.workflow_runs))
+            sha = query.split("head_sha=")[1].split("&")[0]
+            return self._wrapped("workflow_runs", [run for run in _items(self._pull_at(sha).workflow_runs) if run["head_sha"] == sha])
         return None
 
     def _commands(self, args: tuple[str, ...]) -> str | None:
@@ -413,7 +427,7 @@ class FakePullRequestHost:
 
     def _pull_at(self, sha: str) -> FakePull:
         for pull in self.pulls.values():
-            if pull.sha == sha:
+            if sha in (pull.sha, *pull.earlier_commits):
                 return pull
         raise CommandError(f"gh api commits/{sha}", 1, "gh: Not Found (HTTP 404)")
 

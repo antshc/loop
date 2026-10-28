@@ -84,12 +84,15 @@ class PullRequestReader:
         comments = self._comments(pull.ref)
         reviews = self._reviews(number)
         sha = pull.head_sha
+        previous = self._previous_head(number, sha)
+        # Results on the commit before the head are the only way a check that has not re-run on the head shows as stale instead of missing.
+        earlier = [*self._check_runs(previous), *self._statuses(previous)] if previous else []
         return PullRequestSnapshot(
             pull_request=pull,
             threads=threads,
             reviews=reviews,
             comments=comments,
-            checks=(*self._check_runs(sha), *self._statuses(sha), *self._workflow_runs(sha)),
+            checks=(*self._check_runs(sha), *self._statuses(sha), *self._workflow_runs(sha), *earlier),
             review_decision=ReviewDecision(summary.get("reviewDecision") or ""),
             merge_state_status=MergeState(summary.get("mergeStateStatus") or ""),
         )
@@ -156,6 +159,11 @@ class PullRequestReader:
             )
             for node in nodes
         )
+
+    def _previous_head(self, number: int, head_sha: str) -> str | None:
+        """The commit of the pull request just before its head, or None when the head is its first commit or is not in the listing."""
+        shas = [node["sha"] for node in self._repo.pages(self._repo.endpoint(f"pulls/{number}/commits?{_PER_PAGE}"))]
+        return shas[shas.index(head_sha) - 1] if head_sha in shas[1:] else None
 
     def _check_runs(self, sha: str) -> list[CheckResult]:
         nodes = self._repo.pages(self._repo.endpoint(f"commits/{sha}/check-runs?{_PER_PAGE}"), items="check_runs")

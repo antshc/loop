@@ -5,7 +5,7 @@ import pytest
 from workflows.shared.github.account import GitHub
 from workflows.shared.github.identity import CommentRef, IssueIdentity, IssueRef, RepositoryId
 from workflows.shared.github.issues.issue import Comment
-from workflows.shared.github.pull_requests import PullRequests
+from workflows.shared.github.pull_requests import MergeGateEvaluator, MergePolicySnapshot, PullRequests, ReasonCode
 from workflows.shared.github.pull_requests.model import (
     CheckKind,
     Mergeability,
@@ -212,17 +212,44 @@ def test_check_results_are_tied_to_the_commit_they_ran_against() -> None:
     assert [check.passing("head") for check in snapshot.checks] == [True, True, True, False]
 
 
-def test_a_check_result_for_another_commit_is_stale_and_never_passes() -> None:
+def test_a_check_result_for_the_previous_commit_is_stale_and_never_passes() -> None:
     host = FakePullRequestHost()
     pull = host.add(1, head_sha="head")
+    pull.earlier_commits = ["older"]
     pull.check_runs = [check_run(1, "test", commit="older"), check_run(2, "lint", commit="head")]
-    pull.workflow_runs = [workflow_run(3, "older"), workflow_run(4, "head", workflow_id=2)]
+    pull.statuses = [commit_status(3, "ci/legacy", commit="older")]
+    pull.workflow_runs = [workflow_run(4, "head", workflow_id=2)]
 
     snapshot = _read(host)[0].snapshot(1)
 
     assert [check.id for check in snapshot.stale_checks] == [1, 3]
     assert [check.id for check in snapshot.current_checks] == [2, 4]
-    assert [check.passing("head") for check in snapshot.checks] == [False, True, False, True]
+    assert [check.id for check in snapshot.checks] == [2, 4, 1, 3]
+    assert [check.passing("head") for check in snapshot.checks] == [True, True, False, False]
+
+
+def test_a_result_posted_on_another_commit_is_not_returned_for_the_head() -> None:
+    host = FakePullRequestHost()
+    pull = host.add(1, head_sha="head")
+    pull.check_runs = [check_run(1, "test", commit="unrelated"), check_run(2, "lint", commit="head")]
+    pull.statuses = [commit_status(3, "ci/legacy", commit="unrelated")]
+    pull.workflow_runs = [workflow_run(4, "unrelated")]
+
+    snapshot = _read(host)[0].snapshot(1)
+
+    assert [check.id for check in snapshot.checks] == [2]
+
+
+def test_a_required_check_that_has_not_re_run_on_the_new_head_is_reported_stale_not_missing() -> None:
+    host = FakePullRequestHost()
+    pull = host.add(1, head_sha="second")
+    pull.earlier_commits = ["first"]
+    pull.check_runs = [check_run(1, "test", commit="first")]
+    snapshot = _read(host)[0].snapshot(1)
+
+    readiness = MergeGateEvaluator().evaluate(snapshot, MergePolicySnapshot("main", required_checks=frozenset({"test"})))
+
+    assert readiness.codes == (ReasonCode.CHECK_STALE,)
 
 
 def test_a_new_head_commit_makes_every_earlier_result_stale() -> None:
@@ -233,7 +260,7 @@ def test_a_new_head_commit_makes_every_earlier_result_stale() -> None:
     assert pulls.snapshot(1).stale_checks == ()
 
     pull.head_sha = "second"
-    pull.check_runs = [check_run(1, "test", commit="first")]
+    pull.earlier_commits = ["first"]
 
     snapshot = pulls.snapshot(1)
     assert [check.id for check in snapshot.stale_checks] == [1] and not snapshot.checks[0].passing("second")
