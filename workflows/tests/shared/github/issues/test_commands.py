@@ -38,6 +38,16 @@ def test_each_command_is_a_gh_write_sent_in_the_order_issued() -> None:
     assert gh.writes()[2][-2:] == ("--remove-label", "spec")
 
 
+def test_close_and_add_label_decide_from_one_read_of_the_issue_without_its_comments() -> None:
+    gh = FakeGhCli(specs=[issue(1, "Busy", comments=("a", "b"))], tickets={})
+    issues = _issues(gh)
+
+    issues.add_label(1, "hitl")
+    issues.close(1, "done")
+
+    assert [call[-1] for call in gh.calls if call[0] == "api"] == ["repos/owner/repo/issues/1"] * 2
+
+
 def test_a_change_is_on_github_before_the_next_step_reads_it() -> None:
     gh = FakeGhCli()
     issues = _issues(gh)

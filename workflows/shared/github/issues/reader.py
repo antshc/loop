@@ -47,10 +47,17 @@ class IssueReader:
 
     def issue(self, number: int) -> Issue:
         """The issue with its labels and Comments; raises when `number` is a pull request or cannot be read."""
+        return self._hydrate(self._issue_node(number))
+
+    def summary(self, number: int) -> Issue:
+        """The issue as its own payload reports it, with no Comments read; for a decision that needs only its state or labels."""
+        return self._summary(self._issue_node(number))
+
+    def _issue_node(self, number: int) -> dict[str, Any]:
         node = self._repo.json("api", self._endpoint(f"issues/{number}"))
         if "pull_request" in node:
             raise IssueError(f"#{number} is a pull request, not an issue")
-        return self._hydrate(node)
+        return node
 
     def specs(self, number: int | None = None) -> tuple[SpecGraphSnapshot, ...]:
         """Every open issue labeled `spec` (only #`number` when given), each loaded with its Tickets; a listing that cannot be read raises."""

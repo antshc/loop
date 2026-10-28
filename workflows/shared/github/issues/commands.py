@@ -46,7 +46,7 @@ class IssueCommands:
 
     def add_label(self, number: int, label: str) -> None:
         """Adds `label` to the issue, unless it already carries it."""
-        if label not in self._reader.issue(number).labels:
+        if label not in self._reader.summary(number).labels:
             self._repo.run(("issue", "edit", str(number), "--repo", self._repo.slug, "--add-label", label))
 
     def remove_label(self, number: int, label: str) -> None:
@@ -58,7 +58,7 @@ class IssueCommands:
 
     def close(self, number: int, comment: str) -> None:
         """Closes the issue with `comment`, unless it is already closed."""
-        if self._reader.issue(number).state == IssueState.OPEN:
+        if self._reader.summary(number).state == IssueState.OPEN:
             self._repo.run(("issue", "close", str(number), "--repo", self._repo.slug, "--comment", comment))
 
     def find_ticket(self, spec: SpecGraphSnapshot, key: str) -> Ticket | None:
