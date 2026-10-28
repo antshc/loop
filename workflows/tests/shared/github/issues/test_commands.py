@@ -178,6 +178,48 @@ def test_linking_sends_the_ticket_rest_id() -> None:
     assert link[-2:] == ("-F", f"sub_issue_id={created.identity.id}")
 
 
+def _two_tickets(issues: Issues):
+    spec = next(iter(issues.specs()))
+    return issues.create_ticket(spec, "0-first", "First", "one"), issues.create_ticket(spec, "1-second", "Second", "two")
+
+
+def test_a_blocked_by_dependency_sends_the_blockers_internal_id_not_its_number() -> None:
+    gh = _empty_spec_gh()
+    issues = _issues(gh)
+    first, second = _two_tickets(issues)
+
+    issues.add_blocked_by(second, first)
+
+    [call] = gh.calls_matching("api", "--method", "POST", f"repos/owner/repo/issues/{second.number}/dependencies/blocked_by")
+    assert call[-2:] == ("-F", f"issue_id={first.identity.id}")
+    assert first.identity.id != first.number
+    assert gh.blockers_of(second.number) == [first.number]
+
+
+def test_a_blocked_by_dependency_already_on_github_is_not_added_again() -> None:
+    gh = _empty_spec_gh()
+    issues = _issues(gh)
+    first, second = _two_tickets(issues)
+
+    issues.add_blocked_by(second, first)
+    issues.add_blocked_by(second, first)
+
+    assert len(gh.calls_matching("api", "--method", "POST", f"repos/owner/repo/issues/{second.number}/dependencies/blocked_by")) == 1
+    assert gh.blockers_of(second.number) == [first.number]
+
+
+def test_a_blocked_by_dependency_is_not_added_when_the_existing_ones_cannot_be_read() -> None:
+    gh = _empty_spec_gh()
+    issues = _issues(gh)
+    first, second = _two_tickets(issues)
+    gh.deny_on("api", "--paginate", "--slurp", f"repos/owner/repo/issues/{second.number}/dependencies/blocked_by?per_page=100")
+
+    with pytest.raises(CommandError, match="HTTP 403"):
+        issues.add_blocked_by(second, first)
+
+    assert gh.writes()[-1][3].endswith("/issues") and gh.blockers_of(second.number) == []
+
+
 def test_find_ticket_ignores_other_keys_other_specs_and_closed_issues() -> None:
     gh = _empty_spec_gh()
     issues = _issues(gh)

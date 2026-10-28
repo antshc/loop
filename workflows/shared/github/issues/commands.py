@@ -88,6 +88,15 @@ class IssueCommands:
             "-F", f"sub_issue_id={ticket.identity.id}",
         ))
 
+    def add_blocked_by(self, ticket: Ticket, blocker: Ticket) -> None:
+        """Makes `ticket` wait for `blocker` as a native blocked-by dependency, unless it already does."""
+        if blocker.ref in self._reader.blocker_refs(ticket.number):
+            return
+        self._repo.run((
+            "api", "--method", "POST", f"repos/{self._repo.slug}/issues/{ticket.number}/dependencies/blocked_by",
+            "-F", f"issue_id={blocker.identity.id}",
+        ))
+
     @staticmethod
     def _routing_label(spec: SpecGraphSnapshot) -> str:
         label = spec.target_label

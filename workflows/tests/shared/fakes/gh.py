@@ -37,6 +37,7 @@ class FakeGhCli:
         tickets: dict[int, list[dict]] | None = None,
         specs: list[dict] | None = None,
         prs: list[dict] | None = None,
+        blocked_by: dict[int, list[int]] | None = None,
         page_size: int = 100,
         pulls: FakePullRequestHost | None = None,
     ) -> None:
@@ -44,6 +45,8 @@ class FakeGhCli:
         self.page_size = page_size
         self.pulls = pulls
         self._created: dict[int, dict] = {}
+        # Native blocked-by edges: issue number to the numbers of the issues that block it.
+        self._blocked_by: dict[int, list[int]] = copy.deepcopy(blocked_by) if blocked_by is not None else {}
         self._failures: list[list] = []
         # Writes mutate the stored issues, so a caller's shared fixtures must not be aliased.
         self._tickets = (
@@ -75,6 +78,15 @@ class FakeGhCli:
     def deny_on(self, *prefix: str) -> None:
         """Makes the next call starting with `prefix` fail the way GitHub refuses a read it may not make."""
         self.fail_on(*prefix, output="gh: Resource not accessible by integration (HTTP 403)")
+
+    def blockers_of(self, number: int) -> list[int]:
+        """The numbers of the issues that block `number`, in the order the edges were added."""
+        return list(self._blocked_by.get(number, []))
+
+    def close_issue(self, number: int, reason: str = "completed") -> None:
+        """Closes an issue as GitHub does when a human picks `reason` (completed, not_planned, or duplicate)."""
+        node = self._node(number)
+        node["state"], node["state_reason"] = "closed", reason
 
     def writes(self) -> list[tuple[str, ...]]:
         """Every recorded call that changes GitHub, in the order it was issued."""
@@ -139,23 +151,31 @@ class FakeGhCli:
             return self._post(args, path)
         if "--paginate" in args:
             return self._paged(self._collection(path, parse_qs(query)))
-        return json.dumps(_rest(self._node(int(path.lstrip("/")))))
+        return json.dumps(self._payload(self._node(int(path.lstrip("/")))))
 
     def _collection(self, path: str, query: dict[str, list[str]]) -> list[dict]:
         if not path:
             states, labels = query.get("state", ["open"])[0], query.get("labels", [""])[0]
             return [
-                _rest(node)
+                self._payload(node)
                 for node in self._issues()
                 if states in ("all", node["state"]) and (not labels or labels in _label_names(node))
             ]
         number, _, kind = path.lstrip("/").partition("/")
         node = self._node(int(number))
         if kind == "sub_issues":
-            return [_rest(child) for child in self._tickets.get(node["number"], [])]
+            return [self._payload(child) for child in self._tickets.get(node["number"], [])]
         if kind == "labels":
             return list(node["labels"])
+        if kind == "dependencies/blocked_by":
+            return [self._payload(self._node(blocker)) for blocker in self._blocked_by.get(node["number"], [])]
         return list(node["comment_list"])
+
+    def _payload(self, node: dict) -> dict:
+        """The REST payload of a stored issue, with the dependency counts GitHub reports beside it."""
+        edges = [self._node(number) for number in self._blocked_by.get(node["number"], [])]
+        summary = {"blocked_by": sum(edge["state"] == "open" for edge in edges), "total_blocked_by": len(edges)}
+        return {**_rest(node), "issue_dependencies_summary": summary}
 
     def _paged(self, items: list[dict]) -> str:
         size = self.page_size
@@ -163,13 +183,23 @@ class FakeGhCli:
 
     def _post(self, args: tuple[str, ...], path: str) -> str:
         if not path:
-            return json.dumps(_rest(self._create(args)))
+            return json.dumps(self._payload(self._create(args)))
         number, _, kind = path.lstrip("/").partition("/")
         node = self._node(int(number))
         if kind == "comments":
             return json.dumps(self._add_comment(node, _field(args, "body"), "loop"))
+        if kind == "dependencies/blocked_by":
+            return self._add_blocker(node, int(_field(args, "issue_id", flag="-F")) - 1000)
         child = int(_field(args, "sub_issue_id", flag="-F")) - 1000
         self._tickets.setdefault(node["number"], []).append(self._node(child))
+        return "{}"
+
+    def _add_blocker(self, node: dict, blocker: int) -> str:
+        self._node(blocker)
+        blockers = self._blocked_by.setdefault(node["number"], [])
+        if blocker in blockers:
+            raise CommandError("gh api dependencies/blocked_by", 1, "gh: Issue is already blocked by that issue (HTTP 422)")
+        blockers.append(blocker)
         return "{}"
 
     def _create(self, args: tuple[str, ...]) -> dict:

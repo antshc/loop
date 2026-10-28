@@ -6,8 +6,9 @@ from collections.abc import Iterable
 from dataclasses import dataclass, replace
 
 from ..identity import IssueRef
-from .issue import Comment, ReadGap
+from .issue import CloseReason, Comment, IssueState, ReadGap
 from .issue_classifier import LabelTypeDisagreement
+from .readiness import TicketReadiness, TicketReadinessPolicy
 from .spec import HITL_LABEL, Spec, Ticket
 
 
@@ -20,6 +21,16 @@ class IssueRelation:
 
 
 @dataclass(frozen=True)
+class BlockedByRelation:
+    """A native blocked-by edge: `ticket` waits for `blocker`, whose state and close reason were read with the edge."""
+
+    ticket: IssueRef
+    blocker: IssueRef
+    state: IssueState = IssueState.OPEN
+    close_reason: CloseReason | None = None
+
+
+@dataclass(frozen=True)
 class SpecGraphSnapshot:
     """An immutable Spec, its open sub-issues as Tickets, and their relations; `complete` says whether every read behind it succeeded."""
 
@@ -28,8 +39,9 @@ class SpecGraphSnapshot:
     relations: tuple[IssueRelation, ...] = ()
     # Sub-issues of every state, so a Spec whose Tickets are all closed is not mistaken for an unplanned one.
     sub_issue_total: int = 0
-    # Open Tickets that were not actionable when the Spec was read.
-    held_tickets: tuple[int, ...] = ()
+    blocked_by: tuple[BlockedByRelation, ...] = ()
+    # Tickets whose blocked-by edges could not be fully read or were denied; their readiness is UNKNOWN, not "no blockers".
+    unread_dependencies: tuple[int, ...] = ()
     gaps: tuple[ReadGap, ...] = ()
     disagreement: LabelTypeDisagreement | None = None
 
@@ -99,13 +111,29 @@ class SpecGraphSnapshot:
         return HITL_LABEL in self.spec.labels
 
     @property
+    def readiness(self) -> dict[int, TicketReadiness]:
+        """Every Ticket's READY, BLOCKED, or UNKNOWN readiness, by Ticket number."""
+        return TicketReadinessPolicy().evaluate(self)
+
+    @property
+    def held_tickets(self) -> tuple[int, ...]:
+        """The open Tickets that cannot be offered: BLOCKED, UNKNOWN, or carrying `hitl` or `spec`."""
+        readiness = self.readiness
+        return tuple(
+            ticket.number
+            for ticket in self.tickets
+            if ticket.state is IssueState.OPEN and not (ticket.actionable and readiness[ticket.number] is TicketReadiness.READY)
+        )
+
+    @property
     def deliverable_tickets(self) -> tuple[Ticket, ...]:
-        """The Tickets not held when the Spec was read, in order."""
-        return tuple(ticket for ticket in self.tickets if ticket.number not in self.held_tickets)
+        """The Tickets that are not held, in order: the READY ones and those already delivered."""
+        held = self.held_tickets
+        return tuple(ticket for ticket in self.tickets if ticket.number not in held)
 
     @property
     def has_work(self) -> bool:
-        """Has at least one Ticket ready for delivery."""
+        """Has at least one actionable, READY Ticket."""
         return any(ticket.actionable for ticket in self.deliverable_tickets)
 
     @property
@@ -129,17 +157,23 @@ class SpecGraphSnapshot:
         return self._with_ticket(Ticket.of(self.ticket(number).with_label(label)))
 
     def ticket_closed(self, number: int) -> SpecGraphSnapshot:
-        """This snapshot with the Ticket closed."""
-        return self._with_ticket(Ticket.of(self.ticket(number).closed()))
+        """This snapshot with the Ticket closed as completed, which satisfies the edges that wait for it."""
+        closed = Ticket.of(self.ticket(number).closed(CloseReason.COMPLETED))
+        edges = tuple(
+            replace(edge, state=IssueState.CLOSED, close_reason=CloseReason.COMPLETED) if edge.blocker == closed.ref else edge
+            for edge in self.blocked_by
+        )
+        return replace(self._with_ticket(closed), blocked_by=edges)
 
-    def with_created(self, created: Iterable[Ticket]) -> SpecGraphSnapshot:
-        """This snapshot with newly created Tickets appended and related to the Spec."""
+    def with_created(self, created: Iterable[Ticket], blocked_by: Iterable[BlockedByRelation] = ()) -> SpecGraphSnapshot:
+        """This snapshot with newly created Tickets appended, related to the Spec, and ordered by `blocked_by`."""
         created = tuple(created)
         relations = tuple(IssueRelation(self.spec.ref, ticket.ref) for ticket in created)
         return replace(
             self,
             tickets=(*self.tickets, *created),
             relations=(*self.relations, *relations),
+            blocked_by=(*self.blocked_by, *blocked_by),
             sub_issue_total=self.sub_issue_total + len(created),
         )
 

@@ -10,10 +10,8 @@ from loop import Kind, Phase, Phases
 
 from workflows.shared.agents.launcher import AgentLauncher
 from workflows.shared.git import GitClient
-from workflows.shared.github.issues.errors import IssueError
 from workflows.shared.github.issues.graph import SpecGraphSnapshot
-from workflows.shared.github.issues.spec import Ticket
-from workflows.shared.process import CommandError
+from workflows.shared.github.issues.ticketing import SpecTicketingService, TicketDraft, TicketingError
 
 from ..model.branches import slugify
 from ..model.definition import Owner
@@ -49,22 +47,23 @@ def plan_violation(result: PlanResult) -> str | None:
     return None
 
 
-def _with_blockers(planned: PlannedTicket, earlier: list[int]) -> str:
-    blockers = [f"#{earlier[index]}" for index in planned.blocked_by if 0 <= index < len(earlier)]
-    return f"{planned.body.rstrip()}\n\nBlocked by {', '.join(blockers)}" if blockers else planned.body
-
-
-def _ticket_key(index: int, planned: PlannedTicket) -> str:
-    return f"{index}-{slugify(planned.title)}"
+def _drafts(planned: tuple[PlannedTicket, ...]) -> tuple[TicketDraft, ...]:
+    return tuple(
+        TicketDraft(f"{index}-{slugify(ticket.title)}", ticket.title, ticket.body, ticket.blocked_by)
+        for index, ticket in enumerate(planned)
+    )
 
 
 class Planner:
     """Runs the planner read-only on a checkout and turns a valid plan into Tickets on the tracker."""
 
-    def __init__(self, new_agent: AgentLauncher, git: GitClient, tracker: Tracker, phases: Phases) -> None:
+    def __init__(
+        self, new_agent: AgentLauncher, git: GitClient, tracker: Tracker, ticketing: SpecTicketingService, phases: Phases,
+    ) -> None:
         self._new_agent = new_agent
         self._git = git
         self._tracker = tracker
+        self._ticketing = ticketing
         self._phases = phases
 
     def plan(self, spec: SpecGraphSnapshot, checkout: Path, run_plan: PlanWorkflow) -> SpecGraphSnapshot | None:
@@ -89,29 +88,13 @@ class Planner:
             phase.set(planned=len(result.tickets))
         with self._phases.phase("create-tickets", Kind.CODE, Owner.CODE, spec=spec.number) as phase:
             try:
-                created = self._create_tickets(spec, result.tickets)
-            except TicketWorkflowError as exception:
+                created = self._ticketing.create(spec, _drafts(result.tickets))
+            except TicketingError as exception:
                 return self._reject(spec, phase, str(exception))
-            phase.set(tickets=",".join(str(ticket.number) for ticket in created))
-        planned = spec.with_created(created)
-        self._tracker.comment(spec.number, "planned", "dev: planned " + ", ".join(f"#{ticket.number}" for ticket in created))
+            phase.set(tickets=",".join(str(ticket.number) for ticket in created.tickets))
+        planned = spec.with_created(created.tickets, created.blocked_by)
+        self._tracker.comment(spec.number, "planned", "dev: planned " + ", ".join(f"#{ticket.number}" for ticket in created.tickets))
         return planned
-
-    def _create_tickets(self, spec: SpecGraphSnapshot, planned: tuple[PlannedTicket, ...]) -> tuple[Ticket, ...]:
-        """Finds or creates each planned Ticket, then links it to `spec`; a failure names the Tickets already made and keeps them."""
-        tracker = self._tracker
-        created: list[Ticket] = []
-        try:
-            for index, planned_ticket in enumerate(planned):
-                key = _ticket_key(index, planned_ticket)
-                body = _with_blockers(planned_ticket, [ticket.number for ticket in created])
-                ticket = tracker.find_ticket(spec, key) or tracker.create_ticket(spec, key, planned_ticket.title, body)
-                tracker.link_ticket(spec, ticket)
-                created.append(ticket)
-        except (CommandError, IssueError, TicketWorkflowError) as exception:
-            made = ", ".join(f"#{ticket.number}" for ticket in created) or "none"
-            raise TicketWorkflowError(f"creating Tickets failed after creating {made}: {exception}") from exception
-        return tuple(created)
 
     def _reject(self, spec: SpecGraphSnapshot, phase: Phase, reason: str) -> None:
         logger.warning("spec #%s not planned: %s", spec.number, reason)

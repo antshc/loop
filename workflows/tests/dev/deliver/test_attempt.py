@@ -115,7 +115,6 @@ def test_ticket_workflow_skips_non_actionable_tickets_it_is_given(tmp_path: Path
     spec = replace(
         spec,
         tickets=(first.closed(), second.with_label("hitl"), third),
-        held_tickets=(),
     )
     attempted: list[int] = []
 

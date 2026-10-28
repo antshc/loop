@@ -33,8 +33,12 @@ class TicketsDelivered:
     complete: bool
 
 
+def _next_ready(spec: SpecGraphSnapshot) -> Ticket | None:
+    return next((ticket for ticket in spec.deliverable_tickets if ticket.actionable), None)
+
+
 class TicketDeliverer:
-    """Delivers a Spec's actionable Tickets in order on one worktree, one validated agent commit per Ticket."""
+    """Delivers a Spec's actionable, READY Tickets in order on one worktree, one validated agent commit per Ticket."""
 
     def __init__(
         self,
@@ -63,9 +67,8 @@ class TicketDeliverer:
         """Retries failed attempts and stops at the failure cap; `publish` runs with the current Spec after each closed Ticket."""
         if self._max_failures < 1:
             raise TicketWorkflowError("max_failures must be at least one")
-        for ticket in spec.deliverable_tickets:
-            if not ticket.actionable:
-                continue
+        # Re-read each time: closing a Ticket can make a Ticket that waited for it READY.
+        while (ticket := _next_ready(spec)) is not None:
             attempt = 0
             while True:
                 attempt += 1

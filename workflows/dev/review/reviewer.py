@@ -97,7 +97,7 @@ def readiness_blockers(spec: SpecGraphSnapshot, delivery: Delivery, outcome: Rev
     if open_tickets:
         blockers.append("open Tickets: " + ", ".join(f"#{ticket.number}" for ticket in open_tickets))
     if spec.held_tickets:
-        blockers.append("Tickets held for a human: " + ", ".join(f"#{number}" for number in spec.held_tickets))
+        blockers.append("Tickets held (blocked, unread dependencies, or waiting for a human): " + ", ".join(f"#{number}" for number in spec.held_tickets))
     if spec.awaiting_human or any(HITL_LABEL in ticket.labels for ticket in spec.deliverable_tickets):
         blockers.append("a Ticket or the Spec is waiting for a human (`hitl`)")
     if delivery.verification.blocks_ready:

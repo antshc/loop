@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from workflows.shared.github.identity import IssueIdentity, IssueRef, RepositoryId
-from workflows.shared.github.issues.graph import SpecGraphSnapshot
-from workflows.shared.github.issues.issue import Issue, IssueState
+from workflows.shared.github.issues.graph import BlockedByRelation, SpecGraphSnapshot
+from workflows.shared.github.issues.issue import CloseReason, Issue, IssueState
 from workflows.shared.github.issues.spec import Spec, Ticket
 from workflows.shared.github.pull_requests.model import (
     CheckKind,
@@ -56,18 +56,31 @@ def build_ticket(number: int = 10, title: str = "Add login form", labels: tuple[
     return Ticket.of(build_issue(number, title, labels=labels, state=state))
 
 
+def build_blocker(
+    ticket: int,
+    blocker: int,
+    state: IssueState = IssueState.OPEN,
+    close_reason: CloseReason | None = None,
+) -> BlockedByRelation:
+    """The edge saying Ticket `ticket` waits for issue `blocker`, which is in `state`."""
+    return BlockedByRelation(IssueRef(REPOSITORY, ticket), IssueRef(REPOSITORY, blocker), state, close_reason)
+
+
 def build_graph(
     number: int = 1,
     title: str = "Add login page",
     labels: tuple[str, ...] = ("spec",),
     tickets: tuple[Ticket, ...] = (),
+    blocked_by: tuple[BlockedByRelation, ...] = (),
+    unread_dependencies: tuple[int, ...] = (),
 ) -> SpecGraphSnapshot:
-    """A complete Spec graph whose `tickets` were all read open or held."""
+    """A complete Spec graph whose `tickets` were all read open, with no blockers unless given."""
     return SpecGraphSnapshot(
         spec=build_spec(number, title, labels),
         tickets=tickets,
+        blocked_by=blocked_by,
+        unread_dependencies=unread_dependencies,
         sub_issue_total=len(tickets),
-        held_tickets=tuple(ticket.number for ticket in tickets if not ticket.actionable),
     )
 
 

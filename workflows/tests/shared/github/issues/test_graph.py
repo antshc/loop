@@ -5,8 +5,9 @@ from dataclasses import FrozenInstanceError, replace
 import pytest
 
 from workflows.shared.github.issues.graph import IssueRelation, SpecGraphSnapshot
-from workflows.shared.github.issues.issue import GapState, ReadGap
-from workflows.tests.shared.builders import build_graph, build_ticket
+from workflows.shared.github.issues.issue import CloseReason, GapState, IssueState, ReadGap
+from workflows.shared.github.issues.readiness import TicketReadiness
+from workflows.tests.shared.builders import build_blocker, build_graph, build_ticket
 
 
 def test_a_graph_without_gaps_is_complete() -> None:
@@ -48,6 +49,46 @@ def test_tickets_held_when_read_are_not_deliverable() -> None:
 
     assert graph.held_tickets == (11,)
     assert [ticket.number for ticket in graph.deliverable_tickets] == [10]
+
+
+def test_blocked_and_unknown_tickets_are_held_and_not_deliverable() -> None:
+    graph = build_graph(
+        tickets=(build_ticket(10), build_ticket(11), build_ticket(12), build_ticket(13)),
+        blocked_by=(build_blocker(11, 10), build_blocker(12, 20, IssueState.CLOSED, CloseReason.NOT_PLANNED)),
+        unread_dependencies=(13,),
+    )
+
+    assert graph.readiness == {
+        10: TicketReadiness.READY, 11: TicketReadiness.BLOCKED, 12: TicketReadiness.BLOCKED, 13: TicketReadiness.UNKNOWN,
+    }
+    assert graph.held_tickets == (11, 12, 13)
+    assert [ticket.number for ticket in graph.deliverable_tickets] == [10]
+
+
+def test_a_graph_whose_every_ticket_is_held_has_no_work_and_still_needs_no_plan() -> None:
+    graph = build_graph(tickets=(build_ticket(10),), blocked_by=(build_blocker(10, 20),))
+
+    assert not graph.has_work and not graph.needs_plan
+
+
+def test_closing_a_blocker_ticket_as_completed_readies_the_tickets_waiting_for_it() -> None:
+    graph = build_graph(tickets=(build_ticket(10), build_ticket(11)), blocked_by=(build_blocker(11, 10),))
+
+    closed = graph.ticket_closed(10)
+
+    assert graph.held_tickets == (11,)
+    assert closed.held_tickets == () and closed.readiness[11] is TicketReadiness.READY
+    assert [ticket.number for ticket in closed.deliverable_tickets if ticket.actionable] == [11]
+
+
+def test_created_tickets_carry_their_blocked_by_edges() -> None:
+    graph = build_graph()
+    first, second = build_ticket(10), build_ticket(11)
+
+    grown = graph.with_created([first, second], [build_blocker(11, 10)])
+
+    assert grown.held_tickets == (11,)
+    assert graph.blocked_by == ()
 
 
 def test_changing_a_graph_returns_a_new_snapshot_and_leaves_the_original() -> None:

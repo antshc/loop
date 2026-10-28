@@ -234,6 +234,7 @@ class DevHarness:
         specs: list[dict] | None = None,
         tickets: dict[int, list[dict]] | None = None,
         prs: list[dict] | None = None,
+        blocked_by: dict[int, list[int]] | None = None,
     ) -> None:
         self.tmp_path = tmp_path
         self.root = tmp_path / "harness"
@@ -248,6 +249,7 @@ class DevHarness:
             else [issue(1, "Checkout: Add login page", labels=("spec", "repo:target:owner/repo", "repo:base:main"))],
             tickets=tickets if tickets is not None else {1: [issue(10, "Add login form")]},
             prs=prs,
+            blocked_by=blocked_by,
         )
         self.github = GitHubRepo("owner", "repo", gh=self.gh)
         self.tracker = Issues(self.github)

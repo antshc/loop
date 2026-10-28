@@ -11,7 +11,7 @@ from ...process import CommandError
 from ..identity import CommentRef, IssueIdentity, IssueRef, RepositoryId
 from ..repo import GitHubRepo
 from .errors import IssueError
-from .graph import IssueRelation, SpecGraphSnapshot
+from .graph import BlockedByRelation, IssueRelation, SpecGraphSnapshot
 from .issue import CloseReason, Comment, GapState, Issue, IssueState, ReadGap
 from .issue_classifier import IssueClassifier, IssueKind, LabelTypeDisagreement
 from .spec import SPEC_LABEL, Spec, Ticket
@@ -68,6 +68,11 @@ class IssueReader:
         """The numbers of every sub-issue of `number`, open or closed; an unreadable listing raises."""
         return frozenset(node["number"] for node in self._pages(self._endpoint(f"issues/{number}/sub_issues?{_PER_PAGE}")))
 
+    def blocker_refs(self, number: int) -> frozenset[IssueRef]:
+        """Every issue that blocks `number`; an unreadable listing raises."""
+        nodes = self._pages(self._endpoint(f"issues/{number}/dependencies/blocked_by?{_PER_PAGE}"))
+        return frozenset(self._blocker_ref(node) for node in nodes)
+
     def created(self, node: dict[str, Any]) -> Issue:
         """The issue a create call returned, as a fresh snapshot with no Comments."""
         return self._summary(node)
@@ -87,16 +92,51 @@ class IssueReader:
         sub_issues = self._collect(gaps, "sub_issues", self._endpoint(f"issues/{spec.number}/sub_issues?{_PER_PAGE}"))
         sub_issues = [sub_issue for sub_issue in sub_issues if "pull_request" not in sub_issue]
         self._check_total(gaps, "sub_issues", len(sub_issues), (node.get("sub_issues_summary") or {}).get("total"))
-        tickets = tuple(Ticket.of(self._hydrate(sub_issue)) for sub_issue in sub_issues if sub_issue["state"] == "open")
+        open_nodes = [sub_issue for sub_issue in sub_issues if sub_issue["state"] == "open"]
+        tickets = tuple(Ticket.of(self._hydrate(sub_issue)) for sub_issue in open_nodes)
+        blocked_by: list[BlockedByRelation] = []
+        unread: list[int] = []
+        for ticket, ticket_node in zip(tickets, open_nodes, strict=True):
+            edges = self._blockers(ticket, ticket_node)
+            if edges is None:
+                unread.append(ticket.number)
+            else:
+                blocked_by.extend(edges)
         return SpecGraphSnapshot(
             spec=spec,
             tickets=tickets,
             relations=tuple(IssueRelation(spec.ref, ticket.ref) for ticket in tickets),
+            blocked_by=tuple(blocked_by),
+            unread_dependencies=tuple(unread),
             sub_issue_total=len(sub_issues),
-            held_tickets=tuple(ticket.number for ticket in tickets if not ticket.actionable),
             gaps=tuple(gaps),
             disagreement=disagreement,
         )
+
+    def _blockers(self, ticket: Ticket, node: dict[str, Any]) -> list[BlockedByRelation] | None:
+        """The Ticket's native blocked-by edges, or None when they were denied or not fully read."""
+        gaps: list[ReadGap] = []
+        blockers = self._collect(gaps, "blocked_by", self._endpoint(f"issues/{ticket.number}/dependencies/blocked_by?{_PER_PAGE}"))
+        self._check_total(gaps, "blocked_by", len(blockers), (node.get("issue_dependencies_summary") or {}).get("total_blocked_by"))
+        if gaps:
+            logger.warning("ticket #%s: dependencies not read completely, so it is held: %s", ticket.number, gaps)
+            return None
+        return [self._edge(ticket, blocker) for blocker in blockers]
+
+    def _edge(self, ticket: Ticket, node: dict[str, Any]) -> BlockedByRelation:
+        state = IssueState(node["state"])
+        reason = node.get("state_reason")
+        return BlockedByRelation(
+            ticket=ticket.ref,
+            blocker=self._blocker_ref(node),
+            state=state,
+            close_reason=CloseReason(reason) if state is IssueState.CLOSED and reason in CloseReason else None,
+        )
+
+    def _blocker_ref(self, node: dict[str, Any]) -> IssueRef:
+        # A blocker may live in another repository; its payload names it as `.../repos/<owner>/<repo>`.
+        owner, _, name = node.get("repository_url", "").removeprefix("https://api.github.com/repos/").partition("/")
+        return IssueRef(RepositoryId(owner, name) if owner and name else self.repository, node["number"])
 
     def _hydrate(self, node: dict[str, Any]) -> Issue:
         ref = self._ref(node)

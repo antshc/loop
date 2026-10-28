@@ -523,6 +523,87 @@ def test_only_the_selected_ticket_is_closed(tmp_path: Path) -> None:
     assert [c[2] for c in harness.calls("issue", "close")] == ["10"]
 
 
+def _with_blockers(tmp_path: Path, blocked_by: dict[int, list[int]], *others: dict, tickets=None) -> DevHarness:
+    """A harness whose Spec #1 has `tickets` (default 10 and 11) and whose issue graph has `others` elsewhere."""
+    return DevHarness(tmp_path, tickets={1: list(tickets or TWO_TICKETS[1]), 2: list(others)}, blocked_by=blocked_by)
+
+
+def test_only_ready_tickets_are_delivered_while_a_blocked_ticket_waits(tmp_path: Path) -> None:
+    harness = _with_blockers(tmp_path, {10: [20]}, issue(20, "Elsewhere"))
+
+    code = harness.run(lambda prompt: harness.commit_and_report(11))
+
+    assert code == 0 and len(harness.prompts) == 1
+    assert [c[2] for c in harness.calls("issue", "close")] == ["11"]
+    assert not harness.calls("issue", "edit")
+
+
+def test_a_ticket_becomes_ready_in_the_same_run_when_its_blocker_ticket_is_delivered(tmp_path: Path) -> None:
+    harness = _with_blockers(tmp_path, {10: [11]})
+    numbers = iter((11, 10))
+
+    code = harness.run(lambda prompt: harness.commit_and_report(next(numbers)))
+
+    assert code == 0
+    assert [c[2] for c in harness.calls("issue", "close")] == ["11", "10"]
+
+
+def test_when_every_ticket_is_held_nothing_is_delivered_replanned_or_handed_to_a_human(tmp_path: Path) -> None:
+    harness = _with_blockers(tmp_path, {10: [20], 11: [20]}, issue(20, "Elsewhere"))
+
+    code = harness.run(all_phases=True)
+
+    assert code == 0
+    assert harness.prompts == [] and harness.runner.plan_prompts == [] and not harness.git_service.opened
+    assert harness.writes() == []
+
+
+@pytest.mark.parametrize("reason", ["not_planned", "duplicate"])
+def test_a_ticket_whose_blocker_was_dropped_stays_held_with_no_hand_off(tmp_path: Path, reason: str) -> None:
+    harness = _with_blockers(tmp_path, {10: [20], 11: [20]}, issue(20, "Dropped", state="closed", close_reason=reason))
+
+    code = harness.run()
+
+    assert code == 0 and harness.prompts == [] and harness.writes() == []
+
+
+def test_a_ticket_whose_blocker_was_completed_is_delivered(tmp_path: Path) -> None:
+    harness = _with_blockers(tmp_path, {10: [20]}, issue(20, "Done", state="closed", close_reason="completed"), tickets=[issue(10, "Waits")])
+
+    code = harness.run(lambda prompt: harness.commit_and_report(10))
+
+    assert code == 0 and [c[2] for c in harness.calls("issue", "close")] == ["10"]
+
+
+def test_a_ticket_whose_dependencies_are_denied_is_held_and_the_spec_is_not_escalated(tmp_path: Path) -> None:
+    harness = _with_blockers(tmp_path, {})
+    harness.gh.deny_on("api", "--paginate", "--slurp", "repos/owner/repo/issues/10/dependencies/blocked_by?per_page=100")
+
+    code = harness.run(lambda prompt: harness.commit_and_report(11))
+
+    assert code == 0 and len(harness.prompts) == 1
+    assert [c[2] for c in harness.calls("issue", "close")] == ["11"]
+    assert not harness.calls("issue", "edit")
+
+
+def test_a_ticket_with_only_a_legacy_blocked_by_line_is_delivered(tmp_path: Path) -> None:
+    legacy = {**issue(10, "Legacy"), "body": "Do it\n\nBlocked by #20"}
+    harness = _with_blockers(tmp_path, {}, issue(20, "Open"), tickets=[legacy])
+
+    code = harness.run(lambda prompt: harness.commit_and_report(10))
+
+    assert code == 0 and [c[2] for c in harness.calls("issue", "close")] == ["10"]
+
+
+def test_a_spec_with_held_tickets_is_not_replanned(tmp_path: Path) -> None:
+    harness = _with_blockers(tmp_path, {10: [20]}, issue(20, "Elsewhere"), tickets=[issue(10, "Waits")])
+    harness.runner.plan_handler = lambda prompt: envelope("", result={"tickets": [{"title": "New", "body": "x"}]})
+
+    code = harness.run(all_phases=True)
+
+    assert code == 0 and harness.runner.plan_prompts == [] and not harness.gh.created_issues()
+
+
 class SpanRecordingObserver:
     """Stands in for the OTLP observer: records Workflow spans and what the library reports."""
 

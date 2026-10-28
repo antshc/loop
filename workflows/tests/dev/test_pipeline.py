@@ -70,7 +70,10 @@ def test_default_planner_creates_subissues_and_delivers_in_dependency_order(tmp_
     assert harness.run(lambda prompt: harness.commit_and_report(next(numbers)), all_phases=True) == 0
     creates = harness.gh.created_issues()
     assert len(creates) == 2
-    assert "Blocked by #101" in creates[1][1]
+    assert not any("Blocked by" in body for _, body in creates)
+    assert harness.gh.blockers_of(101) == [] and harness.gh.blockers_of(102) == [101]
+    [edge] = harness.calls("api", "--method", "POST", "repos/owner/repo/issues/102/dependencies/blocked_by")
+    assert edge[-2:] == ("-F", "issue_id=1101")
     assert [call[2] for call in harness.calls("issue", "close")] == ["101", "102"]
     assert len(harness.git.pushes) == 2
     assert [profile.name for profile in harness.runner.profiles] == ["planner", "developer", "developer", "chore", "reviewer"]
@@ -94,6 +97,22 @@ def test_a_retry_after_a_crash_between_creating_and_linking_a_ticket_links_it_in
     assert not harness.gh.created_issues()
     assert len(harness.calls("api", "--method", "POST", "repos/owner/repo/issues/1/sub_issues")) == 1
     assert [call[2] for call in harness.calls("issue", "close")] == ["101"]
+
+
+def test_a_planned_spec_is_not_replanned_and_its_edges_are_not_added_again(tmp_path: Path) -> None:
+    """Given a planned and delivered Spec, when dev reruns, then it is not replanned and no edge or Ticket is written."""
+    harness = DevHarness(tmp_path, tickets={1: []})
+    harness.runner.plan_handler = lambda prompt: envelope("", result={"tickets": [
+        {"title": "Add basket", "body": "Create a basket"},
+        {"title": "Add coffee", "body": "Add a product", "blocked_by": [0]},
+    ]})
+    numbers = iter((101, 102))
+    assert harness.run(lambda prompt: harness.commit_and_report(next(numbers)), all_phases=True) == 0
+    harness.gh.calls.clear()
+
+    assert harness.run(all_phases=True) == 0
+
+    assert not harness.gh.created_issues() and not harness.calls("api", "--method", "POST")
 
 
 @pytest.mark.parametrize("reply", ["no JSON", envelope("", result={"tickets": []}),

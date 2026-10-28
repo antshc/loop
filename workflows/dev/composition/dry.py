@@ -178,7 +178,7 @@ class DryGh:
             return self._tickets
         if path.endswith("/labels"):
             return self._issue(int(path.split("/")[-2]))["labels"]
-        if path.endswith("/comments"):
+        if path.endswith(("/comments", "/dependencies/blocked_by")):
             return []
         return self._specs
 

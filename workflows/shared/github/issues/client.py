@@ -52,3 +52,7 @@ class Issues:
     def link_ticket(self, spec: SpecGraphSnapshot, ticket: Ticket) -> None:
         """Makes `ticket` a sub-issue of `spec` unless it already is one."""
         self._commands.link_ticket(spec, ticket)
+
+    def add_blocked_by(self, ticket: Ticket, blocker: Ticket) -> None:
+        """Makes `ticket` wait for `blocker` as a native blocked-by dependency unless it already does."""
+        self._commands.add_blocked_by(ticket, blocker)

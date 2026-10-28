@@ -7,6 +7,7 @@ from workflows.shared.github.issues.client import Issues
 from workflows.shared.github.issues.errors import IssueError
 from workflows.shared.github.issues.issue import CloseReason, GapState, IssueState
 from workflows.shared.github.issues.issue_classifier import LabelTypeDisagreement
+from workflows.shared.github.issues.readiness import TicketReadiness
 from workflows.shared.github.repo import GhRunner, GitHubRepo
 from workflows.shared.process import CommandError
 from workflows.tests.shared.fakes import FakeGhCli, issue
@@ -239,3 +240,101 @@ def test_a_spec_listing_that_cannot_be_read_raises_instead_of_returning_no_specs
 
     with pytest.raises(CommandError, match="HTTP 403"):
         _issues(gh).specs()
+
+
+def _blocked_graph(*, blocker: dict, **options):
+    gh = FakeGhCli(
+        specs=[issue(1, "Spec", labels=_ROUTING)],
+        tickets={1: [issue(10, "Waits")], 2: [blocker]},
+        blocked_by={10: [blocker["number"]]},
+        **options,
+    )
+    return gh, _graph(gh)
+
+
+def test_a_tickets_native_blockers_are_read_with_their_state_and_close_reason() -> None:
+    gh = FakeGhCli(
+        specs=[issue(1, "Spec", labels=_ROUTING)],
+        tickets={1: [issue(10, "Waits")], 2: [issue(20, "Open"), issue(21, "Dropped", state="closed", close_reason="not_planned")]},
+        blocked_by={10: [20, 21]},
+    )
+
+    graph = _graph(gh)
+
+    assert [(edge.ticket.number, edge.blocker.number, edge.state, edge.close_reason) for edge in graph.blocked_by] == [
+        (10, 20, IssueState.OPEN, None),
+        (10, 21, IssueState.CLOSED, CloseReason.NOT_PLANNED),
+    ]
+    assert graph.complete and graph.unread_dependencies == ()
+
+
+@pytest.mark.parametrize(
+    ("blocker", "expected"),
+    [
+        (issue(20, "Blocker"), TicketReadiness.BLOCKED),
+        (issue(20, "Blocker", state="closed", close_reason="completed"), TicketReadiness.READY),
+        (issue(20, "Blocker", state="closed", close_reason="not_planned"), TicketReadiness.BLOCKED),
+        (issue(20, "Blocker", state="closed", close_reason="duplicate"), TicketReadiness.BLOCKED),
+    ],
+)
+def test_a_ticket_is_ready_blocked_or_held_by_how_its_blocker_ended(blocker: dict, expected: TicketReadiness) -> None:
+    _, graph = _blocked_graph(blocker=blocker)
+
+    assert graph.readiness == {10: expected}
+
+
+def test_blockers_are_read_across_every_page() -> None:
+    blockers = [issue(number, f"Blocker {number}", state="closed", close_reason="completed") for number in (20, 21, 22)]
+    gh = FakeGhCli(
+        specs=[issue(1, "Spec", labels=_ROUTING)],
+        tickets={1: [issue(10, "Waits")], 2: blockers},
+        blocked_by={10: [20, 21, 22]},
+        page_size=1,
+    )
+
+    graph = _graph(gh)
+
+    assert [edge.blocker.number for edge in graph.blocked_by] == [20, 21, 22]
+    assert graph.readiness == {10: TicketReadiness.READY}
+
+
+def test_a_ticket_with_only_a_legacy_blocked_by_line_in_its_body_has_no_blockers() -> None:
+    legacy = {**issue(10, "Legacy"), "body": "Do it\n\nBlocked by #20"}
+    gh = FakeGhCli(specs=[issue(1, "Spec", labels=_ROUTING)], tickets={1: [legacy], 2: [issue(20, "Open")]})
+
+    graph = _graph(gh)
+
+    assert graph.blocked_by == () and graph.readiness == {10: TicketReadiness.READY}
+
+
+def test_denied_dependencies_make_the_ticket_unknown_without_making_the_spec_unreadable() -> None:
+    gh, _ = _blocked_graph(blocker=issue(20, "Blocker", state="closed", close_reason="completed"))
+    gh.deny_on(*_read(f"10/dependencies/blocked_by{_PAGE}"))
+
+    graph = _graph(gh)
+
+    assert graph.unread_dependencies == (10,) and graph.blocked_by == ()
+    assert graph.readiness == {10: TicketReadiness.UNKNOWN}
+    assert graph.complete and graph.held_tickets == (10,) and not graph.has_work
+
+
+def test_a_failed_dependency_page_makes_the_ticket_unknown() -> None:
+    gh, _ = _blocked_graph(blocker=issue(20, "Blocker", state="closed", close_reason="completed"))
+    gh.fail_on(*_read(f"10/dependencies/blocked_by{_PAGE}"))
+
+    graph = _graph(gh)
+
+    assert graph.readiness == {10: TicketReadiness.UNKNOWN}
+
+
+def test_blockers_cut_short_of_githubs_own_count_make_the_ticket_unknown() -> None:
+    gh, _ = _blocked_graph(blocker=issue(20, "Blocker", state="closed", close_reason="completed"))
+    real = gh.__call__
+
+    def cut_short(args: tuple[str, ...]) -> str:
+        output = real(args)
+        return output.replace('"total_blocked_by": 1', '"total_blocked_by": 3') if args[-1].endswith(f"issues/1/sub_issues{_PAGE}") else output
+
+    graph = _issues(cut_short).specs()[0]
+
+    assert graph.readiness == {10: TicketReadiness.UNKNOWN}
