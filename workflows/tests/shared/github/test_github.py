@@ -94,3 +94,19 @@ def test_a_closed_pull_request_snapshot_skips_reviews_and_checks() -> None:
 
     assert snapshot["pr"]["state"] == "closed" and snapshot["threads"] == [] and snapshot["checks"] == []
     assert len(gh.calls) == 1
+
+
+def test_a_repository_is_read_from_a_slug_or_a_remote_url_and_nothing_else() -> None:
+    gh = ScriptedGh(lambda args: "")
+
+    assert GitHubRepo.from_slug("acme/harness", gh).slug == "acme/harness"
+    assert GitHubRepo.from_slug("git@github.com:acme/harness.git", gh).slug == "acme/harness"
+    with pytest.raises(ValueError, match="unsupported"):
+        GitHubRepo.from_slug("https://example.com/owner/repo.git", gh)
+
+
+def test_the_account_hands_out_the_issues_of_a_repository() -> None:
+    gh = ScriptedGh(lambda args: "[[]]")
+
+    assert GitHub(gh).issues("a/b").specs() == ()
+    assert gh.calls[0][-1] == "repos/a/b/issues?state=open&labels=spec&per_page=100"

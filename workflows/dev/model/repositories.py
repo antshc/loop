@@ -7,11 +7,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import NewType, Protocol
 
+from workflows.shared.github.identity import RepositoryId
+from workflows.shared.github.issues.graph import SpecGraphSnapshot
+from workflows.shared.github.issues.issue import Comment
+from workflows.shared.github.issues.spec import Ticket
 from workflows.shared.github.repo import GitHubRepo
 
 from .records import (
-    AgentWorkflow, ChoreWorkflow, PlanWorkflow, Repository, RepositoryId, ReviewWorkflow, Spec, Ticket, TicketWorkflowError,
-    VerifyWorkflow,
+    AgentWorkflow, ChoreWorkflow, PlanWorkflow, Repository, ReviewWorkflow, TicketWorkflowError, VerifyWorkflow,
 )
 
 
@@ -65,9 +68,9 @@ GithubFactory = Callable[[Repository], GitHubRepo]
 class Tracker(Protocol):
     """Where Specs and Tickets live; each command takes effect on GitHub at once, and a retry skips what is already applied."""
 
-    def specs(self) -> Iterable[Spec]: ...
+    def specs(self) -> Iterable[SpecGraphSnapshot]: ...
 
-    def comment(self, number: int, purpose: str, body: str) -> None: ...
+    def comment(self, number: int, purpose: str, body: str) -> Comment: ...
 
     def add_label(self, number: int, label: str) -> None: ...
 
@@ -75,8 +78,8 @@ class Tracker(Protocol):
 
     def close(self, number: int, comment: str) -> None: ...
 
-    def find_ticket(self, spec: Spec, key: str) -> Ticket | None: ...
+    def find_ticket(self, spec: SpecGraphSnapshot, key: str) -> Ticket | None: ...
 
-    def create_ticket(self, spec: Spec, key: str, title: str, body: str) -> Ticket: ...
+    def create_ticket(self, spec: SpecGraphSnapshot, key: str, title: str, body: str) -> Ticket: ...
 
-    def link_ticket(self, spec: Spec, ticket: Ticket) -> None: ...
+    def link_ticket(self, spec: SpecGraphSnapshot, ticket: Ticket) -> None: ...

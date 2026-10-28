@@ -11,6 +11,7 @@ from loop import Agent, Phases, SessionLogReader
 
 from workflows.shared.agents.launcher import AgentFactory, AgentLauncher
 from workflows.shared.git import GitClient
+from workflows.shared.github.issues.client import Issues
 from workflows.shared.github.repo import GhCli, GitHubRepo
 from workflows.shared.process import Runner
 from workflows.shared.providers import bind
@@ -25,7 +26,6 @@ from ..model.repositories import HARNESS, GithubFactory, Harness, RepositoryWork
 from ..model.settings import DevSettings
 from ..plan.planner import Planner
 from ..review.reviewer import Finalizer, Reviewer
-from ..tracker.tickets import TicketsTracker
 from ..verify.verifier import AppVerifier
 from .repositories import configured_repositories
 
@@ -64,8 +64,7 @@ class DevProvider(Provider):
 
     @provide(scope=Scope.APP)
     def tracker(self, harness: Harness, github_for: GithubFactory) -> Tracker:
-        github = github_for(harness)
-        return TicketsTracker(harness.owner_name.owner, harness.owner_name.repo, gh=github.run)
+        return Issues(github_for(harness))
 
     @provide(scope=Scope.APP)
     def store(self, settings: DevSettings) -> FileExecutionStore:

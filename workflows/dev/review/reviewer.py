@@ -8,12 +8,14 @@ from loop import Kind, Phases
 
 from workflows.shared.agents.launcher import AgentLauncher
 from workflows.shared.git import GitClient
+from workflows.shared.github.issues.graph import SpecGraphSnapshot
 from workflows.shared.github.pull_requests import PullRequests
 
+from ..model.branches import feature_branch as feature_branch_of
 from ..model.definition import Owner
 from ..model.gates import readonly_violation
 from ..model.outcomes import Delivery, ReviewOutcome
-from ..model.records import HITL_LABEL, Repository, ReviewContext, ReviewWorkflow, Spec, TicketWorkflowError, loop_session_name
+from ..model.records import HITL_LABEL, Repository, ReviewContext, ReviewWorkflow, TicketWorkflowError, loop_session_name
 from ..model.repositories import GithubFactory, Tracker
 
 
@@ -25,7 +27,9 @@ class Reviewer:
         self._git = git
         self._phases = phases
 
-    def review(self, spec: Spec, delivery: Delivery, repository: Repository, run_review: ReviewWorkflow) -> ReviewOutcome:
+    def review(
+        self, spec: SpecGraphSnapshot, delivery: Delivery, repository: Repository, run_review: ReviewWorkflow
+    ) -> ReviewOutcome:
         git, checkout = self._git, repository.checkout
         with self._phases.phase("review", Kind.AGENT, Owner.REVIEWER, spec=spec.number, head=delivery.head_sha) as phase:
             head, status = git.head(checkout), git.status(checkout)
@@ -59,8 +63,8 @@ class Finalizer:
         self._tracker = tracker
         self._phases = phases
 
-    def finalize(self, spec: Spec, delivery: Delivery, outcome: ReviewOutcome, repository: Repository) -> bool:
-        feature_branch = spec.feature_branch
+    def finalize(self, spec: SpecGraphSnapshot, delivery: Delivery, outcome: ReviewOutcome, repository: Repository) -> bool:
+        feature_branch = feature_branch_of(spec)
         if feature_branch is None:
             raise TicketWorkflowError(f"cannot resolve feature branch for Spec {spec.url}")
         git = self._git
@@ -84,17 +88,17 @@ class Finalizer:
         return ready
 
 
-def readiness_blockers(spec: Spec, delivery: Delivery, outcome: ReviewOutcome, current_head: str) -> list[str]:
+def readiness_blockers(spec: SpecGraphSnapshot, delivery: Delivery, outcome: ReviewOutcome, current_head: str) -> list[str]:
     """Why the PR must stay a draft; empty when every gate passes."""
     blockers: list[str] = []
     if not delivery.delivered:
         blockers.append("not every Ticket was delivered")
-    open_tickets = [ticket for ticket in spec.tickets if ticket.state == "open"]
+    open_tickets = [ticket for ticket in spec.deliverable_tickets if ticket.state == "open"]
     if open_tickets:
         blockers.append("open Tickets: " + ", ".join(f"#{ticket.number}" for ticket in open_tickets))
     if spec.held_tickets:
         blockers.append("Tickets held for a human: " + ", ".join(f"#{number}" for number in spec.held_tickets))
-    if spec.awaiting_human or any(HITL_LABEL in ticket.labels for ticket in spec.tickets):
+    if spec.awaiting_human or any(HITL_LABEL in ticket.labels for ticket in spec.deliverable_tickets):
         blockers.append("a Ticket or the Spec is waiting for a human (`hitl`)")
     if delivery.verification.blocks_ready:
         blockers.append(f"app verification is {delivery.verification.verdict}")

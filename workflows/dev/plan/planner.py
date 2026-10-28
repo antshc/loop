@@ -10,13 +10,17 @@ from loop import Kind, Phase, Phases
 
 from workflows.shared.agents.launcher import AgentLauncher
 from workflows.shared.git import GitClient
+from workflows.shared.github.issues.errors import IssueError
+from workflows.shared.github.issues.graph import SpecGraphSnapshot
+from workflows.shared.github.issues.spec import Ticket
 from workflows.shared.process import CommandError
 
+from ..model.branches import slugify
 from ..model.definition import Owner
 from ..model.gates import readonly_violation
 from ..model.handoff import hand_to_human
 from ..model.records import (
-    PlanContext, PlannedTicket, PlanResult, PlanWorkflow, Spec, Ticket, TicketWorkflowError, loop_session_name, slugify,
+    PlanContext, PlannedTicket, PlanResult, PlanWorkflow, TicketWorkflowError, loop_session_name,
 )
 from ..model.repositories import Tracker
 
@@ -63,7 +67,7 @@ class Planner:
         self._tracker = tracker
         self._phases = phases
 
-    def plan(self, spec: Spec, checkout: Path, run_plan: PlanWorkflow) -> Spec | None:
+    def plan(self, spec: SpecGraphSnapshot, checkout: Path, run_plan: PlanWorkflow) -> SpecGraphSnapshot | None:
         """Plans a Spec with no sub-issues; returns it with its new Tickets, else hands the Spec to a human with the reason and returns None."""
         base_branch = spec.base_branch
         if base_branch is None:
@@ -93,7 +97,7 @@ class Planner:
         self._tracker.comment(spec.number, "planned", "dev: planned " + ", ".join(f"#{ticket.number}" for ticket in created))
         return planned
 
-    def _create_tickets(self, spec: Spec, planned: tuple[PlannedTicket, ...]) -> tuple[Ticket, ...]:
+    def _create_tickets(self, spec: SpecGraphSnapshot, planned: tuple[PlannedTicket, ...]) -> tuple[Ticket, ...]:
         """Finds or creates each planned Ticket, then links it to `spec`; a failure names the Tickets already made and keeps them."""
         tracker = self._tracker
         created: list[Ticket] = []
@@ -104,12 +108,12 @@ class Planner:
                 ticket = tracker.find_ticket(spec, key) or tracker.create_ticket(spec, key, planned_ticket.title, body)
                 tracker.link_ticket(spec, ticket)
                 created.append(ticket)
-        except (CommandError, TicketWorkflowError) as exception:
+        except (CommandError, IssueError, TicketWorkflowError) as exception:
             made = ", ".join(f"#{ticket.number}" for ticket in created) or "none"
             raise TicketWorkflowError(f"creating Tickets failed after creating {made}: {exception}") from exception
         return tuple(created)
 
-    def _reject(self, spec: Spec, phase: Phase, reason: str) -> None:
+    def _reject(self, spec: SpecGraphSnapshot, phase: Phase, reason: str) -> None:
         logger.warning("spec #%s not planned: %s", spec.number, reason)
         phase.fail("Planning failed; human input required")
         hand_to_human(self._tracker, spec, f"dev: cannot plan this Spec: {reason}")

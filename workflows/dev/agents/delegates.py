@@ -4,14 +4,18 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from dataclasses import asdict, replace
+from dataclasses import replace
 from pathlib import Path
 
 from loop import DEFAULT, AgentRequest, AgentWorkspace, Role
 
+from workflows.shared.github.issues.spec import Ticket
+
+from ..model.branches import feature_branch as feature_branch_of
 from ..model.definition import Owner
+from ..model.payloads import spec_payload, ticket_payload
 from ..model.records import (
-    AgentCommitSubject, Ticket, TicketContext, TicketResult as DevResult, TicketWorkflowError as DevError,
+    AgentCommitSubject, TicketContext, TicketResult as DevResult, TicketWorkflowError as DevError,
     PlanContext, PlanResult, ChoreContext, ChoreResult, VerifyContext, VerifyResult,
     ReviewContext, ReviewResult,
 )
@@ -36,7 +40,7 @@ def prompt_args(
 ) -> dict[str, str]:
     """Values for every placeholder in the dev prompt template."""
     return {
-        "TICKET_JSON": json.dumps(asdict(ticket), indent=2),
+        "TICKET_JSON": json.dumps(ticket_payload(ticket), indent=2),
         "INITIATIVE_COMMITS": "\n".join(initiative_commits) or "No task commits for this Initiative exist on the feature branch yet.",
         "COMMIT_SUBJECT_PREFIX": identifier.to_subject(),
         "WORKTREE_PATH": str(worktree),
@@ -82,13 +86,12 @@ def chore_pull_request(context: ChoreContext, worktree: AgentWorkspace, *, templ
 def plan_args(context: PlanContext, checkout: Path) -> dict[str, str]:
     """Values for every placeholder in the planner prompt template."""
     spec = context.spec
-    feature_branch = spec.feature_branch
+    feature_branch = feature_branch_of(spec)
     if feature_branch is None:
         raise DevError(f"cannot resolve feature branch for Spec {spec.url}")
-    spec_json = {"number": spec.number, "title": spec.title, "url": spec.url, "body": spec.body, "comments": [asdict(comment) for comment in spec.comments]}
     return {
         "CHECKOUT_PATH": str(checkout),
-        "SPEC_JSON": json.dumps(spec_json, indent=2),
+        "SPEC_JSON": json.dumps(spec_payload(spec), indent=2),
         "TARGET_BRANCH": context.base_branch,
         "FEATURE_BRANCH": feature_branch,
     }

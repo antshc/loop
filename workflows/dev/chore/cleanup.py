@@ -12,12 +12,14 @@ from pathlib import Path
 from loop import AgentWorkspace, Kind, Phases
 
 from workflows.shared.git import Commit, GitClient
+from workflows.shared.github.issues.graph import SpecGraphSnapshot
 from workflows.shared.github.repo import GitHubRepo
 
+from ..model.branches import feature_branch as feature_branch_of
 from ..model.definition import Owner
 from ..model.gates import commit_subject, made_no_commit
 from ..model.outcomes import ChoreReport
-from ..model.records import ChoreContext, ChoreResult, ChoreWorkflow, Spec, TicketWorkflowError, loop_session_name
+from ..model.records import ChoreContext, ChoreResult, ChoreWorkflow, TicketWorkflowError, loop_session_name
 
 
 logger = logging.getLogger("workflow.chore")
@@ -90,11 +92,11 @@ class ChoreRefiner:
         self._phases = phases
 
     def refine(
-        self, spec: Spec, pull_request_url: str, worktree: AgentWorkspace, run_chore_agent: ChoreWorkflow, github: GitHubRepo
+        self, spec: SpecGraphSnapshot, pull_request_url: str, worktree: AgentWorkspace, run_chore_agent: ChoreWorkflow, github: GitHubRepo
     ) -> ChoreReport:
         """Best effort: any failure restores the worktree to the delivered commit and leaves the PR as it was."""
         git, phases = self._git, self._phases
-        base_branch, feature_branch = spec.base_branch, spec.feature_branch
+        base_branch, feature_branch = spec.base_branch, feature_branch_of(spec)
         if base_branch is None or feature_branch is None:
             raise TicketWorkflowError(f"cannot resolve branches for Spec {spec.url}")
         head_before = git.head(worktree.path)

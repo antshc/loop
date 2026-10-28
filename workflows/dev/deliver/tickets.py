@@ -11,11 +11,13 @@ from pathlib import Path
 from loop import AgentWorkspace, Kind, Phase, Phases, Role
 
 from workflows.shared.git import Commit, GitClient
+from workflows.shared.github.identity import RepositoryId
+from workflows.shared.github.issues.graph import SpecGraphSnapshot
+from workflows.shared.github.issues.spec import Ticket
 
+from ..model.branches import feature_branch as feature_branch_of
 from ..model.handoff import close_ticket, escalate
-from ..model.records import (
-    AgentCommitSubject, AgentWorkflow, RepositoryId, Spec, Ticket, TicketContext, TicketResult, TicketWorkflowError,
-)
+from ..model.records import AgentCommitSubject, AgentWorkflow, TicketContext, TicketResult, TicketWorkflowError
 from ..model.repositories import Tracker
 from .journal import FileExecutionStore
 
@@ -27,7 +29,7 @@ logger = logging.getLogger("workflow.tickets")
 class TicketsDelivered:
     """The Spec as it stands after delivery, and whether every Ticket was delivered."""
 
-    spec: Spec
+    spec: SpecGraphSnapshot
     complete: bool
 
 
@@ -53,15 +55,15 @@ class TicketDeliverer:
 
     def deliver(
         self,
-        spec: Spec,
+        spec: SpecGraphSnapshot,
         worktree: AgentWorkspace,
         run_agents: AgentWorkflow,
-        publish: Callable[[Spec], object] = lambda spec: None,
+        publish: Callable[[SpecGraphSnapshot], object] = lambda spec: None,
     ) -> TicketsDelivered:
         """Retries failed attempts and stops at the failure cap; `publish` runs with the current Spec after each closed Ticket."""
         if self._max_failures < 1:
             raise TicketWorkflowError("max_failures must be at least one")
-        for ticket in spec.tickets:
+        for ticket in spec.deliverable_tickets:
             if not ticket.actionable:
                 continue
             attempt = 0
@@ -92,8 +94,8 @@ class TicketDeliverer:
                     return TicketsDelivered(spec, False)
         return TicketsDelivered(spec, True)
 
-    def _context(self, spec: Spec, ticket: Ticket, path: Path) -> TicketContext:
-        base_branch, feature_branch = spec.base_branch, spec.feature_branch
+    def _context(self, spec: SpecGraphSnapshot, ticket: Ticket, path: Path) -> TicketContext:
+        base_branch, feature_branch = spec.base_branch, feature_branch_of(spec)
         if base_branch is None or feature_branch is None:
             raise TicketWorkflowError(f"cannot resolve branches for Spec {spec.url}")
         identifier = AgentCommitSubject(spec.initiative, ticket.number)

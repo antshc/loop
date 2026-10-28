@@ -77,7 +77,6 @@ source_modules = [
     "workflows.dev.model",
     "workflows.dev.plan",
     "workflows.dev.review",
-    "workflows.dev.tracker",
     "workflows.dev.verify",
 ]
 forbidden_modules = ["workflows.dev.agents"]
@@ -93,7 +92,6 @@ source_modules = [
     "workflows.dev.model",
     "workflows.dev.plan",
     "workflows.dev.review",
-    "workflows.dev.tracker",
     "workflows.dev.verify",
 ]
 forbidden_modules = ["workflows.dev.composition"]
@@ -106,7 +104,6 @@ modules = [
     "workflows.dev.deliver",
     "workflows.dev.plan",
     "workflows.dev.review",
-    "workflows.dev.tracker",
     "workflows.dev.verify",
 ]
 
@@ -115,6 +112,24 @@ name = "Shared workflow infrastructure imports no workflow slice"
 type = "forbidden"
 source_modules = ["workflows.shared"]
 forbidden_modules = ["workflows.dev", "workflows.pr_babysit", "workflows.plan_implement", "workflows.workflow_reporting"]
+
+[[tool.importlinter.contracts]]
+name = "Pure modules of the shared GitHub issues package never import the gh process layer; only its reader, commands, and client do"
+type = "forbidden"
+source_modules = ["workflows.shared.github.issues"]
+forbidden_modules = [
+    "workflows.shared.process",
+    "workflows.shared.github.repo",
+    "workflows.shared.github.account",
+    "workflows.shared.github.pull_requests",
+]
+ignore_imports = [
+    "workflows.shared.github.issues.reader -> workflows.shared.process",
+    "workflows.shared.github.issues.reader -> workflows.shared.github.repo",
+    "workflows.shared.github.issues.commands -> workflows.shared.github.repo",
+    "workflows.shared.github.issues.client -> workflows.shared.github.repo",
+]
+allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "Workflow source packages never import the Workflow test tree"
@@ -148,7 +163,6 @@ source_modules = [
     "workflows.dev.model",
     "workflows.dev.plan",
     "workflows.dev.review",
-    "workflows.dev.tracker",
     "workflows.dev.verify",
 ]
 forbidden_modules = ["dishka"]

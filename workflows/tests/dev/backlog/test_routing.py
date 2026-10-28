@@ -121,7 +121,7 @@ def test_harness_specs_route_to_separate_repositories_and_agent_delegates(
     assert all(call[call.index("--repo") + 1] == "owner/harness" for call in writes)
     assert not any(call[0] == "pr" for call in tracker_gh.calls)
     assert [call[2] for call in writes if call[1] == "close"] == (["20"] if first_fails else ["10", "20"])
-    announcements = [call[-1] for call in writes if call[1] == "comment"]
+    announcements = [body for _, body in tracker_gh.posted_comments()]
     assert any("https://github.com/owner/two/pull/99" in body for body in announcements)
     if not first_fails:
         assert any("https://github.com/owner/one/pull/99" in body for body in announcements)

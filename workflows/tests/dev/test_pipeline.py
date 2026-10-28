@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 
-from workflows.dev.tracker.tickets import TicketsTracker
 from workflows.tests.dev.doubles import DevHarness, clean_review, crash, envelope
 from workflows.tests.shared.fakes import issue
 
@@ -69,9 +68,9 @@ def test_default_planner_creates_subissues_and_delivers_in_dependency_order(tmp_
     ]})
     numbers = iter((101, 102))
     assert harness.run(lambda prompt: harness.commit_and_report(next(numbers)), all_phases=True) == 0
-    creates = harness.calls("issue", "create")
+    creates = harness.gh.created_issues()
     assert len(creates) == 2
-    assert "Blocked by #101" in creates[1][-1]
+    assert "Blocked by #101" in creates[1][1]
     assert [call[2] for call in harness.calls("issue", "close")] == ["101", "102"]
     assert len(harness.git.pushes) == 2
     assert [profile.name for profile in harness.runner.profiles] == ["planner", "developer", "developer", "chore", "reviewer"]
@@ -83,17 +82,17 @@ def test_a_retry_after_a_crash_between_creating_and_linking_a_ticket_links_it_in
     """Given a Ticket created but not linked, when the human releases the Spec and dev reruns, then that Ticket is linked."""
     harness = DevHarness(tmp_path, tickets={1: []})
     harness.runner.plan_handler = lambda prompt: envelope("", result={"tickets": [{"title": "Add basket", "body": "Create a basket"}]})
-    harness.gh.fail_on("api", "--method", "POST")
+    harness.gh.fail_on("api", "--method", "POST", "repos/owner/repo/issues/1/sub_issues")
     assert harness.run(all_phases=True) == 1
-    assert len(harness.calls("issue", "create")) == 1
+    assert len(harness.gh.created_issues()) == 1
     assert harness.calls("issue", "edit")[0][-1] == "hitl"
-    TicketsTracker("owner", "repo", gh=harness.gh).remove_label(1, "hitl")
+    harness.tracker.remove_label(1, "hitl")
     harness.gh.calls.clear()
 
     assert harness.run(lambda prompt: harness.commit_and_report(101), all_phases=True) == 0
 
-    assert not harness.calls("issue", "create")
-    assert len(harness.calls("api", "--method", "POST")) == 1
+    assert not harness.gh.created_issues()
+    assert len(harness.calls("api", "--method", "POST", "repos/owner/repo/issues/1/sub_issues")) == 1
     assert [call[2] for call in harness.calls("issue", "close")] == ["101"]
 
 
@@ -104,7 +103,7 @@ def test_planning_failure_hands_off_without_opening_an_implementation_worktree(t
     harness = DevHarness(tmp_path, tickets={1: []})
     harness.runner.plan_handler = lambda prompt: reply
     assert harness.run(all_phases=True) == 1
-    assert not harness.calls("issue", "create")
+    assert not harness.gh.created_issues()
     assert not harness.git_service.opened
     assert harness.calls("issue", "edit")[0][-1] == "hitl"
 
@@ -114,7 +113,7 @@ def test_closed_or_held_subissues_do_not_trigger_another_plan(tmp_path: Path) ->
     harness = DevHarness(tmp_path, tickets={1: [issue(10, "Done", state="CLOSED")]})
     assert harness.run(all_phases=True) == 0
     assert not harness.runner.plan_prompts
-    assert not harness.calls("issue", "create")
+    assert not harness.gh.created_issues()
 
 
 def test_passing_app_verification_saves_evidence_and_commits_only_the_fixes(tmp_path: Path) -> None:
@@ -125,7 +124,7 @@ def test_passing_app_verification_saves_evidence_and_commits_only_the_fixes(tmp_
     assert _deliver(harness) == 0
     assert harness.git.commits[-1].subject == "fix(Checkout): Fix basket"
     assert len(harness.git.pushes) == 2
-    summary = harness.calls("issue", "comment")[-1][-1]
+    summary = harness.comments()[-1]
     assert "App verification: pass" in summary
     assert list((harness.log_dir / "evidence").rglob("basket.json"))
 
@@ -146,7 +145,7 @@ def test_unproven_or_rejected_verification_never_marks_the_pr_ready(
     assert _deliver(harness) == 1
     assert not harness.calls("pr", "ready")
     assert "rejected verifier commit" not in [entry.subject for entry in harness.git.commits]
-    assert f"App verification: {settled}" in harness.calls("issue", "comment")[-1][-1]
+    assert f"App verification: {settled}" in harness.comments()[-1]
     log = capsys.readouterr().err
     assert f"Verify application · spec #1 failed" in log and f"verdict={settled}" in log
     assert "Check readiness · spec #1 failed" in log
@@ -173,7 +172,7 @@ def test_cleanup_failure_is_discarded_and_does_not_block_a_clean_review(tmp_path
     assert _deliver(harness) == 0
     assert len(harness.git.commits) == 2
     assert harness.git.restores
-    assert "Chore: discarded" in harness.calls("issue", "comment")[-1][-1]
+    assert "Chore: discarded" in harness.comments()[-1]
 
 
 @pytest.mark.parametrize("mode", ["bug", "wrong-head", "missing-axis", "crash", "checkout-change", "held-ticket"])
@@ -197,7 +196,7 @@ def test_review_and_readiness_blockers_keep_the_draft(tmp_path: Path, mode: str)
     harness.runner.review_handler = crash() if mode == "crash" else review
     assert _deliver(harness) == 1
     assert not harness.calls("pr", "ready")
-    assert "left as a draft" in harness.calls("issue", "comment")[-1][-1]
+    assert "left as a draft" in harness.comments()[-1]
 
 
 def test_spec_selection_and_visualization_report_the_default_pipeline(tmp_path: Path, capsys) -> None:

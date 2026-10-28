@@ -5,16 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from workflows.dev.model.records import Repository, RepositoryId
-
-
-def test_repository_id_contains_owner_and_repo_and_renders_slug() -> None:
-    identity = RepositoryId("antshc", "loop")
-
-    assert identity.owner == "antshc"
-    assert identity.repo == "loop"
-    assert str(identity) == "antshc/loop"
-    assert tuple(identity) == ("antshc", "loop")
+from workflows.dev.model.records import Repository
+from workflows.shared.github.identity import RepositoryId
 
 
 def test_repository_holds_explicit_paths_and_owner_name(tmp_path: Path) -> None:

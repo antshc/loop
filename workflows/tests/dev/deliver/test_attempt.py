@@ -8,14 +8,14 @@ import pytest
 from loop import AgentWorkspace, GitOptions, Phases
 from workflows.tests.dev.doubles import DevHarness, new_agent_for
 from workflows.tests.shared.fakes import issue
-from workflows.dev.model.records import RepositoryId, Spec
-from workflows.dev.tracker.tickets import TicketsTracker
 from workflows.dev.model.records import AgentWorkflow, TicketContext, TicketResult, TicketWorkflowError
 from workflows.dev.deliver.tickets import TicketDeliverer
+from workflows.shared.github.identity import RepositoryId
+from workflows.shared.github.issues.graph import SpecGraphSnapshot
 
 
-def _deliver(harness: DevHarness, delegate: AgentWorkflow, *, spec: Spec | None = None, max_failures: int = 2) -> bool:
-    tracker = TicketsTracker("owner", "repo", gh=harness.gh)
+def _deliver(harness: DevHarness, delegate: AgentWorkflow, *, spec: SpecGraphSnapshot | None = None, max_failures: int = 2) -> bool:
+    tracker = harness.tracker
     spec = spec or next(iter(tracker.specs()))
     builder = new_agent_for(harness.runner, harness.git_service, harness.root)()
     with builder.with_git(GitOptions()).open() as worktree:
@@ -104,15 +104,19 @@ def test_delegate_results_are_validated_without_relying_on_a_response_parser(
     assert attempts == 2
     assert len(harness.git.commits) == 1
     assert len(harness.git.restores) == 2
-    assert all(reason in call[-1] for call in harness.calls("issue", "comment"))
+    assert all(reason in body for body in harness.comments())
     assert harness.calls("issue", "close") == []
 
 
 def test_ticket_workflow_skips_non_actionable_tickets_it_is_given(tmp_path: Path) -> None:
     harness = DevHarness(tmp_path, tickets={1: [issue(10, "Closed"), issue(11, "Blocked"), issue(12, "Ready")]})
-    spec = next(iter(TicketsTracker("owner", "repo", gh=harness.gh).specs()))
+    spec = next(iter(harness.tracker.specs()))
     first, second, third = spec.tickets
-    spec = replace(spec, tickets=(replace(first, state="closed"), replace(second, labels=("hitl",)), third))
+    spec = replace(
+        spec,
+        tickets=(first.closed(), second.with_label("hitl"), third),
+        held_tickets=(),
+    )
     attempted: list[int] = []
 
     def delegate(context: TicketContext, _worktree: AgentWorkspace) -> TicketResult:

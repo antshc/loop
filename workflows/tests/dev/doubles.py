@@ -19,10 +19,12 @@ from workflows.dev.agents.prompts import load_prompt
 from workflows.dev.composition.entry import main
 from workflows.dev.composition.repositories import configured_repositories
 from workflows.dev.deliver.journal import FileExecutionStore
-from workflows.dev.model.records import AgentCommitSubject, Commit, Repository, RepositoryId
+from workflows.dev.model.records import AgentCommitSubject, Commit, Repository
 from workflows.dev.model.repositories import GithubFactory, Harness, RepositoryWorkflow, Targets
 from workflows.shared.agents.launcher import AgentFactory
 from workflows.shared.git import GitClient
+from workflows.shared.github.identity import RepositoryId
+from workflows.shared.github.issues.client import Issues
 from workflows.shared.github.repo import GitHubRepo
 from workflows.shared.process import CommandRunner
 from workflows.shared.providers import bind
@@ -248,6 +250,7 @@ class DevHarness:
             prs=prs,
         )
         self.github = GitHubRepo("owner", "repo", gh=self.gh)
+        self.tracker = Issues(self.github)
         self.store = FileExecutionStore(self.log_dir)
 
     @property
@@ -265,10 +268,14 @@ class DevHarness:
         return lambda prompt: response(self.git.commit(f"{AgentCommitSubject('Checkout', 10).to_subject()}work"))
 
     def writes(self) -> list[tuple[str, ...]]:
-        return [call for call in self.gh.calls if call[0] in ("issue", "pr")]
+        return [call for call in self.gh.calls if call[0] in ("issue", "pr") or call[:2] == ("api", "--method")]
 
     def calls(self, *prefix: str) -> list[tuple[str, ...]]:
         return [call for call in self.gh.calls if call[: len(prefix)] == prefix]
+
+    def comments(self, number: int | None = None) -> list[str]:
+        """The body of every Comment posted, on every issue or only on issue `number`."""
+        return [body for target, body in self.gh.posted_comments() if number in (None, target)]
 
     def run(
         self,

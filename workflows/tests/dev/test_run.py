@@ -12,9 +12,11 @@ from workflows.tests.dev.doubles import COMPLETED, DevHarness, crash, envelope, 
 from workflows import dev
 from workflows.dev.agents import prompts
 from workflows.dev import FileExecutionStore
-from workflows.dev.model.records import AgentCommitSubject, Spec
-from workflows.dev.tracker.tickets import TicketsTracker
+from workflows.dev.model.branches import feature_branch
+from workflows.dev.model.records import AgentCommitSubject
+from workflows.shared.github.issues.client import Issues
 from workflows.shared.github.repo import GitHubRepo
+from workflows.tests.shared.builders import build_graph
 from workflows.tests.shared.fakes import FakeGhCli, issue
 
 _PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
@@ -22,20 +24,20 @@ TWO_TICKETS = {1: [issue(10, "Add login form"), issue(11, "Add login tests")]}
 TICKET_10_URL = "https://github.com/owner/repo/issues/10"
 
 
-def _spec(*, base_branch: str, title: str) -> Spec:
-    return Spec(1, title, "url", (f"repo:base:{base_branch}",))
+def _branch(*, base_branch: str, title: str) -> str | None:
+    return feature_branch(build_graph(title=title, labels=("spec", f"repo:base:{base_branch}")))
 
 
 def test_feature_branch_prefixes_the_slug_with_an_underscored_version() -> None:
-    assert _spec(base_branch="release/2.4", title="Add Login Page!").feature_branch == "2_4_add-login-page"
+    assert _branch(base_branch="release/2.4", title="Add Login Page!") == "2_4_add-login-page"
 
 
 def test_feature_branch_is_just_the_slug_without_a_version() -> None:
-    assert _spec(base_branch="main", title="Add Login Page!").feature_branch == "add-login-page"
+    assert _branch(base_branch="main", title="Add Login Page!") == "add-login-page"
 
 
 def _first_ticket():
-    tracker = TicketsTracker("o", "r", gh=FakeGhCli())
+    tracker = Issues(GitHubRepo("o", "r", gh=FakeGhCli()))
     return next(iter(tracker.specs())).tickets[0]
 
 
@@ -94,15 +96,11 @@ def test_only_the_configured_harness_is_used(tmp_path: Path) -> None:
 def test_an_unexpected_error_is_logged_and_the_process_exits_non_zero(tmp_path: Path) -> None:
     harness = DevHarness(tmp_path)
 
-    class RaisingGithub:
-        owner = "o"
-        name = "r"
-
-        def run(self, args):
-            raise RuntimeError("boom")
+    def raising(args: tuple[str, ...]) -> str:
+        raise RuntimeError("boom")
 
     code = harness.run(
-        github_factory=lambda checkout: RaisingGithub(),
+        github_factory=lambda checkout: GitHubRepo("o", "r", gh=raising),
         argv=["--log-dir", str(harness.log_dir), "--log-level", "DEBUG"],
     )
 
@@ -143,9 +141,9 @@ def test_an_unconfigured_repo_target_is_labelled_hitl_with_no_worktree_opened(tm
 
     assert code == 0
     assert harness.git_service.opened == [] and harness.git.fetched == []
-    labels, comments = harness.calls("issue", "edit"), harness.calls("issue", "comment")
+    labels, comments = harness.calls("issue", "edit"), harness.comments()
     assert labels[0][-1] == "hitl"
-    assert "repo:target:acme/widgets" in comments[0][-1] and "harness owner/repo" in comments[0][-1]
+    assert "repo:target:acme/widgets" in comments[0] and "harness owner/repo" in comments[0]
 
 
 @pytest.mark.parametrize(
@@ -176,6 +174,27 @@ def test_a_spec_labelled_hitl_is_skipped(tmp_path: Path) -> None:
     code = harness.run()
 
     assert code == 0 and harness.writes() == []
+
+
+def test_a_spec_that_was_not_read_completely_is_left_alone_and_fails_the_run(tmp_path: Path) -> None:
+    harness = DevHarness(tmp_path)
+    harness.gh.fail_on("api", "--paginate", "--slurp", "repos/owner/repo/issues/1/sub_issues?per_page=100")
+
+    code = harness.run()
+
+    assert code == 1
+    assert harness.git_service.opened == [] and harness.git.fetched == [] and harness.writes() == []
+
+
+def test_every_ticket_of_a_spec_is_delivered_when_they_span_several_pages(tmp_path: Path) -> None:
+    harness = DevHarness(tmp_path, tickets=TWO_TICKETS)
+    harness.gh.page_size = 1
+    numbers = iter((10, 11))
+
+    code = harness.run(lambda prompt: harness.commit_and_report(next(numbers)))
+
+    assert code == 0
+    assert [c[2] for c in harness.calls("issue", "close")] == ["10", "11"]
 
 
 def test_a_missing_remote_target_branch_is_labelled_hitl_with_no_worktree_opened(tmp_path: Path) -> None:
@@ -247,7 +266,7 @@ def test_a_failing_worktree_hook_fails_the_spec_with_its_reason(tmp_path: Path) 
     code = harness.run()
 
     assert code == 1 and harness.prompts == []
-    assert any("setup.sh" in c[-1] for c in harness.calls("issue", "comment"))
+    assert any("setup.sh" in body for body in harness.comments())
 
 
 def test_a_prompt_placeholder_with_no_argument_fails_the_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -259,7 +278,7 @@ def test_a_prompt_placeholder_with_no_argument_fails_the_run(tmp_path: Path, mon
     code = harness.run()
 
     assert code == 1 and harness.prompts == []
-    assert any("missing prompt argument: UNKNOWN" in c[-1] for c in harness.calls("issue", "comment"))
+    assert any("missing prompt argument: UNKNOWN" in body for body in harness.comments())
 
 
 def test_a_complete_ticket_is_pushed_prd_and_closed_with_sha_summary_and_verification(tmp_path: Path) -> None:
@@ -298,8 +317,8 @@ def test_all_tickets_delivered_comments_the_pull_request_link_on_the_open_spec(t
 
     harness.run(lambda prompt: harness.commit_and_report(next(numbers)))
 
-    spec_comments = [c for c in harness.calls("issue", "comment") if c[2] == "1"]
-    assert len(spec_comments) == 1 and "pull" in spec_comments[0][-1]
+    spec_comments = harness.comments(1)
+    assert len(spec_comments) == 1 and "pull" in spec_comments[0]
     assert all(c[2] != "1" for c in harness.calls("issue", "close"))
 
 
@@ -340,7 +359,7 @@ def test_a_hitl_stop_still_pushes_the_commits_of_tickets_closed_in_the_run(tmp_p
 
     assert code == 1
     assert len(harness.git.pushes) == 1 and harness.calls("pr", "create")
-    assert all("pull request" not in c[-1] for c in harness.calls("issue", "comment") if c[2] == "1")
+    assert all("pull request" not in body for body in harness.comments(1))
 
 
 def test_a_branch_ahead_at_spec_start_is_pushed_from_the_checkout_before_the_worktree_opens(tmp_path: Path) -> None:
@@ -442,8 +461,8 @@ def test_a_failed_validation_restores_the_worktree_and_escalates_the_ticket_and_
     assert len(harness.git.commits) == 1 and harness.git.restores
     assert harness.git.pushes == [] and harness.calls("pr", "create") == []
     assert {c[2] for c in harness.calls("issue", "edit") if c[-1] == "hitl"} == {"1", "10"}
-    comments = harness.calls("issue", "comment")
-    assert {c[2] for c in comments} == {"1", "10"} and all(reason in c[-1] for c in comments)
+    comments = harness.gh.posted_comments()
+    assert {number for number, _ in comments} == {1, 10} and all(reason in body for _, body in comments)
     assert harness.calls("issue", "close") == []
 
 
@@ -457,7 +476,7 @@ def test_two_commits_in_one_run_fail_the_run(tmp_path: Path) -> None:
     code = harness.run(handler)
 
     assert code == 1 and len(harness.git.commits) == 1
-    assert any("exactly one commit" in c[-1] for c in harness.calls("issue", "comment"))
+    assert any("exactly one commit" in body for body in harness.comments())
 
 
 def test_an_uncommitted_change_fails_the_run(tmp_path: Path) -> None:
@@ -471,7 +490,7 @@ def test_an_uncommitted_change_fails_the_run(tmp_path: Path) -> None:
     code = harness.run(handler)
 
     assert code == 1 and harness.git.dirty is False
-    assert any("uncommitted" in c[-1] for c in harness.calls("issue", "comment"))
+    assert any("uncommitted" in body for body in harness.comments())
 
 
 def test_a_failed_response_after_committing_discards_the_commit_and_comments_its_reason(tmp_path: Path) -> None:
@@ -484,7 +503,7 @@ def test_a_failed_response_after_committing_discards_the_commit_and_comments_its
     code = harness.run(handler)
 
     assert code == 1 and len(harness.git.commits) == 1 and harness.git.pushes == []
-    assert all("needs a decision" in c[-1] for c in harness.calls("issue", "comment"))
+    assert all("needs a decision" in body for body in harness.comments())
 
 
 def test_a_failed_ticket_stops_the_delivery_of_the_next_ticket(tmp_path: Path) -> None:

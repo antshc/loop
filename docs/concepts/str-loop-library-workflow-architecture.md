@@ -104,7 +104,7 @@ The user's aliases (`alias loop-dev='python -m workflows.dev'`) call the script;
 ## Validation
 
 - Workflow tests run against fakes at every process boundary.
-- Architecture checks (import-linter) verify the library layering, that workflows import only the public `loop` API, that `workflows/shared` imports no workflow, that only composition roots import `dishka`, that features never import their composition root, and that no workflow imports another workflow.
+- Architecture checks (import-linter) verify the library layering, that workflows import only the public `loop` API, that `workflows/shared` imports no workflow, that the pure modules of the shared GitHub `issues` package import no `gh` process code, that only composition roots import `dishka`, that features never import their composition root, and that no workflow imports another workflow.
 - The example workflows import only the public `loop` API and `workflows/shared`.
 
 ## Options Considered

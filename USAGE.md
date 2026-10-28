@@ -298,8 +298,7 @@ process, state, telemetry, and the shared Dishka provider), never on a sibling W
 remains a self-contained, function-based script.
 
 - [`composition/`](../workflows/dev/composition/): the only package that knows the Dishka container. `entry.py` holds `main(argv, *, providers=())`, flags, and logging; `providers.py` holds `DevProvider` (APP scope = process, REQUEST scope = one Workflow run) and `use_repositories`; `repositories.py` holds `configured_repositories`; `dry.py` holds the `--fake`/`--dry` seams. Later providers override earlier ones, which is how tests and scripts inject fakes.
-- [`model/`](../workflows/dev/model/): `HARNESS`, work items, repository identities, outcomes, settings, named phases (`definition.py`), response decoding (`reply.py`), and commit gates.
-- [`tracker/`](../workflows/dev/tracker/): `TicketsTracker` over GitHub issues.
+- [`model/`](../workflows/dev/model/): `HARNESS`, work items, repository identities, outcomes, settings, named phases (`definition.py`), response decoding (`reply.py`), commit gates, branch naming (`branches.py`), the `Tracker` Protocol (`repositories.py`), and the `hitl` hand-off policy (`handoff.py`). Specs and Tickets come from the shared `workflows/shared/github/issues/` model.
 - [`agents/`](../workflows/dev/agents/): named prompts and the default agent delegates.
 - [`plan/`](../workflows/dev/plan/), [`deliver/`](../workflows/dev/deliver/), [`verify/`](../workflows/dev/verify/), [`chore/`](../workflows/dev/chore/), and [`review/`](../workflows/dev/review/): `Planner`, `TicketDeliverer` (with the failure journal), `AppVerifier`, `ChoreRefiner`, and `Reviewer`/`Finalizer`. These stages never import each other or a concrete agent.
 - [`backlog/`](../workflows/dev/backlog/): `SpecRouter` and `PullRequestPublisher`, which sequence the stages per Spec.

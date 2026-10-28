@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+from .issues.client import Issues
 from .pull_requests import PullRequests
 from .repo import GhRunner, GitHubRepo
 
@@ -21,6 +22,10 @@ class GitHub:
     def repository(self, slug: str) -> GitHubRepo:
         """The repository named `owner/name`."""
         return GitHubRepo.from_slug(slug, self._gh)
+
+    def issues(self, slug: str) -> Issues:
+        """The issues of the repository named `owner/name`."""
+        return Issues(self.repository(slug))
 
     def pull_requests(self, slug: str) -> PullRequests:
         """The pull requests of the repository named `owner/name`."""
