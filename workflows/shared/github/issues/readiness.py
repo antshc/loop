@@ -24,7 +24,8 @@ class TicketReadiness(StrEnum):
 _UNSATISFYING_REASONS = frozenset({CloseReason.NOT_PLANNED, CloseReason.DUPLICATE})
 
 
-def _satisfied(relation: BlockedByRelation) -> bool:
+def satisfied(relation: BlockedByRelation) -> bool:
+    """The blocker was delivered: it is closed, and not as abandoned."""
     return relation.state is IssueState.CLOSED and relation.close_reason not in _UNSATISFYING_REASONS
 
 
@@ -40,4 +41,4 @@ class TicketReadinessPolicy:
         if number in graph.unread_dependencies:
             return TicketReadiness.UNKNOWN
         blockers = [relation for relation in graph.blocked_by if relation.ticket.number == number]
-        return TicketReadiness.READY if all(_satisfied(relation) for relation in blockers) else TicketReadiness.BLOCKED
+        return TicketReadiness.READY if all(satisfied(relation) for relation in blockers) else TicketReadiness.BLOCKED

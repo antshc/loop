@@ -14,6 +14,7 @@ from workflows.shared.agents.launcher import AgentLauncher
 from workflows.shared.git import GitClient
 from workflows.shared.github.issues.errors import IssueError
 from workflows.shared.github.issues.graph import SpecGraphSnapshot
+from workflows.shared.github.issues.readiness import satisfied
 from workflows.shared.github.pull_requests import PullRequests
 
 from ..chore.cleanup import ChoreRefiner
@@ -179,6 +180,7 @@ class SpecRouter:
                 _skip(phases, "plan", Kind.AGENT, Owner.PLANNER, reason)
                 _skip(phases, "create-tickets", Kind.CODE, Owner.CODE, reason)
             if not spec.has_work:
+                _log_held_tickets(spec)
                 self._publisher.publish(spec, repository, repository.checkout)
                 return Outcome.SKIPPED
             if not git.remote_branch_exists(repository.checkout, base_branch):
@@ -258,6 +260,21 @@ class SpecRouter:
             if delivery.verification.blocks_ready:
                 return Outcome.FAILED
         return Outcome.SUCCESS if delivered else Outcome.FAILED
+
+
+def _log_held_tickets(spec: SpecGraphSnapshot) -> None:
+    """Says why each open Ticket waits, since a Spec whose Tickets are all held is skipped with no tracker write."""
+    readiness = spec.readiness
+    for number in spec.held_tickets:
+        waiting_on = [
+            f"{edge.blocker} ({edge.state}{f', {edge.close_reason}' if edge.close_reason else ''})"
+            for edge in spec.blocked_by
+            if edge.ticket.number == number and not satisfied(edge)
+        ]
+        logger.warning(
+            "Spec #%s: Ticket #%s is held (readiness %s)%s",
+            spec.number, number, readiness[number], f", blocked by {', '.join(waiting_on)}" if waiting_on else "",
+        )
 
 
 def _describe(exception: Exception) -> str:

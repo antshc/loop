@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -23,6 +25,19 @@ from workflows.tests.shared.fakes import FakeGhCli, issue
 _PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
 TWO_TICKETS = {1: [issue(10, "Add login form"), issue(11, "Add login tests")]}
 TICKET_10_URL = "https://github.com/owner/repo/issues/10"
+
+
+@contextmanager
+def _logged(name: str, records: list[str]) -> Iterator[None]:
+    """Collects the messages the named logger emits, whatever handlers the run installs."""
+    handler = logging.Handler()
+    handler.emit = lambda record: records.append(record.getMessage())  # type: ignore[method-assign]
+    logger = logging.getLogger(name)
+    logger.addHandler(handler)
+    try:
+        yield
+    finally:
+        logger.removeHandler(handler)
 
 
 def _branch(*, base_branch: str, title: str) -> str | None:
@@ -234,14 +249,8 @@ def test_a_tracker_comment_that_cannot_be_read_fails_the_spec_instead_of_abortin
         harness.gh.fail_on("api", "--paginate", "--slurp", endpoint, after=1)
         harness.gh.fail_on("api", "--paginate", "--slurp", endpoint, after=1)
     records: list[str] = []
-    handler = logging.Handler()
-    handler.emit = lambda record: records.append(record.getMessage())  # type: ignore[method-assign]
-    logger = logging.getLogger("workflow.dev")
-    logger.addHandler(handler)
-    try:
+    with _logged("workflow.dev", records):
         code = harness.run()
-    finally:
-        logger.removeHandler(handler)
 
     assert code == 1 and harness.comments() == []
     assert "Spec #1 failed (IncompleteReadError)" in records
@@ -586,13 +595,26 @@ def test_when_every_ticket_is_held_nothing_is_delivered_replanned_or_handed_to_a
     assert harness.writes() == []
 
 
+def test_a_spec_whose_tickets_are_all_held_logs_each_held_ticket_and_its_open_blocker(tmp_path: Path) -> None:
+    harness = _with_blockers(tmp_path, {10: [20]}, issue(20, "Elsewhere"), tickets=[issue(10, "Waits")])
+    records: list[str] = []
+
+    with _logged("workflow.dev", records):
+        harness.run()
+
+    assert "Spec #1: Ticket #10 is held (readiness blocked), blocked by owner/repo#20 (open)" in records
+
+
 @pytest.mark.parametrize("reason", ["not_planned", "duplicate"])
 def test_a_ticket_whose_blocker_was_dropped_stays_held_with_no_hand_off(tmp_path: Path, reason: str) -> None:
     harness = _with_blockers(tmp_path, {10: [20], 11: [20]}, issue(20, "Dropped", state="closed", close_reason=reason))
+    records: list[str] = []
 
-    code = harness.run()
+    with _logged("workflow.dev", records):
+        code = harness.run()
 
     assert code == 0 and harness.prompts == [] and harness.writes() == []
+    assert f"Spec #1: Ticket #10 is held (readiness blocked), blocked by owner/repo#20 (closed, {reason})" in records
 
 
 def test_a_ticket_whose_blocker_was_completed_is_delivered(tmp_path: Path) -> None:
