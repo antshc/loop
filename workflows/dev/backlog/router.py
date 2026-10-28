@@ -111,7 +111,7 @@ class SpecRouter:
         """Processes every open Spec (only `settings.spec_number` when set) and returns the exit code."""
         targets = self._targets.by_slug()
         spec_number = self._settings.spec_number
-        specs = [spec for spec in self._tracker.specs() if spec_number in (None, spec.number)]
+        specs = list(self._tracker.specs(spec_number))
         if spec_number is not None and not specs:
             logger.error("no open Spec #%s on %s", spec_number, self._harness.owner_name)
             return 1

@@ -127,6 +127,45 @@ def test_only_open_issues_labeled_spec_are_specs() -> None:
     assert [graph.number for graph in _issues(gh).specs()] == [1]
 
 
+def test_one_spec_is_read_without_listing_or_loading_the_others() -> None:
+    gh = FakeGhCli(
+        specs=[issue(1, "First", labels=_ROUTING), issue(2, "Second", labels=_ROUTING, comments=("hi",))],
+        tickets={1: [issue(10, "Ticket")], 2: [issue(20, "Other ticket")]},
+    )
+
+    [graph] = _issues(gh).specs(2)
+
+    assert graph.number == 2 and [ticket.number for ticket in graph.tickets] == [20]
+    assert not any(call[-1].startswith(("repos/owner/repo/issues?", "repos/owner/repo/issues/1/", "repos/owner/repo/issues/10/")) for call in gh.calls)
+
+
+@pytest.mark.parametrize(
+    "node",
+    [
+        issue(2, "Closed", labels=_ROUTING, state="closed"),
+        issue(2, "Plain", labels=("bug",)),
+        issue(2, "Pull", labels=_ROUTING, pull_request=True),
+    ],
+)
+def test_asking_for_one_spec_returns_nothing_when_that_issue_is_not_an_open_spec(node: dict) -> None:
+    gh = FakeGhCli(specs=[node], tickets={})
+
+    assert _issues(gh).specs(2) == ()
+
+
+def test_asking_for_a_spec_that_does_not_exist_returns_nothing() -> None:
+    assert _issues(FakeGhCli(specs=[], tickets={})).specs(9) == ()
+
+
+def test_the_comments_of_an_issue_that_reports_none_are_not_requested() -> None:
+    gh = FakeGhCli(specs=[issue(1, "Quiet", labels=_ROUTING)], tickets={1: [issue(10, "Quiet ticket")]})
+
+    graph = _graph(gh)
+
+    assert graph.complete and graph.comments == ()
+    assert not [call for call in gh.calls if call[-1].split("?")[0].endswith("/comments")]
+
+
 def test_a_spec_exposes_its_initiative_target_and_base_branch_from_its_routing_labels() -> None:
     gh = FakeGhCli(specs=[issue(1, "Checkout: Add login", labels=("spec", "repo:target:o/r", "repo:base:release/2.4"))], tickets={1: []})
 

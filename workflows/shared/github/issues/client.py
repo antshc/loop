@@ -21,9 +21,9 @@ class Issues:
         """The issue with its labels and Comments."""
         return self._reader.issue(number)
 
-    def specs(self) -> tuple[SpecGraphSnapshot, ...]:
-        """Every open Spec with its Tickets and whether it was read completely."""
-        return self._reader.specs()
+    def specs(self, number: int | None = None) -> tuple[SpecGraphSnapshot, ...]:
+        """Every open Spec with its Tickets and whether it was read completely; only Spec `number` when given."""
+        return self._reader.specs(number)
 
     def comment(self, number: int, purpose: str, body: str) -> Comment:
         """Posts `body` unless a Comment with the same purpose and content is already on the issue."""

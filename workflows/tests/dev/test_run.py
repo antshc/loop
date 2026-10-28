@@ -222,7 +222,12 @@ def test_a_ticket_that_failed_once_in_an_earlier_run_is_escalated_on_its_next_fa
 
 
 def test_a_tracker_comment_that_cannot_be_read_fails_the_spec_instead_of_aborting_the_run(tmp_path: Path) -> None:
-    harness = DevHarness(tmp_path)
+    labels = ("spec", "repo:target:owner/repo", "repo:base:main")
+    harness = DevHarness(
+        tmp_path,
+        specs=[issue(1, "Checkout: Add login page", labels=labels, comments=("earlier",))],
+        tickets={1: [issue(10, "Add login form", comments=("earlier",))]},
+    )
     harness.store.record_failure(TICKET_10_URL, owner="owner", repo="repo", task_id="10", title="x", items=[10])
     for number in (10, 1):
         endpoint = f"repos/owner/repo/issues/{number}/comments?per_page=100"

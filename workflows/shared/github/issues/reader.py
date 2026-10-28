@@ -26,6 +26,8 @@ _PER_PAGE = "per_page=100"
 # gh reports the HTTP status of a refused request in its error output.
 _DENIED = ("HTTP 403", "HTTP 404")
 
+_NOT_FOUND = "HTTP 404"
+
 
 def _denied(exception: CommandError) -> bool:
     return any(status in exception.output for status in _DENIED)
@@ -50,10 +52,11 @@ class IssueReader:
             raise IssueError(f"#{number} is a pull request, not an issue")
         return self._hydrate(node)
 
-    def specs(self) -> tuple[SpecGraphSnapshot, ...]:
-        """Every open issue labeled `spec`, each loaded with its Tickets; a listing that cannot be read raises."""
+    def specs(self, number: int | None = None) -> tuple[SpecGraphSnapshot, ...]:
+        """Every open issue labeled `spec` (only #`number` when given), each loaded with its Tickets; a listing that cannot be read raises."""
+        nodes = self._issues(f"state=open&labels={quote(SPEC_LABEL, safe='')}") if number is None else self._open_issue(number)
         snapshots = []
-        for node in self._issues(f"state=open&labels={quote(SPEC_LABEL, safe='')}"):
+        for node in nodes:
             issue = self._hydrate(node)
             classification = self._classifier.classify(issue)
             if classification.kind is IssueKind.SPEC:
@@ -84,6 +87,16 @@ class IssueReader:
     def _issues(self, query: str) -> list[dict[str, Any]]:
         nodes = self._pages(self._endpoint(f"issues?{query}&{_PER_PAGE}"))
         return [node for node in nodes if "pull_request" not in node]
+
+    def _open_issue(self, number: int) -> list[dict[str, Any]]:
+        """The open issue `number` as a listing of at most one; nothing when it does not exist, is closed, or is a pull request."""
+        try:
+            node = self._repo.json("api", self._endpoint(f"issues/{number}"))
+        except CommandError as exception:
+            if _NOT_FOUND in exception.output:
+                return []
+            raise
+        return [node] if node["state"] == "open" and "pull_request" not in node else []
 
     def _graph(self, spec: Spec, node: dict[str, Any], disagreement: LabelTypeDisagreement | None) -> SpecGraphSnapshot:
         if disagreement is not None:
@@ -145,7 +158,7 @@ class IssueReader:
         if gaps:
             # The labels the issue payload itself carries stand in, so a Spec whose label list failed is still found; the gap flags it.
             labels = node.get("labels", [])
-        comments = self._collect(gaps, "comments", self._endpoint(f"issues/{ref.number}/comments?{_PER_PAGE}"))
+        comments = [] if node.get("comments") == 0 else self._collect(gaps, "comments", self._endpoint(f"issues/{ref.number}/comments?{_PER_PAGE}"))
         self._check_total(gaps, "comments", len(comments), node.get("comments"))
         issue = self._summary(node, labels=tuple(label["name"] for label in labels))
         return replace(issue, comments=tuple(self._comment(ref, comment) for comment in comments), gaps=tuple(gaps))
