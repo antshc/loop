@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from workflows.shared.github.pull_requests.model import PullRequest
 from workflows.shared.state import JsonFile
 
 from ..model import Blocked, PrState, read_state
@@ -23,17 +24,17 @@ class Registry:
         if self.data.get("author") != author or self.data.get("repositories") != self.repositories:
             raise Blocked("Discovery configuration changed; choose a new state_dir or migrate its baseline")
 
-    def enroll(self, prs: list[tuple[str, dict]], include_existing: bool) -> None:
+    def enroll(self, prs: list[tuple[str, PullRequest]], include_existing: bool) -> None:
         """Commits a complete baseline, then durably enrolls future discoveries."""
         for repo, pr in prs:
-            key = f"{repo}#{pr['number']}"
+            key = f"{repo}#{pr.number}"
             if key in self.data["prs"]:
                 continue
             status = "queued" if self.data["initialized"] or include_existing else "ignored"
             # PR state is created first; replay safely repairs a crash before registry publication.
-            state = PrState(self.root, repo, pr["number"])
+            state = PrState(self.root, repo, pr.number)
             if not state.path.exists():
                 state.status(status)
-            self.data["prs"][key] = {"repo": repo, "number": pr["number"], "url": pr["html_url"]}
+            self.data["prs"][key] = {"repo": repo, "number": pr.number, "url": pr.url}
         self.data["initialized"] = True
         self._file.write(self.data)

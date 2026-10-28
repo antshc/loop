@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from collections.abc import Mapping
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
+from typing import Any
 
 from ..identity import CommentRef, IssueIdentity, IssueRef
 
@@ -47,6 +49,8 @@ class Comment:
     author: str
     body: str
     created_at: str
+    # The GitHub payload it was read from; a Workflow whose persisted shapes predate the typed model projects from it.
+    payload: Mapping[str, Any] = field(default_factory=dict, compare=False, repr=False)
 
 
 @dataclass(frozen=True)

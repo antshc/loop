@@ -6,10 +6,12 @@ import logging
 import subprocess
 
 from workflows.shared.github.account import GitHub
+from workflows.shared.github.pull_requests.model import PullRequest
 
 from ..model import Blocked, DiscoveryRequest, Pacer, PrState, StopSignal, exclusive
 from ..settings import Settings
 from ..watch.feedback import fingerprint
+from ..watch.snapshot import babysit_snapshot
 from .children import Child, ChildLauncher
 from .registry import Registry
 
@@ -28,7 +30,7 @@ class Scheduler:
         self._pacer = pacer
         self._stop = stop
 
-    def discover(self, author: str) -> list[tuple[str, dict]]:
+    def discover(self, author: str) -> list[tuple[str, PullRequest]]:
         """A complete discovery scan, taken before the startup baseline advances."""
         return [(repo.name, pr) for repo in self._settings.repositories
                 for pr in self._github.pull_requests(repo.name).open_by(author)]
@@ -54,7 +56,7 @@ class Scheduler:
                     try:
                         prs = self.discover(author)
                         registry.enroll(prs, self._request.include_existing)
-                        open_keys = {f"{repo}#{pr['number']}" for repo, pr in prs}
+                        open_keys = {f"{repo}#{pr.number}" for repo, pr in prs}
                         for key, record in registry.data["prs"].items():
                             if key in children:
                                 continue
@@ -65,13 +67,14 @@ class Scheduler:
                             pulls = github.pull_requests(record["repo"])
                             if key not in open_keys:
                                 if status != "completed":
-                                    if pulls.snapshot(record["number"])["pr"]["state"] != "open":
+                                    if not pulls.pull_request(record["number"]).is_open:
                                         state.status("completed")
                                 continue
                             explicit_retry = retry == record["url"]
                             if status == "blocked" and not explicit_retry:
                                 if (state.data.get("fingerprint") == "worker-crash" or
-                                        fingerprint(pulls.snapshot(record["number"])) == state.data.get("fingerprint")):
+                                        fingerprint(babysit_snapshot(pulls.snapshot(record["number"])))
+                                        == state.data.get("fingerprint")):
                                     continue
                             if len(children) >= settings.concurrency:
                                 continue

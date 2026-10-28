@@ -10,6 +10,8 @@ from urllib.parse import parse_qs
 
 from workflows.shared.process import CommandError
 
+from .pull_requests import FakePullRequestHost
+
 
 class ScriptedGh:
     """Answers each `gh` call with `respond(args)` and records it."""
@@ -36,9 +38,11 @@ class FakeGhCli:
         specs: list[dict] | None = None,
         prs: list[dict] | None = None,
         page_size: int = 100,
+        pulls: FakePullRequestHost | None = None,
     ) -> None:
         self.calls: list[tuple[str, ...]] = []
         self.page_size = page_size
+        self.pulls = pulls
         self._created: dict[int, dict] = {}
         self._failures: list[list] = []
         # Writes mutate the stored issues, so a caller's shared fixtures must not be aliased.
@@ -93,6 +97,9 @@ class FakeGhCli:
     def __call__(self, args: tuple[str, ...]) -> str:
         self.calls.append(args)
         self._raise_scheduled_failure(args)
+        served = self.pulls.handle(args) if self.pulls is not None else None
+        if served is not None:
+            return served
         if args[:2] == ("pr", "list"):
             return self._pr_list(args)
         if args[:2] == ("pr", "create"):

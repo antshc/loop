@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-from copy import deepcopy
 
 import pytest
 from dishka import Provider
@@ -13,10 +12,19 @@ from workflows.pr_babysit.composition.entry import build_container, maintain_pr
 from workflows.pr_babysit.model import Pacer, PrTarget
 from workflows.pr_babysit.monitor.pr import CheckoutGuard
 from workflows.pr_babysit.settings import Repository, Settings
+from workflows.pr_babysit.watch.snapshot import babysit_snapshot
 from workflows.shared.agents.launcher import AgentFactory
 from workflows.shared.github.account import GitHub
 from workflows.shared.providers import bind
 from workflows.shared.telemetry import Telemetry
+from workflows.tests.shared.fakes import (
+    FakeGhCli,
+    FakePullRequestHost,
+    check_run,
+    comment_node,
+    thread_node,
+    workflow_run,
+)
 
 
 def command(path, *args):
@@ -29,12 +37,11 @@ def bare_command(path, *args):
 
 
 def comment(id="c1", login="reviewer", body="Check this"):
-    return {"id": id, "body": body, "author": {"login": login}, "authorAssociation": "COLLABORATOR"}
+    return comment_node(id, login, body)
 
 
 def thread(comments=None, resolved=False):
-    return {"id": "t1", "isResolved": resolved, "isOutdated": False, "path": "cart.py", "line": 4,
-            "comments": comments if comments is not None else [comment()]}
+    return thread_node(comments, resolved=resolved)
 
 
 class LocalGuard:
@@ -55,42 +62,52 @@ class Pace:
 
 
 class Remote:
-    """GitHub and the PR's pull requests, backed by a local bare repository."""
+    """Pull request a/b#1 on the shared `gh` fake, its head following a local bare repository."""
 
     def __init__(self, bare, base, *, reviews=True, ci_failure=False):
-        self.bare, self.base, self.closed = bare, base, False
-        self.discussions = [thread()] if reviews else []
-        self.replies, self.retries, self.ci_failure = [], [], ci_failure
+        self.bare, self.base, self.ci_failure = bare, base, ci_failure
+        self.host = FakePullRequestHost()
+        self.pull = self.host.add(1, head_sha=lambda: bare_command(bare, "rev-parse", "refs/heads/feature"))
+        self.pull.threads = [thread()] if reviews else []
+        self.pull.check_runs = self._check_runs
+        self.pull.workflow_runs = self._workflow_runs
+        self.github = GitHub(FakeGhCli(pulls=self.host))
 
-    def login(self):
-        return "me"
+    @property
+    def discussions(self):
+        return self.pull.threads
 
-    def pull_requests(self, slug):
-        assert slug == "a/b"
-        return self
+    @discussions.setter
+    def discussions(self, threads):
+        self.pull.threads = threads
+
+    @property
+    def closed(self):
+        return self.pull.state == "closed"
+
+    @closed.setter
+    def closed(self, value):
+        self.pull.close(merged=value)
+
+    @property
+    def replies(self):
+        return self.host.replies
+
+    @property
+    def retries(self):
+        return self.host.retries
 
     def snapshot(self, number):
-        sha = bare_command(self.bare, "rev-parse", "refs/heads/feature")
-        failed = self.ci_failure and sha == self.base
-        return {"pr": {"number": number, "state": "closed" if self.closed else "open", "merged": self.closed,
-                       "head": {"sha": sha, "ref": "feature", "repo": {"full_name": "a/b"}},
-                       "user": {"login": "me"}, "draft": False, "mergeable": True, "mergeable_state": "clean"},
-                "threads": deepcopy(self.discussions), "other": [], "statuses": [],
-                "checks": [{"id": 1, "name": "test", "status": "completed", "conclusion": "failure" if failed else "success"}],
-                "runs": [{"id": 1, "workflow_id": 1, "status": "completed", "conclusion": "failure", "head_sha": sha}] if failed else []}
+        return babysit_snapshot(self.github.pull_requests("a/b").snapshot(number))
 
-    def pull(self, number):
-        return self.snapshot(number)["pr"]
+    def _failing(self):
+        return self.ci_failure and self.pull.sha == self.base
 
-    def reply(self, number, item, body):
-        self.replies.append(body)
-        self.discussions[0]["comments"].append(comment(f"reply{len(self.replies)}", "me", body))
+    def _check_runs(self):
+        return [check_run(1, "test", conclusion="failure" if self._failing() else "success")]
 
-    def failed_logs(self, runs):
-        return "cart.py: duplicate product"
-
-    def rerun_failed(self, run_id):
-        self.retries.append(run_id)
+    def _workflow_runs(self):
+        return [workflow_run(1, self.pull.sha, conclusion="failure")] if self._failing() else []
 
 
 class Runner:
@@ -141,7 +158,7 @@ def fakes(remote, runner, *extra: tuple[type, object], on_wait=None, observer=No
     """Overrides GitHub, the agent, the checkout guard, the pacer, and telemetry for one scenario."""
     def close(seconds):
         remote.closed = True
-    return bind((GitHub, remote), (AgentFactory, lambda: fake_agent(runner, git=GitRuntime(GitCli()))),
+    return bind((GitHub, remote.github), (AgentFactory, lambda: fake_agent(runner, git=GitRuntime(GitCli()))),
                 (CheckoutGuard, LocalGuard()), (Pacer, Pace(on_wait or close)), (Telemetry, Telemetry(observer)),
                 *extra)
 

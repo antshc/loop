@@ -63,7 +63,8 @@ Verify — may drift: the rows below name today's test locations; tests move to 
 |---|---|---|
 | Workflow wiring for tests | One local harness binds dev to fakes at every boundary | `workflows/tests/dev/doubles.py`: `DevHarness`, `FakeRunner`, `FakeGitService`, `FakeWorkflowGit` |
 | Envelope builders | Response envelopes the Workflows extract | `tests/workflow_harness.py`: `plan_envelope`, `implement_envelope`; `workflows/tests/dev/doubles.py`: `envelope` |
-| Boundary fakes | One fake per boundary | `workflows/tests/dev/doubles.py`: dev's runner and Git; `workflows/tests/shared/fakes/gh.py`: `FakeGhCli` and `ScriptedGh` for `gh` |
+| Boundary fakes | One fake per boundary | `workflows/tests/dev/doubles.py`: dev's runner and Git; `workflows/tests/shared/fakes/gh.py`: `FakeGhCli` and `ScriptedGh` for `gh`, with the pull request side (`FakePullRequestHost`) in `workflows/tests/shared/fakes/pull_requests.py`, shared by the `dev` and `pr_babysit` harnesses |
+| Compatibility goldens | Values a migration must not change are captured from the old code first, then compared byte for byte | `workflows/tests/pr_babysit/watch/golden.json` with `golden.py` and `test_golden.py`: babysit fingerprints, persisted state, and agent envelopes |
 | Unit tests | Library and Workflow rules against fakes | `tests/unit` and `workflows/tests` (`dev`, `pr_babysit`, `shared`, each mirroring its source folders); all discovered by root `pytest` |
 | Package independence | Dev runs with only `workflows/shared` and no sibling Workflow files, and resolves its own prompts | `workflows/tests/dev/test_package.py` |
 | Architecture checks | Import rules enforced as a test | `tests/unit/test_library.py`: `lint-imports` |
