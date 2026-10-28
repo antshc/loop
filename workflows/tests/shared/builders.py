@@ -6,6 +6,19 @@ from workflows.shared.github.identity import IssueIdentity, IssueRef, Repository
 from workflows.shared.github.issues.graph import SpecGraphSnapshot
 from workflows.shared.github.issues.issue import Issue, IssueState
 from workflows.shared.github.issues.spec import Spec, Ticket
+from workflows.shared.github.pull_requests.model import (
+    CheckKind,
+    CheckOutcome,
+    CheckResult,
+    Mergeability,
+    MergeState,
+    PullRequest,
+    PullRequestReview,
+    PullRequestSnapshot,
+    PullRequestState,
+    ReviewThread,
+    ReviewVerdict,
+)
 
 
 REPOSITORY = RepositoryId("owner", "repo")
@@ -56,3 +69,60 @@ def build_graph(
         sub_issue_total=len(tickets),
         held_tickets=tuple(ticket.number for ticket in tickets if not ticket.actionable),
     )
+
+
+def build_pull_request_snapshot(
+    *,
+    draft: bool = False,
+    state: PullRequestState = PullRequestState.OPEN,
+    mergeability: Mergeability = Mergeability.MERGEABLE,
+    merge_state: MergeState = MergeState.CLEAN,
+    base_ref: str = "main",
+    head_sha: str = "head",
+    author: str = "me",
+    reviews: tuple[PullRequestReview, ...] = (),
+    threads: tuple[ReviewThread, ...] = (),
+    checks: tuple[CheckResult, ...] = (),
+    review_decision: str = "",
+) -> PullRequestSnapshot:
+    """An in-memory pull request snapshot that is open, mergeable, and has nothing else unless given."""
+    pull = PullRequest(
+        ref=IssueRef(REPOSITORY, 7),
+        identity=IssueIdentity(9007, "PR_7"),
+        title="Add login",
+        body="",
+        url=f"https://github.com/{REPOSITORY}/pull/7",
+        state=state,
+        draft=draft,
+        merged=False,
+        base_ref=base_ref,
+        head_ref="feature",
+        head_sha=head_sha,
+        head_repository=str(REPOSITORY),
+        author=author,
+        mergeability=mergeability,
+        merge_state=merge_state,
+    )
+    return PullRequestSnapshot(pull, threads, reviews, (), checks, review_decision)
+
+
+def build_review(id: int, reviewer: str, verdict: ReviewVerdict, *, commit: str = "head") -> PullRequestReview:
+    """A review of the pull request."""
+    return PullRequestReview(id, reviewer, verdict, commit, "", "2026-03-01T12:00:00Z")
+
+
+def build_thread(id: str = "t1", *, resolved: bool = False) -> ReviewThread:
+    """A review thread with no comments."""
+    return ReviewThread(id, resolved, False, "cart.py", 4, 4, ())
+
+
+def build_check(
+    name: str,
+    outcome: CheckOutcome = CheckOutcome.PASSED,
+    *,
+    commit: str = "head",
+    kind: CheckKind = CheckKind.CHECK_RUN,
+    id: int = 1,
+) -> CheckResult:
+    """A check result of `kind` that ran against `commit`."""
+    return CheckResult(kind, id, name, commit, outcome)

@@ -141,6 +141,61 @@ def workflow_run(
     }
 
 
+def pull_request_rule(
+    approvals: int = 1, *, code_owners: bool = False, dismiss_stale: bool = False, threads: bool = False
+) -> dict:
+    """A repository ruleset's pull request rule in the REST shape of the rules-for-branch listing."""
+    parameters = {
+        "required_approving_review_count": approvals,
+        "require_code_owner_review": code_owners,
+        "dismiss_stale_reviews_on_push": dismiss_stale,
+        "required_review_thread_resolution": threads,
+        "require_last_push_approval": False,
+    }
+    return {"type": "pull_request", "parameters": parameters, "ruleset_source_type": "Repository", "ruleset_source": "a/b", "ruleset_id": 1}
+
+
+def required_checks_rule(*contexts: str, strict: bool = False) -> dict:
+    """A repository ruleset's required status checks rule in the REST shape of the rules-for-branch listing."""
+    parameters = {
+        "required_status_checks": [{"context": context, "integration_id": 15368} for context in contexts],
+        "strict_required_status_checks_policy": strict,
+    }
+    return {"type": "required_status_checks", "parameters": parameters, "ruleset_source_type": "Repository", "ruleset_source": "a/b", "ruleset_id": 2}
+
+
+def classic_protection(
+    approvals: int | None = None,
+    *,
+    checks: tuple[str, ...] = (),
+    strict: bool = False,
+    code_owners: bool = False,
+    dismiss_stale: bool = False,
+    linear_history: bool = False,
+    conversation_resolution: bool = False,
+) -> dict:
+    """A branch's classic protection in the REST shape; a requirement left out is not enabled."""
+    protection: dict = {
+        "url": "https://api.github.com/repos/a/b/branches/main/protection",
+        "required_linear_history": {"enabled": linear_history},
+        "required_conversation_resolution": {"enabled": conversation_resolution},
+        "enforce_admins": {"enabled": False},
+    }
+    if approvals is not None:
+        protection["required_pull_request_reviews"] = {
+            "required_approving_review_count": approvals,
+            "require_code_owner_reviews": code_owners,
+            "dismiss_stale_reviews": dismiss_stale,
+        }
+    if checks or strict:
+        protection["required_status_checks"] = {
+            "strict": strict,
+            "contexts": list(checks),
+            "checks": [{"context": context, "app_id": 15368} for context in checks],
+        }
+    return protection
+
+
 def _items(stored: list[dict] | Callable[[], list[dict]]) -> list[dict]:
     return stored() if callable(stored) else stored
 
@@ -224,6 +279,8 @@ class FakePullRequestHost:
         self.requested: list[int] = []
         self.reply_failure: str | None = None
         self.thread_failure: str | None = None
+        self.rules: dict[str, list[dict]] = {}
+        self.protection: dict[str, dict] = {}
 
     def add(self, number: int, **options: Any) -> FakePull:
         """Stores a new open pull request."""
@@ -249,7 +306,14 @@ class FakePullRequestHost:
             return json.dumps(self._pull(int(match[1])).rest())
         if (match := re.fullmatch(r"issues/(\d+)/comments", path)) and int(match[1]) in self.pulls:
             return self._post_comment(self._pull(int(match[1])), args)
+        if match := re.fullmatch(r"branches/(.+)/protection", path):
+            return self._protection(match[1])
         return None
+
+    def _protection(self, branch: str) -> str:
+        if branch not in self.protection:
+            raise CommandError(f"gh api repos/{self.slug}/branches/{branch}/protection", 1, "gh: Branch not protected (HTTP 404)")
+        return json.dumps(self.protection[branch])
 
     def _post_comment(self, pull: FakePull, args: tuple[str, ...]) -> str:
         body = next(arg[len("body="):] for arg in args if arg.startswith("body="))
@@ -268,6 +332,8 @@ class FakePullRequestHost:
         if match := re.fullmatch(r"commits/([^/]+)/(check-runs|statuses)", path):
             pull = self._pull_at(match[1])
             return self._wrapped("check_runs", _items(pull.check_runs)) if match[2] == "check-runs" else self._paged(_items(pull.statuses))
+        if path.startswith("rules/branches/"):
+            return self._paged(self.rules.get(path.removeprefix("rules/branches/"), []))
         if path == "actions/runs":
             pull = self._pull_at(query.split("head_sha=")[1].split("&")[0])
             return self._wrapped("workflow_runs", _items(pull.workflow_runs))

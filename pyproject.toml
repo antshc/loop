@@ -132,7 +132,7 @@ ignore_imports = [
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
-name = "Pure modules of the shared GitHub pull_requests package never import the gh process layer; only its reader and client do"
+name = "Pure modules of the shared GitHub pull_requests package never import the gh process layer; only its reader, policy reader, and client do"
 type = "forbidden"
 source_modules = ["workflows.shared.github.pull_requests"]
 forbidden_modules = [
@@ -143,6 +143,8 @@ forbidden_modules = [
 ignore_imports = [
     "workflows.shared.github.pull_requests.reader -> workflows.shared.github.repo",
     "workflows.shared.github.pull_requests.client -> workflows.shared.github.repo",
+    "workflows.shared.github.pull_requests.policy_reader -> workflows.shared.process",
+    "workflows.shared.github.pull_requests.policy_reader -> workflows.shared.github.repo",
 ]
 allow_indirect_imports = true
 
