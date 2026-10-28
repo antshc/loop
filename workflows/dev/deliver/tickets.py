@@ -5,15 +5,19 @@ from __future__ import annotations
 import logging
 import subprocess
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 from loop import AgentWorkspace, Kind, Phase, Phases, Role
 
 from workflows.shared.git import Commit, GitClient
+from workflows.shared.github.identity import RepositoryId
+from workflows.shared.github.issues.graph import SpecGraphSnapshot
+from workflows.shared.github.issues.spec import Ticket
 
-from ..model.records import (
-    AgentCommitSubject, AgentWorkflow, RepositoryId, Spec, Ticket, TicketContext, TicketResult, TicketWorkflowError,
-)
+from ..model.branches import feature_branch as feature_branch_of
+from ..model.handoff import close_ticket, escalate
+from ..model.records import AgentCommitSubject, AgentWorkflow, TicketContext, TicketResult, TicketWorkflowError
 from ..model.repositories import Tracker
 from .journal import FileExecutionStore
 
@@ -21,8 +25,21 @@ from .journal import FileExecutionStore
 logger = logging.getLogger("workflow.tickets")
 
 
+@dataclass(frozen=True)
+class TicketsDelivered:
+    """The Spec as it stands after delivery; `complete` is true only when no Ticket is left open or held, and `failed` when a Ticket exhausted its retries."""
+
+    spec: SpecGraphSnapshot
+    complete: bool
+    failed: bool = False
+
+
+def _next_ready(spec: SpecGraphSnapshot) -> Ticket | None:
+    return next((ticket for ticket in spec.deliverable_tickets if ticket.actionable), None)
+
+
 class TicketDeliverer:
-    """Delivers a Spec's actionable Tickets in order on one worktree, one validated agent commit per Ticket."""
+    """Delivers a Spec's actionable, READY Tickets in order on one worktree, one validated agent commit per Ticket."""
 
     def __init__(
         self,
@@ -42,14 +59,17 @@ class TicketDeliverer:
         self._max_failures = max_failures
 
     def deliver(
-        self, spec: Spec, worktree: AgentWorkspace, run_agents: AgentWorkflow, publish: Callable[[], object] = lambda: None
-    ) -> bool:
-        """Retries failed attempts and stops at the failure cap; `publish` runs after each closed Ticket."""
+        self,
+        spec: SpecGraphSnapshot,
+        worktree: AgentWorkspace,
+        run_agents: AgentWorkflow,
+        publish: Callable[[SpecGraphSnapshot], object] = lambda spec: None,
+    ) -> TicketsDelivered:
+        """Retries failed attempts and stops at the failure cap; `publish` runs with the current Spec after each closed Ticket."""
         if self._max_failures < 1:
             raise TicketWorkflowError("max_failures must be at least one")
-        for ticket in spec.tickets:
-            if not ticket.actionable:
-                continue
+        # Re-read each time: closing a Ticket can make a Ticket that waited for it READY.
+        while (ticket := _next_ready(spec)) is not None:
             attempt = 0
             while True:
                 attempt += 1
@@ -59,26 +79,28 @@ class TicketDeliverer:
                     result = self._attempt(context, worktree, run_agents, head_before, phase)
                 if isinstance(result, TicketResult):
                     with self._phases.phase("close-ticket", Kind.CODE, Role.CODE, ticket=ticket.number):
-                        spec.close_ticket(
-                            ticket.number, f"Delivered in {result.commit}.\n\n{result.summary}\n\n{result.verification}"
+                        spec = close_ticket(
+                            self._tracker,
+                            spec,
+                            ticket.number,
+                            f"Delivered in {result.commit}.\n\n{result.summary}\n\n{result.verification}",
                         )
-                        self._tracker.update_spec(spec)
                         self._store.reset(ticket.url)
-                    publish()
+                    publish(spec)
                     break
                 logger.debug("ticket %s failed: %s", ticket.url, result)
                 with self._phases.phase("restore", Kind.CODE, Role.CODE, ticket=ticket.number):
                     self._git.restore(worktree.path, head_before.sha)
                 if self._record_failure(ticket) >= self._max_failures:
                     with self._phases.phase("escalate", Kind.CODE, Role.CODE, ticket=ticket.number) as escalation:
-                        spec.escalate(ticket.number, result)
-                        self._tracker.update_spec(spec)
+                        spec = escalate(self._tracker, spec, ticket.number, result)
                         escalation.set(verdict="human input required")
-                    return False
-        return True
+                    return TicketsDelivered(spec, False, failed=True)
+        # A Ticket that is blocked, unread, or awaiting a human is not delivered, so the Spec is not complete.
+        return TicketsDelivered(spec, not spec.held_tickets)
 
-    def _context(self, spec: Spec, ticket: Ticket, path: Path) -> TicketContext:
-        base_branch, feature_branch = spec.base_branch, spec.feature_branch
+    def _context(self, spec: SpecGraphSnapshot, ticket: Ticket, path: Path) -> TicketContext:
+        base_branch, feature_branch = spec.base_branch, feature_branch_of(spec)
         if base_branch is None or feature_branch is None:
             raise TicketWorkflowError(f"cannot resolve branches for Spec {spec.url}")
         identifier = AgentCommitSubject(spec.initiative, ticket.number)

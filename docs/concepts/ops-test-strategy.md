@@ -11,7 +11,7 @@ One unit test group runs in the project's single test command (`pytest`). It tes
 - **Library seams:** `CliRunner` and `GitService` (and `DockerService`) are the replaceable boundaries; tests build `AgentBuilder(runner, git, docker)` over a `FakeRunner` and `FakeGitService`.
 - **Workflow seams:** a Workflow's Git reads and publication (`GitService`) and its GitHub client (`FakeGhCli`) are injected as in-memory fakes. `dev` and `pr_babysit` take them as Dishka override providers through `main(argv, *, providers=())`; `workflows.shared.providers.bind` binds each fake to its type, including an `AgentFactory` over the fake runner. Feature classes take collaborators through constructors, so a single stage is tested by constructing it directly with fakes and no container.
 - **Ticket delegate seam:** reusable Ticket orchestration is tested through `deliver_tickets` with function delegates returning typed results; multi-repository scenarios drive `dev.main` with separate histories, clients, and delegates to prove target isolation and harness-only Ticket updates.
-- **Workflow-local harness:** `workflows/dev/tests/doubles.py` holds dev's fakes, `DevHarness` (which translates its fakes into one override provider), and response-envelope builders; `workflows/pr_babysit/tests/support.py` does the same for babysit. `tests/workflow_harness.py` independently supports `plan_implement`; dev tests import no sibling harness.
+- **Workflow-local harness:** `workflows/tests/dev/doubles.py` holds dev's fakes, `DevHarness` (which translates its fakes into one override provider), and response-envelope builders; `workflows/tests/pr_babysit/support.py` does the same for babysit. Both reuse the shared `gh`-boundary fake in `workflows/tests/shared/fakes/`. `tests/workflow_harness.py` independently supports `plan_implement`; dev tests import no sibling harness.
 - **Architecture checks:** import-linter contracts run as a test.
 
 ## Rules
@@ -61,11 +61,12 @@ Verify — may drift: the rows below name today's test locations; tests move to 
 
 | Concern | Stable anchor | Semantic locator |
 |---|---|---|
-| Workflow wiring for tests | One local harness binds dev to fakes at every boundary | `workflows/dev/tests/doubles.py`: `DevHarness`, `FakeRunner`, `FakeGitService`, `FakeWorkflowGit` |
-| Envelope builders | Response envelopes the Workflows extract | `tests/workflow_harness.py`: `plan_envelope`, `implement_envelope`; `workflows/dev/tests/doubles.py`: `envelope` |
-| Boundary fakes | One fake per boundary | `workflows/dev/tests/doubles.py`: dev's runner, Git, and `FakeGhCli` |
-| Unit tests | Library and Workflow rules against fakes | `tests/unit`, `workflows/shared/tests`, `workflows/dev/tests`, and `workflows/pr_babysit/tests`; all discovered by root `pytest` |
-| Package independence | Dev runs with only `workflows/shared` and no sibling Workflow files, and resolves its own prompts | `workflows/dev/tests/test_package.py` |
+| Workflow wiring for tests | One local harness binds dev to fakes at every boundary | `workflows/tests/dev/doubles.py`: `DevHarness`, `FakeRunner`, `FakeGitService`, `FakeWorkflowGit` |
+| Envelope builders | Response envelopes the Workflows extract | `tests/workflow_harness.py`: `plan_envelope`, `implement_envelope`; `workflows/tests/dev/doubles.py`: `envelope` |
+| Boundary fakes | One fake per boundary | `workflows/tests/dev/doubles.py`: dev's runner and Git; `workflows/tests/shared/fakes/gh.py`: `FakeGhCli` and `ScriptedGh` for `gh`, with the pull request side (`FakePullRequestHost`) in `workflows/tests/shared/fakes/pull_requests.py`, shared by the `dev` and `pr_babysit` harnesses |
+| Compatibility goldens | Values a migration must not change are captured from the old code first, then compared byte for byte | `workflows/tests/pr_babysit/watch/golden.json` with `golden.py` and `test_golden.py`: babysit fingerprints, persisted state, and agent envelopes |
+| Unit tests | Library and Workflow rules against fakes | `tests/unit` and `workflows/tests` (`dev`, `pr_babysit`, `shared`, each mirroring its source folders); all discovered by root `pytest` |
+| Package independence | Dev runs with only `workflows/shared` and no sibling Workflow files, and resolves its own prompts | `workflows/tests/dev/test_package.py` |
 | Architecture checks | Import rules enforced as a test | `tests/unit/test_library.py`: `lint-imports` |
 
 ## References

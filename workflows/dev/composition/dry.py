@@ -27,12 +27,13 @@ from loop import (
 
 from workflows.shared.agents.launcher import AgentFactory
 from workflows.shared.git import Commit, GitClient
+from workflows.shared.github.identity import RepositoryId
 from workflows.shared.github.repo import GitHubRepo
 from workflows.shared.process import CommandRunner
 from workflows.shared.providers import bind
 
 from ..deliver.journal import FileExecutionStore
-from ..model.records import Repository, RepositoryId
+from ..model.records import Repository
 from ..model.repositories import GithubFactory
 from .providers import SessionReaders
 
@@ -119,15 +120,20 @@ class DryGit(GitClient):
         return next(index for index, commit in enumerate(self.commits) if commit.sha == sha)
 
 
-def _issue(number: int, title: str, labels: tuple[str, ...]) -> dict:
+def _issue(number: int, title: str, labels: tuple[str, ...], *, sub_issues: int = 0) -> dict:
     return {
+        "id": 1000 + number,
+        "node_id": f"I_dry{number}",
         "number": number,
         "title": title,
-        "url": f"https://github.com/{DRY_TARGET}/issues/{number}",
-        "state": "OPEN",
+        "html_url": f"https://github.com/{DRY_TARGET}/issues/{number}",
+        "state": "open",
+        "state_reason": None,
         "body": f"Dry-run body of #{number}: {title}.",
-        "labels": {"nodes": [{"name": label} for label in labels]},
-        "comments": {"nodes": []},
+        "labels": [{"name": label} for label in labels],
+        "assignees": [],
+        "comments": 0,
+        "sub_issues_summary": {"total": sub_issues},
     }
 
 
@@ -137,8 +143,8 @@ class DryGh:
     def __init__(self) -> None:
         self.calls: list[tuple[str, ...]] = []
         labels = ("spec", f"repo:target:{DRY_TARGET}", f"repo:base:{DRY_BASE_BRANCH}")
-        self._specs = [_issue(_SPEC_NUMBER, "Basket: Discount policy", labels)]
         self._tickets = [_issue(number, title, ()) for number, title in zip(_TICKET_NUMBERS, _TICKET_TITLES)]
+        self._specs = [_issue(_SPEC_NUMBER, "Basket: Discount policy", labels, sub_issues=len(self._tickets))]
 
     def __call__(self, args: tuple[str, ...]) -> str:
         self.calls.append(args)
@@ -153,14 +159,31 @@ class DryGh:
         if args[0] == "issue":
             logger.debug("dry-run: gh %s", " ".join(args[:3]))
             return ""
-        query = next((arg for arg in args if arg.startswith("query=")), "")
-        if "subIssues" in query:
-            return self._page({"issue": {"subIssues": {"nodes": self._tickets}}})
-        return self._page({"issues": {"nodes": self._specs}})
+        endpoint = next(arg for arg in args if arg.startswith("repos/"))
+        if "--method" in args:
+            return self._post(endpoint)
+        path, _, _ = endpoint.partition("?")
+        if "--paginate" in args:
+            return json.dumps([self._collection(path)])
+        return json.dumps(self._issue(int(path.rsplit("/", 1)[1])))
 
-    @staticmethod
-    def _page(repository: dict) -> str:
-        return json.dumps([{"data": {"repository": repository}}])
+    def _post(self, endpoint: str) -> str:
+        if not endpoint.endswith("/comments"):
+            return "{}"
+        number = int(endpoint.split("/")[-2])
+        return json.dumps({"id": 5000 + number, "user": {"login": "dry-run"}, "body": "", "created_at": "2026-01-01T00:00:00Z"})
+
+    def _collection(self, path: str) -> list[dict]:
+        if path.endswith("/sub_issues"):
+            return self._tickets
+        if path.endswith("/labels"):
+            return self._issue(int(path.split("/")[-2]))["labels"]
+        if path.endswith(("/comments", "/dependencies/blocked_by")):
+            return []
+        return self._specs
+
+    def _issue(self, number: int) -> dict:
+        return next(node for node in (*self._specs, *self._tickets) if node["number"] == number)
 
 
 Committer = Callable[[Path, str], str]

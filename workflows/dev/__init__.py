@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from workflows.shared.github.identity import RepositoryId
+
 from .agents.delegates import (
     chore_pull_request, implement_ticket, plan_spec, prompt_args, review_pull_request, verify_app,
 )
@@ -16,7 +18,6 @@ from .model.records import (
     ChoreContext, ChoreResult, ChoreWorkflow,
     ReviewContext, ReviewAxis, ReviewFinding, ReviewResult, ReviewWorkflow,
     Repository,
-    RepositoryId,
     TicketContext,
     TicketResult,
     TicketResult as DevResult,

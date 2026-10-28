@@ -4,18 +4,20 @@ from __future__ import annotations
 
 import json
 import subprocess
-from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
 from loop import AgentWorkspace, Kind, Phase, Phases
 
 from workflows.shared.git import GitClient
+from workflows.shared.github.issues.graph import SpecGraphSnapshot
 
+from ..model.branches import feature_branch as feature_branch_of, slugify
 from ..model.definition import Owner
 from ..model.gates import commit_subject, find_verification_skills, made_no_commit, protected_changes
 from ..model.outcomes import SKIPPED, VerifyReport
-from ..model.records import Spec, TicketWorkflowError, VerifyContext, VerifyResult, VerifyWorkflow, loop_session_name, slugify
+from ..model.payloads import ticket_payload
+from ..model.records import TicketWorkflowError, VerifyContext, VerifyResult, VerifyWorkflow, loop_session_name
 from ..model.repositories import Tracker
 
 
@@ -28,7 +30,7 @@ class AppVerifier:
         self._phases = phases
         self._evidence_root = evidence_root
 
-    def verify(self, spec: Spec, pull_request_url: str, worktree: AgentWorkspace, run_verify: VerifyWorkflow) -> VerifyReport:
+    def verify(self, spec: SpecGraphSnapshot, pull_request_url: str, worktree: AgentWorkspace, run_verify: VerifyWorkflow) -> VerifyReport:
         """Records the settled verification verdict after evidence checks and any fixes."""
         with self._phases.phase("verify", Kind.AGENT, Owner.VERIFIER, spec=spec.number) as phase:
             report = self._verify(spec, pull_request_url, worktree, run_verify, phase)
@@ -40,11 +42,11 @@ class AppVerifier:
             return report
 
     def _verify(
-        self, spec: Spec, pull_request_url: str, worktree: AgentWorkspace, run_verify: VerifyWorkflow, phase: Phase
+        self, spec: SpecGraphSnapshot, pull_request_url: str, worktree: AgentWorkspace, run_verify: VerifyWorkflow, phase: Phase
     ) -> VerifyReport:
         """Verifies the integrated branch when the repository has a verification skill; fix commits are pushed, the verdict is posted on the Spec."""
         git = self._git
-        base_branch, feature_branch = spec.base_branch, spec.feature_branch
+        base_branch, feature_branch = spec.base_branch, feature_branch_of(spec)
         if base_branch is None or feature_branch is None:
             raise TicketWorkflowError(f"cannot resolve branches for Spec {spec.url}")
         skills = find_verification_skills(worktree.path)
@@ -64,7 +66,7 @@ class AppVerifier:
                 evidence_dir,
                 skills,
                 json.dumps({"number": spec.number, "title": spec.title, "url": spec.url, "body": spec.body}, indent=2),
-                json.dumps([asdict(ticket) for ticket in spec.tickets], indent=2),
+                json.dumps([ticket_payload(ticket) for ticket in spec.deliverable_tickets], indent=2),
                 tuple(f"{commit.sha[:7]} {commit.subject}" for commit in git.branch_commits(worktree.path, base_branch)),
                 loop_session_name(spec.number, spec.title),
             )
@@ -113,11 +115,10 @@ class AppVerifier:
         with self._phases.phase("restore", Kind.CODE, Owner.CODE, to=sha):
             self._git.restore(path, sha)
 
-    def _post_verdict(self, spec: Spec, report: VerifyReport) -> None:
+    def _post_verdict(self, spec: SpecGraphSnapshot, report: VerifyReport) -> None:
         lines = [f"dev: app verification **{report.verdict}**", "", report.summary, "", f"Evidence: `{report.evidence_dir}`"]
         if report.fix_commit:
             lines.append(f"Fix commit: {report.fix_commit}")
         if report.unfixed:
             lines += ["", "Unfixed findings:", *(f"- {item}" for item in report.unfixed)]
-        spec.comment("\n".join(lines))
-        self._tracker.update_spec(spec)
+        self._tracker.comment(spec.number, "verification", "\n".join(lines))

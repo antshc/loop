@@ -11,6 +11,7 @@ from workflows.shared.github.pull_requests import PullRequests
 
 from ..model import Blocked, PrState, PrTarget
 from ..settings import Repository, Settings
+from ..watch.snapshot import babysit_snapshot
 from .verification import Verifier
 
 
@@ -95,12 +96,19 @@ class ChangePublisher:
         batch["inflight"] = None
         state.save()
 
+    def _reply(self, number: int, item: dict, body: str) -> None:
+        """Replies in the review thread the item came from, or on the PR conversation."""
+        if item["kind"] == "thread":
+            self._pulls.reply_to_thread(item["thread_id"], body)
+        else:
+            self._pulls.comment(number, body)
+
     def publish(self, path: Path, login: str, flow: WorkflowRun) -> None:
         """Pushes the batch without force, confirms it, then posts each reply once."""
         state, pulls, number = self._state, self._pulls, self._target.number
         batch = state.data["batch"]
         with flow.phase("publish", head=batch["head"]):
-            current = pulls.snapshot(number)
+            current = babysit_snapshot(pulls.snapshot(number))
             if current["pr"]["state"] != "open":
                 raise Blocked("PR closed during publication; inspect retained work before retrying")
             if current["pr"]["head"]["ref"] != batch["branch"]:
@@ -110,7 +118,7 @@ class ChangePublisher:
                 raise Blocked("PR head moved; publication stopped before replying")
             if batch["head"] != batch["base"] and remote_head != batch["head"]:
                 self._git.publish(path, batch["branch"])
-            if pulls.pull(number)["head"]["sha"] != batch["head"]:
+            if pulls.pull_request(number).head_sha != batch["head"]:
                 raise Blocked("Published SHA could not be confirmed")
             batch["pushed"] = True
             state.save()
@@ -119,7 +127,7 @@ class ChangePublisher:
                 if item["status"] == "handled":
                     continue
                 body = reply if item["kind"] == "thread" else f"In response to {item['url']}:\n\n{reply}"
-                current = pulls.snapshot(number)
+                current = babysit_snapshot(pulls.snapshot(number))
                 if item["kind"] == "thread" and not _reply_exists(current, item, body, login):
                     thread = next((thread for thread in current["threads"] if thread["id"] == item["thread_id"]), None)
                     source = item["key"].rsplit(":", 1)[-1]
@@ -128,7 +136,7 @@ class ChangePublisher:
                         state.save()
                         continue
                 if not _reply_exists(current, item, body, login):
-                    pulls.reply(number, item, body)
+                    self._reply(number, item, body)
                 item["status"] = "handled"
                 state.save()
             state.data["worktree_base"] = batch["head"]

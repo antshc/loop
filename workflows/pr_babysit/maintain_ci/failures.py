@@ -46,7 +46,7 @@ class CiMaintainer:
             if not changes.clean(path):
                 raise Blocked("Worktree contains unverified edits")
             head = changes.head(path)
-            logs = pulls.failed_logs(ci["runs"]) if ci["runs"] else "No Actions run logs; inspect check/status links."
+            logs = pulls.failed_logs(run["id"] for run in ci["runs"]) if ci["runs"] else "No Actions run logs; inspect check/status links."
             with flow.phase("diagnose"):
                 diagnosis = ask(workspace, self._profile, "diagnose", {"snapshot": snapshot, "logs": logs})
             changes.read_only(path, head)

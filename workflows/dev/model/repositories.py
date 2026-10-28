@@ -7,11 +7,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import NewType, Protocol
 
+from workflows.shared.github.identity import RepositoryId
+from workflows.shared.github.issues.graph import SpecGraphSnapshot
+from workflows.shared.github.issues.issue import Comment
 from workflows.shared.github.repo import GitHubRepo
 
 from .records import (
-    AgentWorkflow, ChoreWorkflow, PlannedTicket, PlanWorkflow, Repository, RepositoryId, ReviewWorkflow, Spec, Ticket,
-    TicketWorkflowError, VerifyWorkflow,
+    AgentWorkflow, ChoreWorkflow, PlanWorkflow, Repository, ReviewWorkflow, TicketWorkflowError, VerifyWorkflow,
 )
 
 
@@ -63,10 +65,12 @@ GithubFactory = Callable[[Repository], GitHubRepo]
 
 
 class Tracker(Protocol):
-    """Where Specs and Tickets live and where their pending changes are persisted."""
+    """Where Specs and Tickets live; each command takes effect on GitHub at once, and a retry skips what is already applied."""
 
-    def specs(self) -> Iterable[Spec]: ...
+    def specs(self, number: int | None = None) -> Iterable[SpecGraphSnapshot]: ...
 
-    def update_spec(self, spec: Spec) -> None: ...
+    def comment(self, number: int, purpose: str, body: str) -> Comment: ...
 
-    def create_tickets(self, spec: Spec, planned: Iterable[PlannedTicket]) -> tuple[Ticket, ...]: ...
+    def add_label(self, number: int, label: str) -> None: ...
+
+    def close(self, number: int, comment: str) -> None: ...

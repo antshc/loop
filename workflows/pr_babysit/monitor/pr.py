@@ -19,6 +19,7 @@ from ..maintain_ci.failures import CiMaintainer
 from ..model import BaselineFailed, Blocked, Pacer, PrState, PrTarget, StopSignal, exclusive
 from ..settings import Repository, Settings
 from ..watch.feedback import ci_state, fingerprint, observe
+from ..watch.snapshot import babysit_snapshot
 from .definition import babysit_workflow
 
 logger = logging.getLogger(__name__)
@@ -71,7 +72,7 @@ class PrMonitor:
                 snapshot = None
                 try:
                     while not self._stop.requested():
-                        snapshot = pulls.snapshot(number)
+                        snapshot = babysit_snapshot(pulls.snapshot(number))
                         pr = snapshot["pr"]
                         if pr["state"] != "open":
                             state.status("completed", head=pr["head"]["sha"],
@@ -126,7 +127,7 @@ class PrMonitor:
                     reason = str(exception)
                     # Reconcile after our own replies so they cannot immediately retrigger a blocked PR.
                     try:
-                        blocked_on = fingerprint(pulls.snapshot(number))
+                        blocked_on = fingerprint(babysit_snapshot(pulls.snapshot(number)))
                     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError, ValueError):
                         blocked_on = fingerprint(snapshot) if snapshot is not None else ""
                     state.status("blocked", reason=reason, fingerprint=blocked_on)

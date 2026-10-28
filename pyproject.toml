@@ -25,7 +25,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src", ".", "tests"]
-testpaths = ["tests", "workflows/shared/tests", "workflows/dev/tests", "workflows/pr_babysit/tests"]
+testpaths = ["tests", "workflows/tests"]
 norecursedirs = ["archive", ".*"]
 
 [tool.importlinter]
@@ -77,7 +77,6 @@ source_modules = [
     "workflows.dev.model",
     "workflows.dev.plan",
     "workflows.dev.review",
-    "workflows.dev.tracker",
     "workflows.dev.verify",
 ]
 forbidden_modules = ["workflows.dev.agents"]
@@ -93,7 +92,6 @@ source_modules = [
     "workflows.dev.model",
     "workflows.dev.plan",
     "workflows.dev.review",
-    "workflows.dev.tracker",
     "workflows.dev.verify",
 ]
 forbidden_modules = ["workflows.dev.composition"]
@@ -106,7 +104,6 @@ modules = [
     "workflows.dev.deliver",
     "workflows.dev.plan",
     "workflows.dev.review",
-    "workflows.dev.tracker",
     "workflows.dev.verify",
 ]
 
@@ -115,6 +112,48 @@ name = "Shared workflow infrastructure imports no workflow slice"
 type = "forbidden"
 source_modules = ["workflows.shared"]
 forbidden_modules = ["workflows.dev", "workflows.pr_babysit", "workflows.plan_implement", "workflows.workflow_reporting"]
+
+[[tool.importlinter.contracts]]
+name = "Pure modules of the shared GitHub issues package never import the gh process layer; only its reader, commands, ticketing service, and client do"
+type = "forbidden"
+source_modules = ["workflows.shared.github.issues"]
+forbidden_modules = [
+    "workflows.shared.process",
+    "workflows.shared.github.repo",
+    "workflows.shared.github.account",
+    "workflows.shared.github.pull_requests",
+]
+ignore_imports = [
+    "workflows.shared.github.issues.reader -> workflows.shared.process",
+    "workflows.shared.github.issues.reader -> workflows.shared.github.repo",
+    "workflows.shared.github.issues.commands -> workflows.shared.github.repo",
+    "workflows.shared.github.issues.ticketing -> workflows.shared.process",
+    "workflows.shared.github.issues.client -> workflows.shared.github.repo",
+]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Pure modules of the shared GitHub pull_requests package never import the gh process layer; only its reader, policy reader, and client do"
+type = "forbidden"
+source_modules = ["workflows.shared.github.pull_requests"]
+forbidden_modules = [
+    "workflows.shared.process",
+    "workflows.shared.github.repo",
+    "workflows.shared.github.account",
+]
+ignore_imports = [
+    "workflows.shared.github.pull_requests.reader -> workflows.shared.github.repo",
+    "workflows.shared.github.pull_requests.client -> workflows.shared.github.repo",
+    "workflows.shared.github.pull_requests.policy_reader -> workflows.shared.process",
+    "workflows.shared.github.pull_requests.policy_reader -> workflows.shared.github.repo",
+]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Workflow source packages never import the Workflow test tree"
+type = "forbidden"
+source_modules = ["workflows.shared", "workflows.dev", "workflows.pr_babysit", "workflows.plan_implement", "workflows.workflow_reporting"]
+forbidden_modules = ["workflows.tests"]
 
 [[tool.importlinter.contracts]]
 name = "Only composition roots and the shared provider know the container"
@@ -142,7 +181,6 @@ source_modules = [
     "workflows.dev.model",
     "workflows.dev.plan",
     "workflows.dev.review",
-    "workflows.dev.tracker",
     "workflows.dev.verify",
 ]
 forbidden_modules = ["dishka"]

@@ -12,16 +12,21 @@ from loop import BranchStrategy, GitOptions, Kind, LoopHookError, Phases
 
 from workflows.shared.agents.launcher import AgentLauncher
 from workflows.shared.git import GitClient
+from workflows.shared.github.issues.errors import IssueError
+from workflows.shared.github.issues.graph import SpecGraphSnapshot
+from workflows.shared.github.issues.readiness import satisfied
 from workflows.shared.github.pull_requests import PullRequests
 
 from ..chore.cleanup import ChoreRefiner
 from ..deliver.tickets import TicketDeliverer
+from ..model.branches import feature_branch as feature_branch_of
 from ..model.definition import Owner
+from ..model.handoff import announce_delivered, block, hand_to_human
 from ..model.outcomes import SKIPPED, ChoreReport, Delivery
-from ..model.records import Repository, Spec, TicketWorkflowError as DevError
+from ..model.records import Repository, TicketWorkflowError as DevError
 from ..model.repositories import GithubFactory, Harness, RepositoryWorkflow, Targets, Tracker
 from ..model.settings import DevSettings
-from ..plan.planner import Planner
+from ..plan.planner import Planner, unfinished_plan
 from ..review.reviewer import Finalizer, Reviewer
 from ..verify.verifier import AppVerifier
 
@@ -43,9 +48,9 @@ class PullRequestPublisher:
         self._github_for = github_for
         self._phases = phases
 
-    def publish(self, spec: Spec, repository: Repository, pusher: Path) -> str | None:
+    def publish(self, spec: SpecGraphSnapshot, repository: Repository, pusher: Path) -> str | None:
         """The draft PR's URL, or None when there was nothing new to push."""
-        base_branch, feature_branch = spec.base_branch, spec.feature_branch
+        base_branch, feature_branch = spec.base_branch, feature_branch_of(spec)
         if base_branch is None or feature_branch is None:
             raise DevError(f"cannot resolve branches for Spec {spec.url}")
         with self._phases.phase("publish", Kind.CODE, Owner.CODE, spec=spec.number) as phase:
@@ -59,10 +64,10 @@ class PullRequestPublisher:
             return pull_request.url
 
 
-def pull_request_body(spec: Spec) -> str:
+def pull_request_body(spec: SpecGraphSnapshot) -> str:
     """The initiative ID on the first line (the code-review initiative gate reads it), then every Ticket and whether it is delivered."""
     lines = [spec.initiative, "", f"Spec: {spec.url}", "", "Tickets:"]
-    lines += [f"- [{'x' if ticket.state == 'closed' else ' '}] #{ticket.number} {ticket.title}" for ticket in spec.tickets]
+    lines += [f"- [{'x' if ticket.state == 'closed' else ' '}] #{ticket.number} {ticket.title}" for ticket in spec.deliverable_tickets]
     return "\n".join(lines)
 
 
@@ -107,17 +112,20 @@ class SpecRouter:
         """Processes every open Spec (only `settings.spec_number` when set) and returns the exit code."""
         targets = self._targets.by_slug()
         spec_number = self._settings.spec_number
-        specs = [spec for spec in self._tracker.specs() if spec_number in (None, spec.number)]
+        specs = list(self._tracker.specs(spec_number))
         if spec_number is not None and not specs:
             logger.error("no open Spec #%s on %s", spec_number, self._harness.owner_name)
             return 1
         failed = False
         for spec in specs:
-            if not spec.awaiting_human:
+            if not spec.complete:
+                logger.warning("Spec #%s was not read completely; no decision is made from it: %s", spec.number, spec.gaps)
+                failed = True
+            elif not spec.awaiting_human:
                 failed = (self._process(spec, targets) is Outcome.FAILED) or failed
         return 1 if failed else 0
 
-    def _process(self, spec: Spec, targets: Mapping[str, RepositoryWorkflow]) -> Outcome:
+    def _process(self, spec: SpecGraphSnapshot, targets: Mapping[str, RepositoryWorkflow]) -> Outcome:
         # The engineer's request is the root of the run's trace.
         with self._phases.phase("spec", Kind.ENGINEER, Owner.ENGINEER, spec=spec.number, initiative=spec.initiative) as phase:
             outcome = self._route(spec, targets)
@@ -127,63 +135,67 @@ class SpecRouter:
                 phase.skip("Spec needs no delivery or is blocked")
             return outcome
 
-    def _route(self, spec: Spec, targets: Mapping[str, RepositoryWorkflow]) -> Outcome:
+    def _route(self, spec: SpecGraphSnapshot, targets: Mapping[str, RepositoryWorkflow]) -> Outcome:
         target = spec.target
         if target is None or spec.base_branch is None:
-            spec.block(f"dev: cannot resolve repo:target/repo:base labels on {spec.url}")
-            self._tracker.update_spec(spec)
+            block(self._tracker, spec, f"dev: cannot resolve repo:target/repo:base labels on {spec.url}")
             return Outcome.SKIPPED
         workflow = targets.get(target.casefold())
         if workflow is None:
-            spec.block(f"dev: repo:target:{target} is not configured for harness {self._harness.owner_name}")
-            self._tracker.update_spec(spec)
+            block(self._tracker, spec, f"dev: repo:target:{target} is not configured for harness {self._harness.owner_name}")
             return Outcome.SKIPPED
         try:
-            if not self._prepare(spec, workflow):
-                return Outcome.FAILED if spec.awaiting_human and spec.needs_plan else Outcome.SKIPPED
-            return self._deliver_on_worktree(spec, workflow)
-        except (LoopHookError, subprocess.CalledProcessError) as exception:
+            prepared = self._prepare(spec, workflow)
+            if isinstance(prepared, Outcome):
+                return prepared
+            return self._deliver_on_worktree(prepared, workflow)
+        except (LoopHookError, subprocess.CalledProcessError, IssueError) as exception:
             logger.error("Spec #%s failed (%s)", spec.number, type(exception).__name__)
             logger.debug("Spec failure details: %s", exception, exc_info=True)
-            spec.comment(f"dev: {_describe(exception)}")
-            self._tracker.update_spec(spec)
+            try:
+                self._tracker.comment(spec.number, "failure", f"dev: {_describe(exception)}")
+            except (subprocess.CalledProcessError, IssueError) as comment_failure:
+                logger.error("Spec #%s: the failure Comment was not posted (%s)", spec.number, type(comment_failure).__name__)
             return Outcome.FAILED
 
-    def _prepare(self, spec: Spec, workflow: RepositoryWorkflow) -> bool:
+    def _prepare(self, spec: SpecGraphSnapshot, workflow: RepositoryWorkflow) -> SpecGraphSnapshot | Outcome:
+        """The Spec ready for delivery (planned when it had no Tickets), or the outcome that ends its run."""
         repository, git, phases = workflow.repository, self._git, self._phases
         with phases.phase("preflight", Kind.CODE, Owner.CODE, spec=spec.number) as phase:
             git.fetch(repository.checkout)
             base_branch = spec.base_branch
             if base_branch is None:
                 raise DevError(f"cannot resolve base branch for Spec {spec.url}")
-            if spec.needs_plan and workflow.run_plan is not None:
+            if (spec.needs_plan or unfinished_plan(spec) is not None) and workflow.run_plan is not None:
                 if not git.remote_branch_exists(repository.checkout, base_branch):
                     self._hand_over_missing_base(spec, phase, base_branch)
-                    return False
-                if not self._planner.plan(spec, repository.checkout, workflow.run_plan):
+                    return Outcome.FAILED
+                planned = self._planner.plan(spec, repository.checkout, workflow.run_plan)
+                if planned is None:
                     phase.fail("Planning failed; human input required")
-                    return False
+                    return Outcome.FAILED
+                spec = planned
             else:
                 reason = "No planner configured" if workflow.run_plan is None else "Spec already has Tickets"
                 _skip(phases, "plan", Kind.AGENT, Owner.PLANNER, reason)
                 _skip(phases, "create-tickets", Kind.CODE, Owner.CODE, reason)
             if not spec.has_work:
+                _log_held_tickets(spec)
                 self._publisher.publish(spec, repository, repository.checkout)
-                return False
+                return Outcome.SKIPPED
             if not git.remote_branch_exists(repository.checkout, base_branch):
                 self._hand_over_missing_base(spec, phase, base_branch)
-                return False
+                return Outcome.SKIPPED
             # Publish earlier runs' commits from the checkout before the worktree opens.
             self._publisher.publish(spec, repository, repository.checkout)
-            return True
+            return spec
 
-    def _hand_over_missing_base(self, spec: Spec, phase, base_branch: str) -> None:
-        spec.hand_to_human(f"dev: target branch {base_branch!r} does not exist on {spec.target}")
-        self._tracker.update_spec(spec)
+    def _hand_over_missing_base(self, spec: SpecGraphSnapshot, phase, base_branch: str) -> None:
+        hand_to_human(self._tracker, spec, f"dev: target branch {base_branch!r} does not exist on {spec.target}")
         phase.fail("base branch missing")
 
-    def _deliver_on_worktree(self, spec: Spec, workflow: RepositoryWorkflow) -> Outcome:
-        feature_branch = spec.feature_branch
+    def _deliver_on_worktree(self, spec: SpecGraphSnapshot, workflow: RepositoryWorkflow) -> Outcome:
+        feature_branch = feature_branch_of(spec)
         if feature_branch is None:
             raise DevError(f"cannot resolve feature branch for Spec {spec.url}")
         repository, git, phases = workflow.repository, self._git, self._phases
@@ -196,24 +208,24 @@ class SpecRouter:
         delivery: Delivery | None = None
         published: list[str] = []
 
-        def publish(worktree_path: Path) -> None:
-            url = self._publisher.publish(spec, repository, worktree_path)
+        def publish(current: SpecGraphSnapshot, worktree_path: Path) -> None:
+            url = self._publisher.publish(current, repository, worktree_path)
             if url is not None:
                 published.append(url)
 
         with phases.phase("deliver", Kind.CODE, Owner.CODE, spec=spec.number) as phase:
             with self._new_agent().with_git(options).open() as worktree:
-                delivered = self._deliverer.deliver(
-                    spec, worktree, workflow.run_agents, publish=lambda: publish(worktree.path)
+                result = self._deliverer.deliver(
+                    spec, worktree, workflow.run_agents, publish=lambda current: publish(current, worktree.path)
                 )
-                if not delivered:
+                spec, delivered, failed = result.spec, result.complete, result.failed
+                if failed:
                     phase.fail("Ticket delivery exhausted its retries")
-                publish(worktree.path)
+                publish(spec, worktree.path)
                 # Tickets are published as they land, so the last publish may have found nothing new to push.
                 pull_request_url = published[-1] if published else None
                 if delivered and pull_request_url is not None:
-                    spec.announce_delivered(pull_request_url)
-                    self._tracker.update_spec(spec)
+                    announce_delivered(self._tracker, spec, pull_request_url)
                     verification = SKIPPED
                     if workflow.run_verify is not None:
                         verification = self._verifier.verify(spec, pull_request_url, worktree, workflow.run_verify)
@@ -247,7 +259,22 @@ class SpecRouter:
             _skip(phases, "finalize", Kind.CODE, Owner.CODE, "PR remains a draft without review")
             if delivery.verification.blocks_ready:
                 return Outcome.FAILED
-        return Outcome.SUCCESS if delivered else Outcome.FAILED
+        return Outcome.FAILED if failed else Outcome.SUCCESS
+
+
+def _log_held_tickets(spec: SpecGraphSnapshot) -> None:
+    """Says why each open Ticket waits, since a Spec whose Tickets are all held is skipped with no tracker write."""
+    readiness = spec.readiness
+    for number in spec.held_tickets:
+        waiting_on = [
+            f"{edge.blocker} ({edge.state}{f', {edge.close_reason}' if edge.close_reason else ''})"
+            for edge in spec.blocked_by
+            if edge.ticket.number == number and not satisfied(edge)
+        ]
+        logger.warning(
+            "Spec #%s: Ticket #%s is held (readiness %s)%s",
+            spec.number, number, readiness[number], f", blocked by {', '.join(waiting_on)}" if waiting_on else "",
+        )
 
 
 def _describe(exception: Exception) -> str:
