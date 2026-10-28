@@ -12,7 +12,6 @@ from workflows.shared.git import Commit  # noqa: F401  (re-exported for the slic
 from workflows.shared.github.identity import RepositoryId
 from workflows.shared.github.issues.graph import SpecGraphSnapshot
 from workflows.shared.github.issues.spec import HITL_LABEL, Ticket  # noqa: F401  (HITL_LABEL is re-exported for the slices)
-from workflows.shared.github.pull_requests import PublishedPullRequest  # noqa: F401
 
 
 def loop_session_name(number: int, title: str) -> str:

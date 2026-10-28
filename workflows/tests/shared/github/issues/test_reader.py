@@ -236,7 +236,7 @@ def test_a_permission_denial_marks_that_state_unknown_not_empty() -> None:
 
 def test_a_spec_listing_that_cannot_be_read_raises_instead_of_returning_no_specs() -> None:
     gh = FakeGhCli()
-    gh.deny_on("api", "--paginate", "--slurp", f"repos/owner/repo/issues?state=open&labels=spec&per_page=100")
+    gh.deny_on("api", "--paginate", "--slurp", "repos/owner/repo/issues?state=open&labels=spec&per_page=100")
 
     with pytest.raises(CommandError, match="HTTP 403"):
         _issues(gh).specs()
