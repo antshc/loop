@@ -187,4 +187,4 @@ Decisions: [Run one fresh agent per Ticket](../adr/run-one-fresh-agent-per-ticke
 | Spec and Ticket selection (verify — may drift: moving to `workflows/shared/github/`) | Open Specs; actionable Tickets | `workflows/dev/tracker/tickets.py`: `TicketsTracker.specs`; `workflows/dev/model/records.py`: `Spec.tickets` |
 | Execution | Fresh non-interactive Copilot run per Ticket by default | `loop`: `AgentBuilder`, `Worktree.agent`, `AgentClient`; `workflows/dev/agents/`: named prompts and default delegates; `workflows/dev/model/reply.py`: `DevResponse` |
 | Failure bound | Per-Ticket failure count across runs | `workflows/dev/deliver/journal.py`: `FileExecutionStore` |
-| Tests (verify — may drift: moving to `workflows/tests/dev/`) | Workflow scenarios against fakes | `workflows/dev/tests/test_run.py`; local harness in `workflows/dev/tests/doubles.py` |
+| Tests | Workflow scenarios against fakes | `workflows/tests/dev/test_run.py`; local harness in `workflows/tests/dev/doubles.py` |

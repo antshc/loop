@@ -1,4 +1,4 @@
-"""Unit tests for content decoders: `pytest workflows/dev/tests/test_reply.py`."""
+"""Unit tests for content decoders: `pytest workflows/tests/dev/model/test_reply.py`."""
 
 from __future__ import annotations
 

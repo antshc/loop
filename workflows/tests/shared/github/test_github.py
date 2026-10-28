@@ -7,27 +7,16 @@ import pytest
 from workflows.shared.github.account import GitHub
 from workflows.shared.github.repo import GitHubRepo
 from workflows.shared.github.pull_requests import PullRequests
+from workflows.tests.shared.fakes import ScriptedGh
 
 
-class Gh:
-    """Answers each `gh` call with `respond(args)` and records it."""
-
-    def __init__(self, respond) -> None:
-        self.respond = respond
-        self.calls: list[tuple[str, ...]] = []
-
-    def __call__(self, args: tuple[str, ...]) -> str:
-        self.calls.append(args)
-        return self.respond(args)
-
-
-def _pulls(gh: Gh) -> PullRequests:
+def _pulls(gh: ScriptedGh) -> PullRequests:
     return PullRequests(GitHubRepo("a", "b", gh=gh))
 
 
 def test_rest_collection_paginates_and_filters_author() -> None:
     payload = [[{"user": {"login": "Me"}, "number": 1}], [{"user": {"login": "other"}, "number": 2}]]
-    gh = Gh(lambda args: json.dumps(payload))
+    gh = ScriptedGh(lambda args: json.dumps(payload))
 
     assert [pr["number"] for pr in _pulls(gh).open_by("me")] == [1]
     assert "--paginate" in gh.calls[0] and "--slurp" in gh.calls[0]
@@ -46,7 +35,7 @@ def test_thread_and_comment_pagination_omits_empty_initial_cursor() -> None:
             "nodes": [{"id": "t1", "comments": {"nodes": [{"id": "c1"}],
                 "pageInfo": {"hasNextPage": True, "endCursor": "next-comment"}}}],
             "pageInfo": {"hasNextPage": True, "endCursor": "next-thread"}}}}}})
-    gh = Gh(respond)
+    gh = ScriptedGh(respond)
 
     threads = _pulls(gh).threads(1)
 
@@ -55,7 +44,7 @@ def test_thread_and_comment_pagination_omits_empty_initial_cursor() -> None:
 
 
 def test_graphql_mutation_errors_cannot_be_marked_successful() -> None:
-    gh = Gh(lambda args: '{"errors":[{"message":"forbidden"}]}')
+    gh = ScriptedGh(lambda args: '{"errors":[{"message":"forbidden"}]}')
 
     with pytest.raises(ValueError, match="forbidden"):
         _pulls(gh).reply(1, {"kind": "thread", "thread_id": "t1"}, "Fixed!")
@@ -63,7 +52,7 @@ def test_graphql_mutation_errors_cannot_be_marked_successful() -> None:
 
 def test_a_draft_pull_request_is_reused_for_its_head_branch() -> None:
     existing = [{"number": 5, "title": "t", "url": "u", "headRefName": "feat", "body": "old"}]
-    gh = Gh(lambda args: json.dumps(existing) if args[:2] == ("pr", "list") else "")
+    gh = ScriptedGh(lambda args: json.dumps(existing) if args[:2] == ("pr", "list") else "")
 
     pr = _pulls(gh).create_draft_pull_request("feat", "main", "t", "new")
 
@@ -72,7 +61,7 @@ def test_a_draft_pull_request_is_reused_for_its_head_branch() -> None:
 
 
 def test_a_missing_draft_pull_request_is_created_as_a_draft() -> None:
-    gh = Gh(lambda args: "[]" if args[:2] == ("pr", "list") else "https://github.com/a/b/pull/7\n")
+    gh = ScriptedGh(lambda args: "[]" if args[:2] == ("pr", "list") else "https://github.com/a/b/pull/7\n")
 
     pr = _pulls(gh).create_draft_pull_request("feat", "main", "Title")
 
@@ -81,7 +70,7 @@ def test_a_missing_draft_pull_request_is_created_as_a_draft() -> None:
 
 
 def test_the_account_reaches_repositories_by_slug_and_reports_its_login() -> None:
-    github = GitHub(Gh(lambda args: '{"login": "me"}'))
+    github = GitHub(ScriptedGh(lambda args: '{"login": "me"}'))
 
     assert github.login() == "me"
     assert github.repository("https://github.com/o/r.git").slug == "o/r"
@@ -90,7 +79,7 @@ def test_the_account_reaches_repositories_by_slug_and_reports_its_login() -> Non
 
 
 def test_the_account_reads_one_pull_request_of_a_repository() -> None:
-    gh = Gh(lambda args: '{"number": 7, "state": "open"}')
+    gh = ScriptedGh(lambda args: '{"number": 7, "state": "open"}')
 
     pull = GitHub(gh).pull_requests("o/r").pull(7)
 
@@ -99,7 +88,7 @@ def test_the_account_reads_one_pull_request_of_a_repository() -> None:
 
 
 def test_a_closed_pull_request_snapshot_skips_reviews_and_checks() -> None:
-    gh = Gh(lambda args: '{"number": 7, "state": "closed"}')
+    gh = ScriptedGh(lambda args: '{"number": 7, "state": "closed"}')
 
     snapshot = _pulls(gh).snapshot(7)
 

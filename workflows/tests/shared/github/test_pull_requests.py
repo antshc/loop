@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from workflows.shared.github.pull_requests import PullRequests as PullRequestClient
 from workflows.shared.github.repo import GitHubRepo
-from workflows.dev.tests.doubles import FakeGhCli
+from workflows.tests.shared.fakes import FakeGhCli
 
 
 def _client(gh: FakeGhCli | None = None) -> PullRequestClient:

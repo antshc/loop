@@ -8,14 +8,14 @@ from pathlib import Path
 import pytest
 
 from loop import BranchStrategy
-from workflows.dev.tests.doubles import COMPLETED, DevHarness, crash, envelope, hook_error, issue
+from workflows.tests.dev.doubles import COMPLETED, DevHarness, crash, envelope, hook_error
 from workflows import dev
 from workflows.dev.agents import prompts
 from workflows.dev import FileExecutionStore
 from workflows.dev.model.records import AgentCommitSubject, Spec
 from workflows.dev.tracker.tickets import TicketsTracker
 from workflows.shared.github.repo import GitHubRepo
-from workflows.dev.tests.doubles import FakeGhCli
+from workflows.tests.shared.fakes import FakeGhCli, issue
 
 _PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
 TWO_TICKETS = {1: [issue(10, "Add login form"), issue(11, "Add login tests")]}
@@ -514,7 +514,7 @@ class SpanRecordingObserver:
     def span(self, name: str, attributes: dict | None = None, *, role: str | None = None):
         events = self.events
 
-        from workflows.dev.tests.doubles import FakePhaseSpan
+        from workflows.tests.dev.doubles import FakePhaseSpan
         class _Span(FakePhaseSpan):
             def __enter__(self):
                 events.append(f"open {name}")

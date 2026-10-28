@@ -304,7 +304,7 @@ remains a self-contained, function-based script.
 - [`plan/`](../workflows/dev/plan/), [`deliver/`](../workflows/dev/deliver/), [`verify/`](../workflows/dev/verify/), [`chore/`](../workflows/dev/chore/), and [`review/`](../workflows/dev/review/): `Planner`, `TicketDeliverer` (with the failure journal), `AppVerifier`, `ChoreRefiner`, and `Reviewer`/`Finalizer`. These stages never import each other or a concrete agent.
 - [`backlog/`](../workflows/dev/backlog/): `SpecRouter` and `PullRequestPublisher`, which sequence the stages per Spec.
 - [`prompts/`](../workflows/dev/prompts/): named Markdown templates; `load_prompt("implement")` reads `implement.md` relative to the package, not the current directory.
-- [`tests/`](../workflows/dev/tests/): dev tests and local fakes; run `pytest workflows/dev/tests`.
+- [`tests/dev/`](../workflows/tests/dev/): dev tests and harness under the Workflow test tree; run `pytest workflows/tests/dev`.
 
 Add templates to the prompt folder and let each repository's delegate select,
 render, or combine them. For example, after adding `review.md`, use

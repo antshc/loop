@@ -14,7 +14,7 @@ from workflows.pr_babysit.watch.feedback import fingerprint
 from workflows.shared.github.account import GitHub
 from workflows.shared.telemetry import ObserverFactory
 
-from .support import Pace, bind
+from workflows.tests.pr_babysit.support import Pace, bind
 
 
 def pr(number):

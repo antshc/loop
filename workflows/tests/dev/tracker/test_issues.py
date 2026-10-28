@@ -5,13 +5,13 @@ from unittest.mock import Mock
 
 import pytest
 
-from workflows.dev.tests.doubles import commit_file, git
+from workflows.tests.dev.doubles import commit_file, git
 from workflows.dev.model.records import Spec
 from workflows.dev.tracker.tickets import TicketsTracker
 from workflows.shared.git import GitClient
 from workflows.shared.github.repo import GitHubRepo
 from workflows.shared.process import CommandError, CommandRunner
-from workflows.dev.tests.doubles import FakeGhCli
+from workflows.tests.shared.fakes import FakeGhCli
 
 
 def _tracker(gh: FakeGhCli | Mock | None = None) -> TicketsTracker:

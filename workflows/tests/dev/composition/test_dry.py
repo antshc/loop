@@ -10,7 +10,7 @@ import pytest
 from loop import AgentRunRecord, Role, WorktreeEvent
 from workflows.dev import main
 from workflows.dev.composition.dry import DryGit, Fakes, commit_in_worktree
-from workflows.dev.tests.doubles import FakePhaseSpan
+from workflows.tests.dev.doubles import FakePhaseSpan
 from workflows.shared.providers import bind
 from workflows.shared.telemetry import ObserverFactory
 

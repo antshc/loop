@@ -6,7 +6,7 @@ import pytest
 
 from workflows.dev.model.records import Spec
 from workflows.dev.tracker.tickets import TicketsTracker
-from workflows.dev.tests.doubles import FakeGhCli
+from workflows.tests.shared.fakes import FakeGhCli
 
 
 def _tracker(gh: FakeGhCli | None = None) -> TicketsTracker:

@@ -13,7 +13,7 @@ from workflows.pr_babysit.publish.verification import Verifier
 from workflows.shared.git import GitClient
 from workflows.shared.process import CommandRunner
 
-from .support import Remote, Runner, bare_command, command, execute, fakes, thread
+from workflows.tests.pr_babysit.support import Remote, Runner, bare_command, command, execute, fakes, thread
 
 
 class RejectPush(GitClient):

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from loop import AgentProfile, AgentRequest, AgentWorkspace, copilot
-from workflows.dev.tests.doubles import FakeGitService, FakeRepositoryGh, FakeRepositoryGit, FakeRunner, FakeWorkflowGit, issue, new_agent_for
+from workflows.tests.dev.doubles import FakeGitService, FakeRepositoryGh, FakeRepositoryGit, FakeRunner, FakeWorkflowGit, new_agent_for
 from workflows import dev
 from workflows.dev.agents import prompts as prompt_files
 from workflows.dev.model.repositories import GithubFactory, Harness, Targets
@@ -15,7 +15,7 @@ from workflows.shared.github.repo import GitHubRepo
 from workflows.shared.providers import bind
 from workflows.dev.model.records import Commit
 from workflows.dev.model.records import Repository, RepositoryId
-from workflows.dev.tests.doubles import FakeGhCli
+from workflows.tests.shared.fakes import FakeGhCli, issue
 from workflows.dev.model.records import TicketContext, TicketResult
 
 

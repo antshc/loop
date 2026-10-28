@@ -3,7 +3,7 @@ from __future__ import annotations
 from workflows.pr_babysit.model import PrState
 from workflows.pr_babysit.watch.feedback import ci_state, observe, pending_threads
 
-from .support import comment, thread
+from workflows.tests.pr_babysit.support import comment, thread
 
 
 def test_gate_skips_fixed_and_resolved_but_accepts_followups_and_self_notes():

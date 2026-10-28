@@ -162,7 +162,7 @@ root, shared with agent observations; routine polls/sleeps create no phase spans
 Retained worktrees end their active telemetry span without claiming disk removal.
 
 ```sh
-python3 -m pytest workflows/pr_babysit/tests
+python3 -m pytest workflows/tests/pr_babysit
 python3 -m pytest
 ```
 

@@ -25,7 +25,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src", ".", "tests"]
-testpaths = ["tests", "workflows/shared/tests", "workflows/dev/tests", "workflows/pr_babysit/tests"]
+testpaths = ["tests", "workflows/tests"]
 norecursedirs = ["archive", ".*"]
 
 [tool.importlinter]
@@ -115,6 +115,12 @@ name = "Shared workflow infrastructure imports no workflow slice"
 type = "forbidden"
 source_modules = ["workflows.shared"]
 forbidden_modules = ["workflows.dev", "workflows.pr_babysit", "workflows.plan_implement", "workflows.workflow_reporting"]
+
+[[tool.importlinter.contracts]]
+name = "Workflow source packages never import the Workflow test tree"
+type = "forbidden"
+source_modules = ["workflows.shared", "workflows.dev", "workflows.pr_babysit", "workflows.plan_implement", "workflows.workflow_reporting"]
+forbidden_modules = ["workflows.tests"]
 
 [[tool.importlinter.contracts]]
 name = "Only composition roots and the shared provider know the container"

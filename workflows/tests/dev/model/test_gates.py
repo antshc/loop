@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from workflows.dev.model import gates
-from workflows.dev.tests.doubles import FakeWorkflowGit
+from workflows.tests.dev.doubles import FakeWorkflowGit
 
 PATH = Path("/w")
 

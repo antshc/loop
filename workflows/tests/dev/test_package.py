@@ -10,7 +10,7 @@ import pytest
 
 from workflows.dev import HARNESS, PROMPT, load_prompt
 from workflows.dev.agents import prompts
-from workflows.dev.tests.doubles import DevHarness
+from workflows.tests.dev.doubles import DevHarness
 
 ROOT = Path(__file__).resolve().parents[3]
 

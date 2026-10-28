@@ -6,7 +6,8 @@ from pathlib import Path
 import pytest
 
 from loop import AgentWorkspace, GitOptions, Phases
-from workflows.dev.tests.doubles import DevHarness, issue, new_agent_for
+from workflows.tests.dev.doubles import DevHarness, new_agent_for
+from workflows.tests.shared.fakes import issue
 from workflows.dev.model.records import RepositoryId, Spec
 from workflows.dev.tracker.tickets import TicketsTracker
 from workflows.dev.model.records import AgentWorkflow, TicketContext, TicketResult, TicketWorkflowError

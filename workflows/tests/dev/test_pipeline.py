@@ -8,7 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from workflows.dev.tests.doubles import DevHarness, clean_review, crash, envelope, issue
+from workflows.tests.dev.doubles import DevHarness, clean_review, crash, envelope
+from workflows.tests.shared.fakes import issue
 
 
 def _deliver(harness: DevHarness, **kwargs) -> int:
