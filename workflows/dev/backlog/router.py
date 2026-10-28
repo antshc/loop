@@ -12,6 +12,7 @@ from loop import BranchStrategy, GitOptions, Kind, LoopHookError, Phases
 
 from workflows.shared.agents.launcher import AgentLauncher
 from workflows.shared.git import GitClient
+from workflows.shared.github.issues.errors import IssueError
 from workflows.shared.github.issues.graph import SpecGraphSnapshot
 from workflows.shared.github.pull_requests import PullRequests
 
@@ -147,10 +148,13 @@ class SpecRouter:
             if isinstance(prepared, Outcome):
                 return prepared
             return self._deliver_on_worktree(prepared, workflow)
-        except (LoopHookError, subprocess.CalledProcessError) as exception:
+        except (LoopHookError, subprocess.CalledProcessError, IssueError) as exception:
             logger.error("Spec #%s failed (%s)", spec.number, type(exception).__name__)
             logger.debug("Spec failure details: %s", exception, exc_info=True)
-            self._tracker.comment(spec.number, "failure", f"dev: {_describe(exception)}")
+            try:
+                self._tracker.comment(spec.number, "failure", f"dev: {_describe(exception)}")
+            except (subprocess.CalledProcessError, IssueError) as comment_failure:
+                logger.error("Spec #%s: the failure Comment was not posted (%s)", spec.number, type(comment_failure).__name__)
             return Outcome.FAILED
 
     def _prepare(self, spec: SpecGraphSnapshot, workflow: RepositoryWorkflow) -> SpecGraphSnapshot | Outcome:

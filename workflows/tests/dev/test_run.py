@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -218,6 +219,28 @@ def test_a_ticket_that_failed_once_in_an_earlier_run_is_escalated_on_its_next_fa
 
     assert code == 1 and len(harness.prompts) == 1
     assert {c[2] for c in harness.calls("issue", "edit") if c[-1] == "hitl"} == {"1", "10"}
+
+
+def test_a_tracker_comment_that_cannot_be_read_fails_the_spec_instead_of_aborting_the_run(tmp_path: Path) -> None:
+    harness = DevHarness(tmp_path)
+    harness.store.record_failure(TICKET_10_URL, owner="owner", repo="repo", task_id="10", title="x", items=[10])
+    for number in (10, 1):
+        endpoint = f"repos/owner/repo/issues/{number}/comments?per_page=100"
+        harness.gh.fail_on("api", "--paginate", "--slurp", endpoint, after=1)
+        harness.gh.fail_on("api", "--paginate", "--slurp", endpoint, after=1)
+    records: list[str] = []
+    handler = logging.Handler()
+    handler.emit = lambda record: records.append(record.getMessage())  # type: ignore[method-assign]
+    logger = logging.getLogger("workflow.dev")
+    logger.addHandler(handler)
+    try:
+        code = harness.run()
+    finally:
+        logger.removeHandler(handler)
+
+    assert code == 1 and harness.comments() == []
+    assert "Spec #1 failed (IncompleteReadError)" in records
+    assert "Spec #1: the failure Comment was not posted (IncompleteReadError)" in records
 
 
 def test_failures_persist_per_ticket_in_the_days_execution_log(tmp_path: Path) -> None:
