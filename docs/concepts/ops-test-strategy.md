@@ -23,7 +23,8 @@ One unit test group runs in the project's single test command (`pytest`). It tes
 - MUST exercise agent response parsing with raw runner output; tests of the independent Ticket delegate seam may return typed results without parsing an agent envelope.
 - MUST assert a scenario outcome on effects at the fake boundaries — tracker writes, pushes, CLI invocations and prompts — and MUST NOT assert on Workflow internals.
 - MUST state each scenario as Given/when/then in its docstring, and name each test as a sentence of the behavior it proves.
-- MUST keep fakes and Workflow wiring in the owning Workflow's test harness; a test module MUST NOT rebuild them.
+- MUST keep Workflow tests under `workflows/tests/<package>/`, mirroring the package's source folders.
+- MUST keep fakes and Workflow wiring in the owning Workflow's test harness, and the `gh`-boundary fake for GitHub semantics in `workflows/tests/shared/fakes/`; slice harnesses reuse or extend it, and a test module MUST NOT rebuild them.
 - MUST run the architecture checks (library layering, Workflows import only the public `loop` API, dev imports no sibling helpers, Ticket orchestration imports no agent delegate) inside the test run.
 - MUST keep test fakes out of the public `loop` API.
 
@@ -55,6 +56,8 @@ harness.runner.handler = harness.commit_then(lambda sha: envelope("Checkout|10",
 ```
 
 ## Implementation Map
+
+Verify — may drift: the rows below name today's test locations; tests move to `workflows/tests/<package>/` and the shared GitHub fakes to `workflows/tests/shared/fakes/`.
 
 | Concern | Stable anchor | Semantic locator |
 |---|---|---|

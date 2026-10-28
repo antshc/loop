@@ -9,7 +9,7 @@ The harness contains agent instructions, skills, Specs, and Tickets. The dev wor
 
 `workflows/dev/` reads Specs and Tickets from the immutable `HARNESS: Repository` configured in `model/repositories.py`; target repositories come from `composition/repositories.py` or a `use_repositories(...)` provider passed to `main`.
 Each target is an explicit `RepositoryWorkflow` pairing a `Repository` with an
-agent delegate. With no target configuration, the workflow defaults to
+agent delegate. `RepositoryId` is the shared GitHub repository identity in `workflows/shared/github/`; `Repository` pairs it with the checkout and worktrees and stays in dev. With no target configuration, the workflow defaults to
 implementation on the harness repository.
 
 ```python

@@ -73,6 +73,7 @@ Product and SDLC language for user-owned workflows built **on** Loop. Warp Facto
 | **Ticket Tracker** | Domain-facing service for reading and updating Tickets, Specs, dependencies, comments, labels, and status through a provider such as GitHub Issues or Jira. The external tracker owns work state; it is not the factory execution ledger or checkpoint store. |
 | **Dependency graph** | Relationships between Tickets that constrain execution order; an eligible, unblocked Ticket belongs to the **ready frontier**. |
 | **Pull request (PR)** | Proposed code change and review surface with comments, review threads, commits, and check results. It is not itself a passing merge gate. |
+| **Comment** | Conversation-level message on a Ticket, Spec, or pull request. A **review comment** is distinct: it is anchored to a diff location inside a review thread. **Avoid:** issue comment, timeline comment. |
 
 ### Actors, tools, and execution
 

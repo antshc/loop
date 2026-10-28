@@ -19,7 +19,7 @@ and publication after each accepted Ticket; app verification; cleanup; worktree
 closure; read-only PR review; readiness checks. All delegates are supplied in the
 default `RepositoryWorkflow`; individual delegates can be omitted in custom configurations.
 
-A Spec with no sub-issues can be planned; closed or held sub-issues prevent replanning.
+A Spec with no sub-issues can be planned; closed or held sub-issues prevent replanning. The planner records Ticket blockers as native GitHub blocked-by edges, and a Ticket is actionable only when it is open, carries neither `hitl` nor `spec`, and is READY by those edges. A BLOCKED or UNKNOWN Ticket is held without labelling its Spec `hitl`, and a blocker closed as not planned or duplicate stays unsatisfied until a human decides.
 The developer retains its one-commit-per-Ticket contract. Verification and cleanup
 agents leave edits for the harness to validate, commit, and push. Verification needs
 project skills and durable evidence; absent skills are explicitly skipped. Cleanup
@@ -184,7 +184,7 @@ Decisions: [Run one fresh agent per Ticket](../adr/run-one-fresh-agent-per-ticke
 | Concern | Stable anchor | Semantic locator |
 |---|---|---|
 | External contract | Operator-run service for one repository board | `workflows/dev/composition/entry.py`: runnable package (`python -m workflows.dev`) `main(argv, *, providers=())`, options `--log-dir`, `--log-level`; run from the harness root |
-| Spec and Ticket selection | Open Specs; actionable Tickets | `workflows/dev/tracker/tickets.py`: `TicketsTracker.specs`; `workflows/dev/model/records.py`: `Spec.tickets` |
+| Spec and Ticket selection (verify — may drift: moving to `workflows/shared/github/`) | Open Specs; actionable Tickets | `workflows/dev/tracker/tickets.py`: `TicketsTracker.specs`; `workflows/dev/model/records.py`: `Spec.tickets` |
 | Execution | Fresh non-interactive Copilot run per Ticket by default | `loop`: `AgentBuilder`, `Worktree.agent`, `AgentClient`; `workflows/dev/agents/`: named prompts and default delegates; `workflows/dev/model/reply.py`: `DevResponse` |
 | Failure bound | Per-Ticket failure count across runs | `workflows/dev/deliver/journal.py`: `FileExecutionStore` |
-| Tests | Workflow scenarios against fakes | `workflows/dev/tests/test_run.py`; local harness in `workflows/dev/tests/doubles.py` |
+| Tests (verify — may drift: moving to `workflows/tests/dev/`) | Workflow scenarios against fakes | `workflows/dev/tests/test_run.py`; local harness in `workflows/dev/tests/doubles.py` |
