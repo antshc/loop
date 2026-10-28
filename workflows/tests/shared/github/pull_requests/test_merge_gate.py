@@ -166,6 +166,25 @@ def test_a_commit_status_satisfies_a_required_check() -> None:
     assert _evaluate(_change(checks=(build_check("test", kind=CheckKind.STATUS),))).ready
 
 
+@pytest.mark.parametrize("earlier", [CheckOutcome.PENDING, CheckOutcome.FAILED])
+def test_only_the_newest_status_of_a_context_counts(earlier: CheckOutcome) -> None:
+    statuses = (
+        build_check("test", CheckOutcome.PASSED, kind=CheckKind.STATUS, id=9),
+        build_check("test", earlier, kind=CheckKind.STATUS, id=3),
+    )
+
+    assert _evaluate(_change(checks=statuses)).ready
+
+
+def test_a_newer_failing_status_outranks_an_earlier_passing_one() -> None:
+    statuses = (
+        build_check("test", CheckOutcome.PASSED, kind=CheckKind.STATUS, id=3),
+        build_check("test", CheckOutcome.FAILED, kind=CheckKind.STATUS, id=9),
+    )
+
+    assert _evaluate(_change(checks=statuses)).codes == (ReasonCode.CHECK_FAILING,)
+
+
 def test_approvals_count_each_reviewer_once_by_their_latest_decisive_review() -> None:
     policy = MergePolicySnapshot("main", required_approvals=2)
     reviews = (

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from .merge_policy import MergePolicySnapshot
-from .model import CheckKind, CheckOutcome, Mergeability, MergeState, PullRequestSnapshot, ReviewVerdict
+from .model import CheckKind, CheckOutcome, CheckResult, Mergeability, MergeState, PullRequestSnapshot, ReviewVerdict
 
 
 class ReadinessStatus(StrEnum):
@@ -150,7 +150,7 @@ class MergeGateEvaluator:
     @staticmethod
     def _check_problem(snapshot: PullRequestSnapshot, name: str) -> ReasonCode | None:
         head = snapshot.pull_request.head_sha
-        named = [check for check in snapshot.checks if check.name == name and check.kind in _REQUIRED_CHECK_KINDS]
+        named = _latest_statuses([check for check in snapshot.checks if check.name == name and check.kind in _REQUIRED_CHECK_KINDS])
         current = [check for check in named if not check.stale(head)]
         if any(check.outcome is CheckOutcome.FAILED for check in current):
             return ReasonCode.CHECK_FAILING
@@ -192,6 +192,15 @@ class MergeGateEvaluator:
         if policy.conversation_resolution and unresolved:
             return [MergeReason(ReasonCode.UNRESOLVED_THREADS, str(len(unresolved)))]
         return []
+
+
+def _latest_statuses(checks: list[CheckResult]) -> list[CheckResult]:
+    """`checks` with only the newest commit status of each commit; the statuses endpoint lists every status ever posted, so an earlier `pending` or `failure` is superseded."""
+    newest: dict[str, CheckResult] = {}
+    for check in checks:
+        if check.kind is CheckKind.STATUS and (check.commit not in newest or check.id > newest[check.commit].id):
+            newest[check.commit] = check
+    return [check for check in checks if check.kind is not CheckKind.STATUS or newest[check.commit] is check]
 
 
 def _outdated(verdict: ReviewVerdict, commit: str, head: str, policy: MergePolicySnapshot) -> bool:
