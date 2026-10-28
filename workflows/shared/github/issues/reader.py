@@ -8,11 +8,11 @@ from typing import Any
 from urllib.parse import quote
 
 from ...process import CommandError
-from ..identity import CommentRef, IssueIdentity, IssueRef, RepositoryId
+from ..identity import IssueIdentity, IssueRef, RepositoryId
 from ..repo import GitHubRepo
 from .errors import IssueError
 from .graph import BlockedByRelation, IssueRelation, SpecGraphSnapshot
-from .issue import CloseReason, Comment, GapState, Issue, IssueState, ReadGap
+from .issue import CloseReason, Comment, GapState, Issue, IssueState, ReadGap, comment_from_rest
 from .issue_classifier import IssueClassifier, IssueKind, LabelTypeDisagreement
 from .spec import SPEC_LABEL, Spec, Ticket
 
@@ -89,7 +89,7 @@ class IssueReader:
 
     def posted(self, issue: IssueRef, node: dict[str, Any]) -> Comment:
         """The Comment a post call returned."""
-        return self._comment(issue, node)
+        return comment_from_rest(issue, node)
 
     def _issues(self, query: str) -> list[dict[str, Any]]:
         nodes = self._pages(self._endpoint(f"issues?{query}&{_PER_PAGE}"))
@@ -168,7 +168,7 @@ class IssueReader:
         comments = [] if node.get("comments") == 0 else self._collect(gaps, "comments", self._endpoint(f"issues/{ref.number}/comments?{_PER_PAGE}"))
         self._check_total(gaps, "comments", len(comments), node.get("comments"))
         issue = self._summary(node, labels=tuple(label["name"] for label in labels))
-        return replace(issue, comments=tuple(self._comment(ref, comment) for comment in comments), gaps=tuple(gaps))
+        return replace(issue, comments=tuple(comment_from_rest(ref, comment) for comment in comments), gaps=tuple(gaps))
 
     def _summary(self, node: dict[str, Any], *, labels: tuple[str, ...] | None = None) -> Issue:
         state = IssueState(node["state"])
@@ -185,11 +185,6 @@ class IssueReader:
             assignees=tuple(assignee["login"] for assignee in node.get("assignees") or ()),
             issue_type=(node.get("type") or {}).get("name"),
         )
-
-    def _comment(self, issue: IssueRef, node: dict[str, Any]) -> Comment:
-        # `user` is null for deleted accounts.
-        author = (node.get("user") or {}).get("login", "ghost")
-        return Comment(CommentRef(issue, node["id"]), author, node["body"], node["created_at"])
 
     def _ref(self, node: dict[str, Any]) -> IssueRef:
         return IssueRef(self.repository, node["number"])

@@ -166,6 +166,16 @@ def test_the_comments_of_an_issue_that_reports_none_are_not_requested() -> None:
     assert not [call for call in gh.calls if call[-1].split("?")[0].endswith("/comments")]
 
 
+def test_an_issue_comment_keeps_its_rest_payload_and_reads_a_null_body_as_empty() -> None:
+    gh = FakeGhCli(specs=[issue(1, "Spec", labels=_ROUTING, comments=("hello",))], tickets={1: []})
+    node = gh._specs[0]["comment_list"][0]
+    node["body"] = None
+
+    [comment] = _graph(gh).spec.comments
+
+    assert comment.body == "" and comment.payload["user"]["login"] == "alice"
+
+
 def test_a_spec_exposes_its_initiative_target_and_base_branch_from_its_routing_labels() -> None:
     gh = FakeGhCli(specs=[issue(1, "Checkout: Add login", labels=("spec", "repo:target:o/r", "repo:base:release/2.4"))], tickets={1: []})
 

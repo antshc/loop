@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..identity import CommentRef, IssueIdentity, IssueRef, RepositoryId
-from ..issues.issue import Comment
+from ..identity import IssueIdentity, IssueRef, RepositoryId
+from ..issues.issue import Comment, comment_from_rest
 from ..repo import GitHubRepo
 from .model import (
     CheckKind,
@@ -144,8 +144,7 @@ class PullRequestReader:
 
     def _comments(self, pull: IssueRef) -> tuple[Comment, ...]:
         nodes = self._repo.pages(self._endpoint(f"issues/{pull.number}/comments?{_PER_PAGE}"))
-        return tuple(Comment(CommentRef(pull, node["id"]), _login(node.get("user")), node.get("body") or "", node["created_at"], node)
-                     for node in nodes)
+        return tuple(comment_from_rest(pull, node) for node in nodes)
 
     def _reviews(self, number: int) -> tuple[PullRequestReview, ...]:
         nodes = self._repo.pages(self._endpoint(f"pulls/{number}/reviews?{_PER_PAGE}"))

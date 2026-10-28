@@ -53,6 +53,12 @@ class Comment:
     payload: Mapping[str, Any] = field(default_factory=dict, compare=False, repr=False)
 
 
+def comment_from_rest(issue: IssueRef, node: Mapping[str, Any]) -> Comment:
+    """The Comment a REST `issues/{n}/comments` payload describes, kept as its `payload`; a deleted author and a null body are tolerated."""
+    author = (node.get("user") or {}).get("login", "ghost")
+    return Comment(CommentRef(issue, node["id"]), author, node.get("body") or "", node["created_at"], node)
+
+
 @dataclass(frozen=True)
 class Issue:
     """An immutable snapshot of one issue; a part listed in `gaps` was not fully read and must not be treated as empty."""
