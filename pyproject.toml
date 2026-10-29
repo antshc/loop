@@ -65,6 +65,8 @@ forbidden_modules = [
     "loop.sessions",
     "loop.workflow",
 ]
+# The telemetry test builds Loop's observer over an in-memory exporter, which the public otlp_observer cannot take.
+ignore_imports = ["software_factory.tests.shared.test_telemetry -> loop.observe.otel"]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
