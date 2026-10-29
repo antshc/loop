@@ -136,7 +136,7 @@ The examples live in this repository and are not included in the installed
 | Example | Purpose |
 |---|---|
 | [Library usage](docs/usage.md#library-examples) | One-shot runs, profiles, shared worktrees, sessions, and Loop hooks |
-| [PR scheduler and babysitter](workflows/pr_babysit/README.md) | Discover user-authored PRs and address reviews/CI with JSON recovery and scoped telemetry |
+| [PR scheduler and babysitter](software_factory/legacy_slices/pr_babysit/README.md) | Discover user-authored PRs and address reviews/CI with JSON recovery and scoped telemetry |
 | [Plan and implement](workflows/plan_implement.py) | Plan and implement with different models on one worktree |
 | [Implement Spec Workflow guide](docs/usage.md#implement-spec-workflow) | Deliver GitHub Tickets, configure multiple repositories, and customize prompts |
 | [Multi-repository Workflow](docs/usage.md#different-agent-workflows-per-repository) | Route Specs to several repositories, each with its own agent steps |
@@ -157,7 +157,7 @@ implements and then reviews. Repositories must already be cloned under
 from functools import partial
 from pathlib import Path
 
-from workflows.implement_spec import (
+from software_factory.legacy_slices.implement_spec import (
     Repository, RepositoryId, RepositoryWorkflow, implement_ticket, load_prompt, main,
 )
 

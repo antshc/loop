@@ -103,31 +103,31 @@ builder-owned. Additional CLI-specific settings remain available through `args`.
 
 ## Implement Spec Workflow
 
-The self-contained [`workflows/implement_spec/`](../workflows/implement_spec/) package is an example,
+The self-contained [`software_factory/legacy_slices/implement_spec/`](../software_factory/legacy_slices/implement_spec/) package is an example,
 not part of the installed library. It uses GitHub Specs and Tickets to drive
 agent work, commits, draft pull requests, and Ticket updates.
 
 Install the `workflows` extra (`python -m pip install -e ".[workflows]"`) for the container. Before running it, configure `HARNESS` in
-[`model/repositories.py`](../workflows/implement_spec/model/repositories.py) and target repositories in
-[`composition/repositories.py`](../workflows/implement_spec/composition/repositories.py). The supplied configuration
+[`model/repositories.py`](../software_factory/legacy_slices/implement_spec/model/repositories.py) and target repositories in
+[`composition/repositories.py`](../software_factory/legacy_slices/implement_spec/composition/repositories.py). The supplied configuration
 targets `antshc/loop`; it is not a read-only demo.
 
 ```sh
 gh auth status
 copilot --version
-python -m workflows.implement_spec
+python -m software_factory.legacy_slices.implement_spec
 ```
 
 Optionally run it through your own alias, from the harness root:
 
 ```sh
-alias implement_spec='PYTHONPATH=/path/to/harness python -m workflows.implement_spec'
+alias implement_spec='PYTHONPATH=/path/to/harness python -m software_factory.legacy_slices.implement_spec'
 implement_spec --log-level DEBUG
 ```
 
 ### Implement Spec phases
 
-The default configuration in [`composition/repositories.py`](workflows/implement_spec/composition/repositories.py)
+The default configuration in [`composition/repositories.py`](software_factory/legacy_slices/implement_spec/composition/repositories.py)
 uses the same phases as the [eShop dev workflow](https://github.com/antshc/eShop/tree/main/tools/loop/workflows/dev):
 
 | Order | Phase | Behavior |
@@ -163,8 +163,8 @@ in execution history/telemetry or the DEBUG file. Add a terminal table independe
 
 ```sh
 python -m pip install -e ".[visualization]"
-python -m workflows.implement_spec --spec 42 --visualize
-python -m workflows.implement_spec --dry --fake-speed 0 --no-otel --visualize
+python -m software_factory.legacy_slices.implement_spec --spec 42 --visualize
+python -m software_factory.legacy_slices.implement_spec --dry --fake-speed 0 --no-otel --visualize
 ```
 
 `--spec NUMBER` selects one open Spec. `--visualize` enables the optional Rich table.
@@ -172,7 +172,7 @@ python -m workflows.implement_spec --dry --fake-speed 0 --no-otel --visualize
 `--otlp-endpoint`, fake seams, retry settings, and log-directory options remain available.
 
 Phase declarations and actor names live in
-[`model/definition.py`](workflows/implement_spec/model/definition.py), built on the optional public
+[`model/definition.py`](software_factory/legacy_slices/implement_spec/model/definition.py), built on the optional public
 `WorkflowBuilder`. Execution stays in the `implement_spec`-owned Python helpers.
 
 ### Debugging with fakes
@@ -189,18 +189,18 @@ rest real; `--dry` fakes them all and publishes the run to the dashboard (OTLP e
 | `store` | the failure log, in a temporary directory | none |
 
 ```sh
-python -m workflows.implement_spec --dry                                  # everything fake, traces in the dashboard
-python -m workflows.implement_spec --fake agent --fake github --fake store   # real Git: the fake agent makes real empty commits and `implement_spec` really pushes
-python -m workflows.implement_spec --dry --fake-speed 0 --no-rework        # instant, no failing first attempt
+python -m software_factory.legacy_slices.implement_spec --dry                                  # everything fake, traces in the dashboard
+python -m software_factory.legacy_slices.implement_spec --fake agent --fake github --fake store   # real Git: the fake agent makes real empty commits and `implement_spec` really pushes
+python -m software_factory.legacy_slices.implement_spec --dry --fake-speed 0 --no-rework        # instant, no failing first attempt
 ```
 
 By default the second Ticket fails its first attempt so the retry path shows up in the trace.
-In code, `Fakes` in [`composition/dry.py`](workflows/implement_spec/composition/dry.py) builds the same fakes as a Dishka override provider, and the library offers
+In code, `Fakes` in [`composition/dry.py`](software_factory/legacy_slices/implement_spec/composition/dry.py) builds the same fakes as a Dishka override provider, and the library offers
 `fake_agent`, `FakeCliRunner` and `DirectoryGit` to run any functional slice in isolation.
 
 ### Different agent workflows per repository
 
-The example [`implement_spec`](../workflows/implement_spec/) reads Specs and Tickets from `HARNESS`.
+The example [`implement_spec`](../software_factory/legacy_slices/implement_spec/) reads Specs and Tickets from `HARNESS`.
 By default it implements only Specs targeting the harness itself. Pass
 `providers=(use_repositories(...),)` to `main` to route Specs by their `repo:target:<owner/repo>` label to
 explicitly configured checkouts under the harness's `workspace` folder.
@@ -221,7 +221,7 @@ from functools import partial
 from pathlib import Path
 
 from loop import AgentProfile, AgentRequest, AgentWorkspace, copilot
-from workflows.implement_spec import (
+from software_factory.legacy_slices.implement_spec import (
     DevResponse, Repository, RepositoryId, RepositoryWorkflow,
     TicketContext, TicketResult, implement_ticket, load_prompt, main, use_repositories,
 )
@@ -268,12 +268,12 @@ if __name__ == "__main__":
 ```
 
 Run this user-owned script from the harness root. Configure `HARNESS` in
-[`model/repositories.py`](../workflows/implement_spec/model/repositories.py) for the repository holding your Specs and Tickets.
+[`model/repositories.py`](../software_factory/legacy_slices/implement_spec/model/repositories.py) for the repository holding your Specs and Tickets.
 The supplied list replaces the default target; include the harness explicitly
 if it should also receive code changes. Repository identities are matched
 case-insensitively; duplicate configurations fail the run.
 
-The `implement_spec`-owned [`TicketDeliverer`](../workflows/implement_spec/deliver/tickets.py) handles Ticket
+The `implement_spec`-owned [`TicketDeliverer`](../software_factory/legacy_slices/implement_spec/deliver/tickets.py) handles Ticket
 iteration, refreshed Initiative history, retries, rollback, failure counts, and
 Ticket closure. A delegate can return a failed `TicketResult` or raise
 `TicketWorkflowError` for an expected, retryable failure; agent process failures
@@ -288,20 +288,20 @@ Without session-enabled builders, agent steps start fresh sessions.
 
 ### Implement Spec package and named prompts
 
-All `implement_spec`-owned code, prompts, tests, and fakes live in [`workflows/implement_spec/`](../workflows/implement_spec/), a vertical
+All `implement_spec`-owned code, prompts, tests, and fakes live in [`software_factory/legacy_slices/implement_spec/`](../software_factory/legacy_slices/implement_spec/), a vertical
 slice: one package per feature, each a set of classes taking collaborators through their constructors.
-It depends on the public `loop` package and on [`workflows/shared/`](../workflows/shared/) (Git, GitHub,
+It depends on the public `loop` package and on [`software_factory/shared/`](../software_factory/shared/) (Git, GitHub,
 process, state, telemetry, and the shared Dishka provider), never on a sibling Workflow. Copy
-`workflows/shared` alongside it. The independent [`plan_implement.py`](../workflows/plan_implement.py)
+`software_factory/shared` alongside it. The independent [`plan_implement.py`](../workflows/plan_implement.py)
 remains a self-contained, function-based script.
 
-- [`composition/`](../workflows/implement_spec/composition/): the only package that knows the Dishka container. `entry.py` holds `main(argv, *, providers=())`, flags, and logging; `providers.py` holds `ImplementSpecProvider` (APP scope = process, REQUEST scope = one Workflow run) and `use_repositories`; `repositories.py` holds `configured_repositories`; `dry.py` holds the `--fake`/`--dry` seams. Later providers override earlier ones, which is how tests and scripts inject fakes.
-- [`model/`](../workflows/implement_spec/model/): `HARNESS`, work items, repository identities, outcomes, settings, named phases (`definition.py`), response decoding (`reply.py`), commit gates, branch naming (`branches.py`), the `Tracker` Protocol (`repositories.py`), and the `hitl` hand-off policy (`handoff.py`). Specs and Tickets come from the shared `workflows/shared/github/issues/` model.
-- [`agents/`](../workflows/implement_spec/agents/): named prompts and the default agent delegates.
-- [`plan/`](../workflows/implement_spec/plan/), [`deliver/`](../workflows/implement_spec/deliver/), [`chore/`](../workflows/implement_spec/chore/), and [`review/`](../workflows/implement_spec/review/): `Planner`, `TicketDeliverer` (with the failure journal), `ChoreRefiner`, and `Reviewer`/`Finalizer`. These stages never import each other or a concrete agent.
-- [`backlog/`](../workflows/implement_spec/backlog/): `SpecRouter` and `PullRequestPublisher`, which sequence the stages per Spec.
-- [`prompts/`](../workflows/implement_spec/prompts/): named Markdown templates; `load_prompt("implement")` reads `implement.md` relative to the package, not the current directory.
-- [`tests/implement_spec/`](../workflows/tests/implement_spec/): `implement_spec` tests and harness under the Workflow test tree; run `pytest workflows/tests/implement_spec`.
+- [`composition/`](../software_factory/legacy_slices/implement_spec/composition/): the only package that knows the Dishka container. `entry.py` holds `main(argv, *, providers=())`, flags, and logging; `providers.py` holds `ImplementSpecProvider` (APP scope = process, REQUEST scope = one Workflow run) and `use_repositories`; `repositories.py` holds `configured_repositories`; `dry.py` holds the `--fake`/`--dry` seams. Later providers override earlier ones, which is how tests and scripts inject fakes.
+- [`model/`](../software_factory/legacy_slices/implement_spec/model/): `HARNESS`, work items, repository identities, outcomes, settings, named phases (`definition.py`), response decoding (`reply.py`), commit gates, branch naming (`branches.py`), the `Tracker` Protocol (`repositories.py`), and the `hitl` hand-off policy (`handoff.py`). Specs and Tickets come from the shared `software_factory/shared/github/issues/` model.
+- [`agents/`](../software_factory/legacy_slices/implement_spec/agents/): named prompts and the default agent delegates.
+- [`plan/`](../software_factory/legacy_slices/implement_spec/plan/), [`deliver/`](../software_factory/legacy_slices/implement_spec/deliver/), [`chore/`](../software_factory/legacy_slices/implement_spec/chore/), and [`review/`](../software_factory/legacy_slices/implement_spec/review/): `Planner`, `TicketDeliverer` (with the failure journal), `ChoreRefiner`, and `Reviewer`/`Finalizer`. These stages never import each other or a concrete agent.
+- [`backlog/`](../software_factory/legacy_slices/implement_spec/backlog/): `SpecRouter` and `PullRequestPublisher`, which sequence the stages per Spec.
+- [`prompts/`](../software_factory/legacy_slices/implement_spec/prompts/): named Markdown templates; `load_prompt("implement")` reads `implement.md` relative to the package, not the current directory.
+- [`software_factory/tests/legacy_slices/implement_spec/`](../software_factory/tests/legacy_slices/implement_spec/): `implement_spec` tests and harness under the factory test tree; run `pytest software_factory/tests/legacy_slices/implement_spec`.
 
 Add templates to the prompt folder and let each repository's delegate select,
 render, or combine them. For example, after adding `review.md`, use
@@ -539,7 +539,7 @@ premium-request usage (read from the Copilot CLI's session log), and the Worktre
 exported only with `otlp_observer(capture_content=True)`. Without `with_observer` nothing changes.
 A span appears in the dashboard when it ends, and Codex Agent Runs carry no usage. Pass any
 object with `agent_run(record)` and `worktree(event)` methods to `with_observer` to send the
-records elsewhere. The `implement_spec` Workflow opts in with `python -m workflows.implement_spec --otlp-endpoint http://localhost:4318`.
+records elsewhere. The `implement_spec` Workflow opts in with `python -m software_factory.legacy_slices.implement_spec --otlp-endpoint http://localhost:4318`.
 Name a profile from the shared `Role` vocabulary (`replace(DEFAULT, name=Role.REVIEWER)`) and pass `otlp_observer(resource_per_agent=True)` to export each named agent as its own resource, which Aspire colors apart:
 
 | `Role` | Exports |
@@ -631,10 +631,10 @@ from loop import Agent, AgentOptions, AgentStartMode
 Agent(AgentOptions(start_mode=AgentStartMode.HARNESS, harness_dir=Path("/path/to/harness")))
 ```
 
-See [`workflows/implement_spec/`](../workflows/implement_spec/) for a complete Workflow,
+See [`software_factory/legacy_slices/implement_spec/`](../software_factory/legacy_slices/implement_spec/) for a complete Workflow,
 [`workflows/plan_implement.py`](../workflows/plan_implement.py) for two runs with
 different models on one worktree, and
-[`workflows/implement_spec/prompts/implement.md`](../workflows/implement_spec/prompts/implement.md) for
+[`software_factory/legacy_slices/implement_spec/prompts/implement.md`](../software_factory/legacy_slices/implement_spec/prompts/implement.md) for
 the default `implement_spec` prompt template.
 
 
@@ -664,5 +664,5 @@ was removed. OTLP closes the run's span and marks retention independently of dis
 Loop has no isolated sandbox synchronization backend; patch-based sync recovery is
 not applicable to its host worktrees or Docker context adapter.
 
-See [PR maintenance](workflows/pr_babysit/README.md) for continuous PR discovery,
+See [PR maintenance](software_factory/legacy_slices/pr_babysit/README.md) for continuous PR discovery,
 Address/Maintainer profiles, JSON recovery, and workflow-owned commit/push operations.

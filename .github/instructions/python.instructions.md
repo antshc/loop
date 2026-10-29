@@ -9,7 +9,7 @@ Confirm each rule below against neighboring files in the same package before tru
 
 ## Runtime compatibility
 
-- MUST keep `src/`, `workflows/`, and tests compatible with Python 3.14; `pyproject.toml` declares the supported minimum.
+- MUST keep `src/`, `software_factory/`, `workflows/`, and tests compatible with Python 3.14; `pyproject.toml` declares the supported minimum.
 - MAY use any 3.14 syntax and standard-library API (`StrEnum`, `Exception.add_note`, variable-fraction `datetime.fromisoformat`); no fallbacks for older runtimes.
 - Validate compatibility changes on the minimum supported runtime per [Test Strategy](../../docs/concepts/ops-test-strategy.md#python-compatibility).
 

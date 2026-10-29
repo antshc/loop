@@ -7,9 +7,9 @@ The harness contains agent instructions, skills, Specs, and Tickets. The impleme
 
 ## Harness and target repositories
 
-`workflows/implement_spec/` reads Specs and Tickets from the immutable `HARNESS: Repository` configured in `model/repositories.py`; target repositories come from `composition/repositories.py` or a `use_repositories(...)` provider passed to `main`.
+`software_factory/legacy_slices/implement_spec/` reads Specs and Tickets from the immutable `HARNESS: Repository` configured in `model/repositories.py`; target repositories come from `composition/repositories.py` or a `use_repositories(...)` provider passed to `main`.
 Each target is an explicit `RepositoryWorkflow` pairing a `Repository` with an
-agent delegate. `RepositoryId` is the shared GitHub repository identity in `workflows/shared/github/`; `Repository` pairs it with the checkout and worktrees and stays in implement_spec. With no target configuration, the workflow defaults to
+agent delegate. `RepositoryId` is the shared GitHub repository identity in `software_factory/shared/github/`; `Repository` pairs it with the checkout and worktrees and stays in implement_spec. With no target configuration, the workflow defaults to
 implementation on the harness repository.
 
 ```python
@@ -28,7 +28,7 @@ class Repository:
     owner_name: RepositoryId
 
 
-ROOT = Path(__file__).resolve().parents[3]  # workflows/implement_spec/model/repositories.py
+ROOT = Path(__file__).resolve().parents[3]  # software_factory/legacy_slices/implement_spec/model/repositories.py
 HARNESS = Repository(
     checkout=ROOT,
     worktrees=ROOT / "workspace" / f"{ROOT.name}.worktrees",

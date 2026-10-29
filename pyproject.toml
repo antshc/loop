@@ -25,11 +25,11 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src", ".", "tests"]
-testpaths = ["tests", "workflows/tests"]
+testpaths = ["tests", "software_factory/tests"]
 norecursedirs = ["archive", ".*"]
 
 [tool.importlinter]
-root_packages = ["loop", "workflows"]
+root_packages = ["loop", "workflows", "software_factory"]
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
@@ -48,9 +48,9 @@ layers = [
 containers = ["loop"]
 
 [[tool.importlinter.contracts]]
-name = "The workflows import only the public loop package"
+name = "The factory and the examples import only the public loop package"
 type = "forbidden"
-source_modules = ["workflows"]
+source_modules = ["workflows", "software_factory"]
 forbidden_modules = [
     "loop.agents",
     "loop.builder",
@@ -71,113 +71,113 @@ allow_indirect_imports = true
 name = "Implement-spec stages run the delegates they are given, never a concrete agent"
 type = "forbidden"
 source_modules = [
-    "workflows.implement_spec.backlog",
-    "workflows.implement_spec.chore",
-    "workflows.implement_spec.deliver",
-    "workflows.implement_spec.model",
-    "workflows.implement_spec.plan",
-    "workflows.implement_spec.review",
+    "software_factory.legacy_slices.implement_spec.backlog",
+    "software_factory.legacy_slices.implement_spec.chore",
+    "software_factory.legacy_slices.implement_spec.deliver",
+    "software_factory.legacy_slices.implement_spec.model",
+    "software_factory.legacy_slices.implement_spec.plan",
+    "software_factory.legacy_slices.implement_spec.review",
 ]
-forbidden_modules = ["workflows.implement_spec.agents"]
+forbidden_modules = ["software_factory.legacy_slices.implement_spec.agents"]
 
 [[tool.importlinter.contracts]]
 name = "Implement-spec features never reach back into their composition root"
 type = "forbidden"
 source_modules = [
-    "workflows.implement_spec.agents",
-    "workflows.implement_spec.backlog",
-    "workflows.implement_spec.chore",
-    "workflows.implement_spec.deliver",
-    "workflows.implement_spec.model",
-    "workflows.implement_spec.plan",
-    "workflows.implement_spec.review",
+    "software_factory.legacy_slices.implement_spec.agents",
+    "software_factory.legacy_slices.implement_spec.backlog",
+    "software_factory.legacy_slices.implement_spec.chore",
+    "software_factory.legacy_slices.implement_spec.deliver",
+    "software_factory.legacy_slices.implement_spec.model",
+    "software_factory.legacy_slices.implement_spec.plan",
+    "software_factory.legacy_slices.implement_spec.review",
 ]
-forbidden_modules = ["workflows.implement_spec.composition"]
+forbidden_modules = ["software_factory.legacy_slices.implement_spec.composition"]
 
 [[tool.importlinter.contracts]]
 name = "Implement-spec stages are independent; only the backlog router sequences them"
 type = "independence"
 modules = [
-    "workflows.implement_spec.chore",
-    "workflows.implement_spec.deliver",
-    "workflows.implement_spec.plan",
-    "workflows.implement_spec.review",
+    "software_factory.legacy_slices.implement_spec.chore",
+    "software_factory.legacy_slices.implement_spec.deliver",
+    "software_factory.legacy_slices.implement_spec.plan",
+    "software_factory.legacy_slices.implement_spec.review",
 ]
 
 [[tool.importlinter.contracts]]
 name = "Shared workflow infrastructure imports no workflow slice"
 type = "forbidden"
-source_modules = ["workflows.shared"]
-forbidden_modules = ["workflows.implement_spec", "workflows.pr_babysit", "workflows.plan_implement", "workflows.workflow_reporting"]
+source_modules = ["software_factory.shared"]
+forbidden_modules = ["software_factory.legacy_slices.implement_spec", "software_factory.legacy_slices.pr_babysit", "workflows.plan_implement", "workflows.workflow_reporting"]
 
 [[tool.importlinter.contracts]]
 name = "Pure modules of the shared GitHub issues package never import the gh process layer; only its reader, commands, ticketing service, and client do"
 type = "forbidden"
-source_modules = ["workflows.shared.github.issues"]
+source_modules = ["software_factory.shared.github.issues"]
 forbidden_modules = [
-    "workflows.shared.process",
-    "workflows.shared.github.repo",
-    "workflows.shared.github.account",
-    "workflows.shared.github.pull_requests",
+    "software_factory.shared.process",
+    "software_factory.shared.github.repo",
+    "software_factory.shared.github.account",
+    "software_factory.shared.github.pull_requests",
 ]
 ignore_imports = [
-    "workflows.shared.github.issues.reader -> workflows.shared.process",
-    "workflows.shared.github.issues.reader -> workflows.shared.github.repo",
-    "workflows.shared.github.issues.commands -> workflows.shared.github.repo",
-    "workflows.shared.github.issues.ticketing -> workflows.shared.process",
-    "workflows.shared.github.issues.client -> workflows.shared.github.repo",
+    "software_factory.shared.github.issues.reader -> software_factory.shared.process",
+    "software_factory.shared.github.issues.reader -> software_factory.shared.github.repo",
+    "software_factory.shared.github.issues.commands -> software_factory.shared.github.repo",
+    "software_factory.shared.github.issues.ticketing -> software_factory.shared.process",
+    "software_factory.shared.github.issues.client -> software_factory.shared.github.repo",
 ]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "Pure modules of the shared GitHub pull_requests package never import the gh process layer; only its reader, policy reader, and client do"
 type = "forbidden"
-source_modules = ["workflows.shared.github.pull_requests"]
+source_modules = ["software_factory.shared.github.pull_requests"]
 forbidden_modules = [
-    "workflows.shared.process",
-    "workflows.shared.github.repo",
-    "workflows.shared.github.account",
+    "software_factory.shared.process",
+    "software_factory.shared.github.repo",
+    "software_factory.shared.github.account",
 ]
 ignore_imports = [
-    "workflows.shared.github.pull_requests.reader -> workflows.shared.github.repo",
-    "workflows.shared.github.pull_requests.client -> workflows.shared.github.repo",
-    "workflows.shared.github.pull_requests.policy_reader -> workflows.shared.process",
-    "workflows.shared.github.pull_requests.policy_reader -> workflows.shared.github.repo",
+    "software_factory.shared.github.pull_requests.reader -> software_factory.shared.github.repo",
+    "software_factory.shared.github.pull_requests.client -> software_factory.shared.github.repo",
+    "software_factory.shared.github.pull_requests.policy_reader -> software_factory.shared.process",
+    "software_factory.shared.github.pull_requests.policy_reader -> software_factory.shared.github.repo",
 ]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
-name = "Workflow source packages never import the Workflow test tree"
+name = "Factory and example source packages never import the factory test tree"
 type = "forbidden"
-source_modules = ["workflows.shared", "workflows.implement_spec", "workflows.pr_babysit", "workflows.plan_implement", "workflows.workflow_reporting"]
-forbidden_modules = ["workflows.tests"]
+source_modules = ["software_factory.shared", "software_factory.legacy_slices.implement_spec", "software_factory.legacy_slices.pr_babysit", "workflows.plan_implement", "workflows.workflow_reporting"]
+forbidden_modules = ["software_factory.tests"]
 
 [[tool.importlinter.contracts]]
 name = "Only composition roots and the shared provider know the container"
 type = "forbidden"
 source_modules = [
-    "workflows.shared.agents",
-    "workflows.shared.git",
-    "workflows.shared.github",
-    "workflows.shared.process",
-    "workflows.shared.state",
-    "workflows.shared.telemetry",
-    "workflows.pr_babysit.address",
-    "workflows.pr_babysit.agents",
-    "workflows.pr_babysit.discover",
-    "workflows.pr_babysit.maintain_ci",
-    "workflows.pr_babysit.model",
-    "workflows.pr_babysit.monitor",
-    "workflows.pr_babysit.publish",
-    "workflows.pr_babysit.settings",
-    "workflows.pr_babysit.watch",
-    "workflows.implement_spec.agents",
-    "workflows.implement_spec.backlog",
-    "workflows.implement_spec.chore",
-    "workflows.implement_spec.deliver",
-    "workflows.implement_spec.model",
-    "workflows.implement_spec.plan",
-    "workflows.implement_spec.review",
+    "software_factory.shared.agents",
+    "software_factory.shared.git",
+    "software_factory.shared.github",
+    "software_factory.shared.process",
+    "software_factory.shared.state",
+    "software_factory.shared.telemetry",
+    "software_factory.legacy_slices.pr_babysit.address",
+    "software_factory.legacy_slices.pr_babysit.agents",
+    "software_factory.legacy_slices.pr_babysit.discover",
+    "software_factory.legacy_slices.pr_babysit.maintain_ci",
+    "software_factory.legacy_slices.pr_babysit.model",
+    "software_factory.legacy_slices.pr_babysit.monitor",
+    "software_factory.legacy_slices.pr_babysit.publish",
+    "software_factory.legacy_slices.pr_babysit.settings",
+    "software_factory.legacy_slices.pr_babysit.watch",
+    "software_factory.legacy_slices.implement_spec.agents",
+    "software_factory.legacy_slices.implement_spec.backlog",
+    "software_factory.legacy_slices.implement_spec.chore",
+    "software_factory.legacy_slices.implement_spec.deliver",
+    "software_factory.legacy_slices.implement_spec.model",
+    "software_factory.legacy_slices.implement_spec.plan",
+    "software_factory.legacy_slices.implement_spec.review",
 ]
 forbidden_modules = ["dishka"]
 
@@ -185,32 +185,32 @@ forbidden_modules = ["dishka"]
 name = "Babysit features never reach back into their composition root"
 type = "forbidden"
 source_modules = [
-    "workflows.pr_babysit.address",
-    "workflows.pr_babysit.agents",
-    "workflows.pr_babysit.discover",
-    "workflows.pr_babysit.maintain_ci",
-    "workflows.pr_babysit.model",
-    "workflows.pr_babysit.monitor",
-    "workflows.pr_babysit.publish",
-    "workflows.pr_babysit.settings",
-    "workflows.pr_babysit.watch",
+    "software_factory.legacy_slices.pr_babysit.address",
+    "software_factory.legacy_slices.pr_babysit.agents",
+    "software_factory.legacy_slices.pr_babysit.discover",
+    "software_factory.legacy_slices.pr_babysit.maintain_ci",
+    "software_factory.legacy_slices.pr_babysit.model",
+    "software_factory.legacy_slices.pr_babysit.monitor",
+    "software_factory.legacy_slices.pr_babysit.publish",
+    "software_factory.legacy_slices.pr_babysit.settings",
+    "software_factory.legacy_slices.pr_babysit.watch",
 ]
-forbidden_modules = ["workflows.pr_babysit.composition"]
+forbidden_modules = ["software_factory.legacy_slices.pr_babysit.composition"]
 
 [[tool.importlinter.contracts]]
 name = "No workflow imports another workflow"
 type = "independence"
-modules = ["workflows.implement_spec", "workflows.plan_implement", "workflows.workflow_reporting", "workflows.pr_babysit"]
+modules = ["software_factory.legacy_slices.implement_spec", "workflows.plan_implement", "workflows.workflow_reporting", "software_factory.legacy_slices.pr_babysit"]
 
 [[tool.importlinter.contracts]]
 name = "PR maintenance decisions do not depend on the discovery scheduler"
 type = "forbidden"
 source_modules = [
-    "workflows.pr_babysit.address",
-    "workflows.pr_babysit.agents",
-    "workflows.pr_babysit.maintain_ci",
-    "workflows.pr_babysit.monitor",
-    "workflows.pr_babysit.publish",
-    "workflows.pr_babysit.watch",
+    "software_factory.legacy_slices.pr_babysit.address",
+    "software_factory.legacy_slices.pr_babysit.agents",
+    "software_factory.legacy_slices.pr_babysit.maintain_ci",
+    "software_factory.legacy_slices.pr_babysit.monitor",
+    "software_factory.legacy_slices.pr_babysit.publish",
+    "software_factory.legacy_slices.pr_babysit.watch",
 ]
-forbidden_modules = ["workflows.pr_babysit.discover"]
+forbidden_modules = ["software_factory.legacy_slices.pr_babysit.discover"]

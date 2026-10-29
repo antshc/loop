@@ -1,0 +1,136 @@
+from __future__ import annotations
+
+from dataclasses import replace
+from pathlib import Path
+
+import pytest
+
+from loop import AgentWorkspace, GitOptions, Phases
+from software_factory.tests.legacy_slices.implement_spec.doubles import ImplementSpecHarness, new_agent_for
+from software_factory.tests.shared.fakes import issue
+from software_factory.legacy_slices.implement_spec.model.records import AgentWorkflow, TicketContext, TicketResult, TicketWorkflowError
+from software_factory.legacy_slices.implement_spec.deliver.tickets import TicketDeliverer
+from software_factory.shared.github.identity import RepositoryId
+from software_factory.shared.github.issues.graph import SpecGraphSnapshot
+
+
+def _deliver(harness: ImplementSpecHarness, delegate: AgentWorkflow, *, spec: SpecGraphSnapshot | None = None, max_failures: int = 2) -> bool:
+    tracker = harness.tracker
+    spec = spec or next(iter(tracker.specs()))
+    builder = new_agent_for(harness.runner, harness.git_service, harness.root)()
+    with builder.with_git(GitOptions()).open() as worktree:
+        deliverer = TicketDeliverer(
+            harness.git,  # type: ignore[arg-type]
+            tracker,
+            harness.store,
+            Phases(),
+            ticket_repository=RepositoryId("owner", "repo"),
+            max_failures=max_failures,
+        )
+        return deliverer.deliver(spec, worktree, delegate).complete
+
+
+def _complete(harness: ImplementSpecHarness, context: TicketContext) -> TicketResult:
+    sha = harness.git.commit(f"{context.identifier.to_subject()}work")
+    return TicketResult(str(context.identifier), "completed", sha, "done", "ran tests")
+
+
+def test_delegate_receives_selected_ticket_and_refreshed_initiative_history(tmp_path: Path) -> None:
+    harness = ImplementSpecHarness(tmp_path, tickets={1: [issue(10, "First"), issue(11, "Second")]})
+    harness.git.commit("ccode(Checkout|9): earlier")
+    harness.git.commit("ccode(Other|9): unrelated")
+    contexts: list[TicketContext] = []
+
+    def delegate(context: TicketContext, worktree: AgentWorkspace) -> TicketResult:
+        contexts.append(context)
+        assert worktree.path == harness.worktree
+        assert (context.base_branch, context.feature_branch) == ("main", "add-login-page")
+        return _complete(harness, context)
+
+    assert _deliver(harness, delegate)
+    assert [context.ticket.number for context in contexts] == [10, 11]
+    assert contexts[0].initiative_commits == ("c000000 ccode(Checkout|9): earlier",)
+    assert contexts[1].initiative_commits == (
+        "c000000 ccode(Checkout|9): earlier",
+        "c000000 ccode(Checkout|10): work",
+    )
+    assert [call[2] for call in harness.calls("issue", "close")] == ["10", "11"]
+    assert harness.git.pushes == []
+
+
+def test_retry_excludes_rejected_commits_and_preserves_earlier_work(tmp_path: Path) -> None:
+    harness = ImplementSpecHarness(tmp_path)
+    earlier = harness.git.commit("ccode(Checkout|9): earlier")
+    contexts: list[TicketContext] = []
+
+    def delegate(context: TicketContext, _worktree: AgentWorkspace) -> TicketResult:
+        contexts.append(context)
+        if len(contexts) == 1:
+            harness.git.commit(f"{context.identifier.to_subject()}rejected")
+            raise TicketWorkflowError("review found a defect")
+        return _complete(harness, context)
+
+    assert _deliver(harness, delegate)
+    assert contexts[0].initiative_commits == contexts[1].initiative_commits
+    assert harness.git.restores == [earlier]
+    assert harness.store.failed_attempts("https://github.com/owner/repo/issues/10") == 0
+    assert len(harness.git.commits) == 3
+
+
+@pytest.mark.parametrize(
+    ("changes", "reason"),
+    [
+        ({"identifier": "Checkout|11"}, "does not match task"),
+        ({"status": "unknown"}, "unknown result status"),
+        ({"summary": None}, "required"),
+        ({"verification": None}, "required"),
+        ({"commit": None}, "required"),
+        ({"status": "failed", "reason": None}, "missing reason"),
+        ({"status": "failed", "reason": "review rejected"}, "review rejected"),
+    ],
+)
+def test_delegate_results_are_validated_without_relying_on_a_response_parser(
+    tmp_path: Path, changes: dict[str, str | None], reason: str
+) -> None:
+    harness = ImplementSpecHarness(tmp_path)
+    attempts = 0
+
+    def delegate(context: TicketContext, _worktree: AgentWorkspace) -> TicketResult:
+        nonlocal attempts
+        attempts += 1
+        return replace(_complete(harness, context), **changes)
+
+    assert not _deliver(harness, delegate)
+    assert attempts == 2
+    assert len(harness.git.commits) == 1
+    assert len(harness.git.restores) == 2
+    assert all(reason in body for body in harness.comments())
+    assert harness.calls("issue", "close") == []
+
+
+def test_ticket_workflow_skips_non_actionable_tickets_it_is_given(tmp_path: Path) -> None:
+    harness = ImplementSpecHarness(tmp_path, tickets={1: [issue(10, "Closed"), issue(11, "Blocked"), issue(12, "Ready")]})
+    spec = next(iter(harness.tracker.specs()))
+    first, second, third = spec.tickets
+    spec = replace(
+        spec,
+        tickets=(first.closed(), second.with_label("hitl"), third),
+    )
+    attempted: list[int] = []
+
+    def delegate(context: TicketContext, _worktree: AgentWorkspace) -> TicketResult:
+        attempted.append(context.ticket.number)
+        return _complete(harness, context)
+
+    assert not _deliver(harness, delegate, spec=spec)
+    assert attempted == [12]
+
+
+def test_failure_cap_must_be_positive(tmp_path: Path) -> None:
+    harness = ImplementSpecHarness(tmp_path)
+
+    def delegate(_context: TicketContext, _worktree: AgentWorkspace) -> TicketResult:
+        pytest.fail("invalid failure cap must not run agents")
+
+    with pytest.raises(TicketWorkflowError, match="at least one"):
+        _deliver(harness, delegate, max_failures=0)

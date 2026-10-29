@@ -13,7 +13,7 @@ The process diagrams below describe the Ticket delivery portion; the surrounding
 
 ## Default phases
 
-`workflows/implement_spec/model/definition.py` declares the eShop-style pipeline using the public
+`software_factory/legacy_slices/implement_spec/model/definition.py` declares the eShop-style pipeline using the public
 `WorkflowBuilder`: preflight; conditional planning and Ticket creation; delivery
 and publication after each accepted Ticket; cleanup; worktree
 closure; read-only PR review; readiness checks. All delegates are supplied in the
@@ -182,8 +182,8 @@ Decisions: [Run one fresh agent per Ticket](../adr/run-one-fresh-agent-per-ticke
 ## Implementation Map
 | Concern | Stable anchor | Semantic locator |
 |---|---|---|
-| External contract | Operator-run service for one repository board | `workflows/implement_spec/composition/entry.py`: runnable package (`python -m workflows.implement_spec`) `main(argv, *, providers=())`, options `--log-dir`, `--log-level`; run from the harness root |
-| Spec and Ticket selection | Open Specs; actionable Tickets | `workflows/shared/github/issues/`: `Issues.specs` (complete reads), `SpecGraphSnapshot`, `IssueClassifier`; `workflows/implement_spec/model/repositories.py`: `Tracker` |
-| Execution | Fresh non-interactive Copilot run per Ticket by default | `loop`: `AgentBuilder`, `Worktree.agent`, `AgentClient`; `workflows/implement_spec/agents/`: named prompts and default delegates; `workflows/implement_spec/model/reply.py`: `DevResponse` |
-| Failure bound | Per-Ticket failure count across runs | `workflows/implement_spec/deliver/journal.py`: `FileExecutionStore` |
-| Tests | Workflow scenarios against fakes | `workflows/tests/implement_spec/test_run.py`; local harness in `workflows/tests/implement_spec/doubles.py` |
+| External contract | Operator-run service for one repository board | `software_factory/legacy_slices/implement_spec/composition/entry.py`: runnable package (`python -m software_factory.legacy_slices.implement_spec`) `main(argv, *, providers=())`, options `--log-dir`, `--log-level`; run from the harness root |
+| Spec and Ticket selection | Open Specs; actionable Tickets | `software_factory/shared/github/issues/`: `Issues.specs` (complete reads), `SpecGraphSnapshot`, `IssueClassifier`; `software_factory/legacy_slices/implement_spec/model/repositories.py`: `Tracker` |
+| Execution | Fresh non-interactive Copilot run per Ticket by default | `loop`: `AgentBuilder`, `Worktree.agent`, `AgentClient`; `software_factory/legacy_slices/implement_spec/agents/`: named prompts and default delegates; `software_factory/legacy_slices/implement_spec/model/reply.py`: `DevResponse` |
+| Failure bound | Per-Ticket failure count across runs | `software_factory/legacy_slices/implement_spec/deliver/journal.py`: `FileExecutionStore` |
+| Tests | Workflow scenarios against fakes | `software_factory/tests/legacy_slices/implement_spec/test_run.py`; local harness in `software_factory/tests/legacy_slices/implement_spec/doubles.py` |
