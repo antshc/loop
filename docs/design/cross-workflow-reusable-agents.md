@@ -45,7 +45,7 @@ The seam under debate is **where the agent's interface lives** (slice, `workflow
 2. Import-linter: "Implement-spec stages run the delegates they are given, never a concrete agent" (`workflows.implement_spec.{backlog,chore,deliver,model,plan,review}` ↛ `workflows.implement_spec.agents`).
 3. Import-linter: "Shared workflow infrastructure imports no workflow slice" (`workflows.shared` ↛ `workflows.implement_spec`, `workflows.pr_babysit`, …).
 
-The design constraints applied (one per option, per *Design It Twice*): **A** minimize the interface; **B** maximize flexibility; **C** make the most common caller trivial; **D** ports & adapters for the cross-seam dependency. **E** is a hybrid that applies A's minimal interface to agents and adds a reusable stages layer, borrowing from D only the stage-owned ports that earn two adapters.
+The design constraints applied (one per option, per *Design It Twice*): **A** minimize the interface; **B** maximize flexibility; **C** make the most common caller trivial; **D** ports & adapters for the cross-seam dependency. **E** extends A: it applies A's minimal interface to agents and adds a reusable stages layer.
 
 ---
 
@@ -772,7 +772,7 @@ A true port: two adapters per capability (Copilot adapter in production, in-memo
 
 ---
 
-## Option E — `software_factory` package with role agents and a reusable stages layer (hybrid of A and D)
+## Option E — `software_factory` package with role agents and a reusable stages layer (A plus stages)
 
 Workflows move into their own `software_factory` package that depends on `loop`. Its top-level packages under `src/` are `agents`, `stages`, `workflows`, and `shared`, one per layer:
 
@@ -780,13 +780,13 @@ Workflows move into their own `software_factory` package that depends on `loop`.
 - **stages:** a new layer holding each **Stage** that two or more Workflows run.
   - Each stage is a deep module with a single `run`. It owns its gates, rollback, and commits, and returns a report instead of publishing.
   - Stages take their inputs from the shared typed GitHub read model (`PullRequest`, `ReviewThread`, `Comment`), never from a GitHub client.
-- **workflows:** the vertical slices, without agents. They own the GitHub clients, the implement_spec `Tracker`, and publishing.
-- **shared:** infrastructure. This includes the typed GitHub domain from the `gh-ddd` redesign:
+- **workflows:** the vertical slices, without agents. They own publishing and call the GitHub clients, which live in `shared`.
+- **shared:** infrastructure. This includes the typed GitHub domain and its clients from the `gh-ddd` redesign:
   - `shared/github/issues/`: `Issue`, `Comment`, `Spec`, `Ticket`, `SpecGraphSnapshot`, Ticket readiness, and the `Issues` client.
   - `shared/github/pull_requests/`: `PullRequest`, `ReviewThread`, `PullRequestSnapshot`, `CheckResult`, the merge and lifecycle policies, and the `PullRequests` client.
   - The pure modules of both import no `gh` process code.
 
-From Option D it takes only the stage-owned ports with two adapters (`Checkpoint`). It skips agent ports, publishing ports, and the `AgentsProvider`.
+It takes nothing from Option D: no agent ports, publishing ports, stage ports, or `AgentsProvider`. Mid-batch resume (a `Checkpoint` port) is out of scope for now and can be added later as the first stage port.
 
 ### Interface
 
@@ -809,15 +809,6 @@ class StageBlocked(Exception):
 ```
 
 ```python
-# stages/address/ports.py — the only stage port; two production adapters
-class Checkpoint(Protocol):
-    """Durable progress of one address batch, so a restarted run resumes mid-batch."""
-
-    def load(self) -> AddressBatch | None: ...
-    def save(self, batch: AddressBatch) -> None: ...
-    def clear(self) -> None: ...
-
-
 # stages/address/stage.py
 from shared.github.issues.issue import Comment
 from shared.github.pull_requests.model import PullRequestReview, ReviewThread
@@ -869,7 +860,7 @@ class Address:
         resolve: TypedAgent[AddressResolveRequest, AddressResolveReply] = ADDRESS_RESOLVE,
     ) -> None: ...
 
-    def run(self, workspace: AgentWorkspace, feedback: Sequence[Feedback], checkpoint: Checkpoint) -> AddressOutcome: ...
+    def run(self, workspace: AgentWorkspace, feedback: Sequence[Feedback]) -> AddressOutcome: ...
 ```
 
 Invariants and error modes:
@@ -888,8 +879,8 @@ Invariants and error modes:
   1. Clean-tree check.
   2. Baseline.
   3. Group.
-  4. For each issue: resolve, gate on the agent's head, then commit or record, then save the checkpoint.
-  5. Return the outcome. The caller then publishes: it replies to each thread with `thread_id` and resolves it, comments for everything else, and clears the checkpoint.
+  4. For each issue: resolve, gate on the agent's head, then commit or record.
+  5. Return the outcome. The caller then publishes: it replies to each thread with `thread_id` and resolves it, and comments for everything else.
 - **Promotion rule:**
   - A slice becomes a stage only when a second Workflow runs it. One consumer means it stays in the slice. Reject any stage flag that only one Workflow sets.
   - Next candidate: a `publish` stage over `PullRequests` (head-SHA guard, thread replies, resolution). It qualifies once implement_spec publishes `Address` outcomes too.
@@ -919,13 +910,7 @@ classDiagram
             -baseline : Baseline
             -group : TypedAgent
             -resolve : TypedAgent
-            +run(workspace: AgentWorkspace, feedback: Sequence~Feedback~, checkpoint: Checkpoint) AddressOutcome
-        }
-        class Checkpoint {
-            <<Interface>>
-            +load() AddressBatch
-            +save(batch: AddressBatch)
-            +clear()
+            +run(workspace: AgentWorkspace, feedback: Sequence~Feedback~) AddressOutcome
         }
         class Feedback {
             +from_thread(thread: ReviewThread)$ Feedback
@@ -948,35 +933,23 @@ classDiagram
         }
         class Issues
     }
-    namespace workflows_implement_spec {
-        class Tracker {
-            <<Interface>>
-            +comment(number: int, purpose: str, body: str) Comment
-        }
-        class MemoryCheckpoint
-    }
     namespace workflows_pr_babysit {
         class ReviewAddresser {
             [add] -address : Address
             [rem] -profile : AgentProfile
         }
         class ChangePublisher
-        class StateCheckpoint
         class ask
         class profiles
     }
 
     Address o-- TypedAgent
-    Address ..> Checkpoint : Use
     Address ..> Feedback : Use
     Address ..> AddressOutcome : Use
     Address ..> StageBlocked : Use
     TypedAgent ..> AgentReplyError : Use
     Feedback ..> ReviewThread : Use
     Feedback ..> Comment : Use
-    MemoryCheckpoint ..|> Checkpoint
-    StateCheckpoint ..|> Checkpoint
-    Issues ..|> Tracker
     ReviewAddresser o-- Address
     ReviewAddresser ..> ChangePublisher : Use
     ChangePublisher ..> PullRequests : Use
@@ -984,12 +957,9 @@ classDiagram
     class TypedAgent:::added
     class AgentReplyError:::added
     class Address:::added
-    class Checkpoint:::added
     class Feedback:::added
     class AddressOutcome:::added
     class StageBlocked:::added
-    class MemoryCheckpoint:::added
-    class StateCheckpoint:::added
     class ask:::removed
     class profiles:::removed
     class ReviewAddresser:::memberChanged
@@ -1000,9 +970,9 @@ classDiagram
     classDef memberChanged stroke:#8b949e,stroke-width:1px,stroke-dasharray:5 5
 ```
 
-- The resume state machine in [`ReviewAddresser`](../../workflows/pr_babysit/address/reviews.py) moves into `Address`.
+- The grouping, resolving, gating, and commit logic in [`ReviewAddresser`](../../workflows/pr_babysit/address/reviews.py) moves into `Address`. Its resume state machine does not move; it is dropped for now.
 - [`ChangePublisher`](../../workflows/pr_babysit/publish/changes.py) keeps publishing over the shared `PullRequests` client.
-- `Issues` structurally satisfies implement_spec's `Tracker`, and `PullRequests` is unchanged.
+- `Issues` and `PullRequests` are unchanged.
 
 ### Package layout
 
@@ -1022,9 +992,9 @@ software_factory/
 │   │   └── chore.py       chore.md
 │   ├── stages/                          # Stages used by ≥2 Workflows; imports agents, shared (pure GitHub model only), loop
 │   │   ├── errors.py                    # StageBlocked
-│   │   └── address/{stage,ports}.py     # ports = Checkpoint
+│   │   └── address/stage.py
 │   ├── workflows/                       # vertical slices; no agents/ package
-│   │   ├── implement_spec/{plan,deliver,backlog,chore,review,model,composition}/   # model/ holds Tracker and the hitl hand-off policy
+│   │   ├── implement_spec/{plan,deliver,backlog,chore,review,model,composition}/   # model/ holds the hitl hand-off policy
 │   │   └── pr_babysit/{discover,monitor,watch,address,maintain_ci,publish,composition}/ model.py settings.py
 │   └── shared/
 │       ├── git.py  process.py  state.py  telemetry.py  providers.py
@@ -1045,12 +1015,11 @@ software_factory/
 - **Stages:**
   - Phase and gate recording.
   - Commit and restore rules.
-  - The address resume state machine.
   - Turning threads, Comments, and reviews into stable feedback keys.
 - **Workflows:**
   - Which Specs, pull requests, and feedback to act on (fingerprints, `hitl`, readiness).
   - Sequencing, delivery, and escalation policy.
-  - Publishing through `Tracker` / `PullRequests`.
+  - Publishing through `Issues` / `PullRequests`.
 - **shared/github:** `gh` REST/GraphQL calls, complete paged reads, retry-safe commands, and payload → typed model parsing.
 
 ### Dependency strategy
@@ -1061,19 +1030,18 @@ software_factory/
 | Typed GitHub read model and pure policies (`pull_requests.model`, `issues.graph`, readiness, merge gate, lifecycle) | In-process | Imported by stages and Workflows as values; no port |
 | `Phases` / `WorkflowRun` | In-process | `loop` type passed in; `WorkflowRun` is a `Phases` |
 | Git, worktrees, filesystem | Local-substitutable | No port; stage tests use a real repository under `tmp_path` |
-| Address resume state | In-process, two production adapters | `Checkpoint` port in `stages/address/ports.py`; `StateCheckpoint` (pr_babysit JSON state) and `MemoryCheckpoint` (implement_spec) |
 | Baseline command | Local-substitutable | `Baseline` callable; repository command runner or test stub |
 | Agent CLI | True external, already ported by `loop` | Injected `AgentWorkspace`; tests use Loop's fake runner with canned envelopes |
-| GitHub (`gh`) | True external | Clients `Issues` and `PullRequests` used only by Workflows (implement_spec reaches `Issues` through its `Tracker` Protocol). Tests fake at the `GhCli` boundary with `tests/shared/fakes/`. Stages never need a GitHub fake. |
+| GitHub (`gh`) | True external | Clients `Issues` and `PullRequests` live in `shared` and are used only by Workflows. Tests fake at the `GhCli` boundary with `tests/shared/fakes/`. Stages never need a GitHub fake. |
 
 ### How slices consume it
 
 - **implement_spec:**
-  - `review/` can run `Address` on the threads its reviewer posted: it builds `Feedback.from_thread` over `pulls.threads(number)` and passes a `MemoryCheckpoint`. That makes implement_spec the second consumer of `Address`.
+  - `review/` can run `Address` on the threads its reviewer posted: it builds `Feedback.from_thread` over `pulls.threads(number)` and calls `Address.run`. That makes implement_spec the second consumer of `Address`.
   - `deliver/`, `plan/`, and `chore/` call catalog agents through slice-local delegates, which keeps stages as delegate runners as in Option A.
 - **pr_babysit:**
   - `watch/` keeps choosing which feedback is new, keeping its fingerprints and its dictionary projection (`babysit_snapshot`) for persisted state.
-  - `ReviewAddresser` builds `Feedback` from the typed `PullRequestSnapshot` (`from_thread`, `from_comment`, `from_review`) and calls `Address.run(workspace, feedback, StateCheckpoint(state))`. It publishes replies and commits through `ChangePublisher` over `PullRequests`, maps `StageBlocked` to `Blocked`, and then clears the checkpoint.
+  - `ReviewAddresser` builds `Feedback` from the typed `PullRequestSnapshot` (`from_thread`, `from_comment`, `from_review`) and calls `Address.run(workspace, feedback)`. It publishes replies and commits through `ChangePublisher` over `PullRequests` and maps `StageBlocked` to `Blocked`.
 - **Composition:** each `workflows/<w>/composition/` builds `Address` from its constructor, binds `Issues` / `PullRequests` from `SharedProvider`, and tunes agents with `tuned(...)` or `with_template(...)`. `--fake` and `--dry` replace only the agent runner and the `GhCli` boundary.
 
 ### Policy / import-linter changes
@@ -1118,7 +1086,7 @@ software_factory/
 |---|---|---|---|---|---|
 | Home | new `workflows/agents/` | `workflows/shared/agents/` | new `workflows/agents/` | new `workflows/agents/` | `software_factory`: `agents/` + `stages/` |
 | Reusable unit | Whole agent (profile + prompt + typed reply) | Persona + mechanics | Persona + modes | Capability port + default adapter | Whole agent (as A) + whole Stage (gates, commits) |
-| Interface size | 1 generic class, 1 method (+2 tuners) | 4 parts to assemble | 1 method, untyped | 1 Protocol per capability | As A for agents; 1 `run` per stage + `Checkpoint` port |
+| Interface size | 1 generic class, 1 method (+2 tuners) | 4 parts to assemble | 1 method, untyped | 1 Protocol per capability | As A for agents; 1 `run` per stage |
 | Depth (leverage) | High | Low | Medium (decoding left to callers) | High per port, wide overall | High (agents and stages) |
 | Locality of a reply-shape fix | `workflows/agents/<agent>/` | each slice | each consumer | `workflows/agents/copilot/` | `agents/<role>.py`; gate fixes in `stages/<stage>/` |
 | Typed request/reply | Yes, agent-owned | Yes, slice-owned | No (dicts) | Yes, port-owned | Yes, agent-owned; stage targets built from the shared GitHub model |
