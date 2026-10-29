@@ -427,12 +427,26 @@ def _stages_in(nodes: Iterable[Node]) -> Iterable[Stage[Any, Any, Any]]:
         match node:
             case StageNode(stage):
                 yield stage
-            case EachNode(body=body) | WithinNode(body=body):
+                yield from _hand_offs((stage.routes.passed, stage.routes.failed, stage.routes.held))
+            case EachNode(body=body):
+                yield from _hand_offs((node.on_fail, node.on_hold))
+                yield from _stages_in(body.nodes)
+            case WithinNode(body=body):
                 yield from _stages_in(body.nodes)
             case DispatchNode(cases=cases):
                 for _, case in cases:
-                    if not isinstance(case, (Stop, Handoff)):
+                    if isinstance(case, Handoff):
+                        yield case.stage
+                    elif not isinstance(case, Stop):
                         yield from _stages_in(case.nodes)
+
+
+def _hand_offs(routes: Iterable[Route]) -> Iterable[Stage[Any, Any, Any]]:
+    """The hand-off Stages the routes run; their Events reach the enclosing scope, so later Stages may read them."""
+    for route in routes:
+        route = route.then if isinstance(route, Rework) else route
+        if isinstance(route, Handoff):
+            yield route.stage
 
 
 def _maybe_produced(nodes: Iterable[Node]) -> tuple[Fact, ...]:

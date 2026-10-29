@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import pytest
 
 from software_factory.runtime import (
-    DefinitionError, Flow, HarnessCommits, ReadOnly, Retain, Routes, Workflow, handoff, next_, next_item, reroute, rework,
+    All, DefinitionError, Flow, HarnessCommits, ReadOnly, Retain, Routes, Workflow, handoff, next_, next_item, reroute, rework,
     stop,
 )
 
@@ -463,3 +465,20 @@ def test_a_workflow_cannot_be_used_as_a_fragment() -> None:
     """Given a whole Workflow, when it is spliced into another, then building fails."""
     with pytest.raises(DefinitionError, match="takes a Flow fragment"):
         workflow().then(workflow())
+
+
+@dataclass(frozen=True)
+class NeedsEveryPublished:
+    published: All[Published]
+
+
+def test_an_event_a_hand_off_produces_inside_a_loop_is_visible_to_the_stages_after_it() -> None:
+    """Given a hand-off Stage that produces Published inside an each body, when a later Stage reads every Published, then it is accepted."""
+    escalate = effect("escalate-ticket", NeedsTicket, Published)
+    body = Flow("ticket").stage(agent("implement", NeedsTicket, Delivered).on_fail(rework(max_attempts=2, then=handoff(escalate))))
+
+    definition = (
+        routed().within(checkout(), Flow("deliver").each(tickets(), body, on_fail=next_()).stage(make("check", NeedsEveryPublished, Beta)))
+    ).check()
+
+    assert "check published all Published from escalate-ticket" in wiring(definition)

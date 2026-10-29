@@ -59,13 +59,17 @@ class GitClient:
 
     def push_if_ahead(self, path: Path, branch: str, base: str) -> bool:
         """Pushes `branch` when it holds commits beyond its `origin` counterpart (or beyond `base` when it has none); returns whether it pushed."""
-        if not self._succeeds(path, "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"):
-            return False
-        upstream = f"origin/{branch}" if self.remote_branch_exists(path, branch) else f"origin/{base}"
-        if not self._git(path, "rev-list", f"{upstream}..{branch}").strip():
+        if not self.is_ahead(path, branch, base):
             return False
         self._git(path, "push", "origin", branch)
         return True
+
+    def is_ahead(self, path: Path, branch: str, base: str) -> bool:
+        """Whether local `branch` holds commits beyond its `origin` counterpart (or beyond `base` when it has none)."""
+        if not self._succeeds(path, "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"):
+            return False
+        upstream = f"origin/{branch}" if self.remote_branch_exists(path, branch) else f"origin/{base}"
+        return bool(self._git(path, "rev-list", f"{upstream}..{branch}").strip())
 
     def publish(self, path: Path, branch: str) -> None:
         """Pushes HEAD to `branch` on `origin` without force."""

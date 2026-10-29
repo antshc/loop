@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from ..repo import GitHubRepo
 from .commands import IssueCommands
+from .errors import IssueError
 from .graph import SpecGraphSnapshot
 from .issue import Comment, Issue
 from .reader import IssueReader
@@ -24,6 +25,13 @@ class Issues:
     def specs(self, number: int | None = None) -> tuple[SpecGraphSnapshot, ...]:
         """Every open Spec with its Tickets and whether it was read completely; only Spec `number` when given."""
         return self._reader.specs(number)
+
+    def spec(self, number: int) -> SpecGraphSnapshot:
+        """The open Spec `number` with its Tickets; IssueError when it is not open."""
+        found = self._reader.specs(number)
+        if not found:
+            raise IssueError(f"no open Spec #{number}")
+        return found[0]
 
     def comment(self, number: int, purpose: str, body: str) -> Comment:
         """Posts `body` unless a Comment with the same purpose and content is already on the issue."""

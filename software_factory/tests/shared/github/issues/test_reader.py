@@ -387,3 +387,11 @@ def test_blockers_cut_short_of_githubs_own_count_make_the_ticket_unknown() -> No
     graph = _issues(cut_short).specs()[0]
 
     assert graph.readiness == {10: TicketReadiness.UNKNOWN}
+
+
+def test_a_spec_is_read_by_number_and_an_unknown_number_is_an_error() -> None:
+    gh = FakeGhCli(specs=[issue(1, "Big spec", labels=_ROUTING)], tickets={1: [issue(10, "Ticket 10")]})
+
+    assert _issues(gh).spec(1).number == 1
+    with pytest.raises(IssueError, match="no open Spec #2"):
+        _issues(gh).spec(2)
