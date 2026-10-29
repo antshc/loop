@@ -1,10 +1,10 @@
-"""Unit tests for content decoders: `pytest software_factory/tests/legacy_slices/implement_spec/model/test_reply.py`."""
+"""Unit tests for the response-envelope extraction: `pytest software_factory/tests/agents/test_envelope.py`."""
 
 from __future__ import annotations
 
 import unittest
 
-from software_factory.legacy_slices.implement_spec.model.reply import ContentDecodeError, LastJsonObject
+from software_factory.agents._kit import ContentDecodeError, LastJsonObject
 
 
 class LastJsonObjectTests(unittest.TestCase):

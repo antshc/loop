@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -13,16 +12,12 @@ import pytest
 from loop import BranchStrategy
 from software_factory.tests.legacy_slices.implement_spec.doubles import COMPLETED, ImplementSpecHarness, crash, envelope, hook_error
 from software_factory.legacy_slices import implement_spec
-from software_factory.legacy_slices.implement_spec.agents import prompts
 from software_factory.legacy_slices.implement_spec import FileExecutionStore
 from software_factory.legacy_slices.implement_spec.model.branches import feature_branch
-from software_factory.legacy_slices.implement_spec.model.records import AgentCommitSubject
-from software_factory.shared.github.issues.client import Issues
 from software_factory.shared.github.repo import GitHubRepo
 from software_factory.tests.shared.builders import build_graph
 from software_factory.tests.shared.fakes import FakeGhCli, issue
 
-_PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
 TWO_TICKETS = {1: [issue(10, "Add login form"), issue(11, "Add login tests")]}
 TICKET_10_URL = "https://github.com/owner/repo/issues/10"
 
@@ -50,31 +45,6 @@ def test_feature_branch_prefixes_the_slug_with_an_underscored_version() -> None:
 
 def test_feature_branch_is_just_the_slug_without_a_version() -> None:
     assert _branch(base_branch="main", title="Add Login Page!") == "add-login-page"
-
-
-def _first_ticket():
-    tracker = Issues(GitHubRepo("o", "r", gh=FakeGhCli()))
-    return next(iter(tracker.specs())).tickets[0]
-
-
-def test_prompt_template_placeholders_match_the_supplied_arguments_exactly() -> None:
-    args = implement_spec.prompt_args(
-        _first_ticket(), AgentCommitSubject("Checkout", 10), ["abc1234 first"], Path("/w"), "main", "f"
-    )
-
-    assert set(_PLACEHOLDER.findall(implement_spec.PROMPT.read_text())) == set(args)
-
-
-def test_prompt_args_carry_only_the_ticket_and_the_initiative_commits() -> None:
-    identifier = AgentCommitSubject("Checkout", 10)
-    args = implement_spec.prompt_args(_first_ticket(), identifier, [], Path("/w"), "main", "feature")
-
-    ticket_json = json.loads(args["TICKET_JSON"])
-    assert (ticket_json["number"], ticket_json["body"]) == (10, "Body of #10")
-    assert "TASK_ID" not in args
-    assert args["COMMIT_SUBJECT_PREFIX"] == identifier.to_subject()
-    assert "No task commits" in args["INITIATIVE_COMMITS"]
-    assert {"SPEC_JSON", "TICKETS_JSON", "RECENT_COMMITS"}.isdisjoint(args)
 
 
 def test_agents_run_in_the_worktree_on_the_feature_branch_based_on_the_target(tmp_path: Path) -> None:
@@ -304,18 +274,6 @@ def test_a_failing_worktree_hook_fails_the_spec_with_its_reason(tmp_path: Path) 
 
     assert code == 1 and harness.prompts == []
     assert any("setup.sh" in body for body in harness.comments())
-
-
-def test_a_prompt_placeholder_with_no_argument_fails_the_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    template = tmp_path / "implement.md"
-    template.write_text("Task {{UNKNOWN}}")
-    monkeypatch.setattr(prompts, "PROMPTS", tmp_path)
-    harness = ImplementSpecHarness(tmp_path)
-
-    code = harness.run()
-
-    assert code == 1 and harness.prompts == []
-    assert any("missing prompt argument: UNKNOWN" in body for body in harness.comments())
 
 
 def test_a_complete_ticket_is_pushed_prd_and_closed_with_sha_summary_and_verification(tmp_path: Path) -> None:

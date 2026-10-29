@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import re
 import subprocess
-from functools import partial
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
@@ -15,7 +14,6 @@ from loop import (
     GitOptions, LoopHookError, LoopHookPoint, NativeHandle, RunContext,
 )
 from software_factory.legacy_slices.implement_spec.agents.delegates import implement_ticket
-from software_factory.legacy_slices.implement_spec.agents.prompts import load_prompt
 from software_factory.legacy_slices.implement_spec.composition.entry import main
 from software_factory.legacy_slices.implement_spec.composition.repositories import configured_repositories
 from software_factory.legacy_slices.implement_spec.deliver.journal import FileExecutionStore
@@ -296,12 +294,11 @@ class ImplementSpecHarness:
             owner_name=RepositoryId("owner", "repo"),
         )
         def targets() -> Targets:
-            # Resolved inside `main`, so a missing prompt fails the run instead of the test setup.
             if repositories is not None:
                 return Targets(repositories)  # type: ignore[arg-type]
             if all_phases:
                 return configured_repositories(harness)
-            return Targets((RepositoryWorkflow(harness, partial(implement_ticket, template=load_prompt("implement"))),))
+            return Targets((RepositoryWorkflow(harness, implement_ticket),))
 
         by_checkout = github_factory or (lambda checkout: self.github)
         bindings: list[tuple[object, object]] = [

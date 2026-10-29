@@ -1,120 +1,90 @@
-"""The agent delegates each stage runs, the profiles they run under, and their prompt arguments."""
+"""The agent delegates each stage runs: each builds a role agent's request from the stage context and maps its reply back."""
 
 from __future__ import annotations
 
-import json
-from collections.abc import Sequence
-from dataclasses import replace
-from pathlib import Path
+from loop import AgentWorkspace
 
-from loop import DEFAULT, AgentRequest, AgentWorkspace, Role
-
-from software_factory.shared.github.issues.spec import Ticket
+from software_factory.agents import AgentError, AgentReplyError, AgentRunError, Declined
+from software_factory.agents.roles.chore import CHORE, ChoreRequest
+from software_factory.agents.roles.developer import DEVELOPER, DeveloperRequest
+from software_factory.agents.roles.planner import PLANNER, PlannerRequest
+from software_factory.agents.roles.reviewer import REVIEWER, ReviewerRequest
 
 from ..model.branches import feature_branch as feature_branch_of
-from ..model.definition import Owner
 from ..model.payloads import spec_payload, ticket_payload
 from ..model.records import (
-    AgentCommitSubject, TicketContext, TicketResult as DevResult, TicketWorkflowError as DevError,
-    PlanContext, PlanResult, ChoreContext, ChoreResult,
-    ReviewContext, ReviewResult,
+    AgentProcessError, TicketContext, TicketResult as DevResult, TicketWorkflowError as DevError,
+    PlanContext, PlannedTicket, PlanResult, ChoreContext, ChoreResult,
+    ReviewAxis, ReviewContext, ReviewFinding, ReviewResult,
 )
-from ..model.reply import DevResponse, PlanResponse, ChoreResponse, ReviewResponse
-from .prompts import render_prompt
 
 
-DEVELOPER = replace(DEFAULT, name=Role.DEVELOPER)
-PLANNER = replace(DEFAULT, name=Owner.PLANNER)
-CHORE = replace(DEFAULT, name=Owner.CHORE)
-REVIEWER = replace(DEFAULT, name=Owner.REVIEWER)
+def _failure(exception: AgentError) -> DevError:
+    """The stage-level error for an agent failure; a run error keeps its process-failure meaning."""
+    return AgentProcessError(str(exception)) if isinstance(exception, AgentRunError) else DevError(str(exception))
 
 
-def prompt_args(
-    ticket: Ticket,
-    identifier: AgentCommitSubject,
-    initiative_commits: Sequence[str],
-    worktree: Path,
-    base_branch: str,
-    feature_branch: str,
-) -> dict[str, str]:
-    """Values for every placeholder in the implement_spec prompt template."""
-    return {
-        "TICKET_JSON": json.dumps(ticket_payload(ticket), indent=2),
-        "INITIATIVE_COMMITS": "\n".join(initiative_commits) or "No task commits for this Initiative exist on the feature branch yet.",
-        "COMMIT_SUBJECT_PREFIX": identifier.to_subject(),
-        "WORKTREE_PATH": str(worktree),
-        "TARGET_BRANCH": base_branch,
-        "FEATURE_BRANCH": feature_branch,
-    }
-
-
-def implement_ticket(context: TicketContext, worktree: AgentWorkspace, *, template: str) -> DevResult:
-    """Runs one fresh implementation agent and decodes its response for the selected Ticket."""
-    args = prompt_args(
-        context.ticket,
-        context.identifier,
-        context.initiative_commits,
-        worktree.path,
-        context.base_branch,
-        context.feature_branch,
+def implement_ticket(context: TicketContext, worktree: AgentWorkspace) -> DevResult:
+    """Runs one fresh implementation agent and maps its reply for the selected Ticket."""
+    identifier = str(context.identifier)
+    request = DeveloperRequest(
+        identifier, ticket_payload(context.ticket), context.initiative_commits, context.identifier.to_subject(),
+        worktree.path, context.base_branch, context.feature_branch,
     )
-    prompt = render_prompt(template, args)
-    output = worktree.agent(DEVELOPER).run(AgentRequest(prompt)).output
-    return DevResponse(context.identifier).decode(output)
+    try:
+        reply = DEVELOPER.run(worktree, request)
+    except AgentError as exception:
+        raise _failure(exception) from exception
+    if isinstance(reply, Declined):
+        return DevResult(identifier, "failed", reason=reply.reason)
+    return DevResult(identifier, "completed", commit=reply.commit, summary=reply.summary, verification=reply.verification)
 
 
-def chore_args(context: ChoreContext, worktree: Path) -> dict[str, str]:
-    """Values for every placeholder in the chore prompt template."""
-    return {
-        "PULL_REQUEST_URL": context.pull_request_url,
-        "WORKTREE_PATH": str(worktree),
-        "TARGET_BRANCH": context.base_branch,
-        "FEATURE_BRANCH": context.feature_branch,
-        "DIFF_DIR": str(context.diff_dir),
-        "BRANCH_COMMITS": "\n\n".join(context.branch_commits) or "No commits exist on the feature branch yet.",
-    }
-
-
-def chore_pull_request(context: ChoreContext, worktree: AgentWorkspace, *, template: str) -> ChoreResult:
+def chore_pull_request(context: ChoreContext, worktree: AgentWorkspace) -> ChoreResult:
     """Runs one fresh chore agent over the pull request's captured diff; its edits stay uncommitted in the worktree."""
-    prompt = render_prompt(template, chore_args(context, worktree.path))
-    output = worktree.agent(CHORE).run(AgentRequest(prompt, context.session_name)).output
-    return ChoreResponse().decode(output)
+    request = ChoreRequest(
+        context.pull_request_url, worktree.path, context.base_branch, context.feature_branch, context.diff_dir, context.branch_commits,
+    )
+    try:
+        reply = CHORE.run(worktree, request, session=context.session_name)
+    except AgentReplyError:
+        # The step is best effort, so an unreadable reply is an empty result.
+        return ChoreResult()
+    except AgentError as exception:
+        raise _failure(exception) from exception
+    if isinstance(reply, Declined):
+        return ChoreResult()
+    return ChoreResult(reply.commit_message, reply.summary, reply.out_of_scope)
 
 
-def plan_args(context: PlanContext, checkout: Path) -> dict[str, str]:
-    """Values for every placeholder in the planner prompt template."""
+def plan_spec(context: PlanContext, workspace: AgentWorkspace) -> PlanResult:
+    """Runs one read-only planner agent on the checkout and maps the Tickets it proposes."""
     spec = context.spec
     feature_branch = feature_branch_of(spec)
     if feature_branch is None:
         raise DevError(f"cannot resolve feature branch for Spec {spec.url}")
-    return {
-        "CHECKOUT_PATH": str(checkout),
-        "SPEC_JSON": json.dumps(spec_payload(spec), indent=2),
-        "TARGET_BRANCH": context.base_branch,
-        "FEATURE_BRANCH": feature_branch,
-    }
+    request = PlannerRequest(context.source_root or workspace.path, spec_payload(spec), context.base_branch, feature_branch)
+    try:
+        reply = PLANNER.run(workspace, request, session=context.session_name)
+    except AgentError as exception:
+        raise _failure(exception) from exception
+    if isinstance(reply, Declined):
+        return PlanResult("failed", reason=reply.reason)
+    return PlanResult("completed", tuple(PlannedTicket(ticket.title, ticket.body, ticket.blocked_by) for ticket in reply.tickets))
 
 
-def plan_spec(context: PlanContext, workspace: AgentWorkspace, *, template: str) -> PlanResult:
-    """Runs one read-only planner agent on the checkout and decodes the Tickets it proposes."""
-    prompt = render_prompt(template, plan_args(context, context.source_root or workspace.path))
-    output = workspace.agent(PLANNER).run(AgentRequest(prompt, context.session_name)).output
-    return PlanResponse().decode(output)
-
-
-def review_args(context: ReviewContext) -> dict[str, str]:
-    """Values for every placeholder in the reviewer prompt template."""
-    return {
-        "SOURCE_ROOT": str(context.source_root),
-        "PULL_REQUEST_URL": context.pull_request_url,
-        "INITIATIVE": context.initiative,
-        "HEAD_SHA": context.head_sha,
-    }
-
-
-def review_pull_request(context: ReviewContext, workspace: AgentWorkspace, *, template: str) -> ReviewResult:
+def review_pull_request(context: ReviewContext, workspace: AgentWorkspace) -> ReviewResult:
     """Runs one read-only reviewer agent on the checkout; it posts its own findings through the `code-review` skill."""
-    prompt = render_prompt(template, review_args(context))
-    output = workspace.agent(REVIEWER).run(AgentRequest(prompt, context.session_name)).output
-    return ReviewResponse().decode(output)
+    request = ReviewerRequest(context.pull_request_url, context.source_root, context.initiative, context.head_sha)
+    try:
+        reply = REVIEWER.run(workspace, request, session=context.session_name)
+    except AgentError as exception:
+        raise _failure(exception) from exception
+    if isinstance(reply, Declined):
+        raise DevError(f"review failed: {reply.reason}")
+    return ReviewResult(
+        tuple(ReviewAxis(axis.name, axis.outcome, axis.note) for axis in reply.axes),
+        tuple(ReviewFinding(finding.kind, finding.summary, finding.axis) for finding in reply.findings),
+        reply.posted,
+        reply.head,
+    )

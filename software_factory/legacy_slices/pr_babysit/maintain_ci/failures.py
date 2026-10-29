@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
-
 from loop import WorkflowRun
 
+from software_factory.agents.roles.maintainer import DIAGNOSE_CI, FIX_CI, DiagnoseRequest, FixRequest
 from software_factory.shared.github.pull_requests import PullRequests
 
-from ..agents import MAINTAINER
-from ..agents.ask import ask
+from ..agents.run import run_agent
 from ..agents.workspace import PrWorkspace
 from ..model import Blocked, PrState
 from ..publish.changes import ChangePublisher
@@ -23,7 +21,8 @@ class CiMaintainer:
     def __init__(self, settings: Settings, state: PrState, pulls: PullRequests,
                  workspace: PrWorkspace, changes: ChangePublisher) -> None:
         self._settings = settings
-        self._profile = replace(MAINTAINER, timeout_sec=settings.timeout)
+        self._diagnose = DIAGNOSE_CI.tuned(timeout_sec=settings.timeout)
+        self._fix = FIX_CI.tuned(timeout_sec=settings.timeout)
         self._state = state
         self._pulls = pulls
         self._workspace = workspace
@@ -48,9 +47,9 @@ class CiMaintainer:
             head = changes.head(path)
             logs = pulls.failed_logs(run["id"] for run in ci["runs"]) if ci["runs"] else "No Actions run logs; inspect check/status links."
             with flow.phase("diagnose"):
-                diagnosis = ask(workspace, self._profile, "diagnose", {"snapshot": snapshot, "logs": logs})
+                diagnosis = run_agent(self._diagnose, workspace, DiagnoseRequest(snapshot, logs))
             changes.read_only(path, head)
-            classification = diagnosis.get("classification")
+            classification = diagnosis.classification
             if classification == "transient":
                 if ci["pending"]:
                     return
@@ -66,15 +65,15 @@ class CiMaintainer:
                         pulls.rerun_failed(run["id"])
                 return
             if classification != "branch":
-                raise Blocked(diagnosis.get("reason") or "CI diagnosis is unclear")
+                raise Blocked(diagnosis.reason or "CI diagnosis is unclear")
             if not state.data["batch"]:
                 state.data["batch"] = {"kind": "ci", "base": head, "head": head,
                     "branch": snapshot["pr"]["head"]["ref"], "index": 0, "replies": {}, "inflight": None}
                 state.save()
             with flow.phase("fix-ci"):
-                result = ask(workspace, self._profile, "fix", {"diagnosis": diagnosis, "snapshot": snapshot})
+                result = run_agent(self._fix, workspace, FixRequest(diagnosis, snapshot))
             changes.agent_head(path, head)
-            if result.get("verdict") != "fixed":
-                raise Blocked(result.get("reason") or "Maintainer could not fix CI")
+            if result.verdict != "fixed":
+                raise Blocked(result.reason or "Maintainer could not fix CI")
             changes.commit_issue(path, f"babysit: fix CI (PR #{snapshot['pr']['number']})", {}, flow)
             changes.publish(path, login, flow)

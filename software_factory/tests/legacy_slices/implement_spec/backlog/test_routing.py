@@ -7,7 +7,6 @@ import pytest
 from loop import AgentProfile, AgentRequest, AgentWorkspace, copilot
 from software_factory.tests.legacy_slices.implement_spec.doubles import FakeGitService, FakeRepositoryGh, FakeRepositoryGit, FakeRunner, FakeWorkflowGit, new_agent_for
 from software_factory.legacy_slices import implement_spec
-from software_factory.legacy_slices.implement_spec.agents import prompts as prompt_files
 from software_factory.legacy_slices.implement_spec.model.repositories import GithubFactory, Harness, Targets
 from software_factory.shared.agents.launcher import AgentFactory
 from software_factory.shared.git import GitClient
@@ -21,14 +20,8 @@ from software_factory.legacy_slices.implement_spec.model.records import TicketCo
 
 @pytest.mark.parametrize("first_fails", [False, True])
 def test_harness_specs_route_to_separate_repositories_and_agent_delegates(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, first_fails: bool
+    tmp_path: Path, first_fails: bool
 ) -> None:
-    prompts = tmp_path / "prompts"
-    prompts.mkdir()
-    (prompts / "first.md").write_text("Implement {{TITLE}} for the first repository")
-    (prompts / "second.md").write_text("Implement {{TITLE}} for the second repository")
-    (prompts / "review.md").write_text("Review {{COMMIT}}")
-    monkeypatch.setattr(prompt_files, "PROMPTS", prompts)
     harness = Repository(tmp_path, tmp_path / "workspace/harness.worktrees", RepositoryId("owner", "harness"))
     one = Repository(tmp_path / "workspace/one", tmp_path / "workspace/one.worktrees", RepositoryId("owner", "one"))
     two = Repository(tmp_path / "workspace/two", tmp_path / "workspace/two.worktrees", RepositoryId("owner", "two"))
@@ -69,7 +62,7 @@ def test_harness_specs_route_to_separate_repositories_and_agent_delegates(
         assert context.ticket.number == 10
         assert context.initiative_commits == ("c000000 ccode(Checkout|9): one history",)
         assert (context.base_branch, context.feature_branch) == ("main", "first")
-        prompt = implement_spec.render_prompt(implement_spec.load_prompt("first"), {"TITLE": context.ticket.title})
+        prompt = f"Implement {context.ticket.title} for the first repository"
         worktree.agent(implementer).run(AgentRequest(prompt))
         sha = one_git.commit(f"{context.identifier.to_subject()}first")
         if first_fails:
@@ -81,10 +74,10 @@ def test_harness_specs_route_to_separate_repositories_and_agent_delegates(
         assert context.ticket.number == 20
         assert context.initiative_commits == ("c000000 ccode(Checkout|19): two history",)
         assert (context.base_branch, context.feature_branch) == ("release/2.4", "2_4_second")
-        prompt = implement_spec.render_prompt(implement_spec.load_prompt("second"), {"TITLE": context.ticket.title})
+        prompt = f"Implement {context.ticket.title} for the second repository"
         worktree.agent(implementer).run(AgentRequest(prompt))
         sha = two_git.commit(f"{context.identifier.to_subject()}second")
-        review = implement_spec.render_prompt(implement_spec.load_prompt("review"), {"COMMIT": sha})
+        review = f"Review {sha}"
         worktree.agent(reviewer).run(AgentRequest(review))
         amended = Commit("reviewed-sha", f"{context.identifier.to_subject()}reviewed")
         two_git.commits[-1] = amended

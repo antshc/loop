@@ -52,6 +52,10 @@ class TicketWorkflowError(Exception):
     """An expected failure in ticket delivery or its agent delegate."""
 
 
+class AgentProcessError(TicketWorkflowError):
+    """The agent process failed, timed out, or reported a non-zero exit code."""
+
+
 @dataclass(frozen=True)
 class TicketContext:
     """The selected Ticket and branch history supplied to one agent-workflow attempt."""

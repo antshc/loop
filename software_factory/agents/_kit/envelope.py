@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 
+from ..contract import ReplyMismatch
+
 
 class ContentDecodeError(ValueError):
     """`text` carried no value this decoder recognizes."""
@@ -38,3 +40,11 @@ class LastJsonObject:
         if found is None:
             raise ContentDecodeError("no matching JSON object in text", text)
         return found
+
+
+def read_object(output: str) -> dict:
+    """The last top-level JSON object in `output`; a reply mismatch when there is none."""
+    try:
+        return LastJsonObject().decode(output)
+    except ContentDecodeError as exception:
+        raise ReplyMismatch("no response object in agent output") from exception

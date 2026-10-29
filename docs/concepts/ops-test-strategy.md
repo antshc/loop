@@ -67,7 +67,7 @@ Verify — may drift: the rows below name today's test locations under `software
 | Boundary fakes | One fake per boundary | `software_factory/tests/legacy_slices/implement_spec/doubles.py`: implement_spec's runner and Git; `software_factory/tests/shared/fakes/gh.py`: `FakeGhCli` and `ScriptedGh` for `gh`, with the pull request side (`FakePullRequestHost`) in `software_factory/tests/shared/fakes/pull_requests.py`, shared by the `implement_spec` and `pr_babysit` harnesses |
 | Compatibility goldens | Values a migration must not change are captured from the old code first, then compared byte for byte | `software_factory/tests/legacy_slices/pr_babysit/watch/golden.json` with `golden.py` and `test_golden.py`: babysit fingerprints, persisted state, and agent envelopes |
 | Unit tests | Library and Workflow rules against fakes | `tests/unit` and `software_factory/tests` (`legacy_slices/implement_spec`, `legacy_slices/pr_babysit`, `shared`, each mirroring its source folders); all discovered by root `pytest` |
-| Package independence | `implement_spec` runs with only `software_factory/shared` and no sibling Workflow files, and resolves its own prompts | `software_factory/tests/legacy_slices/implement_spec/test_package.py` |
+| Package independence | `implement_spec` runs with only `software_factory/agents`, `software_factory/shared` and no sibling Workflow files, and the role agents resolve their prompts from their own packages | `software_factory/tests/legacy_slices/implement_spec/test_package.py` |
 | Architecture checks | Import rules enforced as a test | `tests/unit/test_library.py`: `lint-imports` |
 
 ## References

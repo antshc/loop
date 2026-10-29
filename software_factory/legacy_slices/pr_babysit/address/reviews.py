@@ -4,47 +4,43 @@ from __future__ import annotations
 
 import re
 import subprocess
-from dataclasses import replace
 
-from loop import AgentProfile, AgentWorkspace, WorkflowRun
+from loop import AgentWorkspace, WorkflowRun
 
-from ..agents import ADDRESS
-from ..agents.ask import ask
+from software_factory.agents import TypedAgent
+from software_factory.agents.roles.address import (
+    GROUP_FEEDBACK, RESOLVE_ISSUE, FeedbackIssue, Grouped, GroupRequest, Resolved, ResolveRequest,
+)
+
+from ..agents.run import run_agent
 from ..agents.workspace import PrWorkspace
 from ..model import BaselineFailed, Blocked, PrState
 from ..publish.changes import ChangePublisher
 from ..settings import Settings
 
 
-def group_issues(workspace: AgentWorkspace, profile: AgentProfile, items: list[dict]) -> list[dict]:
+def group_issues(workspace: AgentWorkspace, agent: TypedAgent[GroupRequest, Grouped], items: list[dict]) -> list[dict]:
     """Requires complete and unique feedback coverage before editing."""
-    issues = ask(workspace, profile, "group", {"items": items}).get("issues")
-    if not isinstance(issues, list) or not issues:
+    grouped = run_agent(agent, workspace, GroupRequest(items))
+    if not grouped.issues:
         raise Blocked("Address returned no issues")
     keys, ids = [], []
-    for issue in issues:
-        if (not isinstance(issue, dict) or not re.fullmatch(r"[a-zA-Z0-9_-]{1,80}", issue.get("id", ""))
-                or not isinstance(issue.get("statement"), str) or not isinstance(issue.get("keys"), list)
-                or not issue["keys"] or any(not isinstance(key, str) for key in issue["keys"])):
+    for issue in grouped.issues:
+        if not re.fullmatch(r"[a-zA-Z0-9_-]{1,80}", issue.id) or not issue.keys:
             raise Blocked("Address returned an invalid issue")
-        keys.extend(issue["keys"])
-        ids.append(issue["id"])
+        keys.extend(issue.keys)
+        ids.append(issue.id)
     if len(ids) != len(set(ids)) or sorted(keys) != sorted(item["key"] for item in items):
         raise Blocked("Address must assign every feedback item exactly once")
-    return issues
+    return [{"id": issue.id, "statement": issue.statement, "keys": list(issue.keys)} for issue in grouped.issues]
 
 
-def validate_resolution(result: dict, keys: list[str]) -> None:
+def validate_resolution(result: Resolved, keys: list[str]) -> None:
     """Requires a justified verdict and one usable reply per feedback item."""
-    if result.get("verdict") not in {"fix-needed", "no-change-needed", "unclear"}:
-        raise Blocked("Invalid Address verdict")
-    replies = result.get("replies")
-    if (not isinstance(replies, dict) or set(replies) != set(keys)
-            or any(not isinstance(body, str) or not body.strip() for body in replies.values())):
+    replies = {reply.key: reply.body for reply in result.replies}
+    if set(replies) != set(keys) or any(not body.strip() for body in replies.values()):
         raise Blocked("Address must draft one reply for every feedback item")
-    if result["verdict"] != "unclear" and not any(
-            isinstance(citation, str) and re.search(r"\S+:\d+", citation)
-            for citation in result.get("evidence", [])):
+    if result.verdict != "unclear" and not any(re.search(r"\S+:\d+", citation) for citation in result.evidence):
         raise Blocked("Address verdict requires path:line evidence")
 
 
@@ -52,7 +48,8 @@ class ReviewAddresser:
     """Resolves issues sequentially; Python verifies and publishes each batch."""
 
     def __init__(self, settings: Settings, state: PrState, workspace: PrWorkspace, changes: ChangePublisher) -> None:
-        self._profile = replace(ADDRESS, timeout_sec=settings.timeout)
+        self._group = GROUP_FEEDBACK.tuned(timeout_sec=settings.timeout)
+        self._resolve = RESOLVE_ISSUE.tuned(timeout_sec=settings.timeout)
         self._state = state
         self._workspace = workspace
         self._changes = changes
@@ -71,7 +68,7 @@ class ReviewAddresser:
                         raise BaselineFailed("Baseline verification failed") from exception
                 head = changes.head(path)
                 with flow.phase("address", mode="group"):
-                    issues = group_issues(workspace, self._profile, items)
+                    issues = group_issues(workspace, self._group, items)
                 changes.read_only(path, head)
                 state.data["batch"] = {"kind": "address", "base": head, "head": head,
                     "branch": snapshot["pr"]["head"]["ref"], "issues": issues, "index": 0,
@@ -83,17 +80,19 @@ class ReviewAddresser:
                 issue = batch["issues"][batch["index"]]
                 head = changes.head(path)
                 with flow.phase("address", issue=issue["id"]):
-                    result = ask(workspace, self._profile, "resolve", {"issue": issue,
-                        "items": [state.data["items"][key] for key in issue["keys"]]})
+                    result = run_agent(self._resolve, workspace, ResolveRequest(
+                        FeedbackIssue(issue["id"], issue.get("statement"), tuple(issue["keys"])),
+                        [state.data["items"][key] for key in issue["keys"]]))
                     validate_resolution(result, issue["keys"])
+                replies = {reply.key: reply.body for reply in result.replies}
                 changes.agent_head(path, head)
-                if result["verdict"] == "fix-needed":
+                if result.verdict == "fix-needed":
                     changes.commit_issue(path, f"babysit: address {issue['id']} (PR #{snapshot['pr']['number']})",
-                                         result["replies"], flow)
+                                         replies, flow)
                 else:
                     changes.read_only(path, head)
-                    batch["replies"].update(result["replies"])
-                    batch["unclear"] |= result["verdict"] == "unclear"
+                    batch["replies"].update(replies)
+                    batch["unclear"] |= result.verdict == "unclear"
                     batch["index"] += 1
                     state.save()
             unclear = batch["unclear"]

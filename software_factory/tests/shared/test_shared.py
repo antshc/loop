@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-import logging
 from unittest.mock import patch
 
 import pytest
 from dishka import Provider, Scope, make_container, provide
 
-from software_factory.shared.agents.envelope import ContentDecodeError, LastJsonObject
-from software_factory.shared.agents.prompts import PromptError, PromptLibrary, placeholders, render
 from software_factory.shared.git import GitClient
 from software_factory.shared.github.account import GitHub
 from software_factory.shared.github.repo import GhRunner
@@ -50,26 +47,6 @@ def test_process_lock_excludes_a_duplicate_worker_and_releases(tmp_path) -> None
                 pytest.fail("duplicate worker acquired lock")
     with process_lock(tmp_path / "worker.lock"):
         pass
-
-
-def test_prompts_render_every_placeholder_and_reject_a_missing_argument(tmp_path, caplog) -> None:
-    (tmp_path / "task.md").write_text("Do {{ WHAT }} in {{WHERE}}")
-    prompts = PromptLibrary(tmp_path)
-
-    with caplog.at_level(logging.WARNING):
-        assert prompts.render("task", {"WHAT": "x", "WHERE": "y", "EXTRA": "z"}) == "Do x in y"
-    assert "unused prompt argument: EXTRA" in caplog.text
-    assert placeholders(prompts.load("task")) == {"WHAT", "WHERE"}
-    with pytest.raises(PromptError, match="missing prompt argument: WHERE"):
-        render("{{WHERE}}", {})
-
-
-def test_the_last_matching_json_object_wins_over_noise() -> None:
-    decoder = LastJsonObject(lambda value: "status" in value)
-
-    assert decoder.decode('noise {"a": 1} {"status": "x"} {broken {"status": "y"} tail') == {"status": "y"}
-    with pytest.raises(ContentDecodeError):
-        decoder.decode("no json")
 
 
 def test_the_shared_provider_wires_git_and_github_over_one_runner_and_accepts_overrides() -> None:

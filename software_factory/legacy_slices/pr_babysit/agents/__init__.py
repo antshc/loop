@@ -1,5 +1,1 @@
-from __future__ import annotations
-
-from .profiles import ADDRESS, MAINTAINER
-
-__all__ = ["ADDRESS", "MAINTAINER"]
+"""The role agents one PR's maintenance runs and the recovery worktree they edit."""

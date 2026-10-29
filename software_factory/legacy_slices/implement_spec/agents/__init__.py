@@ -1,1 +1,1 @@
-"""Prompt templates and the agent delegates each stage runs."""
+"""The agent delegates each stage runs, over the typed role agents."""

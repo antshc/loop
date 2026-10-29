@@ -17,7 +17,7 @@ from software_factory.shared.github.issues.spec import Ticket
 
 from ..model.branches import feature_branch as feature_branch_of
 from ..model.handoff import close_ticket, escalate
-from ..model.records import AgentCommitSubject, AgentWorkflow, TicketContext, TicketResult, TicketWorkflowError
+from ..model.records import AgentCommitSubject, AgentProcessError, AgentWorkflow, TicketContext, TicketResult, TicketWorkflowError
 from ..model.repositories import Tracker
 from .journal import FileExecutionStore
 
@@ -118,7 +118,7 @@ class TicketDeliverer:
     ) -> TicketResult | str:
         try:
             result = run_agents(context, worktree)
-        except subprocess.CalledProcessError:
+        except (subprocess.CalledProcessError, AgentProcessError):
             phase.fail("Agent process failed")
             return "agent process did not exit successfully"
         except TicketWorkflowError as exception:

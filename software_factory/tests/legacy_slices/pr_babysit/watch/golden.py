@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from software_factory.agents.roles.address import GROUP_FEEDBACK, RESOLVE_ISSUE, FeedbackIssue, GroupRequest, ResolveRequest
+from software_factory.agents.roles.maintainer import DIAGNOSE_CI, FIX_CI, Diagnosis, DiagnoseRequest, FixRequest
 from software_factory.legacy_slices.pr_babysit.model import PrState
 from software_factory.legacy_slices.pr_babysit.watch.feedback import ci_state, fingerprint, observe
 from software_factory.shared.github.account import GitHub
@@ -98,17 +99,17 @@ def capture(snapshot_of: Callable[[PullRequests, int], dict], pulls: PullRequest
     state.status("blocked", reason="Reviewer clarification requested", fingerprint=fingerprint_value)
     ci = ci_state(snapshot)
     keys = [item["key"] for item in items]
-    diagnosis = {"classification": "branch", "reason": "CI evidence"}
+    diagnosis = Diagnosis("branch", "CI evidence")
     return {
         "fingerprint": fingerprint_value,
         "state_file": state.path.read_text(),
         "ci": {**{name: ci[name] for name in ("pending", "failed", "green")}, "runs": [run["id"] for run in ci["runs"]]},
         "envelopes": {
-            "group": json.dumps({"mode": "group", "items": items}),
-            "resolve": json.dumps({"mode": "resolve", "issue": {"id": "all", "keys": keys},
-                                   "items": [state.data["items"][key] for key in keys]}),
-            "diagnose": json.dumps({"mode": "diagnose", "snapshot": snapshot, "logs": "cart.py: duplicate product"}),
-            "fix": json.dumps({"mode": "fix", "diagnosis": diagnosis, "snapshot": snapshot}),
+            "group": GROUP_FEEDBACK.encode(GroupRequest(items)),
+            "resolve": RESOLVE_ISSUE.encode(ResolveRequest(FeedbackIssue("all", None, tuple(keys)),
+                                                           [state.data["items"][key] for key in keys])),
+            "diagnose": DIAGNOSE_CI.encode(DiagnoseRequest(snapshot, "cart.py: duplicate product")),
+            "fix": FIX_CI.encode(FixRequest(diagnosis, snapshot)),
         },
     }
 
