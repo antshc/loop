@@ -149,7 +149,7 @@ allow_indirect_imports = true
 [[tool.importlinter.contracts]]
 name = "Factory and example source packages never import the factory test tree"
 type = "forbidden"
-source_modules = ["software_factory.agents", "software_factory.shared", "software_factory.legacy_slices.implement_spec", "software_factory.legacy_slices.pr_babysit", "workflows.plan_implement", "workflows.workflow_reporting"]
+source_modules = ["software_factory.agents", "software_factory.runtime", "software_factory.shared", "software_factory.legacy_slices.implement_spec", "software_factory.legacy_slices.pr_babysit", "workflows.plan_implement", "workflows.workflow_reporting"]
 forbidden_modules = ["software_factory.tests"]
 
 [[tool.importlinter.contracts]]
@@ -157,6 +157,7 @@ name = "Only composition roots and the shared provider know the container"
 type = "forbidden"
 source_modules = [
     "software_factory.agents",
+    "software_factory.runtime",
     "software_factory.shared.agents",
     "software_factory.shared.git",
     "software_factory.shared.github",
@@ -229,6 +230,18 @@ modules = ["software_factory.agents", "software_factory.shared"]
 [[tool.importlinter.contracts]]
 name = "The private agent kit is unreachable outside the agents package"
 type = "forbidden"
-source_modules = ["software_factory.legacy_slices", "software_factory.shared", "workflows"]
+source_modules = ["software_factory.legacy_slices", "software_factory.runtime", "software_factory.shared", "workflows"]
 forbidden_modules = ["software_factory.agents._kit"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "The Workflow definition runtime is generic: no GitHub, role agents, shared infrastructure, legacy slices or processes"
+type = "forbidden"
+source_modules = ["software_factory.runtime"]
+forbidden_modules = [
+    "software_factory.shared",
+    "software_factory.agents.roles",
+    "software_factory.legacy_slices",
+    "subprocess",
+]
 allow_indirect_imports = true
