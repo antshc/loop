@@ -4,12 +4,12 @@ The `loop` Python library: a single installable package (`pip install` from this
 
 ## Dependencies
 
-- **Called by:** User-owned Workflows (`workflows/dev/` is the self-contained example) through the public `loop` API only.
+- **Called by:** User-owned Workflows (`workflows/implement_spec/` is the self-contained example) through the public `loop` API only.
 - **Calls (via subprocess):** `git`, the `copilot` and `codex` CLIs, and optionally `docker`. No Python dependency beyond `python-json-logger`; the optional `otel` extra adds the OpenTelemetry SDK and OTLP/HTTP exporter.
 
 ## Interfaces
 
-Public API re-exported from [`src/loop/__init__.py`](../../src/loop/__init__.py): `Agent()` returns an `AgentBuilder` ([Build agents with an agent builder](../adr/build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md)), configured with `with_git(GitOptions)`, `with_docker`, `with_session`, and `with_agent_cli_hooks`; `create()` yields an `AgentClient` and `open()` a `Worktree` whose `agent(profile)` yields clients. An `AgentProfile` picks the CLI (`copilot`, `codex`), model, and reasoning effort; a run takes an `AgentRequest` and returns an `AgentResult`. Replaceable seams are `CliRunner`, `GitService`, `DockerService`, `SessionStore`, and, when a Workflow opts in with `with_observer`, `RunObserver` and `SessionLogReader`. The GitHub client and the Spec/Ticket tracker are not part of the public API: the Workflow-side GitHub client lives in `workflows/shared/github/` and dev's tracker in `workflows/dev/tracker/`.
+Public API re-exported from [`src/loop/__init__.py`](../../src/loop/__init__.py): `Agent()` returns an `AgentBuilder` ([Build agents with an agent builder](../adr/build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md)), configured with `with_git(GitOptions)`, `with_docker`, `with_session`, and `with_agent_cli_hooks`; `create()` yields an `AgentClient` and `open()` a `Worktree` whose `agent(profile)` yields clients. An `AgentProfile` picks the CLI (`copilot`, `codex`), model, and reasoning effort; a run takes an `AgentRequest` and returns an `AgentResult`. Replaceable seams are `CliRunner`, `GitService`, `DockerService`, `SessionStore`, and, when a Workflow opts in with `with_observer`, `RunObserver` and `SessionLogReader`. The GitHub client and the Spec/Ticket tracker are not part of the public API: the Workflow-side GitHub client lives in `workflows/shared/github/` and implement_spec's tracker in `workflows/implement_spec/tracker/`.
 
 ## Tweaks/Configuration
 
@@ -38,7 +38,7 @@ sessions/       SessionStore and session values
 observe/        RunObserver, AgentRunRecord, Usage, ToolCall, WorktreeEvent; otel.py is the optional OpenTelemetry observer (extra `loop[otel]`)
 ```
 
-Dependency rule (enforced by import-linter in `pyproject.toml`): a strict layering `factory` > `builder | dryrun` > `agents` > `clis | docker | git` > `run` > `hooks` > `sessions` > `observe`; only `observe/otel.py` imports `opentelemetry` (checked by a unit test); Workflows import only the public `loop` API, dev imports no sibling helpers, and Ticket orchestration imports no agent delegate.
+Dependency rule (enforced by import-linter in `pyproject.toml`): a strict layering `factory` > `builder | dryrun` > `agents` > `clis | docker | git` > `run` > `hooks` > `sessions` > `observe`; only `observe/otel.py` imports `opentelemetry` (checked by a unit test); Workflows import only the public `loop` API, implement_spec imports no sibling helpers, and Ticket orchestration imports no agent delegate.
 
 ## Container view
 

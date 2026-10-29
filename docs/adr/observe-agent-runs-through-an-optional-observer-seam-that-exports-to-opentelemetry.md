@@ -1,6 +1,6 @@
 # Observe Agent Runs through an optional observer seam that exports to OpenTelemetry
 
-Operators want to see what an Agent Run did — its tool calls, token and AIU usage, and its Worktree — in a trace dashboard such as Aspire. Loop's `CliOutcome` carries none of that: usage and tool timings exist only in the agent CLI's own session log, and Tickets, phases, and gates are Workflow concepts, not library ones. The [Aspire prototype](../prototypes/dashboard-aspire/README.md) mirrored the dev Workflow to get it; this decision moves the reusable part into the library without making telemetry a dependency of every Workflow.
+Operators want to see what an Agent Run did — its tool calls, token and AIU usage, and its Worktree — in a trace dashboard such as Aspire. Loop's `CliOutcome` carries none of that: usage and tool timings exist only in the agent CLI's own session log, and Tickets, phases, and gates are Workflow concepts, not library ones. The [Aspire prototype](../prototypes/dashboard-aspire/README.md) mirrored the implement_spec Workflow to get it; this decision moves the reusable part into the library without making telemetry a dependency of every Workflow.
 
 ## Considered Options
 
@@ -28,4 +28,4 @@ Operators want to see what an Agent Run did — its tool calls, token and AIU us
 - The Copilot log format is undocumented; golden-log tests and the `usage=None` fallback bound the damage when it changes.
 - Spans are exported when they end and tool and usage data arrive after the CLI exits, so a dashboard shows an Agent Run only once it finishes.
 - One writer per session is assumed; concurrent resumes of one session are unsupported.
-- `workflows/dev` opts in with `--otlp-endpoint` and adds its own Spec and Ticket spans; Aspire-specific per-role colouring stays a Workflow concern.
+- `workflows/implement_spec` opts in with `--otlp-endpoint` and adds its own Spec and Ticket spans; Aspire-specific per-role colouring stays a Workflow concern.

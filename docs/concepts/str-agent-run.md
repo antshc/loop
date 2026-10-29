@@ -75,7 +75,7 @@ The Workflow selects the variant, sequence, conditions, and concurrency. Each Ru
 
 ## Validation
 
-The `plan_implement` Workflow runs a planning Run and an implementation Run with different profiles on one worktree; the `dev` Workflow runs one Run per Ticket and keeps repeated invocation policy in its own code.
+The `plan_implement` Workflow runs a planning Run and an implementation Run with different profiles on one worktree; the `implement_spec` Workflow runs one Run per Ticket and keeps repeated invocation policy in its own code.
 
 ## References
 
@@ -89,4 +89,4 @@ The `plan_implement` Workflow runs a planning Run and an implementation Run with
 |---|---|---|
 | Agent invocation | One request crosses the library agent boundary and returns one result | `loop`: `AgentClient`, `AgentRequest`, `AgentResult` |
 | Worktree binding | A worktree hands out clients per profile | `loop`: `AgentBuilder.open`, `Worktree.agent` |
-| Workflow ownership | Workflow code decides repeated and conditional agent execution | `workflows`: `dev`, `plan_implement` |
+| Workflow ownership | Workflow code decides repeated and conditional agent execution | `workflows`: `implement_spec`, `plan_implement` |

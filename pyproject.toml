@@ -68,50 +68,47 @@ forbidden_modules = [
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
-name = "Dev stages run the delegates they are given, never a concrete agent"
+name = "Implement-spec stages run the delegates they are given, never a concrete agent"
 type = "forbidden"
 source_modules = [
-    "workflows.dev.backlog",
-    "workflows.dev.chore",
-    "workflows.dev.deliver",
-    "workflows.dev.model",
-    "workflows.dev.plan",
-    "workflows.dev.review",
-    "workflows.dev.verify",
+    "workflows.implement_spec.backlog",
+    "workflows.implement_spec.chore",
+    "workflows.implement_spec.deliver",
+    "workflows.implement_spec.model",
+    "workflows.implement_spec.plan",
+    "workflows.implement_spec.review",
 ]
-forbidden_modules = ["workflows.dev.agents"]
+forbidden_modules = ["workflows.implement_spec.agents"]
 
 [[tool.importlinter.contracts]]
-name = "Dev features never reach back into their composition root"
+name = "Implement-spec features never reach back into their composition root"
 type = "forbidden"
 source_modules = [
-    "workflows.dev.agents",
-    "workflows.dev.backlog",
-    "workflows.dev.chore",
-    "workflows.dev.deliver",
-    "workflows.dev.model",
-    "workflows.dev.plan",
-    "workflows.dev.review",
-    "workflows.dev.verify",
+    "workflows.implement_spec.agents",
+    "workflows.implement_spec.backlog",
+    "workflows.implement_spec.chore",
+    "workflows.implement_spec.deliver",
+    "workflows.implement_spec.model",
+    "workflows.implement_spec.plan",
+    "workflows.implement_spec.review",
 ]
-forbidden_modules = ["workflows.dev.composition"]
+forbidden_modules = ["workflows.implement_spec.composition"]
 
 [[tool.importlinter.contracts]]
-name = "Dev stages are independent; only the backlog router sequences them"
+name = "Implement-spec stages are independent; only the backlog router sequences them"
 type = "independence"
 modules = [
-    "workflows.dev.chore",
-    "workflows.dev.deliver",
-    "workflows.dev.plan",
-    "workflows.dev.review",
-    "workflows.dev.verify",
+    "workflows.implement_spec.chore",
+    "workflows.implement_spec.deliver",
+    "workflows.implement_spec.plan",
+    "workflows.implement_spec.review",
 ]
 
 [[tool.importlinter.contracts]]
 name = "Shared workflow infrastructure imports no workflow slice"
 type = "forbidden"
 source_modules = ["workflows.shared"]
-forbidden_modules = ["workflows.dev", "workflows.pr_babysit", "workflows.plan_implement", "workflows.workflow_reporting"]
+forbidden_modules = ["workflows.implement_spec", "workflows.pr_babysit", "workflows.plan_implement", "workflows.workflow_reporting"]
 
 [[tool.importlinter.contracts]]
 name = "Pure modules of the shared GitHub issues package never import the gh process layer; only its reader, commands, ticketing service, and client do"
@@ -152,7 +149,7 @@ allow_indirect_imports = true
 [[tool.importlinter.contracts]]
 name = "Workflow source packages never import the Workflow test tree"
 type = "forbidden"
-source_modules = ["workflows.shared", "workflows.dev", "workflows.pr_babysit", "workflows.plan_implement", "workflows.workflow_reporting"]
+source_modules = ["workflows.shared", "workflows.implement_spec", "workflows.pr_babysit", "workflows.plan_implement", "workflows.workflow_reporting"]
 forbidden_modules = ["workflows.tests"]
 
 [[tool.importlinter.contracts]]
@@ -174,14 +171,13 @@ source_modules = [
     "workflows.pr_babysit.publish",
     "workflows.pr_babysit.settings",
     "workflows.pr_babysit.watch",
-    "workflows.dev.agents",
-    "workflows.dev.backlog",
-    "workflows.dev.chore",
-    "workflows.dev.deliver",
-    "workflows.dev.model",
-    "workflows.dev.plan",
-    "workflows.dev.review",
-    "workflows.dev.verify",
+    "workflows.implement_spec.agents",
+    "workflows.implement_spec.backlog",
+    "workflows.implement_spec.chore",
+    "workflows.implement_spec.deliver",
+    "workflows.implement_spec.model",
+    "workflows.implement_spec.plan",
+    "workflows.implement_spec.review",
 ]
 forbidden_modules = ["dishka"]
 
@@ -204,7 +200,7 @@ forbidden_modules = ["workflows.pr_babysit.composition"]
 [[tool.importlinter.contracts]]
 name = "No workflow imports another workflow"
 type = "independence"
-modules = ["workflows.dev", "workflows.plan_implement", "workflows.workflow_reporting", "workflows.pr_babysit"]
+modules = ["workflows.implement_spec", "workflows.plan_implement", "workflows.workflow_reporting", "workflows.pr_babysit"]
 
 [[tool.importlinter.contracts]]
 name = "PR maintenance decisions do not depend on the discovery scheduler"

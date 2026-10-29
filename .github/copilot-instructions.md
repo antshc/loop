@@ -5,7 +5,7 @@
 Single repo: docs and codebase live together at the reporoot. There is no `workspace/` split and no `.harness.env`.
 
 - **Docs & decisions:** `GLOSSARY.md` (domain glossary) and `ARCHITECTURE.md` (ADR index, Concept index, and Codebase Structure), with ADRs under `docs/adr/` and Crosscutting Concepts under `docs/concepts/`.
-- **Code:** `src/loop/` (the `loop` library), `workflows/dev/` and `workflows/pr_babysit/` (vertical-slice Workflows, each with a Dishka `composition/` root), `workflows/shared/` (infrastructure shared by those Workflows), other examples under `workflows/`, and library/sibling tests under `tests/`. Loop is a library with no command. The layout is documented under **Codebase Structure** in `ARCHITECTURE.md`.
+- **Code:** `src/loop/` (the `loop` library), `workflows/implement_spec/` and `workflows/pr_babysit/` (vertical-slice Workflows, each with a Dishka `composition/` root), `workflows/shared/` (infrastructure shared by those Workflows), other examples under `workflows/`, and library/sibling tests under `tests/`. Loop is a library with no command. The layout is documented under **Codebase Structure** in `ARCHITECTURE.md`.
 - **Archive:** `archive/` holds retired prototypes as a parts source only. It is excluded from editor search and file watching (see `.vscode/settings.json`) — do not navigate into it, edit it, or import from it.
 
 Within this file, resolve conflicts in this order: **safety and repository targeting → authoritative sources → navigation → build and validation → documentation conventions.** This ordering scopes only the rules in this file; it does not override `AGENTS.md`, path-scoped instructions, or user instructions.

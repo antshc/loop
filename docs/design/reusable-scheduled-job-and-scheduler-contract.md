@@ -27,7 +27,7 @@ Constraints honoured by every option:
 - Loop ships no Workflows and no command; an ABC exists only where Loop's own code calls a replaceable part ([Ship Loop as a workflow library](../adr/ship-loop-as-a-workflow-library-with-no-built-in-workflows.md)).
 - Only `composition/` and `workflows/shared/providers.py` import `dishka`; APP scope is the process, REQUEST scope is one unit of work ([Structure Workflows as vertical slices](../adr/structure-workflows-as-vertical-slices-over-a-shared-package-wired-by-dishka.md)).
 - Import-linter contracts in [`pyproject.toml`](../../pyproject.toml): `workflows.shared` imports no slice; Workflows import only the public `loop` package; the `loop` library is layered (`factory | workflow` on top).
-- "The Workflow" in the glossary ([CONTEXT.md](../../CONTEXT.md)) is the whole user-written procedure. In code, the `loop` abstraction for one run of it is `Workflow.run(...)` → `WorkflowRun` ([`workflow.py`](../../src/loop/workflow/workflow.py), over `Phases` in [`phases.py`](../../src/loop/workflow/phases.py)). Dev already opens one `WorkflowRun` and hands it to a REQUEST scope ([`dev/composition/entry.py`](../../workflows/dev/composition/entry.py) `run_workflow`). Babysit opens it inside `PrMonitor.run`.
+- "The Workflow" in the glossary ([CONTEXT.md](../../CONTEXT.md)) is the whole user-written procedure. In code, the `loop` abstraction for one run of it is `Workflow.run(...)` → `WorkflowRun` ([`workflow.py`](../../src/loop/workflow/workflow.py), over `Phases` in [`phases.py`](../../src/loop/workflow/phases.py)). Dev already opens one `WorkflowRun` and hands it to a REQUEST scope ([`dev/composition/entry.py`](../../workflows/implement_spec/composition/entry.py) `run_workflow`). Babysit opens it inside `PrMonitor.run`.
 
 ### Dependency categories
 
@@ -227,7 +227,7 @@ def scheduler(self, settings: Settings, roster: Roster[PrTarget], job: Job[PrTar
 
 The child keeps `main --pr <url>` → `maintain_pr` → `PrMonitor.run`. `PrRoster` owns `Registry`, the author scan, `include_existing`, `retry`, the closed → `completed` rule, the fingerprint check, the per-PR lock claim, and `exited` → `blocked`/`worker-crash`.
 
-Dev over Specs (hypothetical): `SpecRoster.due` lists open Specs from the tracker that are not awaiting human input; `Job("workflows.dev", lambda spec: ["--spec", str(spec)])` reuses the existing `--spec` flag.
+Dev over Specs (hypothetical): `SpecRoster.due` lists open Specs from the tracker that are not awaiting human input; `Job("workflows.implement_spec", lambda spec: ["--spec", str(spec)])` reuses the existing `--spec` flag.
 
 ### Trade-offs
 

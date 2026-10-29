@@ -4,7 +4,7 @@ This is the Options phase of the design for [antshc/loop#148](https://github.com
 
 **Settled:** the models and the PR tracker live in the `workflows/pr_babysit` slice, not in `workflows/shared`. The rule at line 37 of [Loop Library Workflow Architecture](../concepts/str-loop-library-workflow-architecture.md) says workflow-specific models stay inside the slice.
 
-**Pattern to mirror:** dev keeps frozen records in `workflows/dev/model/records.py` (`Comment` at :86-90). Module-level mappers in `workflows/dev/tracker/tickets.py` map `gh` JSON into them: `_comments` (:37-42), `_spec` (:53-64), and `_ticket` (:67-76). The mappers sit inside `TicketsTracker` (:79-162), which `TicketsTracker.of(GitHubRepo)` (:87-90) builds over a `GhRunner`.
+**Pattern to mirror:** dev keeps frozen records in `workflows/implement_spec/model/records.py` (`Comment` at :86-90). Module-level mappers in `workflows/implement_spec/tracker/tickets.py` map `gh` JSON into them: `_comments` (:37-42), `_spec` (:53-64), and `_ticket` (:67-76). The mappers sit inside `TicketsTracker` (:79-162), which `TicketsTracker.of(GitHubRepo)` (:87-90) builds over a `GhRunner`.
 
 ## 1. Current state
 

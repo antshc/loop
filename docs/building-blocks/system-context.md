@@ -51,7 +51,7 @@ C4Container
 
     Person(author, "Workflow author", "Writes and runs Workflow scripts through their own shell alias.")
 
-    Container_Ext(workflow, "Workflow script", "Python script", "User-owned runnable script on the public loop API; the repository's dev Workflow is only an example.")
+    Container_Ext(workflow, "Workflow script", "Python script", "User-owned runnable script on the public loop API; the repository's `implement_spec` Workflow is only an example.")
 
     System_Boundary(system, "Loop") {
         Container(loop, "loop library", "Python package", "Agent runner, agent clients, git services, stores, and shared policy for composing Workflows.")

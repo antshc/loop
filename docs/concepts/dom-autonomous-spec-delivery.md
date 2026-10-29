@@ -13,39 +13,38 @@ The process diagrams below describe the Ticket delivery portion; the surrounding
 
 ## Default phases
 
-`workflows/dev/model/definition.py` declares the eShop-style pipeline using the public
+`workflows/implement_spec/model/definition.py` declares the eShop-style pipeline using the public
 `WorkflowBuilder`: preflight; conditional planning and Ticket creation; delivery
-and publication after each accepted Ticket; app verification; cleanup; worktree
+and publication after each accepted Ticket; cleanup; worktree
 closure; read-only PR review; readiness checks. All delegates are supplied in the
 default `RepositoryWorkflow`; individual delegates can be omitted in custom configurations.
 
 A Spec with no sub-issues can be planned; closed or held sub-issues prevent replanning. The planner records Ticket blockers as native GitHub blocked-by edges, and a Ticket is actionable only when it is open, carries neither `hitl` nor `spec`, and is READY by those edges. A BLOCKED or UNKNOWN Ticket is held without labelling its Spec `hitl`, and a blocker closed as not planned or duplicate stays unsatisfied until a human decides.
-The developer retains its one-commit-per-Ticket contract. Verification and cleanup
-agents leave edits for the harness to validate, commit, and push. Verification needs
-project skills and durable evidence; absent skills are explicitly skipped. Cleanup
+The developer retains its one-commit-per-Ticket contract. The cleanup agent
+leaves edits for the harness to validate, commit, and push. Cleanup
 is best effort and restores rejected changes.
 
 Review starts after the implementation worktree closes and must cover the final
 head with completed bugs, quality, smells, and initiative axes. Blocking findings,
-unproven app verification, held Tickets, or a moved head keep the PR as a draft.
+held Tickets, or a moved head keep the PR as a draft.
 The harness marks ready only after every readiness check passes; it never merges
 or closes the Spec. Business failures explicitly fail phase and Spec outcomes.
 
 High-level console transitions are always available. `--visualize` adds the optional
 terminal table; `--otlp-endpoint` attaches phase and agent observation to one observer.
 Details stay in telemetry/history or the DEBUG file. See
-[Dev phases](../../USAGE.md#dev-phases) for configuration and examples.
+[Implement Spec phases](../../USAGE.md#implement-spec-phases) for configuration and examples.
 
 ## Definition
-- **Actors:** Operator; Loop (the example `dev` Workflow); Copilot agent (one fresh headless run per Ticket); GitHub.
+- **Actors:** Operator; Loop (the example `implement_spec` Workflow); Copilot agent (one fresh headless run per Ticket); GitHub.
 - **Business processes:** Run AFK Dev Service; Develop Spec; Deliver Ticket.
-- **Starts:** Operator runs the `dev` Workflow script (through their own alias) for a repository board.
+- **Starts:** Operator runs the `implement_spec` Workflow script (through their own alias) for a repository board.
 - **Ends:** Every open Spec not labelled `hitl` was attempted; each Develop Spec run ends with its validated commits pushed and its draft pull request ensured.
 
 ## Business Processes
 
 ### Run AFK Dev Service
-Actor: Operator; Trigger: the `dev` Workflow script is run for a repository board; Action: Loop lists the open Specs, skips those labelled `hitl`, and runs Develop Spec for each remaining one; Outcome: every remaining Spec was attempted. Notes: `--dry` fakes external dependencies; there is no Spec-level attempt cap; failures are counted per Ticket.
+Actor: Operator; Trigger: the `implement_spec` Workflow script is run for a repository board; Action: Loop lists the open Specs, skips those labelled `hitl`, and runs Develop Spec for each remaining one; Outcome: every remaining Spec was attempted. Notes: `--dry` fakes external dependencies; there is no Spec-level attempt cap; failures are counted per Ticket.
 
 ### Develop Spec
 Actor: Loop; Trigger: a Spec not labelled `hitl`; Action: resolve the Initiative id from the Spec title prefix and the target repository and base branch, fetch the target repository, and when no Ticket is actionable push and ensure the draft pull request and stop; when the base branch is missing on `origin` label the Spec `hitl` and stop; otherwise push earlier commits and ensure the draft pull request when ahead, create the worktree, and for each actionable Ticket record `previous_head`, render the prompt, run Deliver Ticket, then validate the response and Git; success closes the Ticket with the commit SHA, summary, and verification and resets its failure count; any failure resets the worktree to `previous_head` and counts once, retries the same Ticket until the failure cap, and at the cap labels the Ticket and the Spec `hitl` with the reason commented on both and stops; finally push and ensure the draft pull request; Outcome: all Tickets delivered — the pull request link is commented on the Spec, which stays open for the human merge — or the Spec stopped on `hitl` with its validated work pushed.
@@ -57,7 +56,7 @@ swimlane-beta TB
   accTitle: Develop Spec responsibility
   accDescr: Shows the whole flow of one Spec run, with Loop validating each Ticket the Copilot agent delivers and publishing results to GitHub.
 
-  subgraph loop [Loop - dev Workflow]
+  subgraph loop [Loop - implement_spec Workflow]
     start([Spec not labelled hitl])
     meta[1 - Resolve Initiative id, target repo, base branch]
     fetch[2 - Fetch target repo]
@@ -124,7 +123,7 @@ swimlane-beta TB
 ```
 
 ### Deliver Ticket
-Actor: Copilot agent (one fresh headless run per attempt, following the `dev` prompt); Trigger: Develop Spec renders the prompt with the Ticket, the Initiative's `ccode(<initiative-id>|` commits on the branch, the task id `<initiative-id>|<ticket-number>`, and the contract; Action: the agent works only inside the worktree, explores, implements the functional slice, verifies it with the fastest relevant checks, makes exactly one `ccode(<initiative-id>|<ticket-number>): <message>` commit, and ends with the response envelope; Outcome: a `completed` envelope carrying the commit SHA, summary, and verification, or a `failed` envelope carrying the reason with nothing committed. Notes: the agent never pushes, opens a pull request, or comments, labels, or closes a Ticket or Spec; Loop validates the envelope and Git and owns the Ticket state in Develop Spec. A Develop Spec failure is an agent-reported `failed`, a missing or invalid response, an `identifier` other than this Ticket's, HEAD unchanged, a non-matching subject, a dirty tree, a reported SHA other than HEAD, or a crashed or timed-out run.
+Actor: Copilot agent (one fresh headless run per attempt, following the `implement_spec` prompt); Trigger: Develop Spec renders the prompt with the Ticket, the Initiative's `ccode(<initiative-id>|` commits on the branch, the task id `<initiative-id>|<ticket-number>`, and the contract; Action: the agent works only inside the worktree, explores, implements the functional slice, verifies it with the fastest relevant checks, makes exactly one `ccode(<initiative-id>|<ticket-number>): <message>` commit, and ends with the response envelope; Outcome: a `completed` envelope carrying the commit SHA, summary, and verification, or a `failed` envelope carrying the reason with nothing committed. Notes: the agent never pushes, opens a pull request, or comments, labels, or closes a Ticket or Spec; Loop validates the envelope and Git and owns the Ticket state in Develop Spec. A Develop Spec failure is an agent-reported `failed`, a missing or invalid response, an `identifier` other than this Ticket's, HEAD unchanged, a non-matching subject, a dirty tree, a reported SHA other than HEAD, or a crashed or timed-out run.
 
 ```mermaid
 %%{init: {'themeVariables': {'lineColor': '#8b949e'}}}%%
@@ -178,13 +177,13 @@ flowchart LR
 
 A solid edge is automatic; a dotted edge is a separately initiated step, labelled with its initiator.
 
-Decisions: [Run one fresh agent per Ticket](../adr/run-one-fresh-agent-per-ticket-from-python-and-let-the-agent-commit-it.md) (per-Ticket run, task commit, Git validation, Python owns push, pull request, and Ticket state), [Build agents with an agent builder](../adr/build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md) (the library returns raw output; the `dev` Workflow extracts the response envelope).
+Decisions: [Run one fresh agent per Ticket](../adr/run-one-fresh-agent-per-ticket-from-python-and-let-the-agent-commit-it.md) (per-Ticket run, task commit, Git validation, Python owns push, pull request, and Ticket state), [Build agents with an agent builder](../adr/build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md) (the library returns raw output; the `implement_spec` Workflow extracts the response envelope).
 
 ## Implementation Map
 | Concern | Stable anchor | Semantic locator |
 |---|---|---|
-| External contract | Operator-run service for one repository board | `workflows/dev/composition/entry.py`: runnable package (`python -m workflows.dev`) `main(argv, *, providers=())`, options `--log-dir`, `--log-level`; run from the harness root |
-| Spec and Ticket selection | Open Specs; actionable Tickets | `workflows/shared/github/issues/`: `Issues.specs` (complete reads), `SpecGraphSnapshot`, `IssueClassifier`; `workflows/dev/model/repositories.py`: `Tracker` |
-| Execution | Fresh non-interactive Copilot run per Ticket by default | `loop`: `AgentBuilder`, `Worktree.agent`, `AgentClient`; `workflows/dev/agents/`: named prompts and default delegates; `workflows/dev/model/reply.py`: `DevResponse` |
-| Failure bound | Per-Ticket failure count across runs | `workflows/dev/deliver/journal.py`: `FileExecutionStore` |
-| Tests | Workflow scenarios against fakes | `workflows/tests/dev/test_run.py`; local harness in `workflows/tests/dev/doubles.py` |
+| External contract | Operator-run service for one repository board | `workflows/implement_spec/composition/entry.py`: runnable package (`python -m workflows.implement_spec`) `main(argv, *, providers=())`, options `--log-dir`, `--log-level`; run from the harness root |
+| Spec and Ticket selection | Open Specs; actionable Tickets | `workflows/shared/github/issues/`: `Issues.specs` (complete reads), `SpecGraphSnapshot`, `IssueClassifier`; `workflows/implement_spec/model/repositories.py`: `Tracker` |
+| Execution | Fresh non-interactive Copilot run per Ticket by default | `loop`: `AgentBuilder`, `Worktree.agent`, `AgentClient`; `workflows/implement_spec/agents/`: named prompts and default delegates; `workflows/implement_spec/model/reply.py`: `DevResponse` |
+| Failure bound | Per-Ticket failure count across runs | `workflows/implement_spec/deliver/journal.py`: `FileExecutionStore` |
+| Tests | Workflow scenarios against fakes | `workflows/tests/implement_spec/test_run.py`; local harness in `workflows/tests/implement_spec/doubles.py` |

@@ -138,16 +138,16 @@ The examples live in this repository and are not included in the installed
 | [Library usage](docs/usage.md#library-examples) | One-shot runs, profiles, shared worktrees, sessions, and Loop hooks |
 | [PR scheduler and babysitter](workflows/pr_babysit/README.md) | Discover user-authored PRs and address reviews/CI with JSON recovery and scoped telemetry |
 | [Plan and implement](workflows/plan_implement.py) | Plan and implement with different models on one worktree |
-| [Dev Workflow guide](docs/usage.md#dev-workflow) | Deliver GitHub Tickets, configure multiple repositories, and customize prompts |
+| [Implement Spec Workflow guide](docs/usage.md#implement-spec-workflow) | Deliver GitHub Tickets, configure multiple repositories, and customize prompts |
 | [Multi-repository Workflow](docs/usage.md#different-agent-workflows-per-repository) | Route Specs to several repositories, each with its own agent steps |
 | [Scenario-style dev Workflow](workflows/dev_bdd/README.md) | Dummy BDD-style Workflow demonstrating nested scenarios, live flow visualization and Allure results |
 
-The dev Workflow can create commits, push branches, open draft pull requests,
+The `implement_spec` Workflow can create commits, push branches, open draft pull requests,
 and update Tickets. Read its configuration guide before running it.
 
 ### Multi-repository example
 
-The dev Workflow routes Specs by their `repo:target:<owner/repo>` label to
+The `implement_spec` Workflow routes Specs by their `repo:target:<owner/repo>` label to
 repositories you configure. Each `RepositoryWorkflow` pairs a checkout with a
 function that owns its agent steps; here `api` only implements while `web`
 implements and then reviews. Repositories must already be cloned under
@@ -157,7 +157,7 @@ implements and then reviews. Repositories must already be cloned under
 from functools import partial
 from pathlib import Path
 
-from workflows.dev import (
+from workflows.implement_spec import (
     Repository, RepositoryId, RepositoryWorkflow, implement_ticket, load_prompt, main,
 )
 
@@ -205,7 +205,7 @@ To restructure your own project this way, use the reusable
 
 ## Documentation
 
-- [Usage guide](docs/usage.md): advanced examples, logging, and dev Workflow configuration.
+- [Usage guide](docs/usage.md): advanced examples, logging, and `implement_spec` Workflow configuration.
 - [Domain glossary](GLOSSARY.md): project terminology.
 - [Architecture](ARCHITECTURE.md): codebase structure, design decisions, and concepts.
 - [System context](docs/building-blocks/system-context.md): context and container diagrams.

@@ -12,9 +12,5 @@
     "no-inline-html":                  { "allowed_elements": [ "summary", "details", "kbd", "br" ]},
     "no-bare-urls":                    false,
     "single-trailing-newline":         false,
-    "emphasis-style":                  false,
-
-    // rule settings and options are documented in https://github.com/DavidAnson/markdownlint
-    // feel free to disable more low value rules in here; get rule name from the error message.
-    // the purpose of the linter is to catch significant issues like broken links.
+    "emphasis-style":                  false
 }

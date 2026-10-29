@@ -11,7 +11,7 @@ Reusable building blocks in the installable `loop` package. Loop does not ship a
 | Term | Definition |
 | --- | --- |
 | **Loop** | Python library for composing headless coding-agent execution, Git worktrees, sessions, hooks, and observation. **Avoid:** factory, CLI, workflow engine. |
-| **Workflow** | User-owned Python procedure that composes Loop primitives and owns its control flow, agent sequencing, interpretation of results, and external effects. Examples: `dev`, `plan_implement`, `pr_babysit`. **Avoid:** built-in workflow, plugin, fixed pipeline. |
+| **Workflow** | User-owned Python procedure that composes Loop primitives and owns its control flow, agent sequencing, interpretation of results, and external effects. Examples: `implement_spec`, `plan_implement`, `pr_babysit`. **Avoid:** built-in workflow, plugin, fixed pipeline. |
 | **WorkflowBuilder** | Optional builder declaring named phases and enabling console, terminal, or telemetry reporting. It does not schedule phases or enforce factory transitions. |
 | **Workflow run** | One invocation of a Workflow definition, containing phase occurrences and an outcome decided by the caller. Distinct from an Agent run. |
 | **Phase** | Observable scope within a Workflow run, with name, owner, kind, status, duration, and optional gate records. Its Python body is controlled by the Workflow. |
