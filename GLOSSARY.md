@@ -102,7 +102,7 @@ Product and SDLC language for user-owned workflows built **on** Loop. Warp Facto
 
 | Term | Definition |
 | --- | --- |
-| **Stage** | Factory business activity such as triage, specify, implement, verify, review, or release. A stage can contain several Loop phases or agent runs. **Avoid:** equating stage with a Phase reporting scope. |
+| **Stage** | Reusable building block of a Workflow: one factory activity (such as plan, implement, review, or address feedback) that may run agents and gates as a unit. Workflows compose Stages; any Phases a Stage reports are internal to it, not part of its contract. **Avoid:** equating stage with a Phase reporting scope. |
 | **Handoff** | Transfer of task context and artifacts to another agent, deterministic step, or human; the receiver must have sufficient durable context. |
 | **Envelope** | Structured, schema-validated agent response containing claims, decisions, artifact references, and next-step recommendations; the Workflow checks it before acting. **Proposed** for unified factory messages; Loop's `AgentResult` remains raw CLI output. |
 | **Execution ledger** | Durable record of work-item state, decisions, attempts, effects, evidence, and recovery information. **Proposed** as factory state, not a Loop session store. |
