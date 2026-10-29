@@ -13,6 +13,7 @@ from .facts import (
 from .nodes import DispatchNode, EachNode, ErrorRoute, Node, StageNode, WithinNode
 from .routes import Handoff, Next, NextItem, Reroute, Rework, Route, Stop
 from .stage import AgentExecution, Action, HarnessCommits, NoRepository, Retain, Selector, Stage, WorkspaceOpener
+from .worktree import WorktreeGit
 
 
 @dataclass(frozen=True)
@@ -109,6 +110,7 @@ class _Walker:
         owner = f"Stage '{stage.id}'"
         self.register_placement(stage, owner)
         self.check_declaration(stage, owner, with_routes=True)
+        self.require_git_for_contract(stage)
         if self.strict:
             self.check_workspace(stage, owner, env)
             self.resolve_inputs(owner, stage.id, stage.input, stage.reads_, facts, env)
@@ -133,6 +135,11 @@ class _Walker:
             raise DefinitionError(f"{owner}: the limit must allow at least 1 attempt, not {stage.limit_.attempts}")
         if with_routes:
             self.check_rework(stage, owner)
+
+    def require_git_for_contract(self, stage: Stage[Any, Any, Any]) -> None:
+        """A repository contract is enforced through the Git service, so the definition needs it."""
+        if not isinstance(stage.work, NoRepository):
+            self.services.add(WorktreeGit)
 
     def check_rework(self, stage: Stage[Any, Any, Any], owner: str) -> None:
         """Rework is for failures of this Stage only, bounded, and never combined with a retained worktree."""
@@ -208,6 +215,7 @@ class _Walker:
             raise DefinitionError(f"{owner}: hand-off Stage '{stage.id}' runs an agent; a hand-off runs an effect or action Stage")
         self.register_handoff(stage, owner)
         self.check_declaration(stage, label, with_routes=False)
+        self.require_git_for_contract(stage)
         if self.strict:
             self.check_workspace(stage, label, env)
             self.resolve_inputs(label, stage.id, stage.input, stage.reads_, facts, env)

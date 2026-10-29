@@ -235,6 +235,13 @@ forbidden_modules = ["software_factory.agents._kit"]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
+name = "The runtime engine is private: only the runtime package reaches it"
+type = "forbidden"
+source_modules = ["software_factory.agents", "software_factory.legacy_slices", "software_factory.shared", "workflows"]
+forbidden_modules = ["software_factory.runtime._engine"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
 name = "The Workflow definition runtime is generic: no GitHub, role agents, shared infrastructure, legacy slices or processes"
 type = "forbidden"
 source_modules = ["software_factory.runtime"]

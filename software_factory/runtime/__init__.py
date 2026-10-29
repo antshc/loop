@@ -1,20 +1,26 @@
-"""The Workflow definition layer: immutable, fluent, and validated when it is built; running a definition is a later layer."""
+"""The factory runtime: immutable, fluent Workflow definitions validated as they are built, and the run that executes one."""
 
 from __future__ import annotations
 
 from .definition import Flow, Workflow
 from .event import All, DefinitionError, Event, History
+from .ledger import Ledger, WorkItemLog
 from .routes import (
     Handoff, Next, NextItem, Reroute, Rework, Route, Routes, Stop, handoff, next_, next_item, reroute, rework, stop,
 )
+from .run import RunResult, Services, StopSignal, WorkItem, run
+from .spans import LogSpans, NullSpans, RecordedEvent, RecordedSpan, RecordingSpans, SpanHandle, Spans
 from .stage import (
     Action, AgentCommits, AgentExecution, Effect, Evidence, Fail, Gate, HarnessCommits, Hold, Item, Limit, NoRepository,
     Nothing, Pass, ReadOnly, Restore, Retain, Selector, Stage, Verdict, Verify, WorkContract, WorkspaceOpener,
 )
+from .worktree import GitCommand, WorktreeCommit, WorktreeGit
 
 __all__ = [
     "Action", "AgentCommits", "AgentExecution", "All", "DefinitionError", "Effect", "Event", "Evidence", "Fail", "Flow",
-    "Gate", "Handoff", "HarnessCommits", "History", "Hold", "Item", "Limit", "Next", "NextItem", "NoRepository", "Nothing",
-    "Pass", "ReadOnly", "Reroute", "Restore", "Retain", "Rework", "Route", "Routes", "Selector", "Stage", "Stop", "Verdict",
-    "Verify", "WorkContract", "Workflow", "WorkspaceOpener", "handoff", "next_", "next_item", "reroute", "rework", "stop",
+    "Gate", "GitCommand", "Handoff", "HarnessCommits", "History", "Hold", "Item", "Ledger", "Limit", "LogSpans", "Next",
+    "NextItem", "NoRepository", "Nothing", "NullSpans", "Pass", "ReadOnly", "RecordedEvent", "RecordedSpan",
+    "RecordingSpans", "Reroute", "Restore", "Retain", "Rework", "Route", "Routes", "RunResult", "Selector", "Services",
+    "SpanHandle", "Spans", "Stage", "Stop", "StopSignal", "Verdict", "Verify", "WorkContract", "WorkItem", "WorkItemLog", "Workflow", "WorkspaceOpener",
+    "WorktreeCommit", "WorktreeGit", "handoff", "next_", "next_item", "reroute", "rework", "run", "stop",
 ]
