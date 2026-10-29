@@ -438,3 +438,4 @@ build/
 
 # Durable local workflow state and recovery worktrees
 .loop/
+tmp
