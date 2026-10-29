@@ -9,7 +9,7 @@ from collections.abc import Callable, Iterator
 
 import software_factory.stages as stages
 from software_factory.runtime import Selector, Stage, WorkspaceOpener
-from software_factory.stages import publish, specs, tickets, workspaces
+from software_factory.stages import chore, finalize, plan, publish, review, specs, tickets, workspaces
 
 FACTORIES = (Stage, Selector, WorkspaceOpener)
 
@@ -35,7 +35,7 @@ def test_no_stage_factory_takes_a_boolean_parameter() -> None:
         if parameter != "return" and hint is bool
     ]
 
-    assert len(found) >= 12
+    assert len(found) >= 20
     assert offenders == []
 
 
@@ -45,7 +45,8 @@ def test_the_stage_ids_are_unique_across_the_library_with_sample_parameters() ->
         specs.route_spec([]), specs.prepare_checkout(), specs.require_work(), specs.announce_delivered(),
         specs.hand_to_human(label="hitl"), specs.block_spec(label="hitl"), specs.comment_failure(),
         tickets.implement_ticket(), tickets.close_ticket(), tickets.escalate_ticket(label="hitl"), tickets.require_delivered(),
-        publish.publish_draft_pr(),
+        publish.publish_draft_pr(), plan.plan_spec(), plan.create_tickets(), chore.refine(), review.review_pull_request(),
+        finalize.finalize(label="hitl"),
     ]
     identities = [stage.id for stage in built] + [tickets.next_ready_ticket().id, workspaces.checkout().id, workspaces.feature_worktree().id]
 

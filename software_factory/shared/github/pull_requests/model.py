@@ -237,3 +237,4 @@ class PublishedPullRequest:
     url: str
     branch: str
     body: str = ""
+    draft: bool = True

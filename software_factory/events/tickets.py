@@ -1,4 +1,4 @@
-"""The Events of selecting, implementing, closing and escalating Tickets and of the delivery they add up to."""
+"""The Events of planning, creating, selecting, implementing, closing and escalating Tickets and of the delivery they add up to."""
 
 from __future__ import annotations
 
@@ -48,3 +48,26 @@ class Delivery(Event):
 
     head: str
     commits: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PlannedTicket:
+    """One Ticket of a plan; `blocked_by` holds zero-based indexes of earlier planned Tickets."""
+
+    title: str
+    body: str
+    blocked_by: tuple[int, ...] = ()
+
+
+@dataclass(frozen=True)
+class PlanProposed(Event):
+    """The planner's valid plan: the Tickets in dependency order."""
+
+    tickets: tuple[PlannedTicket, ...]
+
+
+@dataclass(frozen=True)
+class TicketsCreated(Event):
+    """The plan is persisted on the Spec and every planned Ticket exists, linked, with its blocked-by edges."""
+
+    tickets: tuple[int, ...]

@@ -30,6 +30,7 @@ LABELS = ("spec", "repo:target:owner/repo", "repo:base:main")
 TITLE = "Checkout: Add login page"
 BRANCH = "add-login-page"
 HITL = "hitl"
+PULL_REQUEST = "https://github.com/owner/repo/pull/99"
 
 
 class RecordingRunner:
@@ -117,12 +118,37 @@ class StageRig:
         workspace = AgentWorkspace(self.repo.path, lambda *_: script, RunContext(AgentContext()), None)
         return WorkspaceOpener("worktree", NoInput, lambda _: nullcontext(workspace))
 
-    def in_worktree(self, script: DeveloperScript, *stages: Stage[Any, Any, Any], flow: Flow | None = None) -> Workflow[SpecWork]:
-        """The routing Stage, then a workspace scope of `stages` or `flow`."""
+    def in_worktree(
+        self, script: DeveloperScript, *stages: Stage[Any, Any, Any], flow: Flow | None = None, seeds: Sequence[Event] = (),
+    ) -> Workflow[SpecWork]:
+        """The routing Stage, the Stages producing `seeds`, then a workspace scope of `stages` or `flow`."""
         body = flow or Flow("work")
         for stage in stages:
             body = body.stage(stage)
-        return self.workflow().within(self.worktree(script), body)
+        return self.workflow(*(seeded(event) for event in seeds)).within(self.worktree(script), body)
+
+    def deliver(self) -> str:
+        """Checks the feature branch out with one delivered Ticket commit, pushes it and opens its draft pull request; returns the head."""
+        command(("checkout", "-q", "-b", BRANCH), self.repo.path)
+        self.repo.write("ticket-10-0.txt", "0\n")
+        head = self.repo.commit("ccode(Checkout|10): implement 0")
+        command(("push", "-q", "-u", "origin", BRANCH), self.repo.path)
+        self.github.pull_requests("owner/repo").create_draft_pull_request(BRANCH, "main", TITLE, "Checkout")
+        return head
+
+    def history[T: Event](self, event: type[T]) -> tuple[T, ...]:
+        """Every `event` the Spec's runs recorded, whether its Stage passed, failed or held."""
+        return self.ledger.item("t", self.work.id).history(event)
+
+    def skipped(self) -> list[str]:
+        """The ids of the Stages whose condition was false, in the order they were skipped."""
+        found: list[str] = []
+        pending = list(self.spans.roots)
+        while pending:
+            span = pending.pop(0)
+            found += [str(event.attributes["stage"]) for event in span.events if event.name == "factory.skipped"]
+            pending += span.children
+        return found
 
     def labels(self, number: int) -> list[str]:
         """The labels the tracker holds on an issue."""
@@ -162,6 +188,17 @@ class DeveloperScript:
 def envelope(status: str, identifier: str, **result: str) -> str:
     """Agent output ending in the status envelope the developer role decodes."""
     return f"working...\n{json.dumps({'status': status, 'identifier': identifier, 'result': result})}\n"
+
+
+def answers(status: str, **result: Any) -> Callable[[Repo], str]:
+    """An agent action whose output ends in the `{status, result}` envelope of the planner, chore and reviewer roles."""
+    return lambda repo: f"working...\n{json.dumps({'status': status, 'result': result})}\n"
+
+
+def seeded(event: Event) -> Stage[Any, Any, Any]:
+    """A Stage that produces `event` as an upstream Stage would, so a Stage under test can read it."""
+    name = re.sub(r"(?<!^)(?=[A-Z])", "-", type(event).__name__).lower()
+    return Stage(f"seed-{name}", NoInput, produces=type(event)).action(lambda _: event).gate(lambda *_: Pass(event))
 
 
 def delivers(ticket: int, *, subject: str | None = None, report: str | None = None, commits: int = 1) -> Callable[[Repo], str]:

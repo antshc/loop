@@ -49,13 +49,13 @@ class PullRequests:
         """The open PR whose head is `head`, if any."""
         output = self._repo.run(
             ("pr", "list", "--repo", self.slug, "--state", "open", "--head", head,
-             "--json", "number,title,url,headRefName,body")
+             "--json", "number,title,url,headRefName,body,isDraft")
         )
         prs = json.loads(output)
         if not prs:
             return None
         pr = prs[0]
-        return PublishedPullRequest(pr["number"], pr["title"], pr["url"], pr["headRefName"], pr.get("body") or "")
+        return PublishedPullRequest(pr["number"], pr["title"], pr["url"], pr["headRefName"], pr.get("body") or "", pr.get("isDraft", True))
 
     def mark_ready(self, pull_request: str) -> None:
         """Takes a PR out of draft; `pull_request` is its number or URL."""

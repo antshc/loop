@@ -117,6 +117,9 @@ class FakeGhCli:
         if args[:2] == ("pr", "create"):
             self._prs.append({**_pr(99, args[args.index("--head") + 1]), "body": args[args.index("--body") + 1]})
             return "https://github.com/owner/repo/pull/99\n"
+        if args[:2] == ("pr", "ready"):
+            self._mark_ready(args[2])
+            return ""
         if args[:2] == ("pr", "edit"):
             for pr in self._prs:
                 if str(pr["number"]) == args[2]:
@@ -241,6 +244,11 @@ class FakeGhCli:
             removed = args[args.index("--remove-label") + 1]
             node["labels"] = [label for label in node["labels"] if label["name"] != removed]
 
+    def _mark_ready(self, reference: str) -> None:
+        for pr in self._prs:
+            if reference in (str(pr["number"]), pr["url"]):
+                pr["isDraft"] = False
+
     def _pr_list(self, args: tuple[str, ...]) -> str:
         if "--head" in args:
             head = args[args.index("--head") + 1]
@@ -249,7 +257,8 @@ class FakeGhCli:
 
 
 _WRITES = (
-    ("issue", "edit"), ("issue", "close"), ("api", "--method"), ("pr", "create"), ("pr", "edit"), ("pr", "close"), ("pr", "reopen"),
+    ("issue", "edit"), ("issue", "close"), ("api", "--method"), ("pr", "create"), ("pr", "edit"), ("pr", "ready"), ("pr", "close"),
+    ("pr", "reopen"),
 )
 
 
@@ -282,6 +291,7 @@ def _pr(number: int, branch: str, title: str = "Add login page (PR)") -> dict:
         "title": title,
         "url": f"https://github.com/owner/repo/pull/{number}",
         "headRefName": branch,
+        "isDraft": True,
     }
 
 

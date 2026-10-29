@@ -11,12 +11,16 @@ from pathlib import Path
 import pytest
 
 import software_factory.events as events
-from software_factory.events.pull_requests import DraftPullRequestPublished
+from software_factory.events.chore import ChoreDiscarded, ChoreRefined
+from software_factory.events.pull_requests import DraftPullRequestPublished, Finalized
+from software_factory.events.review import PullRequestReviewed, ReviewAxis, ReviewFailed, ReviewFinding
 from software_factory.events.specs import (
     CheckoutPrepared, DeliveryAnnounced, RepositoryTarget, SpecBlocked, SpecFailureCommented, SpecHandedToHuman, SpecHeld,
     SpecRouted, WorkFound,
 )
-from software_factory.events.tickets import Delivery, TicketClosed, TicketEscalated, TicketImplemented, TicketRejected
+from software_factory.events.tickets import (
+    Delivery, PlannedTicket, PlanProposed, TicketClosed, TicketEscalated, TicketImplemented, TicketRejected, TicketsCreated,
+)
 from software_factory.runtime import Event
 from software_factory.runtime._engine.codec import decode, encode
 
@@ -39,6 +43,13 @@ SAMPLES: list[Event] = [
     Delivery("abc1234", ("abc1234 ccode(Checkout|10): implement",)),
     DraftPullRequestPublished("https://example.test/pull/1", "add-login-page", pushed=True),
     DraftPullRequestPublished(None, "add-login-page", pushed=False),
+    PlanProposed((PlannedTicket("Add form", "Build it"), PlannedTicket("Add tests", "Cover it", (0,)))),
+    TicketsCreated((10, 11)),
+    ChoreRefined("renamed a helper", ("old bug",), "tidy", committed=True),
+    ChoreDiscarded("tests failed", ("old bug",)),
+    PullRequestReviewed((ReviewAxis("bugs", "completed", "ok"),), (ReviewFinding("bug", "null", "bugs"),), ("comment-1",), "abc1234"),
+    ReviewFailed("no diff"),
+    Finalized(ready=False, pull_request="https://example.test/pull/1", blockers=("the review did not run",)),
 ]
 
 

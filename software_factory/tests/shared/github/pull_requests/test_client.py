@@ -61,6 +61,15 @@ def test_an_open_pull_request_is_found_by_its_head_branch() -> None:
     assert _client().find_open("feature/unknown") is None
 
 
+def test_a_found_pull_request_reports_whether_it_is_still_a_draft() -> None:
+    client = _client()
+    assert client.find_open("feature/login").draft is True
+
+    client.mark_ready("10")
+
+    assert client.find_open("feature/login").draft is False
+
+
 def test_a_pull_request_is_marked_ready_and_diffed_by_number_or_url() -> None:
     gh = FakeGhCli()
     client = _client(gh)
