@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 import signal
 from pathlib import Path
+from subprocess import CalledProcessError
 
 import pytest
-from loop import WorktreeError
+from loop import LoopHookError, LoopHookPoint, WorktreeError
 
 from software_factory.workflows.implement_spec import __main__ as entry
 from software_factory.workflows.implement_spec import dry
@@ -106,6 +107,39 @@ def test_a_worktree_that_cannot_be_closed_clean_fails_the_spec_not_the_command(
     code = harness.run()
 
     assert code == 1 and "retained edits" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "error",
+    [LoopHookError(LoopHookPoint.WORKTREE_READY, "make setup", "failed"), CalledProcessError(128, ["git", "worktree", "add"])],
+    ids=["a worktree hook that fails", "a worktree that cannot be added"],
+)
+def test_a_declared_error_opening_the_feature_worktree_fails_that_spec_with_a_comment_and_the_intake_goes_on(
+    error: Exception, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Given two runnable Specs and a first run that raises a declared error outside any Stage, when the intake runs, then the first Spec gets the failure Comment, the second still runs and the command exits 1."""
+    harness = ImplementSpecHarness(tmp_path)
+    real_run, real_select = entry.run, entry.select_specs
+    calls: list[int] = []
+
+    def twice(*args: object, **kwargs: object) -> entry.Selection:
+        selection = real_select(*args, **kwargs)  # type: ignore[arg-type]
+        return entry.Selection(selection.runnable * 2, selection.unreadable, selection.awaiting_human)
+
+    def first_fails(*args: object, **kwargs: object) -> object:
+        calls.append(1)
+        if len(calls) == 1:
+            raise error
+        return real_run(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(entry, "select_specs", twice)
+    monkeypatch.setattr(entry, "run", first_fails)
+
+    code = harness.run()
+
+    assert code == 1 and len(calls) == 2
+    assert sum("the Spec's run failed" in body for body in harness.rig.comments(1)) == 1
+    assert harness.closed() == [10]
 
 
 def test_an_unexpected_error_is_logged_and_the_command_exits_non_zero(

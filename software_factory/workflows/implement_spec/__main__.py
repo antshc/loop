@@ -9,6 +9,7 @@ import signal
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from subprocess import CalledProcessError
 from types import FrameType
 
 from loop import Agent, LoopHook, WorktreeError, configure_logging
@@ -19,15 +20,17 @@ from software_factory.shared.agents.launcher import AgentLauncher
 from software_factory.shared.git import GitClient
 from software_factory.shared.github.account import GitHub
 from software_factory.shared.github.issues.client import Issues
+from software_factory.shared.github.issues.errors import IssueError
 from software_factory.shared.github.issues.graph import SpecGraphSnapshot
 from software_factory.shared.github.repo import GhCli, GitHubRepo
 from software_factory.shared.process import CommandRunner, git_command
 from software_factory.shared.telemetry import OtelSpans, OtlpObserverFactory, Tee, TracingObserver
+from software_factory.stages.specs import post_failure_comment
 
-from . import NAME, implement_spec
+from . import FAILURE_ERRORS, NAME, implement_spec
 from .dry import SEAMS, Fakes
 from .intake import Selection, release_held, select_specs, work_of
-from .policy import SpecWork
+from .policy import SOURCE, SpecWork
 from .settings import ImplementSpecSettings, Targets
 
 logger = logging.getLogger("workflow.implement_spec")
@@ -219,14 +222,25 @@ def _found(selection: Selection) -> bool:
 
 
 def _run_spec(definition: Workflow[SpecWork], spec: SpecGraphSnapshot, services: Services, runtime: Runtime) -> int:
-    """The exit code of one Spec's run; a worktree that cannot be closed clean fails the Spec, not the whole intake."""
+    """The exit code of one Spec's run; a worktree that cannot be closed clean, or a declared error outside any Stage such as a failing worktree hook, fails the Spec, not the whole intake."""
     try:
         result = run(definition, work_of(spec), services=services, ledger=runtime.ledger, spans=runtime.spans, stop=runtime.stop)
     except WorktreeError as exception:
         logger.error("Spec #%s failed: %s", spec.number, exception)
         return 1
+    except FAILURE_ERRORS as exception:
+        logger.error("Spec #%s failed: %s", spec.number, exception)
+        _comment_failure(services.get(Issues), spec.number)
+        return 1
     _report(spec, result)
     return result.exit_code
+
+
+def _comment_failure(tracker: Issues, number: int) -> None:
+    try:
+        post_failure_comment(tracker, number, source=SOURCE)
+    except (IssueError, CalledProcessError) as exception:
+        logger.error("Spec #%s: the failure could not be commented: %s", number, exception)
 
 
 def _report(spec: SpecGraphSnapshot, result: RunResult) -> None:

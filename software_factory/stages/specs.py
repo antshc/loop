@@ -243,6 +243,13 @@ def _failure_commented(source: str) -> Any:
     return reconcile
 
 
+def post_failure_comment(tracker: Issues, number: int, *, source: str = "implement_spec") -> None:
+    """Comments on Spec `number` that its run failed, as `comment_failure` does, unless the Comment is already there; for an error that escaped the run."""
+    message = _failure_message(source)
+    if not _commented(tracker, number, message):
+        tracker.comment(number, "failure", message)
+
+
 def _failure_message(source: str) -> str:
     return _message(source, "the Spec's run failed; the run's ledger and spans hold the details")
 

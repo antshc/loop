@@ -17,7 +17,10 @@ from .settings import ImplementSpecSettings, Targets
 
 NAME = "implement_spec"
 
-__all__ = ["ImplementSpecSettings", "NAME", "Targets", "implement_spec"]
+__all__ = ["FAILURE_ERRORS", "ImplementSpecSettings", "NAME", "Targets", "implement_spec"]
+
+# What the Workflow turns into a failure Comment inside a Stage; the entry point does the same when it escapes the run.
+FAILURE_ERRORS: tuple[type[Exception], ...] = (LoopHookError, CalledProcessError, IssueError)
 
 
 def implement_spec(settings: ImplementSpecSettings, targets: Targets) -> Workflow[SpecWork]:
@@ -33,7 +36,7 @@ def implement_spec(settings: ImplementSpecSettings, targets: Targets) -> Workflo
     )
     return (
         Workflow(NAME).context(SpecWork)
-        .on_error((LoopHookError, CalledProcessError, IssueError), handoff(specs.comment_failure(source=SOURCE)))
+        .on_error(FAILURE_ERRORS, handoff(specs.comment_failure(source=SOURCE)))
         .stage(specs.route_spec(targets.repositories).on_hold(block))
         .stage(specs.prepare_checkout().on_hold(to_human))
         .within(workspaces.checkout(), Flow("plan")
