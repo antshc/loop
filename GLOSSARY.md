@@ -11,10 +11,10 @@ Reusable building blocks in the installable `loop` package. Loop does not ship a
 | Term | Definition |
 | --- | --- |
 | **Loop** | Python library for composing headless coding-agent execution, Git worktrees, sessions, hooks, and observation. **Avoid:** factory, CLI, workflow engine. |
-| **Workflow** | User-owned Python procedure that composes Loop primitives and owns its control flow, agent sequencing, interpretation of results, and external effects. Examples: `implement_spec`, `plan_implement`, `pr_babysit`. **Avoid:** built-in workflow, plugin, fixed pipeline. |
+| **Workflow** | User-owned Python procedure that composes Loop primitives and owns its control flow, agent sequencing, interpretation of results, and external effects. Examples: `implement_spec`, `plan_implement`, `pr_babysit`, `address_once`. A factory Workflow is a declarative Workflow definition run by the factory runtime rather than hand-written control flow. **Avoid:** built-in workflow, plugin, fixed pipeline. |
 | **WorkflowBuilder** | Optional builder declaring named phases and enabling console, terminal, or telemetry reporting. It does not schedule phases or enforce factory transitions. |
 | **Workflow run** | One invocation of a Workflow definition, containing phase occurrences and an outcome decided by the caller. Distinct from an Agent run. |
-| **Phase** | Observable scope within a Workflow run, with name, owner, kind, status, duration, and optional gate records. Its Python body is controlled by the Workflow. |
+| **Phase** | Observable scope within a Workflow run, with name, owner, kind, status, duration, and optional gate records. Its Python body is controlled by the Workflow. **Avoid** in the factory: use Stage attempt span. |
 | **Phase kind** | Owner category for reporting: `engineer` (requester), `agent` (model-driven execution), or `code` (deterministic action). It is not an agent identity. |
 | **Phase gate** | A check recorded by `Phase.gate(check, ok, note)`; failure marks the phase failed. Recording a gate does not itself block or schedule another workflow stage. |
 | **Agent builder** | `Agent()` / `AgentBuilder`: composes CLI, Git, Docker, session, hook, and observer options and creates clients or a shared agent workspace. |
@@ -59,11 +59,11 @@ Product and SDLC language for user-owned workflows built **on** Loop. Warp Facto
 | --- | --- |
 | **Agentic Software Factory (ASF)** | Delivery system coordinating human requests, specialized agents, deterministic actions, evidence, and policy gates across the SDLC. **Avoid:** synonym for Loop library. |
 | **Factory definition** | Versioned configuration of a factory's agents, workflows, integrations, environments, triggers, and policies. Shape is implementation-specific. |
-| **Factory workflow** | Domain procedure that determines which tasks run, in what order, and under what policy; implemented as a user-owned Workflow, not a built-in Loop pipeline. |
+| **Factory workflow** | Domain procedure that determines which tasks run, in what order, and under what policy; implemented as a Workflow (in the factory, a Workflow definition), not a built-in Loop pipeline. |
 | **Work item** | Stable identity for one incoming unit of work through intake, decisions, execution, review, and handoff. It may originate as an issue, PR, or direct request. **Avoid:** equating it with one agent run. |
 | **Intake** | Accept and normalize a work item from an external source; establish its identity and context before routing. |
 | **Trigger** | Condition starting or resuming work, such as an issue event, PR update, user command, schedule, or monitor finding. |
-| **Event** | Immutable statement that something happened, such as `PullRequestUpdated`. **Avoid:** command. |
+| **Event** | Immutable statement that something happened, such as `PullRequestUpdated`. In the factory, a Stage's typed pass payload recorded in the Execution ledger and read by later Stages. **Avoid:** command. |
 | **Command** | Request for an action handled by one responsible component, such as `ImplementTicket`. **Avoid:** event. |
 | **Automation** | Trigger plus filters and target handler/agent, used to route matching events into work. Filters do not grant permissions. |
 | **Workflow instance** | Persisted progress of one work item across events and pauses. **Proposed** for the unified event-driven factory; distinct from an in-process Loop Workflow run. |
@@ -102,15 +102,20 @@ Product and SDLC language for user-owned workflows built **on** Loop. Warp Facto
 
 | Term | Definition |
 | --- | --- |
-| **Stage** | Reusable building block of a Workflow: one factory activity (such as plan, implement, review, or address feedback) that may run agents and gates as a unit. Workflows compose Stages; any Phases a Stage reports are internal to it, not part of its contract. **Avoid:** equating stage with a Phase reporting scope. |
+| **Stage** | Reusable building block of a Workflow: one factory activity (such as plan, implement, review, or address feedback) that may run an agent or a deterministic action and a gate as a unit. Workflows compose Stages from a shared library; a Stage's contract is its typed input, the Event it produces, its gate and its Routes. **Avoid:** equating stage with a Phase reporting scope. |
+| **Workflow definition** | Declarative, immutable description of a factory Workflow: the Stages it places, the Routes between them and the constructs that order them (sequence, per-item loop, switch on a closed Event sum, workspace scope). It is validated as it is built and executed by the factory runtime once per work item. **Avoid:** pipeline, DAG. |
+| **Stage attempt** | One execution of a Stage for a work item, ending in pass, fail or hold. It is recorded in the Execution ledger and reported as one span; a rework is a further attempt of the same Stage. **Avoid:** Phase. |
+| **Route** | Where control goes after a Stage ends in pass, fail or hold: on to the next step, to the next item, back for rework, to a terminal stop, to a hand-off to a person, or to a sibling case. |
+| **Selector** | Pure function that offers the candidate items of a per-item loop in order; it is asked again after every item and has no effect of its own. |
+| **Scope** | One bounded part of a factory run with its own status: the run itself, one item of a per-item loop, or one workspace. A scope that is handed off stays open across runs until a person releases it. |
 | **Handoff** | Transfer of task context and artifacts to another agent, deterministic step, or human; the receiver must have sufficient durable context. |
 | **Envelope** | Structured, schema-validated agent response containing claims, decisions, artifact references, and next-step recommendations; the Workflow checks it before acting. **Proposed** for unified factory messages; Loop's `AgentResult` remains raw CLI output. |
-| **Execution ledger** | Durable record of work-item state, decisions, attempts, effects, evidence, and recovery information. **Proposed** as factory state, not a Loop session store. |
+| **Execution ledger** | Append-only durable record, per work item, of the attempts, outcomes, effects, evidence, and recovery information from which an interrupted or repeated run resumes. Written only by the factory runtime; not a Loop session store and not the Ticket Tracker. |
 | **Checkpoint** | Saved restart position after an externally visible effect or stage, used for idempotent resume. |
 | **Evidence** | Inspectable proof of a claim: test report, screenshot, API response, logs, changed-file diff, or CI result. **Avoid:** relying on an agent's success statement alone. |
 | **Gate** | Explicit predicate over evidence and policy with pass, fail, or hold outcome; it determines whether work may advance. **Avoid:** synonymous with a stage or reviewer. |
 | **Automated gate** | Machine-checkable gate such as tests pass, artifacts exist, no prohibited files changed, or required CI checks succeeded. |
-| **Human gate (HITL)** | Hold requiring a human decision, clarification, or risk acceptance. In the proposed Loop workflow, `hitl` blocks Ticket execution until removed; it is not applied to every generated Ticket. |
+| **Human gate (HITL)** | Hold requiring a human decision, clarification, or risk acceptance. In the proposed Loop workflow, `hitl` blocks Ticket execution until removed; it is not applied to every generated Ticket. In `implement_spec`, removing `hitl` from a held Spec or Ticket releases it: the next run records the release in the Execution ledger and starts a fresh scope with a fresh rework budget. |
 | **Merge gate** | Combined PR readiness rule over required checks, approvals, unresolved discussions, and repository policy. A green test alone is insufficient. |
 | **Verification** | Establishes that actual behavior meets acceptance criteria using reproducible checks and evidence; distinct from reviewing code quality. |
 | **Rework loop** | Bounded return to implementation or an earlier stage after gate failure or review feedback, followed by fresh validation. |

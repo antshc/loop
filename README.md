@@ -135,12 +135,13 @@ The examples live in this repository and are not included in the installed
 
 | Example | Purpose |
 |---|---|
-| [Library usage](docs/usage.md#library-examples) | One-shot runs, profiles, shared worktrees, sessions, and Loop hooks |
-| [PR scheduler and babysitter](workflows/pr_babysit/README.md) | Discover user-authored PRs and address reviews/CI with JSON recovery and scoped telemetry |
+| [Library usage](USAGE.md#library-examples) | One-shot runs, profiles, shared worktrees, sessions, and Loop hooks |
+| [PR scheduler and babysitter](software_factory/workflows/pr_babysit/README.md) | Discover user-authored PRs and address reviews/CI with ledger recovery and scoped telemetry |
+| [Address one pull request once](USAGE.md#other-factory-workflows) | Address the trusted review feedback of one pull request with `address_once`, assembled from existing Stages |
+| [Write a factory Workflow](software_factory/README.md) | Compose a Workflow definition from the factory's Stages and run it with the factory runtime |
 | [Plan and implement](workflows/plan_implement.py) | Plan and implement with different models on one worktree |
-| [Implement Spec Workflow guide](docs/usage.md#implement-spec-workflow) | Deliver GitHub Tickets, configure multiple repositories, and customize prompts |
-| [Multi-repository Workflow](docs/usage.md#different-agent-workflows-per-repository) | Route Specs to several repositories, each with its own agent steps |
-| [Scenario-style dev Workflow](workflows/dev_bdd/README.md) | Dummy BDD-style Workflow demonstrating nested scenarios, live flow visualization and Allure results |
+| [Implement Spec Workflow guide](USAGE.md#implement-spec-workflow) | Deliver GitHub Tickets, configure multiple repositories, and customize prompts |
+| [Multi-repository Workflow](USAGE.md#repositories-and-targets) | Route Specs to several repositories, each with its own agent steps |
 
 The `implement_spec` Workflow can create commits, push branches, open draft pull requests,
 and update Tickets. Read its configuration guide before running it.
@@ -148,64 +149,35 @@ and update Tickets. Read its configuration guide before running it.
 ### Multi-repository example
 
 The `implement_spec` Workflow routes Specs by their `repo:target:<owner/repo>` label to
-repositories you configure. Each `RepositoryWorkflow` pairs a checkout with a
-function that owns its agent steps; here `api` only implements while `web`
+repositories you configure. Each `RepositoryTarget` pairs a checkout with whether the
+planner, the chore cleanup and the reviewer run there; here `api` only implements while `web`
 implements and then reviews. Repositories must already be cloned under
 `workspace/`, and unknown targets are handed to a human.
 
 ```python
-from functools import partial
 from pathlib import Path
 
-from workflows.implement_spec import (
-    Repository, RepositoryId, RepositoryWorkflow, implement_ticket, load_prompt, main,
-)
+from software_factory.events.specs import RepositoryTarget
+from software_factory.workflows.implement_spec.__main__ import build_services, main
+from software_factory.workflows.implement_spec.dry import Fakes
+from software_factory.workflows.implement_spec.settings import Targets
 
 workspace = Path.cwd() / "workspace"
-implement = partial(implement_ticket, template=load_prompt("implement"))
-
-
-def implement_and_review(context, worktree):
-    result = implement(context, worktree)
-    ...  # run a reviewer agent on result.commit; return a TicketResult
-    return result
-
+targets = Targets((
+    RepositoryTarget("acme/api", workspace / "api", workspace / "api.worktrees", plan=False, chore=False, review=False),
+    RepositoryTarget("acme/web", workspace / "web", workspace / "web.worktrees"),
+))
 
 if __name__ == "__main__":
-    raise SystemExit(main(repositories=(
-        RepositoryWorkflow(
-            Repository(workspace / "api", workspace / "api.worktrees", RepositoryId("acme", "api")),
-            implement,
-        ),
-        RepositoryWorkflow(
-            Repository(workspace / "web", workspace / "web.worktrees", RepositoryId("acme", "web")),
-            implement_and_review,
-        ),
-    )))
+    raise SystemExit(main(services=build_services(Fakes([]), None).bind(Targets, targets)))
 ```
 
-Run it from the harness root. The [usage guide](docs/usage.md#different-agent-workflows-per-repository)
-has the complete reviewer step and delivery rules.
-
-### Optional: visualize flows with scenarios (BDD style)
-
-`workflows/dev_bdd` is a dummy Workflow (no GitHub, Git or agent calls) showing a
-delivery flow structured as readable nested scenarios over named steps. It prints a live, colored progress tree
-and can write [Allure](https://allurereport.org/) results. This is optional: the
-`loop` library does not depend on it, and Allure is an extra (`pip install -e ".[reports]"`).
-
-```sh
-python -m workflows.dev_bdd            # live progress, Allure results in .loop/allure-results
-python -m workflows.dev_bdd --quiet --no-allure
-```
-
-To restructure your own project this way, use the reusable
-[restructuring prompt](docs/prompts/restructure-to-scenarios.md). See the
-[usage guide](USAGE.md#scenario-style-flow-visualization-optional) for options.
+Run it from the harness root. The [usage guide](USAGE.md#repositories-and-targets)
+has the delivery rules.
 
 ## Documentation
 
-- [Usage guide](docs/usage.md): advanced examples, logging, and `implement_spec` Workflow configuration.
+- [Usage guide](USAGE.md): advanced examples, logging, and `implement_spec` Workflow configuration.
 - [Domain glossary](GLOSSARY.md): project terminology.
 - [Architecture](ARCHITECTURE.md): codebase structure, design decisions, and concepts.
 - [System context](docs/building-blocks/system-context.md): context and container diagrams.

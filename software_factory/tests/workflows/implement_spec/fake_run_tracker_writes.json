@@ -1,0 +1,73 @@
+[
+  [
+    "issue",
+    "close",
+    "10",
+    "--repo",
+    "antshc/loop",
+    "--comment",
+    "Delivered in c0000001.\n\nAdd discount policy\n\ndry-run: dotnet test -> 12 passed"
+  ],
+  [
+    "pr",
+    "create",
+    "--repo",
+    "antshc/loop",
+    "--head",
+    "discount-policy",
+    "--base",
+    "main",
+    "--title",
+    "Basket: Discount policy",
+    "--body",
+    "Basket\n\nSpec: https://github.com/antshc/loop/issues/1\n\nTickets:\n- [x] #10 Add discount policy\n- [ ] #11 Apply discount at checkout",
+    "--draft"
+  ],
+  [
+    "issue",
+    "close",
+    "11",
+    "--repo",
+    "antshc/loop",
+    "--comment",
+    "Delivered in c0000002.\n\nApply discount at checkout\n\ndry-run: dotnet test -> 12 passed"
+  ],
+  [
+    "pr",
+    "create",
+    "--repo",
+    "antshc/loop",
+    "--head",
+    "discount-policy",
+    "--base",
+    "main",
+    "--title",
+    "Basket: Discount policy",
+    "--body",
+    "Basket\n\nSpec: https://github.com/antshc/loop/issues/1\n\nTickets:\n- [x] #10 Add discount policy\n- [x] #11 Apply discount at checkout",
+    "--draft"
+  ],
+  [
+    "api",
+    "--method",
+    "POST",
+    "repos/antshc/loop/issues/1/comments",
+    "-f",
+    "body=implement_spec: all Tickets delivered; draft pull request: https://github.com/antshc/loop/pull/99\n\n<!-- loop:comment delivered:7b3d1cd1b2bb42e6 -->"
+  ],
+  [
+    "pr",
+    "ready",
+    "https://github.com/antshc/loop/pull/99",
+    "--repo",
+    "antshc/loop"
+  ],
+  [
+    "api",
+    "--method",
+    "POST",
+    "repos/antshc/loop/issues/1/comments",
+    "-f",
+    "body=implement_spec: pull request https://github.com/antshc/loop/pull/99 is **ready for review**\n\nCommits:\n- c000000 ccode(Basket|10): Add discount policy\n- c000000 ccode(Basket|11): Apply discount at checkout\nChore: nothing (No cleanup needed)\nReview: bugs completed, quality completed, smells completed, initiative completed\n\n<!-- loop:comment review-summary:25e85ca0ed461413 -->"
+  ]
+]

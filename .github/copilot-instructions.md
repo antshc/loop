@@ -5,7 +5,7 @@
 Single repo: docs and codebase live together at the reporoot. There is no `workspace/` split and no `.harness.env`.
 
 - **Docs & decisions:** `GLOSSARY.md` (domain glossary) and `ARCHITECTURE.md` (ADR index, Concept index, and Codebase Structure), with ADRs under `docs/adr/` and Crosscutting Concepts under `docs/concepts/`.
-- **Code:** `src/loop/` (the `loop` library), `workflows/implement_spec/` and `workflows/pr_babysit/` (vertical-slice Workflows, each with a Dishka `composition/` root), `workflows/shared/` (infrastructure shared by those Workflows), other examples under `workflows/`, and library/sibling tests under `tests/`. Loop is a library with no command. The layout is documented under **Codebase Structure** in `ARCHITECTURE.md`.
+- **Code:** `src/loop/` (the `loop` library), `software_factory/workflows/implement_spec/` and `software_factory/workflows/pr_babysit/` (the factory Workflow definitions, each with its policy, intake and entry point), `software_factory/shared/` (infrastructure shared by those Workflows), the factory tests under `software_factory/tests/`, the standalone examples under `workflows/`, and library/sibling tests under `tests/`. Loop is a library with no command. The layout is documented under **Codebase Structure** in `ARCHITECTURE.md`.
 - **Archive:** `archive/` holds retired prototypes as a parts source only. It is excluded from editor search and file watching (see `.vscode/settings.json`) — do not navigate into it, edit it, or import from it.
 
 Within this file, resolve conflicts in this order: **safety and repository targeting → authoritative sources → navigation → build and validation → documentation conventions.** This ordering scopes only the rules in this file; it does not override `AGENTS.md`, path-scoped instructions, or user instructions.
@@ -30,7 +30,7 @@ Consult these before searching the code:
 ## 4. Navigation policy
 
 1. Read the relevant authoritative source first and state which doc you checked (or that none applies) before searching.
-2. Use `ARCHITECTURE.md`'s Codebase Structure to scope searches to `src/loop/`, `workflows/`, or `tests/`.
+2. Use `ARCHITECTURE.md`'s Codebase Structure to scope searches to `src/loop/`, `software_factory/`, `workflows/`, or `tests/`.
 3. Exact symbol (definition, references, rename) → language-server tools; concept or behavior → semantic search; literal or config value → text search.
 4. Docs are leads, not proof — confirm behavior against current source or tests, then stop searching.
 
@@ -38,7 +38,7 @@ Consult these before searching the code:
 
 - Runtime: Python 3.14+ for the library and example Workflows; preserve the minimum declared in `pyproject.toml`.
 - Install: `python -m pip install -e ".[dev]"` from the reporoot.
-- Test: `python -m pytest` from the reporoot (configured in `pyproject.toml`, `testpaths = ["tests", "workflows/tests"]`); it includes the import-linter architecture checks.
+- Test: `python -m pytest` from the reporoot (configured in `pyproject.toml`, `testpaths = ["tests", "software_factory/tests"]`); it includes the import-linter architecture checks.
 - For compatibility changes, follow [Test Strategy: Python compatibility](../docs/concepts/ops-test-strategy.md#python-compatibility); a newer local interpreter alone does not verify the minimum.
 
 ## 6. Documentation conventions

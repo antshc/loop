@@ -1,0 +1,11 @@
+{
+  "repositories": [
+    {
+      "name": "owner/repo",
+      "path": "../checkouts/repo",
+      "test": ["python", "-m", "pytest"]
+    }
+  ],
+  "state_dir": "../.loop/address-once",
+  "timeout": 1800
+}

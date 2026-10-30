@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tomllib
 from importlib.metadata import distribution
 from pathlib import Path
 
@@ -21,6 +22,14 @@ def test_packaging_declares_no_scripts_and_ships_no_workflow_file() -> None:
         entry.group in {"console_scripts", "gui_scripts"} for entry in package.entry_points
     )
     assert not workflow_files & package_files
+
+
+def test_distribution_finds_packages_only_under_src_so_the_factory_is_never_shipped() -> None:
+    """Given the build configuration, when packages are discovered, then only `src` is searched and it holds no factory module."""
+    find = tomllib.loads((ROOT / "pyproject.toml").read_text())["tool"]["setuptools"]["packages"]["find"]
+
+    assert find["where"] == ["src"]
+    assert not {"software_factory", "workflows"} & {path.name for path in (ROOT / "src").iterdir()}
 
 
 def test_package_supports_python_310() -> None:

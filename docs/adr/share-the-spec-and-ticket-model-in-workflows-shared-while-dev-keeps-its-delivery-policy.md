@@ -1,5 +1,7 @@
 # Share the Spec and Ticket model in workflows/shared while dev keeps its delivery policy
 
+> **Location update.** `workflows/shared` is now `software_factory/shared/` (the model lives in `software_factory/shared/github/`), and `implement_spec`'s delivery policy lives in `software_factory/workflows/implement_spec/policy.py` and the Stage library ([Compose factory Workflows as declarative definitions](compose-factory-workflows-as-declarative-definitions-over-a-stages-library-run-by-a-factory-runtime.md)). The decision is unchanged.
+
 [Loop Library Workflow Architecture](../concepts/str-loop-library-workflow-architecture.md) keeps workflow-specific models inside their slice, and `Spec` and `Ticket` began as `implement_spec` records. They now live in `workflows/shared` on top of the shared GitHub `Issue` model, together with their metadata (Initiative id, target repository, base branch), classification, readiness, and ticketing, so every Workflow that works Specs reuses one model. `implement_spec` keeps its delivery policy: the `hitl` hand-off and escalation, its comment text, branch naming, failure counts, and the Ticket, plan, and review result types. Applies only to `Spec` and `Ticket`.
 
 ## Considered Options

@@ -1,0 +1,96 @@
+stage                field        source
+route-spec           work         context SpecWork
+route-spec           tracker      service Issues
+block-spec           work         context SpecWork
+block-spec           tracker      service Issues
+block-spec           held         history SpecHeld
+prepare-checkout     routed       event SpecRouted from route-spec
+prepare-checkout     git          service GitClient
+hand-to-human        work         context SpecWork
+hand-to-human        tracker      service Issues
+hand-to-human        held         history SpecHeld
+checkout             launcher     service AgentLauncher
+plan-spec            work         context SpecWork
+plan-spec            routed       event SpecRouted from route-spec
+plan-spec            tracker      service Issues
+plan-spec            checkout     workspace
+create-tickets       work         context SpecWork
+create-tickets       tracker      service Issues
+create-tickets       proposed     event PlanProposed from plan-spec (optional)
+publish-earlier      work         context SpecWork
+publish-earlier      routed       event SpecRouted from route-spec
+publish-earlier      tracker      service Issues
+publish-earlier      git          service GitClient
+publish-earlier      github       service GitHub
+publish-earlier      closed       history TicketClosed
+require-work         work         context SpecWork
+require-work         tracker      service Issues
+feature-worktree     routed       event SpecRouted from route-spec
+feature-worktree     launcher     service AgentLauncher
+next-ready-ticket    work         context SpecWork
+next-ready-ticket    tracker      service Issues
+implement-ticket     ticket       item Ticket
+implement-ticket     routed       event SpecRouted from route-spec
+implement-ticket     worktree     workspace
+implement-ticket     git          service GitClient
+escalate-ticket      work         context SpecWork
+escalate-ticket      ticket       item Ticket
+escalate-ticket      tracker      service Issues
+escalate-ticket      rejected     history TicketRejected
+close-ticket         ticket       item Ticket
+close-ticket         implemented  event TicketImplemented from implement-ticket
+close-ticket         tracker      service Issues
+publish-ticket       work         context SpecWork
+publish-ticket       routed       event SpecRouted from route-spec
+publish-ticket       tracker      service Issues
+publish-ticket       git          service GitClient
+publish-ticket       github       service GitHub
+publish-ticket       closed       history TicketClosed
+publish-delivery     work         context SpecWork
+publish-delivery     routed       event SpecRouted from route-spec
+publish-delivery     tracker      service Issues
+publish-delivery     git          service GitClient
+publish-delivery     github       service GitHub
+publish-delivery     closed       history TicketClosed
+require-delivered    work         context SpecWork
+require-delivered    routed       event SpecRouted from route-spec
+require-delivered    worktree     workspace
+require-delivered    tracker      service Issues
+require-delivered    git          service GitClient
+require-delivered    escalated    all TicketEscalated from escalate-ticket
+announce-delivered   work         context SpecWork
+announce-delivered   tracker      service Issues
+announce-delivered   published    event DraftPullRequestPublished from publish-delivery
+refine-chore         work         context SpecWork
+refine-chore         routed       event SpecRouted from route-spec
+refine-chore         worktree     workspace
+refine-chore         git          service GitClient
+refine-chore         github       service GitHub
+publish-chore        work         context SpecWork
+publish-chore        routed       event SpecRouted from route-spec
+publish-chore        tracker      service Issues
+publish-chore        git          service GitClient
+publish-chore        github       service GitHub
+publish-chore        closed       history TicketClosed
+require-refined      work         context SpecWork
+require-refined      routed       event SpecRouted from route-spec
+require-refined      worktree     workspace
+require-refined      tracker      service Issues
+require-refined      git          service GitClient
+require-refined      escalated    all TicketEscalated from escalate-ticket
+review-pull-request  work         context SpecWork
+review-pull-request  routed       event SpecRouted from route-spec
+review-pull-request  delivery     event Delivery from require-refined
+review-pull-request  checkout     workspace
+review-pull-request  github       service GitHub
+finalize             work         context SpecWork
+finalize             routed       event SpecRouted from route-spec
+finalize             delivery     event Delivery from require-refined
+finalize             published    event DraftPullRequestPublished from publish-delivery
+finalize             chore        event ChoreDiscarded | ChoreRefined from refine-chore (optional)
+finalize             review       event PullRequestReviewed | ReviewFailed from review-pull-request (optional)
+finalize             tracker      service Issues
+finalize             git          service GitClient
+finalize             github       service GitHub
+comment-failure      work         context SpecWork
+comment-failure      tracker      service Issues

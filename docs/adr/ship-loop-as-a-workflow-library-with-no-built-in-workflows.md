@@ -15,7 +15,7 @@ Contracts (`abc.ABC`) exist only where Loop's own code calls a replaceable part:
 
 ## Consequences
 
-- A `pip install` alone yields no runnable Workflow and no command; a Workflow runs only once the user has an entry point such as `workflows/implement_spec/__main__.py` and their own shell alias for it (e.g. `alias loop-dev='python -m workflows.implement_spec'`).
+- A `pip install` alone yields no runnable Workflow and no command; a Workflow runs only once the user has an entry point such as `software_factory/workflows/implement_spec/__main__.py` and their own shell alias for it (e.g. `alias loop-dev='python -m software_factory.workflows.implement_spec'`).
 - The repository's example `implement_spec` workflow is not part of the compatibility surface.
 - The import path, `pyproject.toml` project name, and any `afk_*` invocations in skills and docs follow the `loop` package name.
 - The shipped implementations (agent runner, git services, agent client, stores) are part of the compatibility surface; breaking them breaks user-supplied workflows.

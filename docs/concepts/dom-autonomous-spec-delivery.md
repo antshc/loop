@@ -1,23 +1,24 @@
 # Autonomous Spec Delivery
 
 ## Purpose
-Loop delivers the approved Tickets of every open Spec to a draft pull request without an operator in the session and escalates a Ticket to a human once it keeps failing. The default agent delegate uses one fresh implementation run per Ticket attempt; configured repositories may compose several agent steps per attempt.
+Loop delivers the approved Tickets of every open Spec to a draft pull request without an operator in the session and escalates a Ticket to a human once it keeps failing. Each Ticket attempt is one fresh run of the developer role agent.
 
 Specs and Tickets are read as immutable snapshots on the harness tracker and changed only by explicit commands (Comment, label, close, create Ticket, link Ticket), each applied on GitHub at once and in order. A failing command raises, earlier writes stay, and a retry re-reads GitHub and skips what is already applied. Each Spec's target
-selects an explicitly configured repository and its agent delegate; Git operations
-and the draft PR belong to that target. The reusable ticket workflow supplies the
-selected Ticket and refreshed Initiative history, invokes the delegate, and
-validates its typed result and exactly one final commit. Implement/Review delegates
-may amend that commit; retries restart the entire delegate after rollback.
-The process diagrams below describe the Ticket delivery portion; the surrounding default phases are listed next.
+selects an explicitly configured repository and which of the planner, chore and review Stages run there; Git operations
+and the draft PR belong to that target. The Ticket Stage supplies the
+selected Ticket and refreshed Initiative history to the developer, and the factory runtime
+validates its typed reply and exactly one final commit; a rejected attempt is restored to its base and reworked
+with a fresh agent session. The Workflow is one factory definition ([Factory Workflow Runtime](str-factory-workflow-runtime.md)).
+The process diagrams below describe the Ticket delivery portion; the surrounding default definition is listed next.
 
-## Default phases
+## Default definition
 
-`workflows/implement_spec/model/definition.py` declares the eShop-style pipeline using the public
-`WorkflowBuilder`: preflight; conditional planning and Ticket creation; delivery
-and publication after each accepted Ticket; cleanup; worktree
-closure; read-only PR review; readiness checks. All delegates are supplied in the
-default `RepositoryWorkflow`; individual delegates can be omitted in custom configurations.
+`software_factory/workflows/implement_spec/__init__.py` declares the delivery as one definition over the Stages
+library, run once per Spec by the factory runtime: route the Spec; prepare the checkout; conditional planning and Ticket
+creation; publication of earlier work; delivery of each ready Ticket in the feature worktree with bounded rework,
+closing it and publishing the draft pull request after it; publication after delivery; announcement; best-effort chore
+cleanup; read-only PR review in the checkout; readiness checks. The `hitl` label, hand-off texts, commit subjects and the
+Spec work item are values in its `policy.py`.
 
 A Spec with no sub-issues can be planned; closed or held sub-issues prevent replanning. The planner records Ticket blockers as native GitHub blocked-by edges, and a Ticket is actionable only when it is open, carries neither `hitl` nor `spec`, and is READY by those edges. A BLOCKED or UNKNOWN Ticket is held without labelling its Spec `hitl`, and a blocker closed as not planned or duplicate stays unsatisfied until a human decides.
 The developer retains its one-commit-per-Ticket contract. The cleanup agent
@@ -28,12 +29,17 @@ Review starts after the implementation worktree closes and must cover the final
 head with completed bugs, quality, smells, and initiative axes. Blocking findings,
 held Tickets, or a moved head keep the PR as a draft.
 The harness marks ready only after every readiness check passes; it never merges
-or closes the Spec. Business failures explicitly fail phase and Spec outcomes.
+or closes the Spec. Business failures end the run failed or handed off; the exit code is 0 for completed, idle or held,
+1 for handed off or failed and 130 for interrupted.
 
-High-level console transitions are always available. `--visualize` adds the optional
-terminal table; `--otlp-endpoint` attaches phase and agent observation to one observer.
-Details stay in telemetry/history or the DEBUG file. See
-[Implement Spec phases](../../USAGE.md#implement-spec-phases) for configuration and examples.
+Each Ticket's rework budget (the failure cap, 2 by default) is counted in the Execution ledger per work item and release,
+not per UTC day. A Spec or Ticket handed to a person carries `hitl`; while it does, a run starts no agent and pushes
+nothing for it. When the person removes `hitl`, the next run's intake writes a release, and the Spec starts a fresh scope
+with a fresh budget.
+
+The console shows one line per finished span (a Spec, a Ticket scope, a Stage attempt); `--otlp-endpoint` exports the same
+spans, with the agent runs nested under them, to one observer. Details stay in telemetry, the Execution ledger or the DEBUG
+file. See [Implement Spec phases](../../USAGE.md#implement-spec-phases) for configuration and examples.
 
 ## Definition
 - **Actors:** Operator; Loop (the example `implement_spec` Workflow); Copilot agent (one fresh headless run per Ticket); GitHub.
@@ -47,7 +53,7 @@ Details stay in telemetry/history or the DEBUG file. See
 Actor: Operator; Trigger: the `implement_spec` Workflow script is run for a repository board; Action: Loop lists the open Specs, skips those labelled `hitl`, and runs Develop Spec for each remaining one; Outcome: every remaining Spec was attempted. Notes: `--dry` fakes external dependencies; there is no Spec-level attempt cap; failures are counted per Ticket.
 
 ### Develop Spec
-Actor: Loop; Trigger: a Spec not labelled `hitl`; Action: resolve the Initiative id from the Spec title prefix and the target repository and base branch, fetch the target repository, and when no Ticket is actionable push and ensure the draft pull request and stop; when the base branch is missing on `origin` label the Spec `hitl` and stop; otherwise push earlier commits and ensure the draft pull request when ahead, create the worktree, and for each actionable Ticket record `previous_head`, render the prompt, run Deliver Ticket, then validate the response and Git; success closes the Ticket with the commit SHA, summary, and verification and resets its failure count; any failure resets the worktree to `previous_head` and counts once, retries the same Ticket until the failure cap, and at the cap labels the Ticket and the Spec `hitl` with the reason commented on both and stops; finally push and ensure the draft pull request; Outcome: all Tickets delivered — the pull request link is commented on the Spec, which stays open for the human merge — or the Spec stopped on `hitl` with its validated work pushed.
+Actor: Loop; Trigger: a Spec not labelled `hitl`; Action: resolve the Initiative id from the Spec title prefix and the target repository and base branch, fetch the target repository, and when no Ticket is actionable push and ensure the draft pull request and stop; when the base branch is missing on `origin` label the Spec `hitl` and stop; otherwise push earlier commits and ensure the draft pull request when ahead, create the worktree, and for each actionable Ticket record `previous_head`, render the prompt, run Deliver Ticket, then validate the response and Git; success closes the Ticket with the commit SHA, summary, and verification; any failure restores the worktree to `previous_head` and counts once against the Ticket's rework budget (per work item and release, in the Execution ledger, not per UTC day), retries the same Ticket with a fresh agent session until the failure cap, and at the cap labels the Ticket and the Spec `hitl` with the reason commented on both and stops; finally push and ensure the draft pull request; Outcome: all Tickets delivered — the pull request link is commented on the Spec, which stays open for the human merge — or the Spec stopped on `hitl` with its validated work pushed.
 
 ```mermaid
 %%{init: {'themeVariables': {'lineColor': '#8b949e'}}}%%
@@ -72,7 +78,7 @@ swimlane-beta TB
     gitCheck[11 - Check commit: HEAD moved, one commit, tagged subject, clean tree, reported SHA is HEAD]
     valid{12 - Response and commit valid?}
     close[12a.1 - Close Ticket with SHA, summary, verification]
-    clear[12a.2 - Reset Ticket failure count]
+    clear[12a.2 - Ticket delivered, no further attempts]
     more{12a.3 - More actionable Tickets?}
     nextTicket([Next Ticket - back to step 7])
     reset[12b.1 - Reset worktree to previous HEAD]
@@ -177,13 +183,13 @@ flowchart LR
 
 A solid edge is automatic; a dotted edge is a separately initiated step, labelled with its initiator.
 
-Decisions: [Run one fresh agent per Ticket](../adr/run-one-fresh-agent-per-ticket-from-python-and-let-the-agent-commit-it.md) (per-Ticket run, task commit, Git validation, Python owns push, pull request, and Ticket state), [Build agents with an agent builder](../adr/build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md) (the library returns raw output; the `implement_spec` Workflow extracts the response envelope).
+Decisions: [Compose factory Workflows as declarative definitions](../adr/compose-factory-workflows-as-declarative-definitions-over-a-stages-library-run-by-a-factory-runtime.md) (one definition over a Stages library, run by the factory runtime), [Run one fresh agent per Ticket](../adr/run-one-fresh-agent-per-ticket-from-python-and-let-the-agent-commit-it.md) (per-Ticket run, task commit, Git validation, Python owns push, pull request, and Ticket state), [Build agents with an agent builder](../adr/build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md) (the library returns raw output; the `implement_spec` Workflow extracts the response envelope).
 
 ## Implementation Map
 | Concern | Stable anchor | Semantic locator |
 |---|---|---|
-| External contract | Operator-run service for one repository board | `workflows/implement_spec/composition/entry.py`: runnable package (`python -m workflows.implement_spec`) `main(argv, *, providers=())`, options `--log-dir`, `--log-level`; run from the harness root |
-| Spec and Ticket selection | Open Specs; actionable Tickets | `workflows/shared/github/issues/`: `Issues.specs` (complete reads), `SpecGraphSnapshot`, `IssueClassifier`; `workflows/implement_spec/model/repositories.py`: `Tracker` |
-| Execution | Fresh non-interactive Copilot run per Ticket by default | `loop`: `AgentBuilder`, `Worktree.agent`, `AgentClient`; `workflows/implement_spec/agents/`: named prompts and default delegates; `workflows/implement_spec/model/reply.py`: `DevResponse` |
-| Failure bound | Per-Ticket failure count across runs | `workflows/implement_spec/deliver/journal.py`: `FileExecutionStore` |
-| Tests | Workflow scenarios against fakes | `workflows/tests/implement_spec/test_run.py`; local harness in `workflows/tests/implement_spec/doubles.py` |
+| External contract | Operator-run service for one repository board | `software_factory/workflows/implement_spec/__main__.py`: runnable package (`python -m software_factory.workflows.implement_spec`) `main(argv, *, services=None)`, options `--spec`, `--log-dir`, `--log-level`, `--otlp-endpoint`, `--no-otel`, `--fake`, `--dry`; run from the harness root |
+| Spec and Ticket selection | Open Specs; actionable Tickets | `software_factory/shared/github/issues/`: `Issues.specs` (complete reads), `SpecGraphSnapshot`, `IssueClassifier`; `software_factory/workflows/implement_spec/intake.py`: the open, complete Specs not awaiting a person; `software_factory/stages/tickets.py`: `next_ready_ticket` |
+| Execution | Fresh non-interactive Copilot run per Ticket by default | `loop`: `AgentBuilder`, `Worktree.agent`, `AgentClient`; `software_factory/stages/tickets.py`: `implement_ticket`; `software_factory/agents/roles/developer/`: the developer role agent, its prompt and its identifier-checking reply decoder |
+| Failure bound | Per-Ticket failure count per work item and release, across runs | `software_factory/workflows/implement_spec/__init__.py`: `rework(max_attempts=settings.max_failures, then=handoff(escalate_ticket))`, counted in the Execution ledger (`software_factory/runtime/ledger.py`); `policy.py`: `release_reason` |
+| Tests | Workflow scenarios against fakes | `software_factory/tests/workflows/implement_spec/`: scenarios through `main(argv, services=...)` over `harness.py` (fake tracker, real temporary repository, scripted agent, temporary ledger, recorded spans) |

@@ -1,10 +1,11 @@
 # Usage guide
 
-Start with the [installation and quick start](../README.md#installation).
+Start with the [installation and quick start](README.md#installation).
 This guide covers the example `implement_spec` Workflow and advanced library usage.
 Run repository examples from the repository root.
 
 - [Implement Spec Workflow](#implement-spec-workflow)
+- [Other factory Workflows](#other-factory-workflows)
 - [Optional Workflow Builder](#optional-workflow-builder)
 - [Logging](#logging)
 - [Telemetry (optional)](#telemetry-optional)
@@ -103,47 +104,51 @@ builder-owned. Additional CLI-specific settings remain available through `args`.
 
 ## Implement Spec Workflow
 
-The self-contained [`workflows/implement_spec/`](../workflows/implement_spec/) package is an example,
-not part of the installed library. It uses GitHub Specs and Tickets to drive
+The self-contained [`software_factory/workflows/implement_spec/`](software_factory/workflows/implement_spec/) package is an example,
+not part of the installed library. It is one declarative definition over the factory's Stage library, run once per Spec by
+the factory runtime. It uses GitHub Specs and Tickets to drive
 agent work, commits, draft pull requests, and Ticket updates.
 
-Install the `workflows` extra (`python -m pip install -e ".[workflows]"`) for the container. Before running it, configure `HARNESS` in
-[`model/repositories.py`](../workflows/implement_spec/model/repositories.py) and target repositories in
-[`composition/repositories.py`](../workflows/implement_spec/composition/repositories.py). The supplied configuration
+Install the project (`python -m pip install -e .`); `--otlp-endpoint` needs the `otel` extra (`.[otel]`). Before running it, set `HARNESS_SLUG` and
+`harness_target()` in [`__main__.py`](software_factory/workflows/implement_spec/__main__.py) for the repository holding your
+Specs and Tickets and receiving the code. The supplied configuration
 targets `antshc/loop`; it is not a read-only demo.
 
 ```sh
 gh auth status
 copilot --version
-python -m workflows.implement_spec
+python -m software_factory.workflows.implement_spec
 ```
 
 Optionally run it through your own alias, from the harness root:
 
 ```sh
-alias implement_spec='PYTHONPATH=/path/to/harness python -m workflows.implement_spec'
+alias implement_spec='PYTHONPATH=/path/to/harness python -m software_factory.workflows.implement_spec'
 implement_spec --log-level DEBUG
 ```
 
+Exit codes: 0 when the run completed, ended idle (no actionable Ticket, or only Tickets held by dependencies) or held;
+1 when a Spec was handed to a person or failed; 130 when interrupted (SIGINT or SIGTERM stops the run between Tickets, and
+the next run resumes from the Execution ledger without repeating finished work).
+
 ### Implement Spec phases
 
-The default configuration in [`composition/repositories.py`](workflows/implement_spec/composition/repositories.py)
-uses the same phases as the [eShop dev workflow](https://github.com/antshc/eShop/tree/main/tools/loop/workflows/dev):
+The definition uses the same phases as the [eShop dev workflow](https://github.com/antshc/eShop/tree/main/tools/loop/workflows/dev):
 
 | Order | Phase | Behavior |
 |---|---|---|
 | 1 | Prepare repository | Resolve the target/base branch and fetch the repository |
 | 2 | Plan and create Tickets | When the Spec has no sub-issues, run the read-only planner, validate its plan, then create sub-issues in dependency order |
-| 3 | Deliver Tickets | Run the developer for each actionable Ticket, validate its one commit, retry rejected attempts, and close accepted Tickets |
+| 3 | Deliver Tickets | Run the developer for each actionable Ticket, validate its one commit, rework rejected attempts up to the failure cap, close accepted Tickets and escalate a Ticket that exhausts its attempts to `hitl` |
 | 4 | Publish | Push accepted work and create/update the draft PR after each Ticket |
 | 5 | Refine changes | Capture the PR diff, run cleanup, and commit/push its changes; discard failed cleanup |
 | 6 | Close worktree | Finish implementation before invoking the reviewer |
 | 7 | Review pull request | Review the final head from the checkout through the project’s `code-review` skill |
 | 8 | Check readiness | Mark ready only when delivery, review axes, held Tickets, and the current head permit it |
 
-These phases run as the normal `implement_spec` workflow. The default configuration supplies all
-delegates; a custom `RepositoryWorkflow` can set an individual delegate to `None` to
-skip it. A Spec with existing sub-issues, including closed or held ones, is never
+These phases run as the normal `implement_spec` workflow, each as a Stage with its own span. Which of the planner, chore and
+reviewer run is data on the routed `RepositoryTarget` (`plan`, `chore`, `review`); a Stage whose condition is false is
+skipped. A Spec with existing sub-issues, including closed or held ones, is never
 planned again.
 
 Loop retains its developer commit contract: the developer makes one tagged commit
@@ -157,23 +162,26 @@ repository before using the reviewer. The reviewer reports all four axes (`bugs`
 blocking bug/initiative findings, changed head, or held Tickets keep the PR a draft and fail the Spec result. Cleanup is best effort.
 The workflow never merges the PR or closes the Spec.
 
-Console output contains only high-level phase transitions and outcomes. Commit
+A Spec or Ticket handed to a person carries the `hitl` label. While it does, a run starts no agent and pushes nothing for it.
+Removing `hitl` releases it: the next run writes a release in the Execution ledger and starts a fresh scope with a fresh
+rework budget. The budget is counted per work item and release, no longer per UTC day.
+
+Console output is one line per finished span, such as `ticket #12 · implement-ticket attempt 2 · fail · reason`. Commit
 validation, restoration, individual gates, agent output, and command details stay
-in execution history/telemetry or the DEBUG file. Add a terminal table independently:
+in the Execution ledger, telemetry or the DEBUG file.
 
 ```sh
-python -m pip install -e ".[visualization]"
-python -m workflows.implement_spec --spec 42 --visualize
-python -m workflows.implement_spec --dry --fake-speed 0 --no-otel --visualize
+python -m software_factory.workflows.implement_spec --spec 42
+python -m software_factory.workflows.implement_spec --dry --fake-speed 0 --no-otel
 ```
 
-`--spec NUMBER` selects one open Spec. `--visualize` enables the optional Rich table.
-`--no-otel` disables export even when `--dry` selected an endpoint. Existing
-`--otlp-endpoint`, fake seams, retry settings, and log-directory options remain available.
+`--spec NUMBER` selects one open Spec. `--no-otel` disables export even when `--dry` selected an endpoint. Existing
+`--otlp-endpoint`, fake seams and log-directory options remain available; the Execution ledger lives under
+`<log-dir>/ledger`. The terminal table (`--visualize`) is gone: the span log replaces it, and telemetry names are now
+Stage ids instead of phase names.
 
-Phase declarations and actor names live in
-[`model/definition.py`](workflows/implement_spec/model/definition.py), built on the optional public
-`WorkflowBuilder`. Execution stays in the `implement_spec`-owned Python helpers.
+The Stages and routes live in
+[`__init__.py`](software_factory/workflows/implement_spec/__init__.py); `explain()` prints which Stage feeds which.
 
 ### Debugging with fakes
 
@@ -184,131 +192,82 @@ rest real; `--dry` fakes them all and publishes the run to the dashboard (OTLP e
 | Seam | Fakes | Needs |
 |------|-------|-------|
 | `agent` | the Copilot CLI: a scripted agent that reports usage and tool calls and commits in the worktree | none |
-| `git` | the Workflow's Git reads and pushes, and the worktree (a temporary directory) | `agent` |
-| `github` | `gh`: one canned Spec with two Tickets; writes are logged, not sent | none |
-| `store` | the failure log, in a temporary directory | none |
+| `git` | the Workflow's and the runtime's Git reads, commits and pushes, and the worktree (a temporary directory) | `agent` |
+| `github` | `gh`: one canned Spec with two Tickets; writes change its own state | none |
+| `store` | the Execution ledger, in a temporary directory | none |
 
 ```sh
-python -m workflows.implement_spec --dry                                  # everything fake, traces in the dashboard
-python -m workflows.implement_spec --fake agent --fake github --fake store   # real Git: the fake agent makes real empty commits and `implement_spec` really pushes
-python -m workflows.implement_spec --dry --fake-speed 0 --no-rework        # instant, no failing first attempt
+python -m software_factory.workflows.implement_spec --dry                                  # everything fake, traces in the dashboard
+python -m software_factory.workflows.implement_spec --fake agent --fake github --fake store   # real Git: the fake agent makes real empty commits and `implement_spec` really pushes
+python -m software_factory.workflows.implement_spec --dry --fake-speed 0 --no-rework        # instant, no failing first attempt
 ```
 
-By default the second Ticket fails its first attempt so the retry path shows up in the trace.
-In code, `Fakes` in [`composition/dry.py`](workflows/implement_spec/composition/dry.py) builds the same fakes as a Dishka override provider, and the library offers
+By default the second Ticket fails its first attempt so the rework path shows up in the trace.
+In code, `Fakes` in [`dry.py`](software_factory/workflows/implement_spec/dry.py) builds the same fakes, and a test passes
+its own `Services` to `main(argv, services=...)`; the library offers
 `fake_agent`, `FakeCliRunner` and `DirectoryGit` to run any functional slice in isolation.
 
-### Different agent workflows per repository
+### Repositories and targets
 
-The example [`implement_spec`](../workflows/implement_spec/) reads Specs and Tickets from `HARNESS`.
-By default it implements only Specs targeting the harness itself. Pass
-`providers=(use_repositories(...),)` to `main` to route Specs by their `repo:target:<owner/repo>` label to
+The example [`implement_spec`](software_factory/workflows/implement_spec/) reads Specs and Tickets from the harness repository.
+By default it implements only Specs targeting the harness itself. Pass a `Targets` service to `main(argv, services=...)`, or
+change `harness_target()`, to route Specs by their `repo:target:<owner/repo>` label to
 explicitly configured checkouts under the harness's `workspace` folder.
 Repositories must already be cloned; unknown targets are handed to a human.
 
-Each `RepositoryWorkflow` pairs a `Repository` with a developer function accepting
-`(TicketContext, AgentWorkspace)` and returning a `TicketResult`. The function
-owns agent profiles, step ordering, prompt rendering, and response decoding. Optional
-`run_plan`, `run_chore`, and `run_review` delegates configure the surrounding
-phases; the default configuration supplies all three. A custom instance with only the
-repository and developer function runs implementation only and leaves the PR a draft.
-For example, one repository can implement only while another implements and reviews:
-
-```python
-from __future__ import annotations
-
-from functools import partial
-from pathlib import Path
-
-from loop import AgentProfile, AgentRequest, AgentWorkspace, copilot
-from workflows.implement_spec import (
-    DevResponse, Repository, RepositoryId, RepositoryWorkflow,
-    TicketContext, TicketResult, implement_ticket, load_prompt, main, use_repositories,
-)
-
-workspace = Path.cwd() / "workspace"
-implement = partial(implement_ticket, template=load_prompt("implement"))
-reviewer = AgentProfile(copilot)  # Set a model and reasoning effort here if desired.
-
-
-def implement_and_review(context: TicketContext, worktree: AgentWorkspace) -> TicketResult:
-    """Implements the Ticket, then reviews and optionally amends its one commit."""
-    result = implement(context, worktree)
-    if result.status == "failed":
-        return result
-    prompt = f"""Review commit {result.commit} against this Ticket:
-{context.ticket.title}
-{context.ticket.body}
-
-Work only in this worktree. Verify the implementation; fix defects by amending
-the existing commit, not by adding another. Keep the commit subject prefix
-{context.identifier.to_subject()!r}. Leave the worktree clean.
-Do not push, create PRs, or update Tickets.
-
-Return a JSON object with identifier "{context.identifier}" and status
-"completed", with result containing commit (the final full HEAD SHA), summary,
-and verification. If review cannot complete, return status "failed" with
-result containing reason.
-"""
-    output = worktree.agent(reviewer).run(AgentRequest(prompt)).output
-    return DevResponse(context.identifier).decode(output)
-
-
-if __name__ == "__main__":
-    raise SystemExit(main(providers=(use_repositories(
-        RepositoryWorkflow(
-            Repository(workspace / "api", workspace / "api.worktrees", RepositoryId("acme", "api")),
-            implement,
-        ),
-        RepositoryWorkflow(
-            Repository(workspace / "web", workspace / "web.worktrees", RepositoryId("acme", "web")),
-            implement_and_review,
-        ),
-    ),)))
-```
-
-Run this user-owned script from the harness root. Configure `HARNESS` in
-[`model/repositories.py`](../workflows/implement_spec/model/repositories.py) for the repository holding your Specs and Tickets.
-The supplied list replaces the default target; include the harness explicitly
-if it should also receive code changes. Repository identities are matched
+Each `RepositoryTarget` pairs a slug with its checkout and worktrees folder and says whether the planner (`plan`), the chore
+cleanup (`chore`) and the reviewer (`review`) run there; the default enables all three. A target with only the developer
+runs implementation and leaves the PR a draft. Repository identities are matched
 case-insensitively; duplicate configurations fail the run.
 
-The `implement_spec`-owned [`TicketDeliverer`](../workflows/implement_spec/deliver/tickets.py) handles Ticket
-iteration, refreshed Initiative history, retries, rollback, failure counts, and
-Ticket closure. A delegate can return a failed `TicketResult` or raise
-`TicketWorkflowError` for an expected, retryable failure; agent process failures
-are also retried. Each retry invokes the whole delegate.
+The developer Stage handles Ticket iteration, refreshed Initiative history, rework, rollback and Ticket closure: a
+declined reply or an invalid commit fails the attempt, and each retry starts a fresh agent session. Per-repository agent
+behavior is no longer a Python delegate; adjust the role agents under `software_factory/agents/roles/`.
 
-After the delegate finishes, the ticket workflow requires exactly one new,
+After the developer finishes, the runtime requires exactly one new,
 correctly tagged commit, a clean worktree, and a reported SHA equal to HEAD.
 Existing Initiative commits provide context; a matching subject alone does not
 automatically close or skip a Ticket. Git operations and draft PRs use the target
-repository; Ticket updates and failure-record identities remain on the harness.
-Without session-enabled builders, agent steps start fresh sessions.
+repository; Ticket updates remain on the harness.
 
 ### Implement Spec package and named prompts
 
-All `implement_spec`-owned code, prompts, tests, and fakes live in [`workflows/implement_spec/`](../workflows/implement_spec/), a vertical
-slice: one package per feature, each a set of classes taking collaborators through their constructors.
-It depends on the public `loop` package and on [`workflows/shared/`](../workflows/shared/) (Git, GitHub,
-process, state, telemetry, and the shared Dishka provider), never on a sibling Workflow. Copy
-`workflows/shared` alongside it. The independent [`plan_implement.py`](../workflows/plan_implement.py)
-remains a self-contained, function-based script.
+All `implement_spec`-owned code and tests live in [`software_factory/workflows/implement_spec/`](software_factory/workflows/implement_spec/) and
+[`software_factory/tests/workflows/implement_spec/`](software_factory/tests/workflows/implement_spec/). The definition places Stages from
+[`software_factory/stages/`](software_factory/stages/) over the [`software_factory/runtime/`](software_factory/runtime/),
+depends on the public `loop` package and on [`software_factory/shared/`](software_factory/shared/) (Git, GitHub,
+process, state, telemetry), never on a sibling Workflow, and uses no container. The independent
+[`plan_implement.py`](workflows/plan_implement.py) remains a self-contained, function-based script.
 
-- [`composition/`](../workflows/implement_spec/composition/): the only package that knows the Dishka container. `entry.py` holds `main(argv, *, providers=())`, flags, and logging; `providers.py` holds `ImplementSpecProvider` (APP scope = process, REQUEST scope = one Workflow run) and `use_repositories`; `repositories.py` holds `configured_repositories`; `dry.py` holds the `--fake`/`--dry` seams. Later providers override earlier ones, which is how tests and scripts inject fakes.
-- [`model/`](../workflows/implement_spec/model/): `HARNESS`, work items, repository identities, outcomes, settings, named phases (`definition.py`), response decoding (`reply.py`), commit gates, branch naming (`branches.py`), the `Tracker` Protocol (`repositories.py`), and the `hitl` hand-off policy (`handoff.py`). Specs and Tickets come from the shared `workflows/shared/github/issues/` model.
-- [`agents/`](../workflows/implement_spec/agents/): named prompts and the default agent delegates.
-- [`plan/`](../workflows/implement_spec/plan/), [`deliver/`](../workflows/implement_spec/deliver/), [`chore/`](../workflows/implement_spec/chore/), and [`review/`](../workflows/implement_spec/review/): `Planner`, `TicketDeliverer` (with the failure journal), `ChoreRefiner`, and `Reviewer`/`Finalizer`. These stages never import each other or a concrete agent.
-- [`backlog/`](../workflows/implement_spec/backlog/): `SpecRouter` and `PullRequestPublisher`, which sequence the stages per Spec.
-- [`prompts/`](../workflows/implement_spec/prompts/): named Markdown templates; `load_prompt("implement")` reads `implement.md` relative to the package, not the current directory.
-- [`tests/implement_spec/`](../workflows/tests/implement_spec/): `implement_spec` tests and harness under the Workflow test tree; run `pytest workflows/tests/implement_spec`.
+- [`__init__.py`](software_factory/workflows/implement_spec/__init__.py): `implement_spec(settings, targets)`, the definition.
+- [`policy.py`](software_factory/workflows/implement_spec/policy.py): values and pure functions only: the `hitl` label, comment source, commit subjects, the Spec work item and when held work is released.
+- [`intake.py`](software_factory/workflows/implement_spec/intake.py): selects the open, complete Specs not awaiting a person and writes a release when `hitl` was removed.
+- [`__main__.py`](software_factory/workflows/implement_spec/__main__.py): `main(argv, *, services=None)`, flags, logging, the real services and the interrupt signal.
+- [`dry.py`](software_factory/workflows/implement_spec/dry.py): the `--fake`/`--dry` seams.
+- [`software_factory/agents/roles/`](software_factory/agents/roles/): the role agents and their prompt templates (`prompt.md`), read relative to the package, not the current directory.
+- [`software_factory/tests/workflows/implement_spec/`](software_factory/tests/workflows/implement_spec/): scenarios and harness under the factory test tree; run `pytest software_factory/tests/workflows/implement_spec`.
 
-Add templates to the prompt folder and let each repository's delegate select,
-render, or combine them. For example, after adding `review.md`, use
-`render_prompt(load_prompt("review"), {"COMMIT": result.commit})` with that template's
-arguments. Delegates own step ordering and agent profiles; there is no prompt
-pipeline or configuration-file format. A missing template raises an error rather
+To change a prompt, edit the role's `prompt.md`; a missing template raises an error rather
 than falling back to a different prompt.
+
+## Other factory Workflows
+
+`pr_babysit` and `address_once` are further definitions over the same Stage library, run by the same factory runtime, and use
+the same console span log, optional `--otlp-endpoint` export and Execution ledger as `implement_spec`. Both read their
+settings from a `--config` file; see [`pr_babysit/settings.example.json`](software_factory/workflows/pr_babysit/settings.example.json)
+and [`address_once/settings.example.json`](software_factory/workflows/address_once/settings.example.json).
+
+```sh
+python -m software_factory.workflows.pr_babysit --config cfg.json                  # discover your pull requests and babysit each one
+python -m software_factory.workflows.pr_babysit --config cfg.json --pr https://github.com/owner/repo/pull/123
+python -m software_factory.workflows.address_once --config cfg.json --pr https://github.com/owner/repo/pull/123
+```
+
+`pr_babysit` polls a pull request until it closes, addressing feedback, maintaining CI, requesting a Copilot review and
+reporting readiness ([PR maintenance](software_factory/workflows/pr_babysit/README.md)); `--include-existing` also enrolls
+open pull requests, and `--retry URL` releases a blocked one. `address_once` addresses the trusted review feedback of one pull
+request once, assembled only from existing Stages. To write a Workflow of your own, see the
+[factory quickstart](software_factory/README.md) and [Factory Workflow Runtime](docs/concepts/str-factory-workflow-runtime.md).
 
 ## Optional Workflow Builder
 
@@ -478,9 +437,10 @@ verifies the integrated app, performs optional cleanup, closes the implementatio
 then reviews the PR and checks readiness. Preserve that ordering in Python. The builder
 adds no GitHub writes, commits, Ticket policy, or review logic.
 
-The actual [`implement_spec` Workflow](#implement-spec-phases) uses the builder for the default phase pipeline.
-The smaller fake example demonstrates the library independently. Existing workflow-owned
-spans also remain supported.
+The [`implement_spec` Workflow](#implement-spec-phases) does not use the builder: the factory runtime reports
+Stage attempt spans instead ([Run Observation](docs/concepts/str-run-observation.md#factory-spans)). The builder serves
+user-written scripts such as the smaller fake example, which demonstrates the library independently. Existing
+workflow-owned spans also remain supported.
 
 ### Track phases without a builder
 
@@ -539,7 +499,7 @@ premium-request usage (read from the Copilot CLI's session log), and the Worktre
 exported only with `otlp_observer(capture_content=True)`. Without `with_observer` nothing changes.
 A span appears in the dashboard when it ends, and Codex Agent Runs carry no usage. Pass any
 object with `agent_run(record)` and `worktree(event)` methods to `with_observer` to send the
-records elsewhere. The `implement_spec` Workflow opts in with `python -m workflows.implement_spec --otlp-endpoint http://localhost:4318`.
+records elsewhere. The `implement_spec` Workflow opts in with `python -m software_factory.workflows.implement_spec --otlp-endpoint http://localhost:4318`.
 Name a profile from the shared `Role` vocabulary (`replace(DEFAULT, name=Role.REVIEWER)`) and pass `otlp_observer(resource_per_agent=True)` to export each named agent as its own resource, which Aspire colors apart:
 
 | `Role` | Exports |
@@ -548,7 +508,7 @@ Name a profile from the shared `Role` vocabulary (`replace(DEFAULT, name=Role.RE
 | `CODE` | the Worktree and deterministic steps: checks, validation, Git, GitHub (`observer.span(..., role=Role.CODE)`) |
 | `PLANNER`, `DEVELOPER`, `REVIEWER` | the agents of those names (`AgentProfile(name=...)`) |
 
-`implement_spec` uses `ENGINEER` for each Spec, `CODE` for deterministic phases, and separate planner, developer, chore, and reviewer actors for agent phases; `plan_implement` names its agents `PLANNER` and `DEVELOPER`.
+The factory runtime uses `ENGINEER` for each run, `CODE` for scopes and deterministic Stages, and each agent Stage's role (planner, developer, chore, reviewer, address, maintainer) for its attempts; `plan_implement` names its agents `PLANNER` and `DEVELOPER`.
 See [Run Observation](docs/concepts/str-run-observation.md).
 
 ## Library examples
@@ -631,10 +591,10 @@ from loop import Agent, AgentOptions, AgentStartMode
 Agent(AgentOptions(start_mode=AgentStartMode.HARNESS, harness_dir=Path("/path/to/harness")))
 ```
 
-See [`workflows/implement_spec/`](../workflows/implement_spec/) for a complete Workflow,
-[`workflows/plan_implement.py`](../workflows/plan_implement.py) for two runs with
+See [`software_factory/workflows/implement_spec/`](software_factory/workflows/implement_spec/) for a complete Workflow,
+[`workflows/plan_implement.py`](workflows/plan_implement.py) for two runs with
 different models on one worktree, and
-[`workflows/implement_spec/prompts/implement.md`](../workflows/implement_spec/prompts/implement.md) for
+[`software_factory/agents/roles/developer/prompt.md`](software_factory/agents/roles/developer/prompt.md) for
 the default `implement_spec` prompt template.
 
 
@@ -664,5 +624,5 @@ was removed. OTLP closes the run's span and marks retention independently of dis
 Loop has no isolated sandbox synchronization backend; patch-based sync recovery is
 not applicable to its host worktrees or Docker context adapter.
 
-See [PR maintenance](workflows/pr_babysit/README.md) for continuous PR discovery,
-Address/Maintainer profiles, JSON recovery, and workflow-owned commit/push operations.
+See [PR maintenance](software_factory/workflows/pr_babysit/README.md) for continuous PR discovery,
+Address/Maintainer profiles, Execution-ledger recovery, and workflow-owned commit/push operations.
