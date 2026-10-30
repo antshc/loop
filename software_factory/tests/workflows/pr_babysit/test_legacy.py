@@ -9,6 +9,7 @@ from pathlib import Path
 from software_factory.shared.github.pull_requests.babysit import digest
 from software_factory.tests.runtime.harness import command
 from software_factory.tests.stages.pr_support import NUMBER, SLUG, answer, reply_text, selected_batch, thread
+from software_factory.runtime import Ledger, WorkItemLog
 from software_factory.workflows.pr_babysit.legacy import adopt_v1, state_path
 from software_factory.workflows.pr_babysit.policy import ADOPTED, FINGERPRINT
 
@@ -239,6 +240,29 @@ def test_adoption_skips_a_ledger_that_already_holds_records_without_locking(tmp_
         attempt.join(timeout=5)
 
     assert not attempt.is_alive() and outcome == [False]
+
+
+def test_adoption_never_overwrites_records_another_process_wrote_after_the_unlocked_check(tmp_path: Path, monkeypatch) -> None:
+    """Given a run that writes the log between adoption's unlocked check and its lock, when adoption goes on, then it sees those records and seeds nothing."""
+    rig = Babysit(tmp_path)
+    path = write_state(rig)
+    original = WorkItemLog.lock
+    written: list[bool] = []
+
+    def lock_after_a_run(self, *, wait: bool = False):
+        if not written:
+            written.append(True)
+            other = Ledger(rig.ledger._root).item("pr_babysit", rig.pr.id)
+            with original(other, wait=True):
+                other.seed([{"kind": "run-opened", "epoch": 1}, {"kind": "run-closed", "status": "completed", "reason": None, "attributes": {}}])
+        return original(self, wait=wait)
+
+    monkeypatch.setattr(WorkItemLog, "lock", lock_after_a_run)
+
+    adopted = adopt_v1(path, rig.ledger, rig.pr, ci_signal=lambda: "")
+
+    kinds = [record["kind"] for record in Ledger(rig.ledger._root).item("pr_babysit", rig.pr.id).records()]
+    assert adopted is False and kinds == ["run-opened", "run-closed"]
 
 
 def test_a_pull_request_with_no_earlier_state_adopts_nothing(tmp_path: Path) -> None:

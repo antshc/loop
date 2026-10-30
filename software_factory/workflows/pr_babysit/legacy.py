@@ -49,10 +49,11 @@ def adopt_v1(state_file: Path, ledger: Ledger, work: PullRequestWork, *, ci_sign
     """Seeds the pull request's ledger from the earlier version's state, once and under the work item's lock; False when there is no state, the ledger already holds records or another process holds the lock. `ci_signal` reads the CI signal of the pull request now, which an open CI batch needs to not be diagnosed again."""
     if not state_file.exists():
         return False
-    log = ledger.item(NAME, work.id)
     # The state file stays after adoption, so this runs on every scan: never wait on a lock a live run holds.
-    if log.records():
+    if ledger.item(NAME, work.id).records():
         return False
+    # A fresh handle under the lock: the one above cached what it read before another process could write.
+    log = ledger.item(NAME, work.id)
     try:
         with log.lock():
             if log.records():
