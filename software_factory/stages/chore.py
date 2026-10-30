@@ -18,7 +18,6 @@ from software_factory.events.specs import SpecRouted, SpecWork
 from software_factory.runtime import Evidence, Fail, HarnessCommits, Pass, Restore, Stage, Verdict, Verify
 from software_factory.shared.git import Commit, GitClient
 from software_factory.shared.github.account import GitHub
-from software_factory.stages.feature_branch import open_pull_request, require_open_pull_request
 
 DIFF_DIR = Path("bin") / "review_diff"
 MANIFEST_NAME = "_manifest.tsv"
@@ -93,11 +92,11 @@ def capture_pull_request_diff(diff: str, worktree: Path) -> Path:
 
 def _enabled(i: ChoreInput) -> bool:
     """The target enables the chore and the feature branch has a pull request to refine."""
-    return i.routed.target.chore and open_pull_request(i.github, i.routed) is not None
+    return i.routed.target.chore and i.github.open_pull_request(i.routed.target.slug, i.routed.feature_branch) is not None
 
 
 def _request(i: ChoreInput, path: Path) -> ChoreRequest:
-    url = require_open_pull_request(i.github, i.routed).url
+    url = i.github.require_open_pull_request(i.routed.target.slug, i.routed.feature_branch).url
     diff = i.github.pull_requests(i.routed.target.slug).diff(url)
     commits = tuple(_describe(commit) for commit in i.git.branch_commits(path, i.routed.base_branch))
     return ChoreRequest(url, path, i.routed.base_branch, i.routed.feature_branch, capture_pull_request_diff(diff, path), commits)

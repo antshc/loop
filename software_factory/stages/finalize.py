@@ -17,7 +17,6 @@ from software_factory.shared.github.issues.client import Issues
 from software_factory.shared.github.issues.graph import SpecGraphSnapshot
 from software_factory.shared.github.issues.issue import IssueState
 from software_factory.shared.github.pull_requests import PublishedPullRequest
-from software_factory.stages.feature_branch import open_pull_request
 
 REQUIRED_AXES = frozenset({"bugs", "quality", "smells", "initiative"})
 # Findings of these kinds keep the pull request a draft; the others are only reported.
@@ -117,7 +116,7 @@ def _assess(i: FinalizeInput, source: str, axes: frozenset[str], blocking: froze
     i.git.fetch(routed.target.checkout)
     current_head = i.git.ref_sha(routed.target.checkout, f"origin/{routed.feature_branch}")
     spec = i.tracker.spec(i.work.number)
-    pull_request = open_pull_request(i.github, routed)
+    pull_request = i.github.open_pull_request(routed.target.slug, routed.feature_branch)
     blockers = _readiness_blockers(i, spec, current_head, pull_request, axes, blocking)
     url = pull_request.url if pull_request is not None else i.published.url
     return _Assessment(blockers, pull_request, _summary(i, source, url, blockers))

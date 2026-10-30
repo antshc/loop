@@ -14,7 +14,6 @@ from software_factory.events.specs import SpecRouted, SpecWork
 from software_factory.events.tickets import Delivery
 from software_factory.runtime import Evidence, Fail, Pass, ReadOnly, Stage, Verdict
 from software_factory.shared.github.account import GitHub
-from software_factory.stages.feature_branch import open_pull_request, require_open_pull_request
 
 
 @dataclass(frozen=True)
@@ -40,11 +39,11 @@ def review_pull_request() -> Stage[ReviewInput, ReviewerReply, PullRequestReview
 
 def _enabled(i: ReviewInput) -> bool:
     """The target enables the review and the feature branch has a pull request to review."""
-    return i.routed.target.review and open_pull_request(i.github, i.routed) is not None
+    return i.routed.target.review and i.github.open_pull_request(i.routed.target.slug, i.routed.feature_branch) is not None
 
 
 def _request(i: ReviewInput, path: Path) -> ReviewerRequest:
-    url = require_open_pull_request(i.github, i.routed).url
+    url = i.github.require_open_pull_request(i.routed.target.slug, i.routed.feature_branch).url
     return ReviewerRequest(url, path, i.routed.initiative, i.delivery.head)
 
 
