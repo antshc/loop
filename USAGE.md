@@ -276,22 +276,6 @@ Import from the public package:
 from loop import Kind, Phase, Phases, Role, Workflow, WorkflowBuilder, WorkflowRun
 ```
 
-### Run the fake e-commerce example
-
-[`loop/workflows/workflow_reporting.py`](loop/workflows/workflow_reporting.py) is self-contained,
-uses fake basket data, and makes no agent, Git, or GitHub calls. Run from the `loop/` directory:
-
-```sh
-python -m workflows.workflow_reporting
-python -m workflows.workflow_reporting --fail-verification  # exits 1; PR stays a draft
-python -m pip install -e "..[visualization]"
-python -m workflows.workflow_reporting --visualize
-```
-
-The example deliberately rejects the first implementation attempt and recovers on
-its second attempt. It publishes a fake draft PR before verification, skips cleanup,
-and marks readiness only after verification and review complete.
-
 ### Define phases; execute with ordinary Python
 
 This smaller runnable example demonstrates the same interface:
