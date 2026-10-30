@@ -61,7 +61,7 @@ def feature_worktree(*, hooks: Sequence[LoopHook] = ()) -> WorkspaceOpener[Featu
 
 
 def pr_worktree() -> WorkspaceOpener[PullRequestWorktreeInput]:
-    """The pull request's recovery worktree on `babysit/<repository>/<number>`, at the head the batch opens at; commits an earlier run kept ahead of that head stay, a branch left behind is advanced to it, a diverged one raises WorktreeError."""
+    """The pull request's recovery worktree on `babysit/<repository>/<number>`, at the head the batch opens at; commits an earlier run kept ahead of that head stay, a branch left behind is advanced to it, a stale pre-rebase copy of it is reset to it, any other diverged one raises WorktreeError."""
     return WorkspaceOpener("pr-worktree", PullRequestWorktreeInput, _open_pull_request_worktree)
 
 
@@ -89,13 +89,17 @@ def _open_pull_request_worktree(i: PullRequestWorktreeInput) -> Iterator[AgentWo
 
 
 def _align(git: GitClient, path: Path, head: str) -> None:
-    """Keeps commits ahead of the pull request head, advances a branch left behind it and refuses a diverged one."""
+    """Keeps commits ahead of the pull request head, advances a branch left behind it, resets a stale pre-rebase copy to it and refuses any other diverged one."""
     actual = git.head(path).sha
     if git.is_ancestor(path, head, actual):
         return
-    if not git.is_ancestor(path, actual, head):
+    if git.is_ancestor(path, actual, head):
+        git.advance(path, head)
+    elif git.is_clean(path) and git.is_rebased_copy(path, head):
+        # The pull request was rebased or force-pushed: every local commit is already on the new head.
+        git.restore(path, head)
+    else:
         raise WorktreeError(f"Unexpected local commits; inspect recovery branch at {path}")
-    git.advance(path, head)
 
 
 def _clean(_: CleanInput, clean: bool, __: Evidence) -> Verdict[Nothing]:

@@ -106,6 +106,9 @@ Worktree roots are explicitly configured absolute paths: `worktrees_dir` in the 
 | Run returns successfully with edits | Loop raises `WorktreeError`; no automatic commit |
 | Temporary-branch merge succeeds | Loop merges into host and deletes the temporary branch |
 | Temporary-branch merge fails/diverges | Loop retains the branch; Workflow resolves recovery |
+| Recovery branch behind the PR head | Workflow fast-forwards it to the head |
+| Recovery branch is a stale pre-rebase copy of the head | Workflow resets it to the head when the worktree is clean and every local commit already has a patch-equivalent on the head |
+| Recovery branch has other local commits that diverge from the head | Workflow raises `WorktreeError` and hands the PR off; nothing is discarded |
 | Stale worktree metadata | Loop prunes stale entries before creation |
 | Orphan directory | Loop removes empty/link-only disposable orphans; preserves unknown user files |
 | Two users of one named worktree | Workflow holds a repository/branch lock |

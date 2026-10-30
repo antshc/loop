@@ -126,6 +126,20 @@ def test_the_pr_worktree_opener_advances_a_recovery_branch_that_is_behind_the_he
     assert command(("rev-parse", rig.recovery_branch()), rig.repo.path).strip() == rig.head
 
 
+def test_the_pr_worktree_opener_resets_a_stale_copy_of_the_head_left_by_a_rebase(tmp_path: Path) -> None:
+    """Given a recovery branch whose commits are all patch-equivalent to the rebased head, when the scope opens, then it is reset to the head."""
+    rig = PrRig(tmp_path)
+    command(("checkout", "-q", "-b", rig.recovery_branch(), rig.head), rig.repo.path)
+    command(("commit", "-q", "--amend", "--no-edit", "--date=2001-01-01T00:00:00"), rig.repo.path)
+    command(("checkout", "-q", "main"), rig.repo.path)
+    assert command(("rev-parse", rig.recovery_branch()), rig.repo.path).strip() != rig.head
+
+    result, _, _ = open_pr_worktree(rig)
+
+    assert result.status == "completed"
+    assert command(("rev-parse", rig.recovery_branch()), rig.repo.path).strip() == rig.head
+
+
 def test_the_pr_worktree_opener_refuses_a_recovery_branch_that_diverged_from_the_head(tmp_path: Path) -> None:
     """Given a recovery branch with a commit that is not on the pull request head, when the scope opens, then it raises WorktreeError and no Stage runs."""
     rig = PrRig(tmp_path)

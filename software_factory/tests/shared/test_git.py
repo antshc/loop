@@ -87,6 +87,12 @@ def test_is_ancestor_reports_the_merge_base_outcome() -> None:
     assert GitClient(Script(**{"merge-base": CommandError("git", 1, "")})).is_ancestor(Path("/w"), "a1", "b2") is False
 
 
+def test_is_rebased_copy_holds_only_when_every_commit_has_a_patch_equivalent_upstream() -> None:
+    assert GitClient(Script(cherry="- a1\n- b2\n")).is_rebased_copy(Path("/w"), "up") is True
+    assert GitClient(Script(cherry="")).is_rebased_copy(Path("/w"), "up") is True
+    assert GitClient(Script(cherry="- a1\n+ b2\n")).is_rebased_copy(Path("/w"), "up") is False
+
+
 def test_publish_checks_the_branch_name_and_never_forces() -> None:
     script = Script()
 

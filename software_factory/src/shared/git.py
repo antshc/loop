@@ -84,6 +84,10 @@ class GitClient:
         """Whether commit `ancestor` is reachable from `descendant`, or the same commit."""
         return self._succeeds(path, "merge-base", "--is-ancestor", ancestor, descendant)
 
+    def is_rebased_copy(self, path: Path, upstream: str) -> bool:
+        """Whether every commit of HEAD beyond `upstream` already has a patch-equivalent in `upstream`, as after a rebase."""
+        return all(line.startswith("-") for line in self._git(path, "cherry", upstream).splitlines())
+
     def head(self, path: Path) -> Commit:
         return self._log(path, "-1")[0]
 
