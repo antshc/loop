@@ -6,7 +6,6 @@ Run repository examples from the repository root.
 
 - [Implement Spec Workflow](#implement-spec-workflow)
 - [Other factory Workflows](#other-factory-workflows)
-- [Optional Workflow Builder](#optional-workflow-builder)
 - [Logging](#logging)
 - [Telemetry (optional)](#telemetry-optional)
 - [Library examples](#library-examples)
@@ -98,26 +97,26 @@ builder-owned. Additional CLI-specific settings remain available through `args`.
 
 ## Implement Spec Workflow
 
-The self-contained [`software_factory/workflows/implement_spec/`](software_factory/workflows/implement_spec/) package is an example,
+The self-contained [`workflows/software_factory/implement_spec/`](workflows/software_factory/implement_spec/) package is an example,
 not part of the installed library. It is one declarative definition over the factory's Stage library, run once per Spec by
-the factory runtime. It uses GitHub Specs and Tickets to drive
+Loop's Workflow runtime. It uses GitHub Specs and Tickets to drive
 agent work, commits, draft pull requests, and Ticket updates.
 
 Install the project (`python -m pip install -e .`); `--otlp-endpoint` needs the `otel` extra (`.[otel]`). Before running it, set `HARNESS_SLUG` and
-`harness_target()` in [`__main__.py`](software_factory/workflows/implement_spec/__main__.py) for the repository holding your
+`harness_target()` in [`__main__.py`](workflows/software_factory/implement_spec/__main__.py) for the repository holding your
 Specs and Tickets and receiving the code. The supplied configuration
 targets `antshc/loop`; it is not a read-only demo.
 
 ```sh
 gh auth status
 copilot --version
-python -m factory_workflows.implement_spec
+python -m workflows.software_factory.implement_spec
 ```
 
 Optionally run it through your own alias, from the harness root:
 
 ```sh
-alias implement_spec='PYTHONPATH=/path/to/harness python -m factory_workflows.implement_spec'
+alias implement_spec='PYTHONPATH=/path/to/harness python -m workflows.software_factory.implement_spec'
 implement_spec --log-level DEBUG
 ```
 
@@ -127,7 +126,7 @@ the next run resumes from the Execution ledger without repeating finished work).
 
 ### Implement Spec phases
 
-The definition uses the same phases as the [eShop dev workflow](https://github.com/antshc/eShop/tree/main/tools/loop/workflows/dev):
+The definition uses the same phases as the [eShop dev workflow](https://github.com/antshc/eShop/tree/main/tools/workflows/loop/dev):
 
 | Order | Phase | Behavior |
 |---|---|---|
@@ -165,8 +164,8 @@ validation, restoration, individual gates, agent output, and command details sta
 in the Execution ledger, telemetry or the DEBUG file.
 
 ```sh
-python -m factory_workflows.implement_spec --spec 42
-python -m factory_workflows.implement_spec --dry --fake-speed 0 --no-otel
+python -m workflows.software_factory.implement_spec --spec 42
+python -m workflows.software_factory.implement_spec --dry --fake-speed 0 --no-otel
 ```
 
 `--spec NUMBER` selects one open Spec. `--no-otel` disables export even when `--dry` selected an endpoint. Existing
@@ -175,7 +174,7 @@ python -m factory_workflows.implement_spec --dry --fake-speed 0 --no-otel
 Stage ids instead of phase names.
 
 The Stages and routes live in
-[`__init__.py`](software_factory/workflows/implement_spec/__init__.py); `explain()` prints which Stage feeds which.
+[`__init__.py`](workflows/software_factory/implement_spec/__init__.py); `explain()` prints which Stage feeds which.
 
 ### Debugging with fakes
 
@@ -191,19 +190,19 @@ rest real; `--dry` fakes them all and publishes the run to the dashboard (OTLP e
 | `store` | the Execution ledger, in a temporary directory | none |
 
 ```sh
-python -m factory_workflows.implement_spec --dry                                  # everything fake, traces in the dashboard
-python -m factory_workflows.implement_spec --fake agent --fake github --fake store   # real Git: the fake agent makes real empty commits and `implement_spec` really pushes
-python -m factory_workflows.implement_spec --dry --fake-speed 0 --no-rework        # instant, no failing first attempt
+python -m workflows.software_factory.implement_spec --dry                                  # everything fake, traces in the dashboard
+python -m workflows.software_factory.implement_spec --fake agent --fake github --fake store   # real Git: the fake agent makes real empty commits and `implement_spec` really pushes
+python -m workflows.software_factory.implement_spec --dry --fake-speed 0 --no-rework        # instant, no failing first attempt
 ```
 
 By default the second Ticket fails its first attempt so the rework path shows up in the trace.
-In code, `Fakes` in [`dry.py`](software_factory/workflows/implement_spec/dry.py) builds the same fakes, and a test passes
+In code, `Fakes` in [`dry.py`](workflows/software_factory/implement_spec/dry.py) builds the same fakes, and a test passes
 its own `Services` to `main(argv, services=...)`; the library offers
 `fake_agent`, `FakeCliRunner` and `DirectoryGit` to run any functional slice in isolation.
 
 ### Repositories and targets
 
-The example [`implement_spec`](software_factory/workflows/implement_spec/) reads Specs and Tickets from the harness repository.
+The example [`implement_spec`](workflows/software_factory/implement_spec/) reads Specs and Tickets from the harness repository.
 By default it implements only Specs targeting the harness itself. Pass a `Targets` service to `main(argv, services=...)`, or
 change `harness_target()`, to route Specs by their `repo:target:<owner/repo>` label to
 explicitly configured checkouts under the harness's `workspace` folder.
@@ -216,7 +215,7 @@ case-insensitively; duplicate configurations fail the run.
 
 The developer Stage handles Ticket iteration, refreshed Initiative history, rework, rollback and Ticket closure: a
 declined reply or an invalid commit fails the attempt, and each retry starts a fresh agent session. Per-repository agent
-behavior is no longer a Python delegate; adjust the role agents under `software_factory/src/agents/roles/`.
+behavior is no longer a Python delegate; adjust the role agents under `workflows/software_factory/agents/roles/`.
 
 After the developer finishes, the runtime requires exactly one new,
 correctly tagged commit, a clean worktree, and a reported SHA equal to HEAD.
@@ -226,228 +225,42 @@ repository; Ticket updates remain on the harness.
 
 ### Implement Spec package and named prompts
 
-All `implement_spec`-owned code and tests live in [`software_factory/workflows/implement_spec/`](software_factory/workflows/implement_spec/) and
-[`software_factory/tests/workflows/implement_spec/`](software_factory/tests/workflows/implement_spec/). The definition places Stages from
-[`software_factory/src/stages/`](software_factory/src/stages/) over the [`software_factory/src/runtime/`](software_factory/src/runtime/),
-depends on the public `loop` package and on [`software_factory/src/shared/`](software_factory/src/shared/) (Git, GitHub,
-process, state, telemetry), never on a sibling Workflow, and uses no container. The independent
-[`plan_implement.py`](loop/workflows/plan_implement.py) remains a self-contained, function-based script.
+All `implement_spec`-owned code and tests live in [`workflows/software_factory/implement_spec/`](workflows/software_factory/implement_spec/) and
+[`workflows/tests/software_factory/workflows/implement_spec/`](workflows/tests/software_factory/workflows/implement_spec/). The definition places Stages from
+[`workflows/software_factory/stages/`](workflows/software_factory/stages/) run by Loop's Workflow runtime ([`src/runtime/`](src/runtime/)),
+depends on the public `loop` package (including the Git, GitHub and process helpers in [`src/shared/`](src/shared/)) and on
+[`workflows/software_factory/shared/`](workflows/software_factory/shared/) (checks, state, pacing, telemetry), never on a sibling Workflow, and uses no container. The independent
+[`plan_implement.py`](workflows/loop/plan_implement.py) is a small definition on the same runtime with its own Stages.
 
-- [`__init__.py`](software_factory/workflows/implement_spec/__init__.py): `implement_spec(settings, targets)`, the definition.
-- [`policy.py`](software_factory/workflows/implement_spec/policy.py): values and pure functions only: the `hitl` label, comment source, commit subjects, the Spec work item and when held work is released.
-- [`intake.py`](software_factory/workflows/implement_spec/intake.py): selects the open, complete Specs not awaiting a person and writes a release when `hitl` was removed.
-- [`__main__.py`](software_factory/workflows/implement_spec/__main__.py): `main(argv, *, services=None)`, flags, logging, the real services and the interrupt signal.
-- [`dry.py`](software_factory/workflows/implement_spec/dry.py): the `--fake`/`--dry` seams.
-- [`software_factory/src/agents/roles/`](software_factory/src/agents/roles/): the role agents and their prompt templates (`prompt.md`), read relative to the package, not the current directory.
-- [`software_factory/tests/workflows/implement_spec/`](software_factory/tests/workflows/implement_spec/): scenarios and harness under the factory test tree; run `pytest software_factory/tests/workflows/implement_spec`.
+- [`__init__.py`](workflows/software_factory/implement_spec/__init__.py): `implement_spec(settings, targets)`, the definition.
+- [`policy.py`](workflows/software_factory/implement_spec/policy.py): values and pure functions only: the `hitl` label, comment source, commit subjects, the Spec work item and when held work is released.
+- [`intake.py`](workflows/software_factory/implement_spec/intake.py): selects the open, complete Specs not awaiting a person and writes a release when `hitl` was removed.
+- [`__main__.py`](workflows/software_factory/implement_spec/__main__.py): `main(argv, *, services=None)`, flags, logging, the real services and the interrupt signal.
+- [`dry.py`](workflows/software_factory/implement_spec/dry.py): the `--fake`/`--dry` seams.
+- [`workflows/software_factory/agents/roles/`](workflows/software_factory/agents/roles/): the role agents and their prompt templates (`prompt.md`), read relative to the package, not the current directory.
+- [`workflows/tests/software_factory/workflows/implement_spec/`](workflows/tests/software_factory/workflows/implement_spec/): scenarios and harness under the factory test tree; run `pytest workflows/tests/software_factory/workflows/implement_spec`.
 
 To change a prompt, edit the role's `prompt.md`; a missing template raises an error rather
 than falling back to a different prompt.
 
 ## Other factory Workflows
 
-`pr_babysit` and `address_once` are further definitions over the same Stage library, run by the same factory runtime, and use
+`pr_babysit` and `address_once` are further definitions over the same Stage library, run by the same Workflow runtime, and use
 the same console span log, optional `--otlp-endpoint` export and Execution ledger as `implement_spec`. Both read their
-settings from a `--config` file; see [`pr_babysit/settings.example.json`](software_factory/workflows/pr_babysit/settings.example.json)
-and [`address_once/settings.example.json`](software_factory/workflows/address_once/settings.example.json).
+settings from a `--config` file; see [`pr_babysit/settings.example.json`](workflows/software_factory/pr_babysit/settings.example.json)
+and [`address_once/settings.example.json`](workflows/software_factory/address_once/settings.example.json).
 
 ```sh
-python -m factory_workflows.pr_babysit --config cfg.json                  # discover your pull requests and babysit each one
-python -m factory_workflows.pr_babysit --config cfg.json --pr https://github.com/owner/repo/pull/123
-python -m factory_workflows.address_once --config cfg.json --pr https://github.com/owner/repo/pull/123
+python -m workflows.software_factory.pr_babysit --config cfg.json                  # discover your pull requests and babysit each one
+python -m workflows.software_factory.pr_babysit --config cfg.json --pr https://github.com/owner/repo/pull/123
+python -m workflows.software_factory.address_once --config cfg.json --pr https://github.com/owner/repo/pull/123
 ```
 
 `pr_babysit` polls a pull request until it closes, addressing feedback, maintaining CI, requesting a Copilot review and
-reporting readiness ([PR maintenance](software_factory/workflows/pr_babysit/README.md)); `--include-existing` also enrolls
+reporting readiness ([PR maintenance](workflows/software_factory/pr_babysit/README.md)); `--include-existing` also enrolls
 open pull requests, and `--retry URL` releases a blocked one. `address_once` addresses the trusted review feedback of one pull
 request once, assembled only from existing Stages. To write a Workflow of your own, see the
-[factory quickstart](software_factory/README.md) and [Factory Workflow Runtime](docs/concepts/str-factory-workflow-runtime.md).
-
-## Optional Workflow Builder
-
-`WorkflowBuilder` adds phase tracking, high-level console logs, terminal visualization,
-and optional OTLP spans to ordinary Python. It does not execute callbacks or schedule
-work: your script owns loops, conditions, retries, Git, and agent calls. Existing
-`Agent()` workflows need no changes.
-
-Import from the public package:
-
-```python
-from loop import Kind, Phase, Phases, Role, Workflow, WorkflowBuilder, WorkflowRun
-```
-
-### Run the fake e-commerce example
-
-[`loop/workflows/workflow_reporting.py`](loop/workflows/workflow_reporting.py) is self-contained,
-uses fake basket data, and makes no agent, Git, or GitHub calls. Run from the `loop/` directory:
-
-```sh
-python -m workflows.workflow_reporting
-python -m workflows.workflow_reporting --fail-verification  # exits 1; PR stays a draft
-python -m pip install -e "..[visualization]"
-python -m workflows.workflow_reporting --visualize
-```
-
-The example deliberately rejects the first implementation attempt and recovers on
-its second attempt. It publishes a fake draft PR before verification, skips cleanup,
-and marks readiness only after verification and review complete.
-
-### Define phases; execute with ordinary Python
-
-This smaller runnable example demonstrates the same interface:
-
-```python
-from loop import Kind, Role, WorkflowBuilder, configure_logging
-
-configure_logging()  # The application owns logging handlers.
-workflow = (
-    WorkflowBuilder("eShop development")
-    .phase("prepare", "Prepare repository", Kind.CODE, Role.CODE)
-    .phase("implement", "Implement ticket", Kind.AGENT, Role.DEVELOPER)
-    .phase("verify", "Verify application", Kind.CODE, "verifier")
-    .phase("review", "Review pull request", Kind.AGENT, Role.REVIEWER)
-    .console()
-    .build()
-)
-
-basket = []
-with workflow.run(spec=42) as run:
-    with run.phase("prepare"):
-        basket.clear()
-
-    for ticket, product in ((43, "coffee"), (44, "tea")):
-        for attempt in range(1, 3):
-            with run.phase("implement", ticket=ticket, attempt=attempt) as phase:
-                changed = not (ticket == 43 and attempt == 1)
-                if phase.gate("product added", changed, "No changes produced"):
-                    basket.append(product)
-            if phase.status == "completed":
-                break
-        else:
-            run.fail(f"Ticket #{ticket} exhausted its retries")
-            break
-
-    if run.outcome.status != "failed":
-        with run.phase("verify") as phase:
-            verified = basket == ["coffee", "tea"]
-            phase.set(verdict="pass" if verified else "fail")
-            phase.gate("basket contains products", verified, "Basket verification failed")
-        if verified:
-            with run.phase("review") as phase:
-                phase.set(blocking_findings=0)
-            run.set(ready=True)
-        else:
-            run.skip("review", "Verification failed")
-            run.set(ready=False)
-            run.fail("Verification failed; PR remains a draft")
-
-assert run.outcome.status == "completed"
-assert run.outcome.attributes["ready"] is True
-```
-
-`build()` snapshots the declarations. Each `workflow.run()` creates independent state;
-reuse the definition for several Specs. Phase names must be unique and declared before
-use. Existing helpers may also pass the declared kind and owner positionally, as with
-`Phases.phase(name, kind, owner, **attributes)`; conflicting declarations are rejected.
-Definition order controls the pending display, not execution order. The current
-interface is synchronous; keep phase contexts within their run and close them before
-leaving it. Thread scheduling and asynchronous context managers are outside its scope.
-
-### Outcomes and gates
-
-- `run.phase(...)` starts a new occurrence every time, even for the same Ticket.
-  Each occurrence has its own ID, parent ID, attempt attributes, and duration.
-- Nested phases inherit their parent's attributes; inner changes do not mutate the parent.
-- `phase.gate(check, ok, note)` records a claim and returns `ok`. A failed gate makes
-  that phase failed. The caller decides whether to stop, retry, or continue.
-- `phase.fail(reason)` is sticky: clean exit and `phase.succeed()` cannot erase failure.
-- Clean exit completes a running phase. Exceptions mark it failed and propagate unchanged;
-  interruption/cancellation marks it cancelled. Console errors summarize exception types.
-- `run.skip(name, reason, **attributes)` records a skipped occurrence without running work.
-  A declared phase never entered remains pending; it is not automatically called or skipped.
-- A failed child does not automatically fail its parent: retries may recover. Call
-  `run.fail(reason)` when recovery fails or a business outcome blocks delivery.
-- `phase.set(...)` and `run.set(...)` record business facts; they do not infer success.
-  Set verification verdict and PR readiness explicitly. Read the root result through
-  `run.outcome` and occurrence history through `run.executions` after exit.
-
-### Independent reporting options
-
-| Option | Behavior | Dependency |
-|---|---|---|
-| No options | Track phases and gates without output | Base install |
-| `.console()` | High-level transitions and final results through `loop.workflow` | Base install |
-| `.visualize(stream=...)` | Live terminal table; one final table when redirected | `loop[visualization]` |
-| `.otel(observer)` | Export nested phase spans through an existing observer | `loop[otel]` |
-
-Combine the options as needed. Importing Loop never imports Rich or OpenTelemetry.
-Missing Rich raises an actionable error only when visualization is requested.
-`configure_logging()` or the host's logging configuration controls console records;
-the builder installs no handlers. Visualization defaults to stderr, honors `NO_COLOR`,
-and restores the terminal on failure. With console and visualization together, each
-log transition is emitted once; the table is a separate view of the same phases.
-Reporting errors are summarized without replacing the workflow's outcome or original exception.
-
-Use `.phase(..., visible=False)` for details such as commit or restore operations.
-They stay in execution history and telemetry but do not appear in console or terminal.
-Console output excludes prompts, agent output, tool calls, command output, gate details,
-and stack traces. Pass short, high-level reasons to `phase.fail()` and `run.fail()`.
-
-Example console transitions (timestamps/logger omitted):
-
-```text
-INFO  eShop development · spec #42 started
-INFO  Implement ticket · spec #42 · ticket #43 · attempt 1 started
-WARN  Implement ticket · spec #42 · ticket #43 · attempt 1 failed · 0.0s · No changes produced
-INFO  Implement ticket · spec #42 · ticket #43 · attempt 2 started
-INFO  Implement ticket · spec #42 · ticket #43 · attempt 2 completed · 0.0s
-INFO  eShop development · spec #42 completed · 0.0s · ready=True
-```
-
-### Share telemetry with agent observation
-
-```python
-from loop import Agent, WorkflowBuilder, otlp_observer
-
-observer = otlp_observer(endpoint="http://localhost:4318", resource_per_agent=True)
-agent_builder = Agent().with_observer(observer)
-workflow_builder = WorkflowBuilder("delivery").otel(observer)
-```
-
-Declare phases on `workflow_builder`, build it, and open each phase around the existing
-agent/worktree calls. `.otel(observer)` does not attach an agent observer automatically;
-`with_observer(observer)` remains the independent agent opt-in. Share the same observer
-so spans share providers and trace context. An active workflow phase parents an Agent Run,
-including within a worktree; the worktree remains the fallback parent without a current span.
-Gates and explicit failed outcomes are exported even when the Python body returns normally.
-
-### Adapt an eShop-style dev workflow
-
-Declare phases in a user-owned `definition.py`, build once in `run.py`, and pass the
-active `run` to helpers accepting a phase tracker. The
-[eShop reference](https://github.com/antshc/eShop/tree/main/tools/loop/workflows/dev)
-adds optional planning/ticket creation before delivery, publishes tickets as they land,
-verifies the integrated app, performs optional cleanup, closes the implementation worktree,
-then reviews the PR and checks readiness. Preserve that ordering in Python. The builder
-adds no GitHub writes, commits, Ticket policy, or review logic.
-
-The [`implement_spec` Workflow](#implement-spec-phases) does not use the builder: the factory runtime reports
-Stage attempt spans instead ([Run Observation](docs/concepts/str-run-observation.md#factory-spans)). The builder serves
-user-written scripts such as the smaller fake example, which demonstrates the library independently. Existing
-workflow-owned spans also remain supported.
-
-### Track phases without a builder
-
-```python
-from loop import Kind, Phases, Role
-
-phases = Phases()
-with phases.phase("verify", Kind.CODE, Role.CODE) as phase:
-    phase.gate("basket has coffee", "coffee" in ["coffee"])
-```
-
-Direct `Phases()` has no registry and emits no output. The builder and phase tracking
-are both optional for agent execution.
+[factory quickstart](workflows/software_factory/README.md) and [Factory Workflow Runtime](docs/concepts/str-factory-workflow-runtime.md).
 
 ## Logging
 
@@ -493,7 +306,7 @@ premium-request usage (read from the Copilot CLI's session log), and the Worktre
 exported only with `otlp_observer(capture_content=True)`. Without `with_observer` nothing changes.
 A span appears in the dashboard when it ends, and Codex Agent Runs carry no usage. Pass any
 object with `agent_run(record)` and `worktree(event)` methods to `with_observer` to send the
-records elsewhere. The `implement_spec` Workflow opts in with `python -m factory_workflows.implement_spec --otlp-endpoint http://localhost:4318`.
+records elsewhere. The `implement_spec` Workflow opts in with `python -m workflows.software_factory.implement_spec --otlp-endpoint http://localhost:4318`.
 Name a profile from the shared `Role` vocabulary (`replace(DEFAULT, name=Role.REVIEWER)`) and pass `otlp_observer(resource_per_agent=True)` to export each named agent as its own resource, which Aspire colors apart:
 
 | `Role` | Exports |
@@ -502,7 +315,7 @@ Name a profile from the shared `Role` vocabulary (`replace(DEFAULT, name=Role.RE
 | `CODE` | the Worktree and deterministic steps: checks, validation, Git, GitHub (`observer.span(..., role=Role.CODE)`) |
 | `PLANNER`, `DEVELOPER`, `REVIEWER` | the agents of those names (`AgentProfile(name=...)`) |
 
-The factory runtime uses `ENGINEER` for each run, `CODE` for scopes and deterministic Stages, and each agent Stage's role (planner, developer, chore, reviewer, address, maintainer) for its attempts; `plan_implement` names its agents `PLANNER` and `DEVELOPER`.
+The Workflow runtime uses `ENGINEER` for each run, `CODE` for scopes and deterministic Stages, and each agent Stage's role (planner, developer, chore, reviewer, address, maintainer) for its attempts; `plan_implement` names its agents `PLANNER` and `DEVELOPER`.
 See [Run Observation](docs/concepts/str-run-observation.md).
 
 ## Library examples
@@ -585,10 +398,10 @@ from loop import Agent, AgentOptions, AgentStartMode
 Agent(AgentOptions(start_mode=AgentStartMode.HARNESS, harness_dir=Path("/path/to/harness")))
 ```
 
-See [`software_factory/workflows/implement_spec/`](software_factory/workflows/implement_spec/) for a complete Workflow,
-[`workflows/plan_implement.py`](loop/workflows/plan_implement.py) for two runs with
+See [`workflows/software_factory/implement_spec/`](workflows/software_factory/implement_spec/) for a complete Workflow,
+[`workflows/loop/plan_implement.py`](workflows/loop/plan_implement.py) for two runs with
 different models on one worktree, and
-[`software_factory/src/agents/roles/developer/prompt.md`](software_factory/src/agents/roles/developer/prompt.md) for
+[`workflows/software_factory/agents/roles/developer/prompt.md`](workflows/software_factory/agents/roles/developer/prompt.md) for
 the default `implement_spec` prompt template.
 
 
@@ -618,5 +431,5 @@ was removed. OTLP closes the run's span and marks retention independently of dis
 Loop has no isolated sandbox synchronization backend; patch-based sync recovery is
 not applicable to its host worktrees or Docker context adapter.
 
-See [PR maintenance](software_factory/workflows/pr_babysit/README.md) for continuous PR discovery,
+See [PR maintenance](workflows/software_factory/pr_babysit/README.md) for continuous PR discovery,
 Address/Maintainer profiles, Execution-ledger recovery, and workflow-owned commit/push operations.

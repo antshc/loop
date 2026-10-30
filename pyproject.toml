@@ -12,7 +12,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-visualization = ["rich>=13"]
 dev = ["pytest", "import-linter", "opentelemetry-sdk>=1.45", "opentelemetry-exporter-otlp-proto-http>=1.45"]
 otel = [
     "opentelemetry-sdk>=1.45",
@@ -20,6 +19,7 @@ otel = [
 ]
 
 [tool.setuptools]
+# The installed artifact is the Loop library only; Workflows and tests run from the repository clone.
 packages = [
     "loop",
     "loop.agents",
@@ -30,64 +30,32 @@ packages = [
     "loop.hooks",
     "loop.observe",
     "loop.run",
+    "loop.runtime",
+    "loop.runtime._engine",
     "loop.sessions",
-    "loop.workflow",
-    "loop.workflow.adapters",
-    "software_factory",
-    "software_factory.agents",
-    "software_factory.agents._kit",
-    "software_factory.agents.roles",
-    "software_factory.agents.roles.address",
-    "software_factory.agents.roles.chore",
-    "software_factory.agents.roles.developer",
-    "software_factory.agents.roles.maintainer",
-    "software_factory.agents.roles.planner",
-    "software_factory.agents.roles.reviewer",
-    "software_factory.events",
-    "software_factory.flows",
-    "software_factory.runtime",
-    "software_factory.runtime._engine",
-    "software_factory.shared",
-    "software_factory.shared.agents",
-    "software_factory.shared.github",
-    "software_factory.shared.github.issues",
-    "software_factory.shared.github.pull_requests",
-    "software_factory.stages",
-    "factory_workflows",
-    "factory_workflows.address_once",
-    "factory_workflows.implement_spec",
-    "factory_workflows.pr_babysit",
+    "loop.shared",
+    "loop.shared.github",
+    "loop.shared.github.issues",
+    "loop.shared.github.pull_requests",
 ]
 
 [tool.setuptools.package-dir]
-loop = "loop/src"
-software_factory = "software_factory/src"
-factory_workflows = "software_factory/workflows"
-
-[tool.setuptools.package-data]
-"software_factory.agents.roles.address" = ["*.md"]
-"software_factory.agents.roles.chore" = ["*.md"]
-"software_factory.agents.roles.developer" = ["*.md"]
-"software_factory.agents.roles.maintainer" = ["*.md"]
-"software_factory.agents.roles.planner" = ["*.md"]
-"software_factory.agents.roles.reviewer" = ["*.md"]
-"factory_workflows.address_once" = ["*.json"]
-"factory_workflows.pr_babysit" = ["*.json"]
+loop = "src"
 
 [tool.pytest.ini_options]
-pythonpath = ["loop", "software_factory", "loop/tests"]
-testpaths = ["loop/tests", "software_factory/tests"]
+pythonpath = ["."]
+testpaths = ["tests", "workflows/tests"]
 norecursedirs = ["archive", ".*"]
 
 [tool.importlinter]
-root_packages = ["loop", "workflows", "software_factory", "factory_workflows", "tests"]
+root_packages = ["loop", "workflows", "tests"]
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
-name = "The loop library is layered: builder over agents over clis, docker and git over run over hooks over sessions"
+name = "The loop library is layered: the runtime over builder over agents over clis, docker and git over run over hooks over sessions over shared infrastructure"
 type = "layers"
 layers = [
-    "factory | workflow",
+    "runtime | factory",
     "builder | dryrun",
     "agents",
     "clis | docker | git",
@@ -95,13 +63,20 @@ layers = [
     "hooks",
     "sessions",
     "observe",
+    "shared",
 ]
 containers = ["loop"]
 
 [[tool.importlinter.contracts]]
-name = "The factory and the examples import only the public loop package"
+name = "The loop library never imports Workflows or tests"
 type = "forbidden"
-source_modules = ["workflows", "software_factory", "factory_workflows"]
+source_modules = ["loop"]
+forbidden_modules = ["workflows", "tests"]
+
+[[tool.importlinter.contracts]]
+name = "The factory and the examples import only the public loop package and its public shared modules"
+type = "forbidden"
+source_modules = ["workflows.loop", "workflows.software_factory"]
 forbidden_modules = [
     "loop.agents",
     "loop.builder",
@@ -113,160 +88,210 @@ forbidden_modules = [
     "loop.hooks",
     "loop.observe",
     "loop.run",
+    "loop.runtime",
     "loop.sessions",
-    "loop.workflow",
 ]
-# The telemetry test builds Loop's observer over an in-memory exporter, which the public otlp_observer cannot take.
-ignore_imports = ["tests.shared.test_telemetry -> loop.observe.otel"]
+# `from loop import run` names the runtime's run function, which grimp reads as the `loop.run` subpackage.
+ignore_imports = ["workflows.**.__main__ -> loop.run", "workflows.loop.plan_implement -> loop.run"]
+unmatched_ignore_imports_alerting = "none"
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
-name = "The factory is layered: Workflow definitions over Flow fragments over Stages over Events over the runtime over role agents and shared infrastructure"
+name = "The factory is layered: Workflow definitions over Flow fragments over Stages over Events over role agents and shared infrastructure"
 type = "layers"
 layers = [
-    "factory_workflows",
-    "software_factory.flows",
-    "software_factory.stages",
-    "software_factory.events",
-    "software_factory.runtime",
-    "software_factory.agents | software_factory.shared",
+    "workflows.software_factory.address_once | workflows.software_factory.implement_spec | workflows.software_factory.pr_babysit",
+    "workflows.software_factory.flows",
+    "workflows.software_factory.stages",
+    "workflows.software_factory.events",
+    "workflows.software_factory.agents | workflows.software_factory.shared",
 ]
 
 [[tool.importlinter.contracts]]
 name = "Pure modules of the shared GitHub issues package never import the gh process layer; only its reader, commands, ticketing service, and client do"
 type = "forbidden"
-source_modules = ["software_factory.shared.github.issues"]
+source_modules = ["loop.shared.github.issues"]
 forbidden_modules = [
-    "software_factory.shared.process",
-    "software_factory.shared.github.repo",
-    "software_factory.shared.github.account",
-    "software_factory.shared.github.pull_requests",
+    "loop.shared.process",
+    "loop.shared.github.repo",
+    "loop.shared.github.account",
+    "loop.shared.github.pull_requests",
 ]
 ignore_imports = [
-    "software_factory.shared.github.issues.reader -> software_factory.shared.process",
-    "software_factory.shared.github.issues.reader -> software_factory.shared.github.repo",
-    "software_factory.shared.github.issues.commands -> software_factory.shared.github.repo",
-    "software_factory.shared.github.issues.ticketing -> software_factory.shared.process",
-    "software_factory.shared.github.issues.client -> software_factory.shared.github.repo",
+    "loop.shared.github.issues.reader -> loop.shared.process",
+    "loop.shared.github.issues.reader -> loop.shared.github.repo",
+    "loop.shared.github.issues.commands -> loop.shared.github.repo",
+    "loop.shared.github.issues.ticketing -> loop.shared.process",
+    "loop.shared.github.issues.client -> loop.shared.github.repo",
 ]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "Pure modules of the shared GitHub pull_requests package never import the gh process layer; only its reader, policy reader, and client do"
 type = "forbidden"
-source_modules = ["software_factory.shared.github.pull_requests"]
+source_modules = ["loop.shared.github.pull_requests"]
 forbidden_modules = [
-    "software_factory.shared.process",
-    "software_factory.shared.github.repo",
-    "software_factory.shared.github.account",
+    "loop.shared.process",
+    "loop.shared.github.repo",
+    "loop.shared.github.account",
 ]
 ignore_imports = [
-    "software_factory.shared.github.pull_requests.reader -> software_factory.shared.github.repo",
-    "software_factory.shared.github.pull_requests.client -> software_factory.shared.github.repo",
-    "software_factory.shared.github.pull_requests.policy_reader -> software_factory.shared.process",
-    "software_factory.shared.github.pull_requests.policy_reader -> software_factory.shared.github.repo",
+    "loop.shared.github.pull_requests.reader -> loop.shared.github.repo",
+    "loop.shared.github.pull_requests.client -> loop.shared.github.repo",
+    "loop.shared.github.pull_requests.policy_reader -> loop.shared.process",
+    "loop.shared.github.pull_requests.policy_reader -> loop.shared.github.repo",
 ]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
-name = "Factory and example source packages never import the factory test tree"
+name = "Factory and example source packages never import a test tree"
 type = "forbidden"
-source_modules = ["software_factory.agents", "software_factory.runtime", "software_factory.events", "software_factory.stages", "software_factory.flows", "software_factory.shared", "factory_workflows", "workflows.plan_implement", "workflows.workflow_reporting"]
-forbidden_modules = ["tests"]
+source_modules = [
+    "workflows.software_factory.agents",
+    "workflows.software_factory.events",
+    "workflows.software_factory.stages",
+    "workflows.software_factory.flows",
+    "workflows.software_factory.shared",
+    "workflows.software_factory.address_once",
+    "workflows.software_factory.implement_spec",
+    "workflows.software_factory.pr_babysit",
+    "workflows.loop",
+]
+forbidden_modules = ["tests", "workflows.tests"]
 
 [[tool.importlinter.contracts]]
 name = "No dependency-injection container in the factory"
 type = "forbidden"
-source_modules = ["software_factory", "factory_workflows"]
+source_modules = ["workflows.software_factory"]
 forbidden_modules = ["dishka"]
 
 [[tool.importlinter.contracts]]
 name = "The factory never imports the examples"
 type = "forbidden"
-source_modules = ["software_factory", "factory_workflows"]
-forbidden_modules = ["workflows"]
+source_modules = ["workflows.software_factory"]
+forbidden_modules = ["workflows.loop"]
 
 [[tool.importlinter.contracts]]
 name = "No Workflow imports another: factory Workflow definitions and the examples are independent"
 type = "independence"
-modules = ["factory_workflows.*", "workflows.plan_implement", "workflows.workflow_reporting"]
+modules = [
+    "workflows.software_factory.address_once",
+    "workflows.software_factory.implement_spec",
+    "workflows.software_factory.pr_babysit",
+    "workflows.loop.plan_implement",
+]
 
 [[tool.importlinter.contracts]]
 name = "Agent roles are independent of each other"
 type = "independence"
-modules = ["software_factory.agents.roles.*"]
+modules = ["workflows.software_factory.agents.roles.*"]
 
 [[tool.importlinter.contracts]]
 name = "The private agent kit is unreachable outside the agents package"
 type = "forbidden"
-source_modules = ["factory_workflows", "software_factory.runtime", "software_factory.events", "software_factory.stages", "software_factory.flows", "software_factory.shared", "workflows"]
-forbidden_modules = ["software_factory.agents._kit"]
+source_modules = [
+    "workflows.software_factory.address_once",
+    "workflows.software_factory.implement_spec",
+    "workflows.software_factory.pr_babysit",
+    "workflows.software_factory.events",
+    "workflows.software_factory.stages",
+    "workflows.software_factory.flows",
+    "workflows.software_factory.shared",
+    "workflows.loop",
+]
+forbidden_modules = ["workflows.software_factory.agents._kit"]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "The runtime engine is private: only the runtime package reaches it"
 type = "forbidden"
-source_modules = ["software_factory.agents", "factory_workflows", "software_factory.events", "software_factory.stages", "software_factory.flows", "software_factory.shared", "workflows"]
-forbidden_modules = ["software_factory.runtime._engine"]
+source_modules = [
+    "loop.agents",
+    "loop.builder",
+    "loop.clis",
+    "loop.docker",
+    "loop.dryrun",
+    "loop.factory",
+    "loop.git",
+    "loop.hooks",
+    "loop.observe",
+    "loop.run",
+    "loop.sessions",
+    "loop.shared",
+    "workflows.loop",
+    "workflows.software_factory",
+]
+forbidden_modules = ["loop.runtime._engine"]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
-name = "The Workflow definition runtime is generic: no GitHub, role agents, shared infrastructure, Events, Stages, Flow fragments or processes"
+name = "The Workflow definition runtime is generic: no GitHub, shared infrastructure, Workflows or processes"
 type = "forbidden"
-source_modules = ["software_factory.runtime"]
-forbidden_modules = [
-    "software_factory.shared",
-    "software_factory.agents.roles",
-    "software_factory.events",
-    "software_factory.stages",
-    "software_factory.flows",
-    "subprocess",
-]
+source_modules = ["loop.runtime"]
+forbidden_modules = ["loop.shared", "workflows", "subprocess"]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "Stages are independent: they share Events, never each other; composition across Stage modules belongs to Flow fragments and Workflow definitions"
 type = "independence"
-modules = ["software_factory.stages.*"]
+modules = ["workflows.software_factory.stages.*"]
 
 [[tool.importlinter.contracts]]
 name = "Events are pure data: no Git, no GitHub clients"
 type = "forbidden"
-source_modules = ["software_factory.events"]
+source_modules = ["workflows.software_factory.events"]
 forbidden_modules = [
-    "software_factory.shared.git",
-    "software_factory.shared.github.repo",
-    "software_factory.shared.github.account",
-    "software_factory.stages",
-    "software_factory.flows",
-]
-
-[[tool.importlinter.contracts]]
-name = "Stages, Flow fragments and Workflow definitions never start processes themselves; only an entry point, a dry-run seam and the discovery scheduler do"
-type = "forbidden"
-source_modules = ["software_factory.stages", "software_factory.flows", "factory_workflows"]
-forbidden_modules = ["software_factory.shared.process", "subprocess"]
-# A definition and an entry point name the hook and process errors an error route turns into a hand-off or an exit code.
-ignore_imports = [
-    "factory_workflows.* -> subprocess",
-    "factory_workflows.*.__main__ -> subprocess",
-    "factory_workflows.*.__main__ -> software_factory.shared.process",
-    "factory_workflows.implement_spec.dry -> software_factory.shared.process",
-    "factory_workflows.pr_babysit.intake -> subprocess",
+    "loop.shared.git",
+    "loop.shared.github.repo",
+    "loop.shared.github.account",
+    "workflows.software_factory.stages",
+    "workflows.software_factory.flows",
 ]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
+name = "Stages, Flow fragments and Workflow definitions never start processes themselves; only an entry point, a dry-run seam and the discovery scheduler do"
+type = "forbidden"
+source_modules = [
+    "workflows.software_factory.stages",
+    "workflows.software_factory.flows",
+    "workflows.software_factory.address_once",
+    "workflows.software_factory.implement_spec",
+    "workflows.software_factory.pr_babysit",
+]
+forbidden_modules = ["loop.shared.process", "subprocess"]
+# A definition and an entry point name the hook and process errors an error route turns into a hand-off or an exit code.
+ignore_imports = [
+    "workflows.software_factory.address_once -> subprocess",
+    "workflows.software_factory.address_once.__main__ -> subprocess",
+    "workflows.software_factory.address_once.__main__ -> loop.shared.process",
+    "workflows.software_factory.implement_spec -> subprocess",
+    "workflows.software_factory.implement_spec.__main__ -> subprocess",
+    "workflows.software_factory.implement_spec.__main__ -> loop.shared.process",
+    "workflows.software_factory.pr_babysit -> subprocess",
+    "workflows.software_factory.pr_babysit.__main__ -> subprocess",
+    "workflows.software_factory.pr_babysit.__main__ -> loop.shared.process",
+    "workflows.software_factory.implement_spec.dry -> loop.shared.process",
+    "workflows.software_factory.pr_babysit.intake -> subprocess",
+]
+allow_indirect_imports = true
+unmatched_ignore_imports_alerting = "none"
+
+[[tool.importlinter.contracts]]
 name = "A Workflow's policy module holds values and pure functions: no process, Git or GitHub client"
 type = "forbidden"
-source_modules = ["factory_workflows.*.policy"]
+source_modules = [
+    "workflows.software_factory.address_once.policy",
+    "workflows.software_factory.implement_spec.policy",
+    "workflows.software_factory.pr_babysit.policy",
+]
 forbidden_modules = [
-    "software_factory.shared.process",
-    "software_factory.shared.git",
-    "software_factory.shared.github.repo",
-    "software_factory.shared.github.account",
-    "software_factory.shared.github.issues.client",
-    "software_factory.shared.github.pull_requests.client",
+    "loop.shared.process",
+    "loop.shared.git",
+    "loop.shared.github.repo",
+    "loop.shared.github.account",
+    "loop.shared.github.issues.client",
+    "loop.shared.github.pull_requests.client",
     "subprocess",
 ]
 allow_indirect_imports = true

@@ -131,10 +131,10 @@ The examples live in this repository and are not included in the installed
 | Example | Purpose |
 |---|---|
 | [Library usage](USAGE.md#library-examples) | One-shot runs, profiles, shared worktrees, sessions, and Loop hooks |
-| [PR scheduler and babysitter](software_factory/workflows/pr_babysit/README.md) | Discover user-authored PRs and address reviews/CI with ledger recovery and scoped telemetry |
+| [PR scheduler and babysitter](workflows/software_factory/pr_babysit/README.md) | Discover user-authored PRs and address reviews/CI with ledger recovery and scoped telemetry |
 | [Address one pull request once](USAGE.md#other-factory-workflows) | Address the trusted review feedback of one pull request with `address_once`, assembled from existing Stages |
-| [Write a factory Workflow](software_factory/README.md) | Compose a Workflow definition from the factory's Stages and run it with the factory runtime |
-| [Plan and implement](loop/workflows/plan_implement.py) | Plan and implement with different models on one worktree |
+| [Write a factory Workflow](workflows/software_factory/README.md) | Compose a Workflow definition from the factory's Stages and run it with Loop's Workflow runtime |
+| [Plan and implement](workflows/loop/plan_implement.py) | Plan and implement with different models on one worktree |
 | [Implement Spec Workflow guide](USAGE.md#implement-spec-workflow) | Deliver GitHub Tickets, configure multiple repositories, and customize prompts |
 | [Multi-repository Workflow](USAGE.md#repositories-and-targets) | Route Specs to several repositories, each with its own agent steps |
 
@@ -152,10 +152,10 @@ implements and then reviews. Repositories must already be cloned under
 ```python
 from pathlib import Path
 
-from software_factory.events.specs import RepositoryTarget
-from factory_workflows.implement_spec.__main__ import build_services, main
-from factory_workflows.implement_spec.dry import Fakes
-from factory_workflows.implement_spec.settings import Targets
+from workflows.software_factory.events.specs import RepositoryTarget
+from workflows.software_factory.implement_spec.__main__ import build_services, main
+from workflows.software_factory.implement_spec.dry import Fakes
+from workflows.software_factory.implement_spec.settings import Targets
 
 workspace = Path.cwd() / "workspace"
 targets = Targets((
@@ -174,14 +174,16 @@ has the delivery rules.
 
 | Path | Contents |
 |---|---|
-| `loop/src/` | The installable `loop` library. |
-| `loop/workflows/` | Standalone examples that use only the public `loop` API. |
-| [`software_factory/`](software_factory/README.md) | Software factory built on `loop`: reusable Stages, Flow fragments, and Workflow definitions such as `implement_spec` and `pr_babysit`. It lives at the repository root, imports only the public `loop` package, and is not part of the installed `loop` distribution. |
+| `src/` | The installable `loop` library, including the Workflow runtime and the shared Git, process and GitHub helpers. The only installed code. |
+| `tests/` | Library tests, grouped by capability. |
+| `workflows/loop/` | The standalone `plan_implement` example on the public `loop` API. |
+| [`workflows/software_factory/`](workflows/software_factory/README.md) | Software factory built on `loop`: reusable Stages, Flow fragments, role agents, and Workflow definitions such as `implement_spec` and `pr_babysit`. Imports only the public `loop` package and runs from the repository clone. |
+| `workflows/tests/` | Workflow tests for `loop/` and `software_factory/`. |
 
 ## Documentation
 
 - [Usage guide](USAGE.md): advanced examples, logging, and `implement_spec` Workflow configuration.
-- [Software factory](software_factory/README.md): write and run factory Workflows from reusable Stages.
+- [Software factory](workflows/software_factory/README.md): write and run factory Workflows from reusable Stages.
 - [Domain glossary](GLOSSARY.md): project terminology.
 - [Architecture](ARCHITECTURE.md): codebase structure, design decisions, and concepts.
 - [System context](docs/building-blocks/system-context.md): context and container diagrams.
@@ -196,7 +198,7 @@ python -m pip install -e ".[dev]" --config-settings editable_mode=strict
 python -m pytest
 ```
 
-The strict editable mode keeps `import loop` resolving to `loop/src` even though the repository also has a `loop/` directory.
+The strict editable mode keeps `import loop` resolving to the repository-root `src/` folder.
 The test suite includes library tests, example Workflow tests, and import-linter
 architecture checks. See the [test strategy](docs/concepts/ops-test-strategy.md)
 for testing boundaries.

@@ -9,7 +9,7 @@ Let an operator see what Agent Runs and Worktrees did — tool calls with real t
 
 A Workflow opts in with `Agent().with_observer(observer)`. Loop then decorates its CLI runner and Git service: after each Agent Run turn the observer receives an `AgentRunRecord` (CLI, session, times, exit code, model, `Usage`, `ToolCall`s), and around each Worktree it receives `WorktreeEvent`s (`ready`, `removing`, `removed`). Usage and tool calls come from a per-CLI `SessionLogReader` that reads the CLI's own session log after the process exits; for Copilot a Start turn is pinned to a session id derived from the session name so the log path is known.
 
-`otlp_observer(endpoint=..., service_name=...)` (extra `loop[otel]`) is the OpenTelemetry observer. It exports an `invoke_agent` span per turn with `execute_tool` children, a `loop.worktree` span, and the `gen_ai.client.*`, `loop.agent.aiu`, and `loop.agent.premium_requests` metrics over OTLP/HTTP. Agent and Worktree spans nest under the current OpenTelemetry span, so a Workflow adds Spec, Ticket, phase, or gate spans around its runs with `observer.span(name, attributes)`; Loop never learns those concepts. An `AgentProfile` may carry a `name`; with `otlp_observer(resource_per_agent=True)` each named agent exports as its own resource, so a backend such as Aspire colors the agents apart. The reusable names are `Role`: `engineer` (the request), `code` (the Worktree and deterministic Workflow steps, via `observer.span(name, role=Role.CODE)`), `planner`, `developer` and `reviewer`. Decision: [Observe Agent Runs through an optional observer seam](../adr/observe-agent-runs-through-an-optional-observer-seam-that-exports-to-opentelemetry.md).
+`otlp_observer(endpoint=..., service_name=...)` (extra `loop[otel]`) is the OpenTelemetry observer. It exports an `invoke_agent` span per turn with `execute_tool` children, a `loop.worktree` span, and the `gen_ai.client.*`, `loop.agent.aiu`, and `loop.agent.premium_requests` metrics over OTLP/HTTP. Agent and Worktree spans nest under the current OpenTelemetry span, so a Workflow adds Spec or Ticket spans around its runs with `observer.span(name, attributes)`; Loop never learns those concepts. An `AgentProfile` may carry a `name`; with `otlp_observer(resource_per_agent=True)` each named agent exports as its own resource, so a backend such as Aspire colors the agents apart. The reusable names are `Role`: `engineer` (the request), `code` (the Worktree and deterministic Workflow steps, via `observer.span(name, role=Role.CODE)`), `planner`, `developer` and `reviewer`. Decision: [Observe Agent Runs through an optional observer seam](../adr/observe-agent-runs-through-an-optional-observer-seam-that-exports-to-opentelemetry.md).
 
 ## Rules
 
@@ -19,7 +19,7 @@ A Workflow opts in with `Agent().with_observer(observer)`. Loop then decorates i
 - MUST report unobservable usage as `None`, never zero.
 - MUST sum only the events of the turn being reported; session shutdown totals are cumulative.
 - MUST export prompts, outputs, and tool arguments only when content capture is requested.
-- MUST NOT add Ticket, phase, or gate concepts to the library; Workflows own those spans.
+- MUST NOT add Spec or Ticket concepts to the agent observer; Workflows own those spans, and the runtime reports Stages and gates through its own spans.
 
 ## Benefits and Trade-offs
 
@@ -38,9 +38,9 @@ A Workflow opts in with `Agent().with_observer(observer)`. Loop then decorates i
 
 With a fake `CliRunner`, a golden `events.jsonl`, and OpenTelemetry's in-memory exporters, a run yields one `invoke_agent` span with its `execute_tool` children, usage attributes, and metrics, nested under the caller's span; a throwing observer or garbled log leaves the run's result unchanged; a build without the extra imports `loop` and reports the missing extra only when `otlp_observer()` is called.
 
-## Factory spans
+## Runtime spans
 
-The factory runtime owns its spans and does not use Loop's Phase reporting ([decision](../adr/report-factory-runs-as-opentelemetry-spans-bypassing-loops-phase-reporting.md)). It opens them through a `Spans` seam, which `LogSpans` (console), `RecordingSpans` (tests), `NullSpans` and `OtelSpans` (over the Workflow's `observer.span(...)`) implement, so Loop's `invoke_agent`, `execute_tool` and `loop.worktree` spans nest under the current attempt automatically.
+Loop's Workflow runtime owns its spans; they are the only workflow reporting, and the earlier Phase reporting (`WorkflowBuilder`, `Phases`) is retired ([decision](../adr/report-factory-runs-as-opentelemetry-spans-bypassing-loops-phase-reporting.md)). It opens them through a `Spans` seam, which `LogSpans` (console), `RecordingSpans` (tests), `NullSpans` and `OtelSpans` (over the Workflow's `observer.span(...)`) implement, so Loop's `invoke_agent`, `execute_tool` and `loop.worktree` spans nest under the current attempt automatically.
 
 | Span | Name | Parent | Role | Key attributes and events |
 |---|---|---|---|---|
@@ -53,20 +53,4 @@ The factory runtime owns its spans and does not use Loop's Phase reporting ([dec
 - The status is error on a failed or handed-off run or scope and on a failed attempt; a hold is not an error.
 - `factory.*` is the attribute namespace; `loop.gate` events are not emitted.
 - Observation never changes a run's result: a failing sink is logged and the run continues.
-- The console is one line per finished span; the Rich terminal table (`--visualize`) is dropped for the factory.
-
-## Optional Workflow phase reporting
-
-`WorkflowBuilder` on the public `loop` package declares phases while ordinary Python
-owns execution. It serves user-written scripts; factory Workflows report Stage attempt spans instead. `.console()` emits high-level transitions, `.visualize()` adds an
-optional Rich terminal table, and `.otel(observer)` exports workflow-owned spans.
-All three options are independent. Direct `Phases()` and existing workflow spans
-remain supported without the builder.
-
-Use the same observer with `Agent().with_observer(observer)` to connect phase and
-Agent Run traces. An active span takes precedence over the worktree fallback when
-parenting an Agent Run. Gate failures and explicit business outcomes are exported;
-the caller decides whether a failed attempt can recover or fails the whole run.
-
-See [Optional Workflow Builder](../../USAGE.md#optional-workflow-builder) for the
-runnable fake e-commerce example, lifecycle rules, and independent reporting options.
+- The console is one line per finished span; the Rich terminal table (`--visualize`) is dropped.

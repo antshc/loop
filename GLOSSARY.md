@@ -4,19 +4,18 @@ Shared domain language for the [Loop library](README.md) and the [Agentic Softwa
 
 ## Loop Library
 
-Reusable building blocks in the installable `loop` package. Loop does not ship a CLI, a fixed SDLC, or built-in workflows.
+Reusable building blocks in the installable `loop` package, including the Workflow runtime, the typed agent contract and the shared Git, process and GitHub helpers. Loop does not ship a CLI, a fixed SDLC, or built-in workflows.
 
 ### Composition and execution
 
 | Term | Definition |
 | --- | --- |
 | **Loop** | Python library for composing headless coding-agent execution, Git worktrees, sessions, hooks, and observation. **Avoid:** factory, CLI, workflow engine. |
-| **Workflow** | User-owned Python procedure that composes Loop primitives and owns its control flow, agent sequencing, interpretation of results, and external effects. Examples: `implement_spec`, `plan_implement`, `pr_babysit`, `address_once`. A factory Workflow is a declarative Workflow definition run by the factory runtime rather than hand-written control flow. **Avoid:** built-in workflow, plugin, fixed pipeline. |
-| **WorkflowBuilder** | Optional builder declaring named phases and enabling console, terminal, or telemetry reporting. It does not schedule phases or enforce factory transitions. |
-| **Workflow run** | One invocation of a Workflow definition, containing phase occurrences and an outcome decided by the caller. Distinct from an Agent run. |
-| **Phase** | Observable scope within a Workflow run, with name, owner, kind, status, duration, and optional gate records. Its Python body is controlled by the Workflow. **Avoid** in the factory: use Stage attempt span. |
-| **Phase kind** | Owner category for reporting: `engineer` (requester), `agent` (model-driven execution), or `code` (deterministic action). It is not an agent identity. |
-| **Phase gate** | A check recorded by `Phase.gate(check, ok, note)`; failure marks the phase failed. Recording a gate does not itself block or schedule another workflow stage. |
+| **Workflow** | User-owned Python procedure, written as a declarative Workflow definition on the public `loop` API and run by Loop's Workflow runtime, that owns its Stages, policy, interpretation of results, and external effects. Examples: `implement_spec`, `plan_implement`, `pr_babysit`, `address_once`. **Avoid:** built-in workflow, plugin, fixed pipeline. |
+| **Workflow runtime** | Loop's generic interpreter of Workflow definitions: Stage attempts, gates, repository contracts, routes, the Execution ledger and run, scope and Stage attempt spans. It knows no GitHub, Ticket or pull request. **Avoid:** factory runtime (former name), engine. |
+| **Typed agent** | `TypedAgent`: one reusable role over an `AgentProfile` that encodes a typed request into a prompt and decodes the output into a typed reply or a declined value. Loop owns the contract; concrete role agents belong to a Workflow. **Avoid:** agent role (the responsibility), agent client (the CLI boundary). |
+| **Workflow run** | One run of a Workflow definition for one work item, ending completed, idle, held, handed off, failed or interrupted. Distinct from an Agent run. |
+| **Phase** | Retired: the former Phase-reporting API (`WorkflowBuilder`, `Phases`, `Phase`, `Kind`) was removed; use Stage attempt span. **Avoid.** |
 | **Agent builder** | `Agent()` / `AgentBuilder`: composes CLI, Git, Docker, session, hook, and observer options and creates clients or a shared agent workspace. |
 | **Agent client** | `AgentClient` accepting Agent requests for one profile, optionally bound to a worktree. Host execution uses host permissions; a worktree is not a sandbox. **Avoid:** agent role, agent runner, sandbox. |
 | **Agent profile** | Reusable choice of CLI, model, reasoning effort, instructions, tool permissions, paths, environment, timeout, and arguments, defined in code. **Avoid:** Agent options, factory role. |
@@ -24,7 +23,7 @@ Reusable building blocks in the installable `loop` package. Loop does not ship a
 | **CLI runner** | Process boundary used by Loop to invoke a configured Agent CLI and capture its result. **Avoid:** factory orchestrator. |
 | **Agent request** | `AgentRequest`: one prompt submitted to an Agent client; starts or resumes a session. **Avoid:** ticket, workflow run. |
 | **Agent result** | `AgentResult`: raw CLI output, session identity, and process exit code. It is not validated proof of task completion. **Avoid:** verification verdict. |
-| **Agent run** | One execution of an Agent request (one observed turn). Distinct from a long-lived Agent session and a multi-phase Workflow run. |
+| **Agent run** | One execution of an Agent request (one observed turn). Distinct from a long-lived Agent session and a multi-Stage Workflow run. |
 | **Agent session** | Agent conversation context identified separately from an OS process; may span multiple Agent runs. **Avoid:** process, container. |
 | **Session store** | Maps logical session names to native CLI session handles for continuation; the library supplies an in-memory implementation. |
 | **Session lifecycle** | Start, remember, and resume an Agent session when enabled. **Avoid:** process lifecycle. |
@@ -94,7 +93,7 @@ Product and SDLC language for user-owned workflows built **on** Loop. Warp Facto
 | **Tool (Agent Tool)** | Capability an agent invokes directly *during* an Agent run, such as shell, file editing, GitHub API, browser, or MCP. Tools are governed by permissions; exposing a tool does not make it a workflow decision. **Avoid:** Workflow Action. |
 | **Workflow Action** | Operation invoked by deterministic Workflow code, before or after an Agent run or without any agent, such as updating a Ticket, creating a PR, or checking CI status. Workflow code decides whether and when it runs. **Avoid:** Agent Tool, agent prompt. |
 | **Service / Adapter** | Reusable implementation behind an Agent Tool or Workflow Action. A service exposes domain operations (for example `TicketTracker`); an adapter connects those operations to GitHub, Jira, Git, or another external system. **Avoid:** equating the service with one tool call. |
-| **Deterministic step** | Code-controlled Workflow phase that may invoke one or more Workflow Actions, validate results, and record gates. **Avoid:** asking an agent to rediscover a fixed operation for every run. |
+| **Deterministic step** | Code-controlled Workflow step (an action or effect Stage) that may invoke one or more Workflow Actions, validate results, and record gates. **Avoid:** asking an agent to rediscover a fixed operation for every run. |
 | **Execution environment** | Host, container, VM, or managed runner supplying repository access, tools, credentials, and compute to an agent. |
 | **Sandbox** | Enforced execution or filesystem boundary. A Git worktree alone is **not** a sandbox. |
 
@@ -102,15 +101,15 @@ Product and SDLC language for user-owned workflows built **on** Loop. Warp Facto
 
 | Term | Definition |
 | --- | --- |
-| **Stage** | Reusable building block of a Workflow: one factory activity (such as plan, implement, review, or address feedback) that may run an agent or a deterministic action and a gate as a unit. Workflows compose Stages from a shared library; a Stage's contract is its typed input, the Event it produces, its gate and its Routes. **Avoid:** equating stage with a Phase reporting scope. |
-| **Workflow definition** | Declarative, immutable description of a factory Workflow: the Stages it places, the Routes between them and the constructs that order them (sequence, per-item loop, switch on a closed Event sum, workspace scope). It is validated as it is built and executed by the factory runtime once per work item. **Avoid:** pipeline, DAG. |
+| **Stage** | Reusable building block of a Workflow: one factory activity (such as plan, implement, review, or address feedback) that may run an agent or a deterministic action and a gate as a unit. Workflows compose Stages from a shared library; a Stage's contract is its typed input, the Event it produces, its gate and its Routes. **Avoid:** Phase. |
+| **Workflow definition** | Declarative, immutable description of a factory Workflow: the Stages it places, the Routes between them and the constructs that order them (sequence, per-item loop, switch on a closed Event sum, workspace scope). It is validated as it is built and executed by Loop's Workflow runtime once per work item. **Avoid:** pipeline, DAG. |
 | **Stage attempt** | One execution of a Stage for a work item, ending in pass, fail or hold. It is recorded in the Execution ledger and reported as one span; a rework is a further attempt of the same Stage. **Avoid:** Phase. |
 | **Route** | Where control goes after a Stage ends in pass, fail or hold: on to the next step, to the next item, back for rework, to a terminal stop, to a hand-off to a person, or to a sibling case. |
 | **Selector** | Pure function that offers the candidate items of a per-item loop in order; it is asked again after every item and has no effect of its own. |
 | **Scope** | One bounded part of a factory run with its own status: the run itself, one item of a per-item loop, or one workspace. A scope that is handed off stays open across runs until a person releases it. |
 | **Handoff** | Transfer of task context and artifacts to another agent, deterministic step, or human; the receiver must have sufficient durable context. |
 | **Envelope** | Structured, schema-validated agent response containing claims, decisions, artifact references, and next-step recommendations; the Workflow checks it before acting. **Proposed** for unified factory messages; Loop's `AgentResult` remains raw CLI output. |
-| **Execution ledger** | Append-only durable record, per work item, of the attempts, outcomes, effects, evidence, and recovery information from which an interrupted or repeated run resumes. Written only by the factory runtime; not a Loop session store and not the Ticket Tracker. |
+| **Execution ledger** | Append-only durable record, per work item, of the attempts, outcomes, effects, evidence, and recovery information from which an interrupted or repeated run resumes. Written only by the Workflow runtime; not a Loop session store and not the Ticket Tracker. |
 | **Checkpoint** | Saved restart position after an externally visible effect or stage, used for idempotent resume. |
 | **Evidence** | Inspectable proof of a claim: test report, screenshot, API response, logs, changed-file diff, or CI result. **Avoid:** relying on an agent's success statement alone. |
 | **Gate** | Explicit predicate over evidence and policy with pass, fail, or hold outcome; it determines whether work may advance. **Avoid:** synonymous with a stage or reviewer. |
@@ -127,7 +126,7 @@ Product and SDLC language for user-owned workflows built **on** Loop. Warp Facto
 
 ### Sources and boundaries
 
-- [Loop library building blocks](docs/building-blocks/loop.md), [public API](loop/src/__init__.py), [Workflow reporting](loop/src/workflow/phases.py), and [unified workflow plan](docs/researches/unified-event-driven-sdlc-workflow.md).
+- [Loop library building blocks](docs/building-blocks/loop.md), [public API](src/__init__.py), [Workflow runtime](src/runtime/__init__.py), and [unified workflow plan](docs/researches/unified-event-driven-sdlc-workflow.md).
 - [Warp Factories overview](https://docs.warp.dev/factories/), [how factories work](https://docs.warp.dev/factories/how-factories-work/), [agents](https://docs.warp.dev/factories/factory-agents/), [automations](https://docs.warp.dev/factories/automations/), and [issue-to-PR example](https://github.com/warpdotdev/warp-factory-examples/tree/main/examples/02-sdlc-issue-to-pr).
 - [SSSF overview](https://github.com/antshc/super-simple-software-factory/blob/main/.claude/skills/sssf/cookbooks/sssf_overview.md), [agent-driven workflows](https://github.com/antshc/super-simple-software-factory/blob/main/.claude/skills/sssf/cookbooks/create_adw.md), and [deterministic gates](https://github.com/antshc/super-simple-software-factory/blob/main/.claude/skills/sssf/templates/adws/adw_modules/gates.py).
-- **Boundary:** Loop owns agent execution, local Git/worktree lifecycle, and optional phase reporting. The factory owns intake, routing, business gates, policy, durable work-item state, GitHub publication, approvals, and delivery. Proposed terms do not assert that the event-driven factory is already implemented.
+- **Boundary:** Loop owns agent execution, local Git/worktree lifecycle, the Workflow runtime (with its Execution ledger and spans), the typed agent contract, and the shared Git, process and GitHub helpers including the Spec and Ticket model. The factory owns intake, routing, business gates, policy, role agents, Stages, GitHub publication decisions, approvals, and delivery. Proposed terms do not assert that the event-driven factory is already implemented.
