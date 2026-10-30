@@ -8,8 +8,9 @@ import typing
 from collections.abc import Callable, Iterator
 
 import software_factory.stages as stages
+from software_factory.events.feedback import TrustPolicy
 from software_factory.runtime import Selector, Stage, WorkspaceOpener
-from software_factory.stages import chore, finalize, plan, publish, review, specs, tickets, workspaces
+from software_factory.stages import address, checks, chore, feedback, finalize, plan, publish, pull_requests, review, specs, tickets, workspaces
 
 FACTORIES = (Stage, Selector, WorkspaceOpener)
 
@@ -47,7 +48,13 @@ def test_the_stage_ids_are_unique_across_the_library_with_sample_parameters() ->
         tickets.implement_ticket(), tickets.close_ticket(), tickets.escalate_ticket(label="hitl"), tickets.require_delivered(),
         publish.publish_draft_pr(), plan.plan_spec(), plan.create_tickets(), chore.refine(), review.review_pull_request(),
         finalize.finalize(label="hitl"),
+        workspaces.require_clean(), checks.run_checks(verify=lambda _: None), checks.run_checks(verify=lambda _: None).named("baseline"),
+        feedback.select(trust=TrustPolicy(frozenset(), frozenset())), address.group_feedback(),
+        address.resolve_issue(message=lambda _: "m", verify=lambda _: None), address.require_no_unclear(), pull_requests.publish_batch(),
     ]
-    identities = [stage.id for stage in built] + [tickets.next_ready_ticket().id, workspaces.checkout().id, workspaces.feature_worktree().id]
+    identities = [stage.id for stage in built] + [
+        tickets.next_ready_ticket().id, address.issues().id, workspaces.checkout().id, workspaces.feature_worktree().id,
+        workspaces.pr_worktree().id,
+    ]
 
     assert len(identities) == len(set(identities))

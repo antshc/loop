@@ -80,6 +80,10 @@ class GitClient:
         """Fast-forwards the checked-out branch to `sha`."""
         self._git(path, "merge", "--ff-only", sha)
 
+    def is_ancestor(self, path: Path, ancestor: str, descendant: str) -> bool:
+        """Whether commit `ancestor` is reachable from `descendant`, or the same commit."""
+        return self._succeeds(path, "merge-base", "--is-ancestor", ancestor, descendant)
+
     def head(self, path: Path) -> Commit:
         return self._log(path, "-1")[0]
 

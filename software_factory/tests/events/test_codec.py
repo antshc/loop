@@ -11,8 +11,12 @@ from pathlib import Path
 import pytest
 
 import software_factory.events as events
+from software_factory.events.checks import ChecksPassed
 from software_factory.events.chore import ChoreDiscarded, ChoreRefined
-from software_factory.events.pull_requests import DraftPullRequestPublished, Finalized
+from software_factory.events.feedback import (
+    FeedbackBatch, FeedbackGrouped, FeedbackHandled, GroupedIssue, IssueResolved, IssueUnclear, ReplyDraft,
+)
+from software_factory.events.pull_requests import DraftPullRequestPublished, Finalized, PullRequestPolled
 from software_factory.events.review import PullRequestReviewed, ReviewAxis, ReviewFailed, ReviewFinding
 from software_factory.events.specs import (
     CheckoutPrepared, DeliveryAnnounced, RepositoryTarget, SpecBlocked, SpecFailureCommented, SpecHandedToHuman, SpecHeld,
@@ -50,6 +54,13 @@ SAMPLES: list[Event] = [
     PullRequestReviewed((ReviewAxis("bugs", "completed", "ok"),), (ReviewFinding("bug", "null", "bugs"),), ("comment-1",), "abc1234"),
     ReviewFailed("no diff"),
     Finalized(ready=False, pull_request="https://example.test/pull/1", blockers=("the review did not run",)),
+    PullRequestPolled(TARGET, 7, {"pr": {"head": {"sha": "abc1234", "ref": "feature"}}, "threads": [], "other": []}),
+    FeedbackBatch("abc1234", True, ({"key": "thread:t1:c1", "kind": "thread", "line": None, "comments": [{"id": "c1"}], "status": "pending"},)),
+    FeedbackGrouped("1f2e3d", "abc1234", (GroupedIssue("cart", "duplicate products", ("thread:t1:c1",)), GroupedIssue("docs", None, ("comment:5:x",)))),
+    IssueResolved("1f2e3d", "cart", "fix-needed", (ReplyDraft("thread:t1:c1", "Fixed!"),)),
+    IssueUnclear("1f2e3d", "docs", "which docs?", (ReplyDraft("comment:5:x", "Could you say which?"),)),
+    FeedbackHandled(("thread:t1:c1", "comment:5:x"), "def5678"),
+    ChecksPassed(),
 ]
 
 

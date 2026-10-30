@@ -79,6 +79,14 @@ def test_is_clean_follows_porcelain_status() -> None:
     assert GitClient(Script(status=" M a.py\n")).is_clean(Path("/w")) is False
 
 
+def test_is_ancestor_reports_the_merge_base_outcome() -> None:
+    script = Script()
+
+    assert GitClient(script).is_ancestor(Path("/w"), "a1", "b2") is True
+    assert script.calls[0][0] == ("git", "merge-base", "--is-ancestor", "a1", "b2")
+    assert GitClient(Script(**{"merge-base": CommandError("git", 1, "")})).is_ancestor(Path("/w"), "a1", "b2") is False
+
+
 def test_publish_checks_the_branch_name_and_never_forces() -> None:
     script = Script()
 

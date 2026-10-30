@@ -4,7 +4,28 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from software_factory.agents import Json
+from software_factory.events.specs import RepositoryTarget
 from software_factory.runtime import Event
+
+
+@dataclass(frozen=True)
+class PullRequestPolled(Event):
+    """One read of pull request `number` of `target`'s repository, as the snapshot dictionaries babysit's fingerprints and agent envelopes are built on."""
+
+    target: RepositoryTarget
+    number: int
+    snapshot: dict[str, Json]
+
+    @property
+    def head(self) -> str:
+        """The pull request's head commit."""
+        return str(self.snapshot["pr"]["head"]["sha"])  # type: ignore[index]
+
+    @property
+    def branch(self) -> str:
+        """The pull request's head branch."""
+        return str(self.snapshot["pr"]["head"]["ref"])  # type: ignore[index]
 
 
 @dataclass(frozen=True)
