@@ -8,9 +8,10 @@ import tomllib
 from importlib.metadata import distribution
 from pathlib import Path
 
-ROOT = Path(__file__).parents[2]
-SRC = ROOT / "src" / "loop"
-WORKFLOWS = ROOT / "workflows"
+ROOT = Path(__file__).parents[3]
+SRC_ROOT = ROOT / "loop" / "src"
+SRC = SRC_ROOT / "loop"
+WORKFLOWS = ROOT / "loop" / "workflows"
 
 
 def test_packaging_declares_no_scripts_and_ships_no_workflow_file() -> None:
@@ -28,8 +29,8 @@ def test_distribution_finds_packages_only_under_src_so_the_factory_is_never_ship
     """Given the build configuration, when packages are discovered, then only `src` is searched and it holds no factory module."""
     find = tomllib.loads((ROOT / "pyproject.toml").read_text())["tool"]["setuptools"]["packages"]["find"]
 
-    assert find["where"] == ["src"]
-    assert not {"software_factory", "workflows"} & {path.name for path in (ROOT / "src").iterdir()}
+    assert find["where"] == ["loop/src"]
+    assert not {"software_factory", "workflows"} & {path.name for path in SRC_ROOT.iterdir()}
 
 
 def test_package_supports_python_310() -> None:
@@ -40,7 +41,7 @@ def test_import_linter_contracts_pass() -> None:
     lint_imports = Path(sys.executable).parent / "lint-imports"
     executable = str(lint_imports) if lint_imports.exists() else shutil.which("lint-imports")
     assert executable, "lint-imports (import-linter) is not installed"
-    environment = os.environ | {"PYTHONPATH": os.pathsep.join(filter(None, [str(ROOT / "src"), os.environ.get("PYTHONPATH")]))}
+    environment = os.environ | {"PYTHONPATH": os.pathsep.join(filter(None, [str(SRC_ROOT), str(ROOT / "loop"), os.environ.get("PYTHONPATH")]))}
     result = subprocess.run([executable], cwd=ROOT, env=environment, capture_output=True, text=True)
 
     assert result.returncode == 0, result.stdout + result.stderr

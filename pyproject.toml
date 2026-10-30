@@ -20,11 +20,11 @@ otel = [
 ]
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["loop/src"]
 
 [tool.pytest.ini_options]
-pythonpath = ["src", ".", "tests"]
-testpaths = ["tests", "software_factory/tests"]
+pythonpath = ["loop/src", "loop", ".", "loop/tests"]
+testpaths = ["loop/tests", "software_factory/tests"]
 norecursedirs = ["archive", ".*"]
 
 [tool.importlinter]

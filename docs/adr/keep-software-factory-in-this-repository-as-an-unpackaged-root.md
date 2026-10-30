@@ -11,10 +11,10 @@ The cross-Workflow reusable agents design ([Option E](../design/cross-workflow-r
 
 ## Decision
 
-- `software_factory/` sits at the reporoot, beside `src/loop/`. `packages.find` searches only `src`, so the `loop` wheel never contains it, and a test asserts that.
+- `software_factory/` sits at the reporoot, beside `loop/src/loop/`. `packages.find` searches only `loop/src`, so the `loop` wheel never contains it, and a test asserts that.
 - It imports only the public top-level `loop` package. An import-linter contract forbids every `loop.*` submodule, and `software_factory` is a root package of the architecture checks, so the layering of the factory is enforced in the same `pytest` run as the library's.
 - Users run its Workflows from a clone with `python -m software_factory.workflows.<name>`, from the harness root; its tests live in `software_factory/tests/` and are discovered by the root `pytest`.
-- Standalone public-Loop examples (`plan_implement.py`, `workflow_reporting.py`) stay under `workflows/`.
+- Standalone public-Loop examples (`plan_implement.py`, `workflow_reporting.py`) stay under `loop/workflows/`.
 
 ## Consequences
 

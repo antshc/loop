@@ -236,7 +236,7 @@ def test_broken_host_logging_cannot_fail_or_replace_a_workflow_error() -> None:
 def test_documented_python_examples_are_runnable() -> None:
     """Given the usage guide, when its builder examples execute, then they use the public interface."""
     import re
-    guide = Path(__file__).parents[2] / "USAGE.md"
+    guide = Path(__file__).parents[3] / "USAGE.md"
     section = guide.read_text().split("## Optional Workflow Builder\n", 1)[1].split("## Logging\n", 1)[0]
     snippets = re.findall(r"```python\n(.*?)```", section, re.DOTALL)
     for index in (0, 1, 3):

@@ -21,7 +21,7 @@ A `SessionStore` maps logical agent session keys to provider session identifiers
 
 ## Source-folder structure
 
-Paths relative to `src/loop/`.
+Paths relative to `loop/src/loop/`.
 
 ```text
 __init__.py     public API

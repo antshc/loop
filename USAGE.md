@@ -237,7 +237,7 @@ All `implement_spec`-owned code and tests live in [`software_factory/workflows/i
 [`software_factory/stages/`](software_factory/stages/) over the [`software_factory/runtime/`](software_factory/runtime/),
 depends on the public `loop` package and on [`software_factory/shared/`](software_factory/shared/) (Git, GitHub,
 process, state, telemetry), never on a sibling Workflow, and uses no container. The independent
-[`plan_implement.py`](workflows/plan_implement.py) remains a self-contained, function-based script.
+[`plan_implement.py`](loop/workflows/plan_implement.py) remains a self-contained, function-based script.
 
 - [`__init__.py`](software_factory/workflows/implement_spec/__init__.py): `implement_spec(settings, targets)`, the definition.
 - [`policy.py`](software_factory/workflows/implement_spec/policy.py): values and pure functions only: the `hitl` label, comment source, commit subjects, the Spec work item and when held work is released.
@@ -284,13 +284,13 @@ from loop import Kind, Phase, Phases, Role, Workflow, WorkflowBuilder, WorkflowR
 
 ### Run the fake e-commerce example
 
-[`workflows/workflow_reporting.py`](workflows/workflow_reporting.py) is self-contained,
-uses fake basket data, and makes no agent, Git, or GitHub calls. Run from the repository root:
+[`loop/workflows/workflow_reporting.py`](loop/workflows/workflow_reporting.py) is self-contained,
+uses fake basket data, and makes no agent, Git, or GitHub calls. Run from the `loop/` directory:
 
 ```sh
 python -m workflows.workflow_reporting
 python -m workflows.workflow_reporting --fail-verification  # exits 1; PR stays a draft
-python -m pip install -e ".[visualization]"
+python -m pip install -e "..[visualization]"
 python -m workflows.workflow_reporting --visualize
 ```
 
@@ -592,7 +592,7 @@ Agent(AgentOptions(start_mode=AgentStartMode.HARNESS, harness_dir=Path("/path/to
 ```
 
 See [`software_factory/workflows/implement_spec/`](software_factory/workflows/implement_spec/) for a complete Workflow,
-[`workflows/plan_implement.py`](workflows/plan_implement.py) for two runs with
+[`workflows/plan_implement.py`](loop/workflows/plan_implement.py) for two runs with
 different models on one worktree, and
 [`software_factory/agents/roles/developer/prompt.md`](software_factory/agents/roles/developer/prompt.md) for
 the default `implement_spec` prompt template.

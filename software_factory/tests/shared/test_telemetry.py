@@ -301,7 +301,7 @@ def test_without_the_extra_the_factory_runs_with_console_logging_and_reports_the
 
     completed = subprocess.run(
         [sys.executable, "-c", script, str(tmp_path)], cwd=REPO_ROOT, capture_output=True, text=True,
-        env={"PYTHONPATH": f"{REPO_ROOT / 'src'}{':'}{REPO_ROOT}", "PATH": ""},
+        env={"PYTHONPATH": f"{REPO_ROOT / 'loop' / 'src'}{':'}{REPO_ROOT}", "PATH": ""},
     )
 
     assert completed.returncode == 0, completed.stderr

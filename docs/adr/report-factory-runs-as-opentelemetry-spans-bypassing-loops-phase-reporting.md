@@ -19,7 +19,7 @@ The factory runtime executes Stages and must show an operator what happened: whi
 - A span is an error on a failed or handed-off run or scope and on a failed attempt; hold is not an error.
 - The factory never imports Phase reporting. An architecture test scans the factory's source for those names from `loop`, because import-linter cannot forbid names.
 - Implementations: `LogSpans` (one console line per finished span), `RecordingSpans` (tests), `NullSpans`, and `OtelSpans` in `software_factory/shared/telemetry.py`, which exports through the Workflow's observer.
-- `loop.workflow` stays in the library unchanged for user scripts such as `workflows/workflow_reporting.py`.
+- `loop.workflow` stays in the library unchanged for user scripts such as `loop/workflows/workflow_reporting.py`.
 
 ## Consequences
 

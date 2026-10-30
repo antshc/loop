@@ -30,7 +30,7 @@ Consult these before searching the code:
 ## 4. Navigation policy
 
 1. Read the relevant authoritative source first and state which doc you checked (or that none applies) before searching.
-2. Use `ARCHITECTURE.md`'s Codebase Structure to scope searches to `src/loop/`, `software_factory/`, `workflows/`, or `tests/`.
+2. Use `ARCHITECTURE.md`'s Codebase Structure to scope searches to `loop/src/loop/`, `software_factory/`, `loop/workflows/`, or `loop/tests/`.
 3. Exact symbol (definition, references, rename) → language-server tools; concept or behavior → semantic search; literal or config value → text search.
 4. Docs are leads, not proof — confirm behavior against current source or tests, then stop searching.
 

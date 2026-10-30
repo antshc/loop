@@ -16,6 +16,6 @@
     "emitDecoratorMetadata": true,
     "skipLibCheck": true
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts", "workflows/**/*.ts", "*.ts"],
+  "include": ["loop/src/**/*.ts", "loop/tests/**/*.ts", "loop/workflows/**/*.ts", "*.ts"],
   "exclude": ["node_modules", "archive", "docs", "workspace"]
 }
