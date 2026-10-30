@@ -77,11 +77,6 @@ The repository revision determines the installed version. To update, pull the
 desired revision and reinstall. For an editable development installation, see
 [Contributing](#contributing).
 
-## Bun toolchain (TypeScript port in progress)
-
-Requires Bun 1.4.4 or newer; Node.js is unsupported. `bun install` then `bun run test`
-runs lint, type-check and `bun test`. TypeScript source is consumed directly (no build step).
-
 ## Quick start
 
 Save this as `my_workflow.py` and run it from the Git repository you want to work
