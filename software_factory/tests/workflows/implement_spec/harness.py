@@ -43,7 +43,7 @@ class StopAfter:
 
 
 class Agents:
-    """Answers every role's prompt; a Ticket's attempts follow its actions (`commit`, `fail`, `nothing`, `die`), the last one repeating."""
+    """Answers every role's prompt; a Ticket's attempts follow its actions (`commit`, `fail`, `nothing`, `die`), the last one repeating; the chore writes `chore_edit` when set."""
 
     def __init__(self, stop: StopAfter) -> None:
         self.stop = stop
@@ -51,6 +51,7 @@ class Agents:
         self.planned: list[dict[str, Any]] | None = None
         self.prompts: dict[str, list[str]] = {"developer": [], "planner": [], "chore": [], "reviewer": []}
         self.attempts: dict[int, int] = {}
+        self.chore_edit: str | None = None
 
     def developer_runs(self, ticket: int | None = None) -> int:
         """How many developer runs there were, in total or for one Ticket."""
@@ -66,7 +67,10 @@ class Agents:
             return _reply("failed", reason="needs a product decision") if self.planned is None else _reply("completed", tickets=self.planned)
         if request.prompt.startswith("# TASK"):
             self.prompts["chore"].append(request.prompt)
-            return _reply("completed", summary="No cleanup needed", out_of_scope=[])
+            if self.chore_edit is None:
+                return _reply("completed", summary="No cleanup needed", out_of_scope=[])
+            (context.agent.cwd / "chore.txt").write_text(self.chore_edit)
+            return _reply("completed", summary="Tidied", out_of_scope=[], commit_message="Tidy the change set")
         self.prompts["reviewer"].append(request.prompt)
         head = re.search(r"head is commit\s+`([^`]+)`", request.prompt)
         axes = [{"name": name, "outcome": "completed"} for name in REVIEW_AXES]

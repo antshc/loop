@@ -7,6 +7,7 @@ from subprocess import CalledProcessError
 from loop import LoopHookError
 
 from software_factory.events.pull_requests import DraftPullRequestPublished
+from software_factory.events.tickets import Delivery
 from software_factory.runtime import Flow, Workflow, handoff, next_, rework, stop
 from software_factory.shared.github.issues.errors import IssueError
 from software_factory.stages import chore, finalize, plan, publish, review, specs, tickets, workspaces
@@ -45,8 +46,12 @@ def implement_spec(settings: ImplementSpecSettings, targets: Targets) -> Workflo
             .stage(publish.publish_draft_pr().named("publish-delivery"))
             .stage(tickets.require_delivered().on_hold(stop.idle()))
             .stage(specs.announce_delivered(source=SOURCE).reads(DraftPullRequestPublished, from_="publish-delivery"))
-            .stage(chore.refine(subject=chore_subject).on_fail(next_())))
+            .stage(chore.refine(subject=chore_subject).on_fail(next_()))
+            .stage(publish.publish_draft_pr().named("publish-chore"))
+            .stage(tickets.require_delivered().named("require-refined").on_hold(stop.idle())))
         .within(workspaces.checkout(), Flow("review")
-            .stage(review.review_pull_request().on_fail(next_())))
-        .stage(finalize.finalize(label=HITL, source=SOURCE).reads(DraftPullRequestPublished, from_="publish-delivery"))
+            .stage(review.review_pull_request().reads(Delivery, from_="require-refined").on_fail(next_())))
+        .stage(finalize.finalize(label=HITL, source=SOURCE)
+            .reads(DraftPullRequestPublished, from_="publish-delivery")
+            .reads(Delivery, from_="require-refined"))
     )

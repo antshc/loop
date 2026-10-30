@@ -35,8 +35,18 @@ def test_the_definition_has_no_verify_stage() -> None:
 
 
 def test_the_finalization_reads_the_publication_made_after_delivery() -> None:
-    """Given three publication placements, when the wiring is read, then finalize and the announcement read the one named publish-delivery."""
+    """Given four publication placements, when the wiring is read, then finalize and the announcement read the one named publish-delivery."""
     wiring = implement_spec(ImplementSpecSettings(), Targets(())).explain()
 
     assert "published    event DraftPullRequestPublished from publish-delivery" in wiring
     assert wiring.count("from publish-delivery") == 2
+
+
+def test_the_review_and_finalization_read_the_delivery_after_the_chore_is_published() -> None:
+    """Given a chore that may commit, when the wiring is read, then the chore is published and the review and finalize read the delivery taken after it."""
+    lines = implement_spec(ImplementSpecSettings(), Targets(())).explain().splitlines()
+    order = [line.split()[0] for line in lines[1:]]
+
+    assert order.index("refine-chore") < order.index("publish-chore") < order.index("require-refined") < order.index("review-pull-request")
+    assert "review-pull-request  delivery     event Delivery from require-refined" in lines
+    assert "finalize             delivery     event Delivery from require-refined" in lines

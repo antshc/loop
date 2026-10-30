@@ -66,14 +66,26 @@ refine-chore         routed       event SpecRouted from route-spec
 refine-chore         worktree     workspace
 refine-chore         git          service GitClient
 refine-chore         github       service GitHub
+publish-chore        work         context SpecWork
+publish-chore        routed       event SpecRouted from route-spec
+publish-chore        tracker      service Issues
+publish-chore        git          service GitClient
+publish-chore        github       service GitHub
+publish-chore        closed       history TicketClosed
+require-refined      work         context SpecWork
+require-refined      routed       event SpecRouted from route-spec
+require-refined      worktree     workspace
+require-refined      tracker      service Issues
+require-refined      git          service GitClient
+require-refined      escalated    all TicketEscalated from escalate-ticket
 review-pull-request  work         context SpecWork
 review-pull-request  routed       event SpecRouted from route-spec
-review-pull-request  delivery     event Delivery from require-delivered
+review-pull-request  delivery     event Delivery from require-refined
 review-pull-request  checkout     workspace
 review-pull-request  github       service GitHub
 finalize             work         context SpecWork
 finalize             routed       event SpecRouted from route-spec
-finalize             delivery     event Delivery from require-delivered
+finalize             delivery     event Delivery from require-refined
 finalize             published    event DraftPullRequestPublished from publish-delivery
 finalize             chore        event ChoreDiscarded | ChoreRefined from refine-chore (optional)
 finalize             review       event PullRequestReviewed | ReviewFailed from review-pull-request (optional)

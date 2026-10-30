@@ -30,6 +30,20 @@ def test_every_actionable_ticket_is_delivered_then_published_reviewed_and_made_r
     assert harness.labels(1) == set(LABELS)
 
 
+def test_a_chore_commit_is_pushed_and_is_the_head_the_review_and_finalization_judge(tmp_path: Path) -> None:
+    """Given a chore agent that edits a file, when the Spec runs, then the chore commit is on the remote branch, the reviewer saw that head and the pull request is made ready."""
+    harness = ImplementSpecHarness(tmp_path, tickets=TWO_TICKETS)
+    harness.agents.chore_edit = "tidied\n"
+
+    code = harness.run()
+
+    assert code == 0
+    assert harness.branch_subjects()[-1].startswith("chore(")
+    assert harness.rig.remote_head(BRANCH) == harness.branch_head()
+    assert harness.branch_head() in harness.agents.prompts["reviewer"][0]
+    assert harness.rig.gh.calls_matching("pr", "ready")
+
+
 def test_a_developer_that_fails_twice_escalates_the_ticket_and_the_spec_and_the_run_exits_1(tmp_path: Path) -> None:
     """Given a developer that never commits, when the Spec runs with the default cap, then Ticket and Spec carry hitl with the reason on both and exactly two attempts failed."""
     harness = ImplementSpecHarness(tmp_path)
