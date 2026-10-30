@@ -39,10 +39,11 @@ python -m pip check
 python -m pytest
 python -m software_factory.workflows.implement_spec --help
 python -m software_factory.workflows.pr_babysit --help
+python -m software_factory.workflows.address_once --help
 python -m workflows.plan_implement --help
 ```
 
-Run from the repository root with `git` installed. The `dev` extra still includes Dishka for the shared provider that a later change removes. The root test command covers library tests, `software_factory/shared`, the `implement_spec` and `pr_babysit` Workflows, and import-linter contracts. The `--help` checks exercise Workflow imports and argument parsing without starting agents or contacting GitHub.
+Run from the repository root with `git` installed. The `dev` extra includes no dependency-injection container. The root test command covers library tests, `software_factory/shared`, the `implement_spec`, `pr_babysit` and `address_once` Workflows, the derived architecture tests in `software_factory/tests/architecture/`, and import-linter contracts. The `--help` checks exercise Workflow imports and argument parsing without starting agents or contacting GitHub.
 
 Syntax checks alone do not prove runtime compatibility: imports, standard-library APIs, dependency resolution, and error paths must also work. Hook-point enums are `StrEnum`s, so string conversion, formatting, and JSON serialization yield the value. Cleanup failures must not mask the original error: the secondary failure is attached to it as an exception note.
 

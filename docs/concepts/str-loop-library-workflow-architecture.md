@@ -13,7 +13,7 @@ Loop is a library of an agent builder, agent CLI adapters, git, and hooks; a **w
 - Loop ships default implementations for git, the Copilot and Codex agent CLIs, and an in-memory session store. The replaceable seams are `CliRunner`, `GitService`, `DockerService`, and `SessionStore`; tests replace them with fakes ([Ship Loop as a workflow library](../adr/ship-loop-as-a-workflow-library-with-no-built-in-workflows.md)). `software_factory/shared/` owns the Workflow-side Git, GitHub (issues, pull requests, and the Spec and Ticket model), subprocess, JSON-state, envelope, and telemetry helpers; implement_spec owns its delivery policy in `software_factory/workflows/implement_spec/policy.py`, and the Stage library in `software_factory/stages/` owns response decoding, commit validation, and publication ([Share the Spec and Ticket model](../adr/share-the-spec-and-ticket-model-in-workflows-shared-while-dev-keeps-its-delivery-policy.md)).
 - Loop ships no workflows: the user writes every workflow, `implement_spec` included; this repository's `software_factory/workflows/implement_spec/` is only an example and test subject.
 - The example `implement_spec` is a definition (`__init__.py`) that places Stages and Flow fragments from the factory's Stage library; the Stages are independent of each other and of the definition, and per-repository variability is data on the routed `RepositoryTarget`, not a delegate.
-- A workflow imports only the public `loop` API and is a runnable script: its entry point takes an argument list and returns an exit code, and a `__main__` guard passes that code to the process exit. `implement_spec` builds its services by hand (no container) and `main(argv, *, services=None)` accepts a `Services` bundle so tests substitute fakes; `pr_babysit` still builds a Dishka container in its `composition/` root and accepts override providers ([Structure workflows as vertical slices](../adr/structure-workflows-as-vertical-slices-over-a-shared-package-wired-by-dishka.md)).
+- A workflow imports only the public `loop` API and is a runnable script: its entry point takes an argument list and returns an exit code, and a `__main__` guard passes that code to the process exit. Every factory Workflow builds its services by hand (no container) and `main(argv, *, services=None)` accepts a `Services` bundle so tests substitute fakes.
 - Loop ships no command: the user runs a workflow script through their own shell alias (for example `alias loop-implement-spec='python -m software_factory.workflows.implement_spec'`), with the harness as the current folder ([Ship Loop as a workflow library](../adr/ship-loop-as-a-workflow-library-with-no-built-in-workflows.md)).
 - The workflow's Python code carries its own settings: harness root, log dir, agent profiles, retry and failure bounds, prompts, and Loop hooks. `implement_spec` keeps entry-point settings in `__main__.py` and `settings.py`, its policy values in `policy.py`, and its role agents' prompt templates in `software_factory/agents/roles/<role>/prompt.md`. Command-line arguments are optional overrides; there is no Loop configuration file or prompt execution framework.
 - Inside the library, each layer imports only the layers below it; shared parts never depend on the builder or the Workflows.
@@ -27,7 +27,7 @@ Loop is a library of an agent builder, agent CLI adapters, git, and hooks; a **w
 - MUST run every agent invocation through an `AgentClient` from the builder or an opened `Worktree`; a workflow MUST NOT call the provider CLI directly.
 - MUST create the branch and worktree through `GitOptions` and a branch strategy, by default under the harness's `workspace` folder, and run the Workflow from the harness root so the worktree root is inside the process working directory.
 - MUST give each workflow a Python entry point that owns its settings and wiring, returns the exit code, and runs through a `__main__` guard; a package may use `__main__.py` and keep its implementation in local modules.
-- MUST let callers replace every external dependency by passing `Services` to the entry point; only `software_factory/shared/providers.py` may still import `dishka`, until a later change removes it.
+- MUST let callers replace every external dependency by passing `Services` to the entry point; no module of the factory imports a dependency-injection container.
 - MUST declare a workflow's settings and Loop hooks as code in the workflow module; a workflow MUST run with no command-line arguments and MUST NOT require a configuration file.
 - MUST treat command-line arguments as optional overrides of the workflow's coded settings, owned by that workflow.
 - MUST keep each Workflow package's tests under `software_factory/tests/` (`workflows/<name>/` and `shared/`), mirroring the package's source folders; shared GitHub fakes live in `software_factory/tests/shared/fakes/` and workflow harnesses reuse or extend them.
@@ -53,8 +53,7 @@ loop/                              # public API: builder, profiles, strategies, 
 ├── shared/                       # infrastructure identical across workflows; imports no workflow
 │   ├── git.py, process.py, state.py, telemetry.py
 │   ├── github/                   # gh client, repository, issues (Spec, Ticket), pull requests
-│   ├── agents/                   # agent launcher, envelopes, prompt files
-│   └── providers.py              # SharedProvider and bind() for overrides
+│   └── agents/                   # agent launcher, envelopes, prompt files
 ├── workflows/                    # Workflow definitions; main(argv, *, services=None) -> int
 │   └── implement_spec/           # python -m software_factory.workflows.implement_spec
 │       ├── __init__.py           # the definition over the Stage library
@@ -67,24 +66,30 @@ loop/                              # public API: builder, profiles, strategies, 
 │       ├── policy.py             # trust rules, fingerprint, subjects, what a blocked run records
 │       ├── intake.py, settings.py, legacy.py
 │       └── __main__.py           # entry point, services, discovery, console and OpenTelemetry spans
-└── tests/                        # workflows/implement_spec/, workflows/pr_babysit/ and shared/ (fakes/) mirror the source folders
+│   └── address_once/             # python -m software_factory.workflows.address_once
+│       ├── __init__.py           # existing Stages and the address fragment, no Stage logic
+│       ├── policy.py, settings.py
+│       └── __main__.py           # entry point and services
+└── tests/                        # workflows/<name>/, architecture/ and shared/ (fakes/) mirror the source folders
 <harness root>/workflows/         # standalone user-written examples; import only public `loop`
 ├── plan_implement.py             # plan with one model, implement with another, on one worktree
 └── review.py                     # may call its own tracker client
 ```
 
 ```python
-class Planner:
-    def __init__(self, new_agent: AgentLauncher, git: GitClient, tracker: Tracker, phases: Phases) -> None: ...
+def address_once(verify: Verify) -> Workflow[PullRequestWork]:
+    return (
+        Workflow("address_once").context(PullRequestWork)
+        .stage(pull_requests.validate_origin())
+        .stage(pull_requests.snapshot())
+        .stage(feedback.select(trust=TRUST))
+        .then(address.address_feedback(message=address_subject, verify=verify))
+    )
 
-class ImplementSpecProvider(Provider):
-    planner = provide(Planner, scope=Scope.REQUEST)   # one per Workflow run
-
-def main(argv=None, *, providers: Sequence[Provider] = ()) -> int:
-    settings = parse(argv)
-    container = make_container(SharedProvider(), ImplementSpecProvider(), *providers, context={ImplementSpecSettings: settings})
-    with container(context={Phases: phases}) as run:
-        return run.get(SpecRouter).run()
+def main(argv=None, *, services: Services | None = None) -> int:
+    ...
+    result = run(address_once(verify), work, services=services or build_services(), ledger=ledger, spans=spans)
+    return result.exit_code
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))
@@ -109,7 +114,8 @@ The user's aliases (`alias loop-implement-spec='python -m software_factory.workf
 ## Validation
 
 - Workflow tests run against fakes at every process boundary.
-- Architecture checks (import-linter) verify the library layering, that workflows import only the public `loop` API, that `software_factory/shared` imports no workflow, that the pure modules of the shared GitHub `issues` package import no `gh` process code, that no Workflow imports another and each Workflow's policy module holds values and pure functions only.
+- Architecture checks (import-linter) verify the library layering, that the factory and examples import only the public `loop` API, the factory layers (Workflow definitions over Flow fragments over Stages over Events over the runtime over role agents and shared infrastructure), that Stages, Workflows and role agents are mutually independent, that the runtime engine and agent kit are private, that no process starts in Stages, definitions or the runtime (the discovery scheduler excepted), that no dependency-injection container is imported, that the pure modules of the shared GitHub `issues` and `pull_requests` packages import no `gh` process code and that source never imports tests.
+- Structural tests derive the rest from the code (`software_factory/tests/architecture/`): every definition builds and validates, Stage ids are unique, every Stage is used by a Workflow and every shared fragment by two, no Stage factory takes a `bool`, policy modules hold values and pure functions only, nothing uses Loop's phase-reporting API, every Event and agent message round-trips through the ledger codec and each Workflow runs from its own import closure.
 - The example workflows import only the public `loop` API and `software_factory/shared`.
 
 ## Options Considered
@@ -117,7 +123,7 @@ The user's aliases (`alias loop-implement-spec='python -m software_factory.workf
 | Option | Outcome |
 |--------|---------|
 | Horizontal domain, contracts, and infrastructure layers (Clean Architecture) | Rejected. The use-case-over-repository shape does not fit agent workflows; layers were mostly empty. |
-| Feature-sliced workflows over `software_factory/shared/` with a Dishka composition root | Chosen for workflow internals ([Structure workflows as vertical slices](../adr/structure-workflows-as-vertical-slices-over-a-shared-package-wired-by-dishka.md)). |
+| Feature-sliced workflows over `software_factory/shared/` with a Dishka composition root | Superseded by declarative Workflow definitions over the factory's Stage library, with services passed explicitly and no container ([Structure workflows as vertical slices](../adr/structure-workflows-as-vertical-slices-over-a-shared-package-wired-by-dishka.md)). |
 | Runtime with fixed lifecycle phases; plugins fill slots | Rejected as the base. Removes loop duplication but cannot express planner, implementer, and reviewer flows. |
 | Pipeline of replaceable steps | Rejected. Implicit coupling through shared run state and harder tracing. |
 | Plugin folders with a `Command` contract, a composition-root `command.py`, and runtime-only imports for user workflows | Rejected. The prot2 prototype shows plain scripts over a public library suffice, without the command contract or per-workflow adapters. |

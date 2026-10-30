@@ -1,5 +1,7 @@
 # Structure workflows as vertical slices over a shared package, wired by a Dishka composition root
 
+**Superseded.** The factory replaced the slices and the container: each Workflow is a declarative definition over the shared Stage library in `software_factory/`, services are passed explicitly as `Services`, and no module imports Dishka.
+
 `implement_spec` and `pr_babysit` had grown into flat module piles. Each duplicated the same Git, `gh`, subprocess, JSON-state, envelope, and telemetry helpers, and each wired its dependencies through long keyword-default parameter lists on `main`. Each Workflow is now a **vertical slice**: one package per feature (implement_spec: `plan`, `deliver`, `chore`, `review`, `backlog`; babysit: `discover`, `monitor`, `watch`, `address`, `maintain_ci`, `publish`), plus `model`, `agents`, and one `composition` package. Infrastructure whose meaning is identical in both moved into `workflows/shared/` (`git`, `github`, `process`, `state`, `telemetry`, `agents`, `providers`). Features are classes that receive collaborators through their constructors. Only `composition/` knows the container: it builds a [Dishka](https://dishka.readthedocs.io/) container from `SharedProvider`, the slice's own provider, and any caller-supplied override providers. `main(argv=None, *, providers=())` replaces the keyword seams. APP scope is the process; REQUEST scope is one unit of work, either one implement_spec Workflow run or one babysat pull request.
 
 ## Considered Options

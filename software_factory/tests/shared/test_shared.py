@@ -3,13 +3,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
-from dishka import Provider, Scope, make_container, provide
 
-from software_factory.shared.git import GitClient
-from software_factory.shared.github.account import GitHub
-from software_factory.shared.github.repo import GhRunner
-from software_factory.shared.process import CommandRunner, Runner
-from software_factory.shared.providers import SharedProvider
 from software_factory.shared.state import JsonFile, StateError, process_lock
 
 
@@ -48,25 +42,3 @@ def test_process_lock_excludes_a_duplicate_worker_and_releases(tmp_path) -> None
     with process_lock(tmp_path / "worker.lock"):
         pass
 
-
-def test_the_shared_provider_wires_git_and_github_over_one_runner_and_accepts_overrides() -> None:
-    calls: list[tuple[str, ...]] = []
-
-    class FakeRunner(Provider):
-        scope = Scope.APP
-
-        @provide(override=True)
-        def runner(self) -> Runner:
-            def run(args, *, cwd=None, timeout_s=None):
-                calls.append(tuple(args))
-                return '{"login": "me"}'
-            return run
-
-    real = make_container(SharedProvider(timeout_s=5))
-    assert isinstance(real.get(Runner), CommandRunner) and isinstance(real.get(GitClient), GitClient)
-    real.close()
-
-    container = make_container(SharedProvider(), FakeRunner())
-    assert container.get(GitHub).login() == "me"
-    assert container.get(GhRunner)(("auth", "status")) and calls == [("gh", "api", "user"), ("gh", "auth", "status")]
-    container.close()
