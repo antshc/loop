@@ -127,7 +127,7 @@ Product and SDLC language for user-owned workflows built **on** Loop. Warp Facto
 
 ### Sources and boundaries
 
-- [Loop library building blocks](docs/building-blocks/loop.md), [public API](loop/src/loop/__init__.py), [Workflow reporting](loop/src/loop/workflow/phases.py), and [unified workflow plan](docs/researches/unified-event-driven-sdlc-workflow.md).
+- [Loop library building blocks](docs/building-blocks/loop.md), [public API](loop/src/__init__.py), [Workflow reporting](loop/src/workflow/phases.py), and [unified workflow plan](docs/researches/unified-event-driven-sdlc-workflow.md).
 - [Warp Factories overview](https://docs.warp.dev/factories/), [how factories work](https://docs.warp.dev/factories/how-factories-work/), [agents](https://docs.warp.dev/factories/factory-agents/), [automations](https://docs.warp.dev/factories/automations/), and [issue-to-PR example](https://github.com/warpdotdev/warp-factory-examples/tree/main/examples/02-sdlc-issue-to-pr).
 - [SSSF overview](https://github.com/antshc/super-simple-software-factory/blob/main/.claude/skills/sssf/cookbooks/sssf_overview.md), [agent-driven workflows](https://github.com/antshc/super-simple-software-factory/blob/main/.claude/skills/sssf/cookbooks/create_adw.md), and [deterministic gates](https://github.com/antshc/super-simple-software-factory/blob/main/.claude/skills/sssf/templates/adws/adw_modules/gates.py).
 - **Boundary:** Loop owns agent execution, local Git/worktree lifecycle, and optional phase reporting. The factory owns intake, routing, business gates, policy, durable work-item state, GitHub publication, approvals, and delivery. Proposed terms do not assert that the event-driven factory is already implemented.

@@ -30,14 +30,14 @@ Consult these before searching the code:
 ## 4. Navigation policy
 
 1. Read the relevant authoritative source first and state which doc you checked (or that none applies) before searching.
-2. Use `ARCHITECTURE.md`'s Codebase Structure to scope searches to `loop/src/loop/`, `software_factory/`, `loop/workflows/`, or `loop/tests/`.
+2. Use `ARCHITECTURE.md`'s Codebase Structure to scope searches to `loop/src/`, `software_factory/`, `loop/workflows/`, or `loop/tests/`.
 3. Exact symbol (definition, references, rename) → language-server tools; concept or behavior → semantic search; literal or config value → text search.
 4. Docs are leads, not proof — confirm behavior against current source or tests, then stop searching.
 
 ## 5. Build and validation policy
 
 - Runtime: Python 3.14+ for the library and example Workflows; preserve the minimum declared in `pyproject.toml`.
-- Install: `python -m pip install -e ".[dev]"` from the reporoot.
+- Install: `python -m pip install -e ".[dev]" --config-settings editable_mode=strict` from the reporoot.
 - Test: `python -m pytest` from the reporoot (configured in `pyproject.toml`, `testpaths = ["tests", "software_factory/tests"]`); it includes the import-linter architecture checks.
 - For compatibility changes, follow [Test Strategy: Python compatibility](../docs/concepts/ops-test-strategy.md#python-compatibility); a newer local interpreter alone does not verify the minimum.
 

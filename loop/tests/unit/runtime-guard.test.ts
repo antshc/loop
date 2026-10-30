@@ -7,7 +7,7 @@ import {
   MINIMUM_BUN_VERSION,
   type RuntimeGuardEnvironment,
   type RuntimeVersions,
-} from '../../src/loop/runtime-guard.ts';
+} from '../../src/runtime-guard.ts';
 
 interface Recorded {
   environment: RuntimeGuardEnvironment;
@@ -86,7 +86,7 @@ describe('enforceRuntime', () => {
 
 describe('package metadata', () => {
   test('declares the same minimum Bun version as the guard', async () => {
-    const metadata = (await Bun.file(`${import.meta.dir}/../../package.json`).json()) as {
+    const metadata = (await Bun.file(`${import.meta.dir}/../../../package.json`).json()) as {
       engines: { bun: string };
       packageManager: string;
     };
@@ -98,7 +98,7 @@ describe('package metadata', () => {
 describe('entry guard under Node.js', () => {
   const nodePath = Bun.which('node');
   test.skipIf(nodePath === null)('exits non-zero with an unsupported message', () => {
-    const result = Bun.spawnSync([nodePath ?? 'node', `${import.meta.dir}/../../src/loop/require-bun.ts`]);
+    const result = Bun.spawnSync([nodePath ?? 'node', `${import.meta.dir}/../../src/require-bun.ts`]);
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr.toString()).toContain('Node.js is unsupported');
   });

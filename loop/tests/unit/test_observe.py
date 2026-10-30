@@ -35,8 +35,7 @@ from loop.git import ObservingGitService
 from loop.run import RunContext
 
 ROOT = Path(__file__).parents[3]
-SRC_ROOT = ROOT / "loop" / "src"
-SRC = SRC_ROOT / "loop"
+SRC = ROOT / "loop" / "src"
 NAME = SessionName("ticket-7")
 PROFILE = AgentProfile(copilot, model="claude-haiku-4.5")
 
@@ -347,7 +346,7 @@ def test_loop_imports_without_opentelemetry_and_reports_the_missing_extra() -> N
         "    print('loop[otel]' in str(error))\n"
     )
 
-    result = subprocess.run([sys.executable, "-c", script], cwd=ROOT, env={"PYTHONPATH": str(SRC_ROOT)}, capture_output=True, text=True)
+    result = subprocess.run([sys.executable, "-c", script], cwd=ROOT, capture_output=True, text=True)
 
     assert result.stdout.strip() == "True", result.stderr
 

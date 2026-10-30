@@ -175,9 +175,18 @@ if __name__ == "__main__":
 Run it from the harness root. The [usage guide](USAGE.md#repositories-and-targets)
 has the delivery rules.
 
+## Repository layout
+
+| Path | Contents |
+|---|---|
+| `loop/src/` | The installable `loop` library. |
+| `loop/workflows/` | Standalone examples that use only the public `loop` API. |
+| [`software_factory/`](software_factory/README.md) | Software factory built on `loop`: reusable Stages, Flow fragments, and Workflow definitions such as `implement_spec` and `pr_babysit`. It lives at the repository root, imports only the public `loop` package, and is not part of the installed `loop` distribution. |
+
 ## Documentation
 
 - [Usage guide](USAGE.md): advanced examples, logging, and `implement_spec` Workflow configuration.
+- [Software factory](software_factory/README.md): write and run factory Workflows from reusable Stages.
 - [Domain glossary](GLOSSARY.md): project terminology.
 - [Architecture](ARCHITECTURE.md): codebase structure, design decisions, and concepts.
 - [System context](docs/building-blocks/system-context.md): context and container diagrams.
@@ -188,10 +197,11 @@ has the delivery rules.
 From the repository root, with your virtual environment active:
 
 ```sh
-python -m pip install -e ".[dev]"
+python -m pip install -e ".[dev]" --config-settings editable_mode=strict
 python -m pytest
 ```
 
+The strict editable mode keeps `import loop` resolving to `loop/src` even though the repository also has a `loop/` directory.
 The test suite includes library tests, example Workflow tests, and import-linter
 architecture checks. See the [test strategy](docs/concepts/ops-test-strategy.md)
 for testing boundaries.

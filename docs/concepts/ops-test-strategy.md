@@ -37,7 +37,7 @@ The library and example Workflows support Python 3.14+; [package metadata](../..
 
 ```sh
 python --version
-python -m pip install -e ".[dev]"
+python -m pip install -e ".[dev]" --config-settings editable_mode=strict
 python -m pip check
 python -m pytest
 python -m software_factory.workflows.implement_spec --help

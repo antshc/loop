@@ -255,13 +255,3 @@ def test_environment_validation_prevents_invalid_process_arguments(values: dict[
     with pytest.raises(ValueError, match="environment"):
         AgentProfile(copilot, env=values)
 
-
-def test_shared_profile_can_be_imported_and_used_by_the_example(capsys: pytest.CaptureFixture[str]) -> None:
-    """Given a Python-defined agent, when its example runs, then both execution forms work."""
-    from examples.profile_workflow import main
-
-    main()
-    output = capsys.readouterr().out
-    assert "shopping-cart quantity" in output
-    assert "--deny-tool shell(git push)" in output
-    assert "worktree add" in output

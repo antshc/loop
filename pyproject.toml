@@ -19,11 +19,27 @@ otel = [
     "opentelemetry-exporter-otlp-proto-http>=1.45",
 ]
 
-[tool.setuptools.packages.find]
-where = ["loop/src"]
+[tool.setuptools]
+packages = [
+    "loop",
+    "loop.agents",
+    "loop.clis",
+    "loop.docker",
+    "loop.dryrun",
+    "loop.git",
+    "loop.hooks",
+    "loop.observe",
+    "loop.run",
+    "loop.sessions",
+    "loop.workflow",
+    "loop.workflow.adapters",
+]
+
+[tool.setuptools.package-dir]
+loop = "loop/src"
 
 [tool.pytest.ini_options]
-pythonpath = ["loop/src", "loop", ".", "loop/tests"]
+pythonpath = ["loop", ".", "loop/tests"]
 testpaths = ["loop/tests", "software_factory/tests"]
 norecursedirs = ["archive", ".*"]
 

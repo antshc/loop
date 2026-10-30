@@ -50,12 +50,6 @@ with Agent().with_git(GitOptions(strategy=BranchStrategy("cart-validation"))).op
     result = worktree.agent(developer).run(AgentRequest("Add cart quantity validation, verify, and commit."))
 ```
 
-Run the included example without executing Git or agent processes:
-
-```sh
-python3 -m examples.profile_workflow
-```
-
 Instruction sources can also be literal text or a public raw-text URL:
 
 ```python

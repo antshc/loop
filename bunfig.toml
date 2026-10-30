@@ -1,2 +1,2 @@
 [test]
-pathIgnorePatterns = ["archive/**", "docs/**", "examples/**", "workspace/**"]
+pathIgnorePatterns = ["archive/**", "docs/**", "workspace/**"]
