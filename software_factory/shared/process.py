@@ -47,12 +47,22 @@ class CommandRunner:
         return completed.stdout
 
 
-def git_command(args: Sequence[str], path: Path, *, env: Mapping[str, str] | None = None) -> str:
-    """Runs `git <args>` in `path` with `env` added to the environment and returns stdout; the runtime's Git command."""
+# Generous, since a commit runs the repository's hooks, but finite, so a hung call cannot hold a work item forever.
+GIT_TIMEOUT_S = 900.0
+
+
+def git_command(
+    args: Sequence[str], path: Path, *, env: Mapping[str, str] | None = None, timeout_s: float = GIT_TIMEOUT_S,
+) -> str:
+    """Runs `git <args>` in `path` with `env` added to the environment and returns stdout, failing after `timeout_s`; the runtime's Git command."""
     label = f"git {' '.join(args)}"
     environment = {**os.environ, **env} if env else None
     try:
-        completed = subprocess.run(["git", *args], cwd=path, capture_output=True, text=True, check=False, env=environment)
+        completed = subprocess.run(
+            ["git", *args], cwd=path, capture_output=True, text=True, check=False, env=environment, timeout=timeout_s,
+        )
+    except subprocess.TimeoutExpired as exception:
+        raise CommandError(label, None, f"timed out after {timeout_s}s") from exception
     except FileNotFoundError as exception:
         raise CommandError(label, None, str(exception)) from exception
     if completed.returncode != 0:
