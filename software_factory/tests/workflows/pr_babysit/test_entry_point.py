@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import signal
 from pathlib import Path
+from subprocess import CalledProcessError, TimeoutExpired
 
 import pytest
 from loop import WorktreeError
 
+from software_factory.runtime import DefinitionError
 from software_factory.shared.telemetry import Tee
 from software_factory.workflows.pr_babysit import __main__ as entry
 from software_factory.workflows.pr_babysit.__main__ import StopRequest, main
@@ -71,6 +73,45 @@ def test_a_worktree_that_cannot_be_closed_clean_is_recorded_as_a_hand_off_at_the
     status = rig.status()
     assert code == 1 and status is not None and status.status == "handed_off"
     assert status.attributes == {FINGERPRINT: fingerprint(rig.polled()), REASON: "worktree has retained edits"}
+
+
+@pytest.mark.parametrize(
+    ("error", "reason"),
+    [
+        (CalledProcessError(128, ["git", "fetch", "origin", "feature"]), "returned non-zero exit status 128"),
+        (TimeoutExpired(["git", "fetch"], 120), "timed out after 120 seconds"),
+    ],
+    ids=["a fetch that fails", "a fetch that times out"],
+)
+def test_an_error_the_workflow_declares_that_escapes_the_run_is_recorded_as_a_hand_off(
+    error: Exception, reason: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Given a run whose workspace opener raises a declared error outside any Stage guard, when the command handles it, then the run is closed handed off at the fingerprint and the command exits 1."""
+    rig = addressing(tmp_path)
+
+    def escaping(*args: object, **kwargs: object) -> object:
+        rig.ledger.item("pr_babysit", rig.pr.id).append({"kind": "run-opened", "epoch": 1})
+        raise error
+
+    monkeypatch.setattr(entry, "run", escaping)
+
+    code = rig.babysit()
+
+    status = rig.status()
+    assert code == 1 and status is not None and status.status == "handed_off"
+    assert status.attributes[FINGERPRINT] == fingerprint(rig.polled()) and reason in str(status.attributes[REASON])
+
+
+def test_a_definition_error_is_not_recorded_as_a_hand_off(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Given a run refused before it opens because the definition is wrong, when the command handles it, then it exits 1 without closing a run."""
+    rig = addressing(tmp_path)
+
+    def refused(*args: object, **kwargs: object) -> object:
+        raise DefinitionError("Services is missing GitHub")
+
+    monkeypatch.setattr(entry, "run", refused)
+
+    assert rig.babysit() == 1 and rig.status() is None
 
 
 def test_an_interrupt_request_asks_the_run_to_stop_wakes_the_pacer_and_gives_the_signals_back() -> None:

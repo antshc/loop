@@ -15,10 +15,10 @@ from subprocess import CalledProcessError, TimeoutExpired
 from types import FrameType
 from typing import Any
 
-from loop import Agent, WorktreeError
+from loop import Agent
 
 from software_factory.events.pull_requests import PullRequestWork
-from software_factory.runtime import Fail, Ledger, LogSpans, RunResult, Services, Spans, StopSignal, Verify, WorktreeGit, run
+from software_factory.runtime import DefinitionError, Fail, Ledger, LogSpans, RunResult, Services, Spans, StopSignal, Verify, WorktreeGit, run
 from software_factory.shared.agents.launcher import AgentLauncher
 from software_factory.shared.git import GitClient
 from software_factory.shared.github.account import GitHub
@@ -29,7 +29,7 @@ from software_factory.shared.telemetry import OtelSpans, OtlpObserverFactory, Te
 from software_factory.stages import pull_requests
 from software_factory.stages.checks import as_verify
 
-from . import NAME, pr_babysit
+from . import HANDED_OFF_ERRORS, NAME, pr_babysit
 from .intake import ChildLauncher, DiscoveryRequest, ProcessLauncher, Scheduler, adopt_state, release_if_changed, work_of
 from .policy import FINGERPRINT, REASON, Blocked, fingerprint
 from .settings import Repository, Settings
@@ -148,7 +148,9 @@ def _maintain(settings: Settings, given: Services | None, slug: str, number: int
     with _handling(stop, given is None):
         try:
             result = run(definition, work, services=services, ledger=runtime.ledger, spans=runtime.spans, stop=runtime.stop)
-        except WorktreeError as exception:
+        except DefinitionError:
+            raise
+        except HANDED_OFF_ERRORS as exception:
             return _hand_off_unclosed(runtime.ledger, github, work, str(exception))
     _report(work, result)
     return result.exit_code
@@ -187,7 +189,7 @@ def _handling(stop: StopRequest, install: bool) -> Iterator[None]:
 
 
 def _hand_off_unclosed(ledger: Ledger, github: GitHub, work: PullRequestWork, reason: str) -> int:
-    """Closes the run a worktree that could not be closed clean left unclosed as handed off, at the pull request's fingerprint; the exit code 1."""
+    """Closes the run an error that escaped the Workflow's guard (a worktree not closed clean, a failed fetch) left unclosed as handed off, at the pull request's fingerprint; the exit code 1."""
     try:
         blocked_on = fingerprint(pull_requests.read(work, github))
     except (CalledProcessError, TimeoutExpired, OSError, ValueError):

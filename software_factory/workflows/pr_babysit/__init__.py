@@ -20,7 +20,10 @@ from .settings import Settings
 
 NAME = "pr_babysit"
 
-__all__ = ["NAME", "pr_babysit"]
+__all__ = ["HANDED_OFF_ERRORS", "NAME", "pr_babysit"]
+
+# What the Workflow hands off as blocked inside a Stage; the entry point hands off the same set when it escapes the run.
+HANDED_OFF_ERRORS: tuple[type[Exception], ...] = (Blocked, WorktreeError, CalledProcessError, TimeoutExpired, OSError, ValueError)
 
 
 def pr_babysit(settings: Settings, verify: Verify) -> Workflow[PullRequestWork]:
@@ -43,7 +46,7 @@ def pr_babysit(settings: Settings, verify: Verify) -> Workflow[PullRequestWork]:
     )
     return (
         Workflow(NAME).context(PullRequestWork)
-        .on_error((Blocked, WorktreeError, CalledProcessError, TimeoutExpired, OSError, ValueError), block)
+        .on_error(HANDED_OFF_ERRORS, block)
         .stage(pull_requests.validate_origin().on_hold(block))
         .each(
             pacing.polls(),
