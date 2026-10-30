@@ -7,11 +7,11 @@ import threading
 from pathlib import Path
 
 from software_factory.shared.github.pull_requests.babysit import digest
-from software_factory.tests.runtime.harness import command
-from software_factory.tests.stages.pr_support import NUMBER, SLUG, answer, reply_text, selected_batch, thread
+from tests.runtime.harness import command
+from tests.stages.pr_support import NUMBER, SLUG, answer, reply_text, selected_batch, thread
 from software_factory.runtime import Ledger, WorkItemLog
-from software_factory.workflows.pr_babysit.legacy import adopt_v1, state_path
-from software_factory.workflows.pr_babysit.policy import ADOPTED, FINGERPRINT
+from factory_workflows.pr_babysit.legacy import adopt_v1, state_path
+from factory_workflows.pr_babysit.policy import ADOPTED, FINGERPRINT
 
 from .golden import GOLDEN, OPEN, build_host
 from .harness import Babysit

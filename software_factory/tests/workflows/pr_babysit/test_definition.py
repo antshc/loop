@@ -11,8 +11,8 @@ from software_factory.shared.agents.launcher import AgentLauncher
 from software_factory.shared.git import GitClient
 from software_factory.shared.github.account import GitHub
 from software_factory.shared.pacing import Pacer
-from software_factory.workflows.pr_babysit import pr_babysit
-from software_factory.workflows.pr_babysit.settings import Repository, Settings
+from factory_workflows.pr_babysit import pr_babysit
+from factory_workflows.pr_babysit.settings import Repository, Settings
 
 WIRING = Path(__file__).with_name("wiring.txt")
 

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from software_factory.shared.github.account import GitHub
 from software_factory.shared.github.pull_requests import PullRequests
-from software_factory.tests.shared.fakes import (
+from tests.shared.fakes import (
     FakeGhCli,
     FakePullRequestHost,
     check_run,

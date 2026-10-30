@@ -23,9 +23,9 @@ from software_factory.shared.github.issues.client import Issues
 from software_factory.shared.github.repo import GitHubRepo
 from software_factory.shared.process import CommandRunner
 from software_factory.stages import specs
-from software_factory.tests.runtime.harness import GIT, Repo, command
-from software_factory.tests.runtime.support import NoInput
-from software_factory.tests.shared.fakes import FakeGhCli, issue
+from tests.runtime.harness import GIT, Repo, command
+from tests.runtime.support import NoInput
+from tests.shared.fakes import FakeGhCli, issue
 
 LABELS = ("spec", "repo:target:owner/repo", "repo:base:main")
 TITLE = "Checkout: Add login page"

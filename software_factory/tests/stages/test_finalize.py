@@ -13,9 +13,9 @@ from software_factory.events.review import PullRequestReviewed, ReviewAxis, Revi
 from software_factory.events.tickets import Delivery
 from software_factory.runtime import Event
 from software_factory.stages import finalize
-from software_factory.tests.runtime.harness import command
-from software_factory.tests.shared.fakes import issue
-from software_factory.tests.stages.support import BRANCH, HITL, PULL_REQUEST, StageRig, seeded
+from tests.runtime.harness import command
+from tests.shared.fakes import issue
+from tests.stages.support import BRANCH, HITL, PULL_REQUEST, StageRig, seeded
 
 AXES = ("bugs", "quality", "smells", "initiative")
 DELIVERED = [issue(10, "Add login form", state="CLOSED")]

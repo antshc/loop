@@ -7,7 +7,7 @@ import pytest
 from software_factory.shared.github.issues.graph import IssueRelation, SpecGraphSnapshot
 from software_factory.shared.github.issues.issue import CloseReason, GapState, IssueState, ReadGap
 from software_factory.shared.github.issues.readiness import TicketReadiness
-from software_factory.tests.shared.builders import build_blocker, build_graph, build_ticket
+from tests.shared.builders import build_blocker, build_graph, build_ticket
 
 
 def test_a_graph_without_gaps_is_complete() -> None:

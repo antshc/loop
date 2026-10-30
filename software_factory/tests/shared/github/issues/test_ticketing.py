@@ -6,7 +6,7 @@ from software_factory.shared.github.issues.client import Issues
 from software_factory.shared.github.issues.readiness import TicketReadiness
 from software_factory.shared.github.issues.ticketing import SpecTicketingService, TicketDraft, TicketingError
 from software_factory.shared.github.repo import GitHubRepo
-from software_factory.tests.shared.fakes import FakeGhCli, issue
+from tests.shared.fakes import FakeGhCli, issue
 
 _ROUTING = ("spec", "repo:target:o/r", "repo:base:main")
 

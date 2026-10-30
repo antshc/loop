@@ -47,7 +47,7 @@ ADDRESS_ONCE = (
 ```
 
 ```sh
-python -m software_factory.workflows.address_once --config address_once.json --pr https://github.com/owner/repo/pull/123
+python -m factory_workflows.address_once --config address_once.json --pr https://github.com/owner/repo/pull/123
 ```
 
 ## Layout

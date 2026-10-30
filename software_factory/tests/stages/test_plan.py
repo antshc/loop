@@ -10,7 +10,7 @@ import pytest
 from software_factory.events.specs import SpecHeld
 from software_factory.events.tickets import PlannedTicket, PlanProposed, TicketsCreated
 from software_factory.stages import plan
-from software_factory.tests.stages.support import DeveloperScript, StageRig, answers
+from tests.stages.support import DeveloperScript, StageRig, answers
 
 FORM = {"title": "Add login form", "body": "Build the form", "blocked_by": []}
 TESTS = {"title": "Add login tests", "body": "Cover the form", "blocked_by": [0]}

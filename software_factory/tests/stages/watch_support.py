@@ -15,10 +15,10 @@ from software_factory.events.pull_requests import PullRequestPolled, PullRequest
 from software_factory.runtime import Event, Fail, Nothing, Pass, RunResult, Services, Stage, StopSignal, Workflow, run
 from software_factory.shared.pacing import Pacer
 from software_factory.stages import pull_requests
-from software_factory.tests.runtime.harness import GIT
-from software_factory.tests.runtime.support import NoInput
-from software_factory.tests.shared.fakes import check_run, workflow_run
-from software_factory.tests.stages.pr_support import BRANCH, NUMBER, SLUG, PrRig
+from tests.runtime.harness import GIT
+from tests.runtime.support import NoInput
+from tests.shared.fakes import check_run, workflow_run
+from tests.stages.pr_support import BRANCH, NUMBER, SLUG, PrRig
 
 WORKFLOW = "watch"
 

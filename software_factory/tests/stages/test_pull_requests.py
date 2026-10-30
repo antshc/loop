@@ -18,14 +18,14 @@ from software_factory.events.pull_requests import (
 from software_factory.runtime import Evidence, Fail, Flow, Nothing, Pass, Stage, handoff, stop
 from software_factory.stages import pull_requests
 from software_factory.stages.pull_requests import DecideInput, PublishInput, publish_batch
-from software_factory.tests.runtime.harness import command
-from software_factory.tests.runtime.support import NoInput
-from software_factory.tests.shared.fakes import comment_node, issue_comment, thread_node
-from software_factory.tests.stages.pr_support import (
+from tests.runtime.harness import command
+from tests.runtime.support import NoInput
+from tests.shared.fakes import comment_node, issue_comment, thread_node
+from tests.stages.pr_support import (
     BRANCH, NUMBER, SLUG, TRUST, Crash, PrRig, reply_text, selected_batch, thread, workspace_at,
 )
-from software_factory.tests.stages.support import probe
-from software_factory.tests.stages.watch_support import WatchRig, failing, fingerprint_of, produces, watch
+from tests.stages.support import probe
+from tests.stages.watch_support import WatchRig, failing, fingerprint_of, produces, watch
 
 EVIDENCE = Evidence("", "", False)
 

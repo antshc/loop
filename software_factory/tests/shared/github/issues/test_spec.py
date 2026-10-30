@@ -6,7 +6,7 @@ import pytest
 
 from software_factory.shared.github.issues.issue import IssueState
 from software_factory.shared.github.issues.spec import SpecMetadata
-from software_factory.tests.shared.builders import build_spec, build_ticket
+from tests.shared.builders import build_spec, build_ticket
 
 
 def _metadata(title: str = "Add login page", labels: tuple[str, ...] = (), number: int = 7) -> SpecMetadata:

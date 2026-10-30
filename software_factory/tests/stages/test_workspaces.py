@@ -15,9 +15,9 @@ from loop import (
 from software_factory.runtime import Evidence, Flow, Hold, Nothing, Pass, RunResult, Stage, Workflow
 from software_factory.shared.agents.launcher import AgentLauncher
 from software_factory.stages import specs, workspaces
-from software_factory.tests.runtime.harness import command
-from software_factory.tests.stages.pr_support import AddressAgent, PrRig, PrWork, workspace_at
-from software_factory.tests.stages.support import BRANCH, StageRig
+from tests.runtime.harness import command
+from tests.stages.pr_support import AddressAgent, PrRig, PrWork, workspace_at
+from tests.stages.support import BRANCH, StageRig
 
 
 @dataclass(frozen=True)

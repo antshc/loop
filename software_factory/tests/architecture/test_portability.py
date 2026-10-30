@@ -17,9 +17,10 @@ import loop
 import pytest
 
 import software_factory
-import software_factory.workflows as workflows
+import factory_workflows as workflows
 
-ROOT = Path(software_factory.__file__).parent.parent
+# Each factory package maps to the directory that holds it, mirroring the package-dir mapping in pyproject.toml.
+PACKAGE_DIRS = {"software_factory": Path(software_factory.__file__).parent, "factory_workflows": Path(workflows.__file__).parent}
 
 SAMPLES = Path(__file__).with_name("samples.py")
 
@@ -35,7 +36,7 @@ definition = portable_samples.call_with_samples(getattr(package, package.NAME))
 definition.check()
 foreign = [
     name for name, module in sys.modules.items()
-    if name.split(".")[0] == "software_factory" and not str(getattr(module, "__file__", "")).startswith(str(root))
+    if name.split(".")[0] in ("software_factory", "factory_workflows") and not str(getattr(module, "__file__", "")).startswith(str(root))
 ]
 print(json.dumps({"name": definition.name, "foreign": foreign}))
 """
@@ -64,7 +65,10 @@ def runtime_nodes(node: ast.AST) -> Iterator[ast.AST]:
 
 def module_file(name: str) -> Path | None:
     """The source file of a factory module, or None when `name` is no factory module."""
-    base = ROOT.joinpath(*name.split("."))
+    top, *rest = name.split(".")
+    if top not in PACKAGE_DIRS:
+        return None
+    base = PACKAGE_DIRS[top].joinpath(*rest)
     if (base / "__init__.py").exists():
         return base / "__init__.py"
     return base.with_suffix(".py") if base.with_suffix(".py").exists() else None
@@ -96,7 +100,7 @@ def closure_of(package: str) -> dict[str, Path]:
     found: dict[str, Path] = {}
     while pending:
         name = pending.pop()
-        file = module_file(name) if name.split(".")[0] == "software_factory" else None
+        file = module_file(name)
         if file is None or name in found:
             continue
         found[name] = file
@@ -107,8 +111,9 @@ def closure_of(package: str) -> dict[str, Path]:
 
 def copy_closure(closure: dict[str, Path], target: Path) -> None:
     """Copies each module of the closure and the data files beside it into `target`, keeping their paths."""
-    for file in closure.values():
-        destination = target / file.relative_to(ROOT)
+    for name, file in closure.items():
+        parts = name.split(".")
+        destination = target.joinpath(*parts, "__init__.py") if file.name == "__init__.py" else target.joinpath(*parts[:-1], f"{parts[-1]}.py")
         destination.parent.mkdir(parents=True, exist_ok=True)
         for sibling in file.parent.iterdir():
             if sibling.is_file() and (sibling == file or sibling.suffix not in (".py", ".pyc")):
@@ -118,7 +123,10 @@ def copy_closure(closure: dict[str, Path], target: Path) -> None:
 
 def probe(package: str, target: Path) -> subprocess.CompletedProcess[str]:
     """Imports the Workflow package and its entry point in a fresh interpreter that sees only `target` and Loop."""
-    loop_source = Path(loop.__file__).parent.parent
+    loop_source = target.with_name(f"{target.name}-loop")
+    loop_source.mkdir(exist_ok=True)
+    if not (loop_source / "loop").exists():
+        (loop_source / "loop").symlink_to(Path(loop.__file__).parent)
     environment = {**os.environ, "PYTHONPATH": os.pathsep.join([str(target), str(loop_source)])}
     return subprocess.run([sys.executable, "-c", PROBE, package], cwd=target, env=environment, capture_output=True, text=True, timeout=120)
 
@@ -144,7 +152,7 @@ def test_a_workflows_import_closure_holds_no_other_workflow_and_no_tests(name: s
     unexpected = sorted(
         module for module in closure_of(package)
         if module.startswith(f"{workflows.__name__}.") and not module.startswith(package) and module != workflows.__name__
-        or module.startswith("software_factory.tests")
+        or module.split(".")[0] == "tests"
     )
 
     assert unexpected == []

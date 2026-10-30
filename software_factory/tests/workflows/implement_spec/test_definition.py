@@ -9,7 +9,7 @@ from software_factory.shared.agents.launcher import AgentLauncher
 from software_factory.shared.git import GitClient
 from software_factory.shared.github.account import GitHub
 from software_factory.shared.github.issues.client import Issues
-from software_factory.workflows.implement_spec import ImplementSpecSettings, Targets, implement_spec
+from factory_workflows.implement_spec import ImplementSpecSettings, Targets, implement_spec
 
 WIRING = Path(__file__).with_name("wiring.txt")
 

@@ -10,10 +10,10 @@ from loop import AgentRequest, FakeReply, RunContext
 
 from software_factory.events.feedback import FeedbackHandled
 from software_factory.events.pull_requests import CopilotRequested, ReadinessReported
-from software_factory.tests.runtime.harness import StopAfter, command
-from software_factory.tests.stages.pr_support import answer, reply_text, thread
-from software_factory.workflows.pr_babysit import __main__ as entry
-from software_factory.workflows.pr_babysit.policy import FINGERPRINT, REASON, fingerprint
+from tests.runtime.harness import StopAfter, command
+from tests.stages.pr_support import answer, reply_text, thread
+from factory_workflows.pr_babysit import __main__ as entry
+from factory_workflows.pr_babysit.policy import FINGERPRINT, REASON, fingerprint
 
 from .harness import FAILS_AFTER_EDIT, FAILS_UNTIL_FIXED, Babysit, LocalOrigin
 

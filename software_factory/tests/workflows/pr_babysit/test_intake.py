@@ -13,12 +13,12 @@ from software_factory.runtime import Ledger, RecordingSpans, Services
 from software_factory.shared.github.account import GitHub
 from software_factory.shared.pacing import Pacer
 from software_factory.stages import pull_requests
-from software_factory.tests.shared.fakes import FakeGhCli, FakePullRequestHost, issue_comment
-from software_factory.tests.workflows.pr_babysit.golden import GOLDEN, GREEN, OPEN, build_host
-from software_factory.workflows.pr_babysit import NAME
-from software_factory.workflows.pr_babysit.__main__ import Runtime, main
-from software_factory.workflows.pr_babysit.intake import ChildLauncher, Registry, child_environment
-from software_factory.workflows.pr_babysit.policy import FINGERPRINT, Blocked, fingerprint
+from tests.shared.fakes import FakeGhCli, FakePullRequestHost, issue_comment
+from tests.workflows.pr_babysit.golden import GOLDEN, GREEN, OPEN, build_host
+from factory_workflows.pr_babysit import NAME
+from factory_workflows.pr_babysit.__main__ import Runtime, main
+from factory_workflows.pr_babysit.intake import ChildLauncher, Registry, child_environment
+from factory_workflows.pr_babysit.policy import FINGERPRINT, Blocked, fingerprint
 
 
 class Child:

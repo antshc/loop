@@ -20,7 +20,7 @@ from software_factory.shared.github.pull_requests.model import (
     PullRequestState,
     ReviewVerdict,
 )
-from software_factory.tests.shared.builders import build_check, build_pull_request_snapshot, build_review, build_thread
+from tests.shared.builders import build_check, build_pull_request_snapshot, build_review, build_thread
 
 
 READY, WAITING, BLOCKED, UNKNOWN = ReadinessStatus.READY, ReadinessStatus.WAITING, ReadinessStatus.BLOCKED, ReadinessStatus.UNKNOWN

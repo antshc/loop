@@ -8,8 +8,8 @@ from pathlib import Path
 from software_factory.events.review import PullRequestReviewed, ReviewAxis, ReviewFailed, ReviewFinding
 from software_factory.events.tickets import Delivery
 from software_factory.stages import review
-from software_factory.tests.runtime.harness import Repo
-from software_factory.tests.stages.support import PULL_REQUEST, DeveloperScript, StageRig, answers
+from tests.runtime.harness import Repo
+from tests.stages.support import PULL_REQUEST, DeveloperScript, StageRig, answers
 
 AXES = ("bugs", "quality", "smells", "initiative")
 

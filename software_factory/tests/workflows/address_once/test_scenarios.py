@@ -7,10 +7,10 @@ from pathlib import Path
 import pytest
 
 from software_factory.events.feedback import FeedbackHandled
-from software_factory.tests.runtime.harness import command
-from software_factory.tests.shared.fakes import comment_node, thread_node
-from software_factory.tests.stages.pr_support import reply_text
-from software_factory.workflows.address_once import __main__ as entry
+from tests.runtime.harness import command
+from tests.shared.fakes import comment_node, thread_node
+from tests.stages.pr_support import reply_text
+from factory_workflows.address_once import __main__ as entry
 
 from .harness import FAILS_AFTER_EDIT, URL, Addressing
 

@@ -9,8 +9,8 @@ from software_factory.runtime.analysis import _stages_in
 from software_factory.shared.agents.launcher import AgentLauncher
 from software_factory.shared.git import GitClient
 from software_factory.shared.github.account import GitHub
-from software_factory.workflows.address_once import address_once, policy
-from software_factory.workflows.pr_babysit import policy as babysit_policy
+from factory_workflows.address_once import address_once, policy
+from factory_workflows.pr_babysit import policy as babysit_policy
 
 WIRING = Path(__file__).with_name("wiring.txt")
 

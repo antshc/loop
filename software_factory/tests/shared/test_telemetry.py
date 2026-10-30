@@ -31,10 +31,10 @@ from software_factory.runtime import (  # noqa: E402
     Fail, Flow, HarnessCommits, LogSpans, NullSpans, Pass, Stage, Workflow, WorkspaceOpener, handoff, rework,
 )
 from software_factory.shared.telemetry import OtelSpans, Tee  # noqa: E402
-from software_factory.tests.runtime.harness import TESTER, Ask, Rig, WorkCtx, editing  # noqa: E402
-from software_factory.tests.runtime.support import NoInput, Routed  # noqa: E402
+from tests.runtime.harness import TESTER, Ask, Rig, WorkCtx, editing  # noqa: E402
+from tests.runtime.support import NoInput, Routed  # noqa: E402
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+TESTS_ROOT = Path(__file__).resolve().parents[2]
 
 
 class Capture:
@@ -284,8 +284,8 @@ def test_without_the_extra_the_factory_runs_with_console_logging_and_reports_the
         from pathlib import Path
         from software_factory.runtime import Ledger, LogSpans, Pass, Services, Stage, Workflow, run
         from software_factory.shared.telemetry import OtlpObserverFactory, Tee
-        from software_factory.tests.runtime.harness import WorkCtx
-        from software_factory.tests.runtime.support import Alpha, NoInput
+        from tests.runtime.harness import WorkCtx
+        from tests.runtime.support import Alpha, NoInput
 
         stage = Stage("work", NoInput, Alpha).action(lambda i: None).gate(lambda i, r, e: Pass(Alpha()))
         result = run(Workflow("t").context(WorkCtx).stage(stage), WorkCtx(), services=Services(), ledger=Ledger(Path(sys.argv[1])), spans=Tee(LogSpans()))
@@ -300,8 +300,8 @@ def test_without_the_extra_the_factory_runs_with_console_logging_and_reports_the
     )
 
     completed = subprocess.run(
-        [sys.executable, "-c", script, str(tmp_path)], cwd=REPO_ROOT, capture_output=True, text=True,
-        env={"PYTHONPATH": f"{REPO_ROOT}", "PATH": ""},
+        [sys.executable, "-c", script, str(tmp_path)], cwd=tmp_path, capture_output=True, text=True,
+        env={"PYTHONPATH": f"{TESTS_ROOT}", "PATH": ""},
     )
 
     assert completed.returncode == 0, completed.stderr

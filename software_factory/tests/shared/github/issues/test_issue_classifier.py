@@ -8,7 +8,7 @@ from software_factory.shared.github.issues.issue_classifier import (
     IssueKind,
     LabelTypeDisagreement,
 )
-from software_factory.tests.shared.builders import build_issue
+from tests.shared.builders import build_issue
 
 
 @pytest.mark.parametrize(

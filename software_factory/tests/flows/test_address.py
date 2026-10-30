@@ -13,9 +13,9 @@ from software_factory.runtime import Flow, Workflow, handoff, reroute
 from software_factory.runtime.nodes import StageNode, WithinNode
 from software_factory.stages import feedback
 from software_factory.stages.address import IssueWork
-from software_factory.tests.runtime.harness import command
-from software_factory.tests.shared.fakes import check_run, issue_comment
-from software_factory.tests.stages.pr_support import (
+from tests.runtime.harness import command
+from tests.shared.fakes import check_run, issue_comment
+from tests.stages.pr_support import (
     BRANCH, TRUST, Action, AddressAgent, Crash, Elsewhere, PrRig, PrWork, Verifier, answer, blocking, reply_text,
     selected_batch, thread,
 )

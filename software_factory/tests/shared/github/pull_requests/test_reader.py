@@ -16,7 +16,7 @@ from software_factory.shared.github.pull_requests.model import (
     ReviewVerdict,
 )
 from software_factory.shared.process import CommandError
-from software_factory.tests.shared.fakes import (
+from tests.shared.fakes import (
     FakeGhCli,
     FakePullRequestHost,
     check_run,

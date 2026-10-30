@@ -7,9 +7,9 @@ from pathlib import Path
 from software_factory.events.pull_requests import DraftPullRequestPublished
 from software_factory.events.tickets import TicketClosed
 from software_factory.stages import publish
-from software_factory.tests.runtime.harness import command
-from software_factory.tests.shared.fakes import issue
-from software_factory.tests.stages.support import BRANCH, StageRig, never_closes, probe, seeded
+from tests.runtime.harness import command
+from tests.shared.fakes import issue
+from tests.stages.support import BRANCH, StageRig, never_closes, probe, seeded
 
 
 def pushes(rig: StageRig) -> list[tuple[str, ...]]:

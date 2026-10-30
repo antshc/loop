@@ -17,11 +17,11 @@ from software_factory.events.specs import RepositoryTarget
 from software_factory.runtime import Evidence, Fail, Flow, Hold, Pass, Workflow, handoff
 from software_factory.shared.github.repo import CommandError
 from software_factory.stages import ci, pull_requests, workspaces
-from software_factory.tests.runtime.harness import command
-from software_factory.tests.workflows.pr_babysit.golden import CLOSED, GOLDEN, GREEN, OPEN, build_host, pulls_over
-from software_factory.tests.shared.fakes import check_run
-from software_factory.tests.stages.pr_support import BRANCH, Verifier, polled_of
-from software_factory.tests.stages.watch_support import MaintainerAgent, WatchRig, fingerprint_of, produces, watch
+from tests.runtime.harness import command
+from tests.workflows.pr_babysit.golden import CLOSED, GOLDEN, GREEN, OPEN, build_host, pulls_over
+from tests.shared.fakes import check_run
+from tests.stages.pr_support import BRANCH, Verifier, polled_of
+from tests.stages.watch_support import MaintainerAgent, WatchRig, fingerprint_of, produces, watch
 
 EVIDENCE = Evidence("", "", False)
 SUBJECT = "babysit: fix CI (PR #7)"

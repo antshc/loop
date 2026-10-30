@@ -12,11 +12,11 @@ from software_factory.events.pull_requests import PullRequestWork
 from software_factory.runtime import Event, RecordingSpans, RunStatus, Services, WorktreeGit
 from software_factory.shared.agents.launcher import AgentLauncher
 from software_factory.shared.git import GitClient
-from software_factory.tests.runtime.harness import GIT, command
-from software_factory.tests.stages.pr_support import NUMBER, SLUG, AddressAgent, answer, thread
-from software_factory.tests.stages.watch_support import WatchRig
-from software_factory.workflows.address_once import NAME
-from software_factory.workflows.address_once.__main__ import Runtime, main
+from tests.runtime.harness import GIT, command
+from tests.stages.pr_support import NUMBER, SLUG, AddressAgent, answer, thread
+from tests.stages.watch_support import WatchRig
+from factory_workflows.address_once import NAME
+from factory_workflows.address_once.__main__ import Runtime, main
 
 URL = f"https://github.com/{SLUG}/pull/{NUMBER}"
 

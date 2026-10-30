@@ -15,9 +15,9 @@ from software_factory.runtime import Flow, Item, Ledger, Nothing, Pass, Stage, W
 from software_factory.runtime._engine.scope import Scope
 from software_factory.shared.pacing import Pacer
 from software_factory.stages import pacing, pull_requests
-from software_factory.tests.runtime.harness import StopAfter
-from software_factory.tests.stages.pr_support import SLUG
-from software_factory.tests.stages.watch_support import WORKFLOW, WatchRig, watch
+from tests.runtime.harness import StopAfter
+from tests.stages.pr_support import SLUG
+from tests.stages.watch_support import WORKFLOW, WatchRig, watch
 
 TARGET = RepositoryTarget(SLUG, Path("/work"), Path("/trees"))
 

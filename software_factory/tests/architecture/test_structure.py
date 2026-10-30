@@ -19,7 +19,7 @@ import software_factory.agents as agents
 import software_factory.events as events
 import software_factory.flows as flows
 import software_factory.stages as stages
-import software_factory.workflows as workflows
+import factory_workflows as workflows
 from software_factory.agents import Message
 from software_factory.runtime import Event, Flow, Handoff, Rework, Route, Selector, Stage, Workflow, WorkspaceOpener
 from software_factory.runtime._engine.codec import decode, encode
@@ -315,10 +315,10 @@ def phase_api_uses(source: str) -> list[str]:
 
 def test_the_factory_never_uses_the_loop_phase_api() -> None:
     """Given every module of the factory, when its imports from loop are scanned, then none names the phase-reporting API."""
-    root = Path(software_factory.__file__).parent
-    modules = sorted(root.rglob("*.py"))
+    roots = [Path(software_factory.__file__).parent, Path(workflows.__file__).parent]
+    modules = sorted(path for root in roots for path in root.rglob("*.py"))
 
-    offenders = [f"{path.relative_to(root)}: {name}" for path in modules for name in phase_api_uses(path.read_text())]
+    offenders = [f"{path}: {name}" for path in modules for name in phase_api_uses(path.read_text())]
 
     assert len(modules) > 100
     assert offenders == []

@@ -30,9 +30,9 @@ Three deliberate ways to express what the constructs alone cannot; each is writt
 
 ### Where policy lives
 
-- **Stages** (`software_factory/stages/`) hold activity logic with complete defaults. Policy that varies by Workflow arrives as value or callable parameters, never booleans.
+- **Stages** (`software_factory/src/stages/`) hold activity logic with complete defaults. Policy that varies by Workflow arrives as value or callable parameters, never booleans.
 - **Workflow packages** (`software_factory/workflows/<name>/`) hold the definition, a `policy.py` of values and pure functions (the `hitl` label, hand-off texts, trust rules, commit subjects, the work item), settings, and the entry point that builds `Services`. A definition holds no Stage logic and a policy module imports no process, Git or GitHub client.
-- **Events** (`software_factory/events/`) are data only.
+- **Events** (`software_factory/src/events/`) are data only.
 - **The runtime** knows no GitHub, Ticket or pull request and starts no process; Git runs behind an injected command.
 
 ## Rules
@@ -106,9 +106,9 @@ Verify — may drift.
 
 | Concern | Stable anchor | Semantic locator |
 |---|---|---|
-| Definition language | Immutable Stage, Flow and Workflow, validated as built | `software_factory/runtime/`: `stage.py`, `definition.py`, `routes.py`, `facts.py`, `analysis.py` |
-| Interpreter | `run(...)` and the private engine | `software_factory/runtime/run.py`, `software_factory/runtime/_engine/` |
-| Ledger and spans | Execution ledger; span seam | `software_factory/runtime/ledger.py`, `software_factory/runtime/spans.py`, `software_factory/shared/telemetry.py` |
-| Stage library and fragments | Reusable Stages and Flow fragments | `software_factory/stages/`, `software_factory/flows/` |
+| Definition language | Immutable Stage, Flow and Workflow, validated as built | `software_factory/src/runtime/`: `stage.py`, `definition.py`, `routes.py`, `facts.py`, `analysis.py` |
+| Interpreter | `run(...)` and the private engine | `software_factory/src/runtime/run.py`, `software_factory/src/runtime/_engine/` |
+| Ledger and spans | Execution ledger; span seam | `software_factory/src/runtime/ledger.py`, `software_factory/src/runtime/spans.py`, `software_factory/src/shared/telemetry.py` |
+| Stage library and fragments | Reusable Stages and Flow fragments | `software_factory/src/stages/`, `software_factory/src/flows/` |
 | Workflows | Definition, policy, entry point | `software_factory/workflows/{implement_spec,pr_babysit,address_once}/` |
 | Structure checks | Layer contracts and derived tests | `pyproject.toml` (`[tool.importlinter]`), `software_factory/tests/architecture/` |

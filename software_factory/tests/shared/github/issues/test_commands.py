@@ -6,7 +6,7 @@ from software_factory.shared.github.issues.client import Issues
 from software_factory.shared.github.issues.errors import IncompleteReadError, IssueError
 from software_factory.shared.github.repo import GitHubRepo
 from software_factory.shared.process import CommandError
-from software_factory.tests.shared.fakes import FakeGhCli, issue
+from tests.shared.fakes import FakeGhCli, issue
 
 _SPEC_LABELS = ("spec", "repo:target:o/r", "repo:base:main")
 

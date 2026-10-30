@@ -11,8 +11,8 @@ from software_factory.events.pull_requests import (
 )
 from software_factory.runtime import Flow, Workflow, stop
 from software_factory.stages import copilot, pull_requests
-from software_factory.tests.stages.pr_support import NUMBER, TRUST
-from software_factory.tests.stages.watch_support import WatchRig, produces, watch
+from tests.stages.pr_support import NUMBER, TRUST
+from tests.stages.watch_support import WatchRig, produces, watch
 
 COPILOT_BOT = "copilot-pull-request-reviewer[bot]"
 

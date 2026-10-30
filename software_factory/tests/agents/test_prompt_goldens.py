@@ -14,7 +14,7 @@ from software_factory.shared.github.issues.graph import SpecGraphSnapshot
 from software_factory.shared.github.issues.spec import Spec
 from software_factory.stages.specs import feature_branch
 from software_factory.stages.tickets import _ticket_payload
-from software_factory.tests.shared.builders import build_issue, build_ticket
+from tests.shared.builders import build_issue, build_ticket
 
 GOLDENS = Path(__file__).with_name("goldens") / "prompts"
 

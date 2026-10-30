@@ -12,9 +12,9 @@ from software_factory.events.tickets import Delivery, TicketImplemented, TicketR
 from software_factory.runtime import Flow, Item, Selector, Stage, handoff, next_, rework
 from software_factory.shared.github.issues.spec import Ticket
 from software_factory.stages import specs, tickets
-from software_factory.tests.runtime.support import NoInput
-from software_factory.tests.shared.fakes import issue
-from software_factory.tests.stages.support import (
+from tests.runtime.support import NoInput
+from tests.shared.fakes import issue
+from tests.stages.support import (
     HITL, DeveloperScript, StageRig, commits_nothing, declines, delivers, probe,
 )
 

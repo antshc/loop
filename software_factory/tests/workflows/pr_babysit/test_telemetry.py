@@ -10,7 +10,7 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from opentelemetry.sdk.trace.sampling import ALWAYS_ON
 
 from software_factory.shared.telemetry import OtelSpans
-from software_factory.workflows.pr_babysit.__main__ import Runtime
+from factory_workflows.pr_babysit.__main__ import Runtime
 
 from .harness import Babysit
 

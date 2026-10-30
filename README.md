@@ -153,9 +153,9 @@ implements and then reviews. Repositories must already be cloned under
 from pathlib import Path
 
 from software_factory.events.specs import RepositoryTarget
-from software_factory.workflows.implement_spec.__main__ import build_services, main
-from software_factory.workflows.implement_spec.dry import Fakes
-from software_factory.workflows.implement_spec.settings import Targets
+from factory_workflows.implement_spec.__main__ import build_services, main
+from factory_workflows.implement_spec.dry import Fakes
+from factory_workflows.implement_spec.settings import Targets
 
 workspace = Path.cwd() / "workspace"
 targets = Targets((

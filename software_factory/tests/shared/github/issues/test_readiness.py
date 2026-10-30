@@ -6,7 +6,7 @@ from software_factory.shared.github.issues.graph import SpecGraphSnapshot
 from software_factory.shared.github.issues.issue import CloseReason, IssueState
 from software_factory.shared.github.issues.readiness import TicketReadiness, TicketReadinessPolicy
 from software_factory.shared.github.issues.spec import Ticket
-from software_factory.tests.shared.builders import build_blocker, build_graph, build_issue, build_ticket
+from tests.shared.builders import build_blocker, build_graph, build_issue, build_ticket
 
 READY, BLOCKED, UNKNOWN = TicketReadiness.READY, TicketReadiness.BLOCKED, TicketReadiness.UNKNOWN
 CLOSED = IssueState.CLOSED

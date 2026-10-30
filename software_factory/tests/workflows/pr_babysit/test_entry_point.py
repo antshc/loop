@@ -11,10 +11,10 @@ from loop import WorktreeError
 
 from software_factory.runtime import DefinitionError
 from software_factory.shared.telemetry import Tee
-from software_factory.workflows.pr_babysit import __main__ as entry
-from software_factory.workflows.pr_babysit.__main__ import StopRequest, main
-from software_factory.workflows.pr_babysit.policy import FINGERPRINT, REASON, fingerprint
-from software_factory.workflows.pr_babysit.settings import Settings
+from factory_workflows.pr_babysit import __main__ as entry
+from factory_workflows.pr_babysit.__main__ import StopRequest, main
+from factory_workflows.pr_babysit.policy import FINGERPRINT, REASON, fingerprint
+from factory_workflows.pr_babysit.settings import Settings
 
 from .harness import Babysit
 from .test_intake import Discovery

@@ -6,7 +6,7 @@ from software_factory.shared.github.account import GitHub
 from software_factory.shared.github.pull_requests import MergePolicyReader, MergePolicySnapshot
 from software_factory.shared.github.pull_requests.merge_policy import PolicySource
 from software_factory.shared.process import CommandError
-from software_factory.tests.shared.fakes import (
+from tests.shared.fakes import (
     FakeGhCli,
     FakePullRequestHost,
     classic_protection,

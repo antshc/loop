@@ -8,7 +8,7 @@ The harness contains agent instructions, skills, Specs, and Tickets. The impleme
 ## Harness and target repositories
 
 `software_factory/workflows/implement_spec/` reads Specs and Tickets from the harness repository (`HARNESS_SLUG`, `harness_target()` in `__main__.py`); target repositories are `RepositoryTarget` values (slug, checkout, worktrees, and whether it plans, runs the chore and reviews) the entry point passes as `Targets`, which tests replace through `main(argv, services=...)`.
-`RepositoryId` is the shared GitHub repository identity in `software_factory/shared/github/`. With no other target configuration, the workflow defaults to
+`RepositoryId` is the shared GitHub repository identity in `software_factory/src/shared/github/`. With no other target configuration, the workflow defaults to
 implementation on the harness repository.
 
 ```python

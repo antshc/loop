@@ -12,12 +12,12 @@ from loop import AgentRequest, FakeCliRunner, FakeReply, GitCli, GitRuntime, Run
 
 from software_factory.runtime import RecordingSpans, Services
 from software_factory.shared.agents.launcher import AgentLauncher
-from software_factory.tests.runtime.harness import GIT, command
-from software_factory.tests.shared.fakes import issue
-from software_factory.tests.stages.support import BRANCH, LABELS, StageRig, envelope
-from software_factory.workflows.implement_spec.__main__ import Runtime, main
-from software_factory.workflows.implement_spec.dry import commit_in_worktree
-from software_factory.workflows.implement_spec.settings import Targets
+from tests.runtime.harness import GIT, command
+from tests.shared.fakes import issue
+from tests.stages.support import BRANCH, LABELS, StageRig, envelope
+from factory_workflows.implement_spec.__main__ import Runtime, main
+from factory_workflows.implement_spec.dry import commit_in_worktree
+from factory_workflows.implement_spec.settings import Targets
 
 TICKET_PROMPT = re.compile(r"subject `ccode\((?P<identifier>[^)|]+\|(?P<number>\d+))\): ")
 

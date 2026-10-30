@@ -65,7 +65,7 @@ class ChildLauncher(Protocol):
 
 def child_command(config: Path, url: str) -> list[str]:
     """An independent babysit process without a scheduler trace parent."""
-    return [sys.executable, "-m", "software_factory.workflows.pr_babysit", "--config", str(config), "--pr", url]
+    return [sys.executable, "-m", "factory_workflows.pr_babysit", "--config", str(config), "--pr", url]
 
 
 def child_environment() -> dict[str, str]:
@@ -74,7 +74,7 @@ def child_environment() -> dict[str, str]:
 
 
 class ProcessLauncher:
-    """Starts `python -m software_factory.workflows.pr_babysit --pr <url>` as a child process."""
+    """Starts `python -m factory_workflows.pr_babysit --pr <url>` as a child process."""
 
     def start(self, config: Path, url: str) -> Child:
         """The running child."""

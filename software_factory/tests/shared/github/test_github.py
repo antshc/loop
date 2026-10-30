@@ -8,7 +8,7 @@ from software_factory.shared.github.account import GitHub
 from software_factory.shared.github.repo import GitHubRepo, denied
 from software_factory.shared.github.pull_requests import PullRequests
 from software_factory.shared.process import CommandError
-from software_factory.tests.shared.fakes import FakeGhCli, FakePullRequestHost, ScriptedGh
+from tests.shared.fakes import FakeGhCli, FakePullRequestHost, ScriptedGh
 
 
 def _pulls(gh: ScriptedGh) -> PullRequests:

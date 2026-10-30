@@ -13,8 +13,8 @@ from software_factory.events.specs import (
 from software_factory.runtime import DefinitionError, Stage, Workflow, handoff
 from software_factory.shared.github.issues.errors import IssueError
 from software_factory.stages import specs
-from software_factory.tests.shared.fakes import issue
-from software_factory.tests.stages.support import BRANCH, HITL, StageRig, probe
+from tests.shared.fakes import issue
+from tests.stages.support import BRANCH, HITL, StageRig, probe
 
 
 def test_a_spec_whose_target_label_matches_a_configured_repository_is_routed_with_its_target(tmp_path: Path) -> None:

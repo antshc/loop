@@ -15,9 +15,9 @@ from software_factory.shared.github.account import GitHub
 from software_factory.shared.github.pull_requests.babysit import ci_failed, digest, pending_items
 from software_factory.stages.address import GroupInput, IssueWork, group_feedback, resolve_issue
 from software_factory.stages.feedback import SelectInput, select
-from software_factory.tests.workflows.pr_babysit.golden import CLOSED, GOLDEN, GREEN, OPEN, build_host, pulls_over
-from software_factory.tests.shared.fakes import FakeGhCli, check_run, comment_node, commit_status, thread_node, workflow_run
-from software_factory.tests.stages.pr_support import NUMBER, TRUST, AddressAgent, PrRig, polled_of, selected_batch, thread
+from tests.workflows.pr_babysit.golden import CLOSED, GOLDEN, GREEN, OPEN, build_host, pulls_over
+from tests.shared.fakes import FakeGhCli, check_run, comment_node, commit_status, thread_node, workflow_run
+from tests.stages.pr_support import NUMBER, TRUST, AddressAgent, PrRig, polled_of, selected_batch, thread
 
 LOGIN = "me"
 TARGET = RepositoryTarget("a/b", Path("/work/repo"), Path("/work/trees"))

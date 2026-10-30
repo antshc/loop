@@ -9,10 +9,10 @@ from software_factory.events.tickets import TicketEscalated
 from software_factory.runtime import RunStatus
 from software_factory.shared.github.issues.client import Issues
 from software_factory.shared.github.repo import GitHubRepo
-from software_factory.tests.shared.builders import build_graph, build_ticket
-from software_factory.tests.shared.fakes import FakeGhCli, issue
-from software_factory.workflows.implement_spec.intake import select_specs, work_of
-from software_factory.workflows.implement_spec.policy import (
+from tests.shared.builders import build_graph, build_ticket
+from tests.shared.fakes import FakeGhCli, issue
+from factory_workflows.implement_spec.intake import select_specs, work_of
+from factory_workflows.implement_spec.policy import (
     HELD_SPEC, HELD_TICKET, HITL, chore_subject, held_by_spec, held_by_ticket, release_reason, spec_revision,
 )
 

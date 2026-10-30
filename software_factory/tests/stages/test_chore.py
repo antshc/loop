@@ -10,9 +10,9 @@ import pytest
 from software_factory.events.chore import ChoreDiscarded, ChoreRefined
 from software_factory.runtime import Fail
 from software_factory.stages import chore
-from software_factory.tests.runtime.harness import Repo, command
-from software_factory.tests.shared.fakes import PR_DIFF
-from software_factory.tests.stages.support import DeveloperScript, StageRig, answers
+from tests.runtime.harness import Repo, command
+from tests.shared.fakes import PR_DIFF
+from tests.stages.support import DeveloperScript, StageRig, answers
 
 SUBJECT = "refactor(Checkout): tidy the form"
 

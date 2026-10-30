@@ -12,7 +12,7 @@ from software_factory.runtime import Evidence, Fail, Hold, Pass
 from software_factory.shared.checks import CheckCommand
 from software_factory.shared.process import CommandError
 from software_factory.stages.checks import ChecksInput, as_verify, run_checks
-from software_factory.tests.stages.pr_support import workspace_at
+from tests.stages.pr_support import workspace_at
 
 EVIDENCE = Evidence("", "", False)
 

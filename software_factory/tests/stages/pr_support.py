@@ -26,10 +26,10 @@ from software_factory.shared.github.account import GitHub
 from software_factory.shared.github.pull_requests.babysit import babysit_snapshot, bot_logins
 from software_factory.shared.github.pull_requests.model import PullRequestSnapshot
 from software_factory.stages import feedback
-from software_factory.tests.runtime.harness import GIT, Repo, command
-from software_factory.tests.runtime.support import NoInput
-from software_factory.tests.shared.fakes import FakeGhCli, FakePullRequestHost, comment_node, thread_node
-from software_factory.tests.stages.support import RecordingRunner
+from tests.runtime.harness import GIT, Repo, command
+from tests.runtime.support import NoInput
+from tests.shared.fakes import FakeGhCli, FakePullRequestHost, comment_node, thread_node
+from tests.stages.support import RecordingRunner
 
 SLUG = "owner/repo"
 NUMBER = 7

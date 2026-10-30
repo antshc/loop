@@ -9,7 +9,7 @@ import pytest
 
 from software_factory.shared.github.issues.client import Issues
 from software_factory.shared.github.repo import GitHubRepo
-from software_factory.workflows.implement_spec.dry import DryGh, DryGit, DryHistory, DryWorktreeGit, Fakes
+from factory_workflows.implement_spec.dry import DryGh, DryGit, DryHistory, DryWorktreeGit, Fakes
 
 HERE = Path("/work")
 

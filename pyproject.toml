@@ -33,18 +33,54 @@ packages = [
     "loop.sessions",
     "loop.workflow",
     "loop.workflow.adapters",
+    "software_factory",
+    "software_factory.agents",
+    "software_factory.agents._kit",
+    "software_factory.agents.roles",
+    "software_factory.agents.roles.address",
+    "software_factory.agents.roles.chore",
+    "software_factory.agents.roles.developer",
+    "software_factory.agents.roles.maintainer",
+    "software_factory.agents.roles.planner",
+    "software_factory.agents.roles.reviewer",
+    "software_factory.events",
+    "software_factory.flows",
+    "software_factory.runtime",
+    "software_factory.runtime._engine",
+    "software_factory.shared",
+    "software_factory.shared.agents",
+    "software_factory.shared.github",
+    "software_factory.shared.github.issues",
+    "software_factory.shared.github.pull_requests",
+    "software_factory.stages",
+    "factory_workflows",
+    "factory_workflows.address_once",
+    "factory_workflows.implement_spec",
+    "factory_workflows.pr_babysit",
 ]
 
 [tool.setuptools.package-dir]
 loop = "loop/src"
+software_factory = "software_factory/src"
+factory_workflows = "software_factory/workflows"
+
+[tool.setuptools.package-data]
+"software_factory.agents.roles.address" = ["*.md"]
+"software_factory.agents.roles.chore" = ["*.md"]
+"software_factory.agents.roles.developer" = ["*.md"]
+"software_factory.agents.roles.maintainer" = ["*.md"]
+"software_factory.agents.roles.planner" = ["*.md"]
+"software_factory.agents.roles.reviewer" = ["*.md"]
+"factory_workflows.address_once" = ["*.json"]
+"factory_workflows.pr_babysit" = ["*.json"]
 
 [tool.pytest.ini_options]
-pythonpath = ["loop", ".", "loop/tests"]
+pythonpath = ["loop", "software_factory", "loop/tests"]
 testpaths = ["loop/tests", "software_factory/tests"]
 norecursedirs = ["archive", ".*"]
 
 [tool.importlinter]
-root_packages = ["loop", "workflows", "software_factory"]
+root_packages = ["loop", "workflows", "software_factory", "factory_workflows", "tests"]
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
@@ -65,7 +101,7 @@ containers = ["loop"]
 [[tool.importlinter.contracts]]
 name = "The factory and the examples import only the public loop package"
 type = "forbidden"
-source_modules = ["workflows", "software_factory"]
+source_modules = ["workflows", "software_factory", "factory_workflows"]
 forbidden_modules = [
     "loop.agents",
     "loop.builder",
@@ -81,14 +117,20 @@ forbidden_modules = [
     "loop.workflow",
 ]
 # The telemetry test builds Loop's observer over an in-memory exporter, which the public otlp_observer cannot take.
-ignore_imports = ["software_factory.tests.shared.test_telemetry -> loop.observe.otel"]
+ignore_imports = ["tests.shared.test_telemetry -> loop.observe.otel"]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "The factory is layered: Workflow definitions over Flow fragments over Stages over Events over the runtime over role agents and shared infrastructure"
 type = "layers"
-containers = ["software_factory"]
-layers = ["workflows", "flows", "stages", "events", "runtime", "agents | shared"]
+layers = [
+    "factory_workflows",
+    "software_factory.flows",
+    "software_factory.stages",
+    "software_factory.events",
+    "software_factory.runtime",
+    "software_factory.agents | software_factory.shared",
+]
 
 [[tool.importlinter.contracts]]
 name = "Pure modules of the shared GitHub issues package never import the gh process layer; only its reader, commands, ticketing service, and client do"
@@ -129,25 +171,25 @@ allow_indirect_imports = true
 [[tool.importlinter.contracts]]
 name = "Factory and example source packages never import the factory test tree"
 type = "forbidden"
-source_modules = ["software_factory.agents", "software_factory.runtime", "software_factory.events", "software_factory.stages", "software_factory.flows", "software_factory.shared", "software_factory.workflows", "workflows.plan_implement", "workflows.workflow_reporting"]
-forbidden_modules = ["software_factory.tests"]
+source_modules = ["software_factory.agents", "software_factory.runtime", "software_factory.events", "software_factory.stages", "software_factory.flows", "software_factory.shared", "factory_workflows", "workflows.plan_implement", "workflows.workflow_reporting"]
+forbidden_modules = ["tests"]
 
 [[tool.importlinter.contracts]]
 name = "No dependency-injection container in the factory"
 type = "forbidden"
-source_modules = ["software_factory"]
+source_modules = ["software_factory", "factory_workflows"]
 forbidden_modules = ["dishka"]
 
 [[tool.importlinter.contracts]]
 name = "The factory never imports the examples"
 type = "forbidden"
-source_modules = ["software_factory"]
+source_modules = ["software_factory", "factory_workflows"]
 forbidden_modules = ["workflows"]
 
 [[tool.importlinter.contracts]]
 name = "No Workflow imports another: factory Workflow definitions and the examples are independent"
 type = "independence"
-modules = ["software_factory.workflows.*", "workflows.plan_implement", "workflows.workflow_reporting"]
+modules = ["factory_workflows.*", "workflows.plan_implement", "workflows.workflow_reporting"]
 
 [[tool.importlinter.contracts]]
 name = "Agent roles are independent of each other"
@@ -157,14 +199,14 @@ modules = ["software_factory.agents.roles.*"]
 [[tool.importlinter.contracts]]
 name = "The private agent kit is unreachable outside the agents package"
 type = "forbidden"
-source_modules = ["software_factory.workflows", "software_factory.runtime", "software_factory.events", "software_factory.stages", "software_factory.flows", "software_factory.shared", "workflows"]
+source_modules = ["factory_workflows", "software_factory.runtime", "software_factory.events", "software_factory.stages", "software_factory.flows", "software_factory.shared", "workflows"]
 forbidden_modules = ["software_factory.agents._kit"]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "The runtime engine is private: only the runtime package reaches it"
 type = "forbidden"
-source_modules = ["software_factory.agents", "software_factory.workflows", "software_factory.events", "software_factory.stages", "software_factory.flows", "software_factory.shared", "workflows"]
+source_modules = ["software_factory.agents", "factory_workflows", "software_factory.events", "software_factory.stages", "software_factory.flows", "software_factory.shared", "workflows"]
 forbidden_modules = ["software_factory.runtime._engine"]
 allow_indirect_imports = true
 
@@ -202,22 +244,22 @@ forbidden_modules = [
 [[tool.importlinter.contracts]]
 name = "Stages, Flow fragments and Workflow definitions never start processes themselves; only an entry point, a dry-run seam and the discovery scheduler do"
 type = "forbidden"
-source_modules = ["software_factory.stages", "software_factory.flows", "software_factory.workflows"]
+source_modules = ["software_factory.stages", "software_factory.flows", "factory_workflows"]
 forbidden_modules = ["software_factory.shared.process", "subprocess"]
 # A definition and an entry point name the hook and process errors an error route turns into a hand-off or an exit code.
 ignore_imports = [
-    "software_factory.workflows.* -> subprocess",
-    "software_factory.workflows.*.__main__ -> subprocess",
-    "software_factory.workflows.*.__main__ -> software_factory.shared.process",
-    "software_factory.workflows.implement_spec.dry -> software_factory.shared.process",
-    "software_factory.workflows.pr_babysit.intake -> subprocess",
+    "factory_workflows.* -> subprocess",
+    "factory_workflows.*.__main__ -> subprocess",
+    "factory_workflows.*.__main__ -> software_factory.shared.process",
+    "factory_workflows.implement_spec.dry -> software_factory.shared.process",
+    "factory_workflows.pr_babysit.intake -> subprocess",
 ]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "A Workflow's policy module holds values and pure functions: no process, Git or GitHub client"
 type = "forbidden"
-source_modules = ["software_factory.workflows.*.policy"]
+source_modules = ["factory_workflows.*.policy"]
 forbidden_modules = [
     "software_factory.shared.process",
     "software_factory.shared.git",

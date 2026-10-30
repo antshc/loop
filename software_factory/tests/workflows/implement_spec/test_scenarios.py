@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from software_factory.tests.shared.fakes import issue
-from software_factory.tests.stages.support import BRANCH, LABELS
+from tests.shared.fakes import issue
+from tests.stages.support import BRANCH, LABELS
 
 from .harness import TWO_TICKETS, ImplementSpecHarness
 

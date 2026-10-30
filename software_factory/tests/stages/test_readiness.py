@@ -11,8 +11,8 @@ from software_factory.events.pull_requests import (
 )
 from software_factory.runtime import Flow, Workflow, stop
 from software_factory.stages import pull_requests, readiness
-from software_factory.tests.stages.pr_support import TRUST
-from software_factory.tests.stages.watch_support import WatchRig, produces, watch
+from tests.stages.pr_support import TRUST
+from tests.stages.watch_support import WatchRig, produces, watch
 
 
 def report_readiness() -> Workflow[Any]:

@@ -8,7 +8,7 @@ from software_factory.shared.process import CommandError
 
 from software_factory.shared.github.pull_requests import PullRequests as PullRequestClient
 from software_factory.shared.github.repo import GitHubRepo
-from software_factory.tests.shared.fakes import PR_DIFF, FakeGhCli, FakePullRequestHost, comment_node, thread_node
+from tests.shared.fakes import PR_DIFF, FakeGhCli, FakePullRequestHost, comment_node, thread_node
 
 
 def _client(gh: FakeGhCli | None = None) -> PullRequestClient:

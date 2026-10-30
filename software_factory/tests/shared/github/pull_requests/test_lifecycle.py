@@ -6,7 +6,7 @@ import pytest
 
 from software_factory.shared.github.pull_requests import LifecycleAction, LifecycleDecision, PullRequestLifecyclePolicy
 from software_factory.shared.github.pull_requests.model import PullRequestState
-from software_factory.tests.shared.builders import build_pull_request_snapshot
+from tests.shared.builders import build_pull_request_snapshot
 
 CLOSE, REOPEN = LifecycleAction.CLOSE, LifecycleAction.REOPEN
 VALID, NO_OP, INVALID = LifecycleDecision.VALID, LifecycleDecision.NO_OP, LifecycleDecision.INVALID

@@ -15,13 +15,13 @@ from software_factory.runtime import Event, RecordingSpans, RunStatus, Services,
 from software_factory.shared.agents.launcher import AgentLauncher
 from software_factory.shared.git import GitClient
 from software_factory.shared.pacing import Pacer
-from software_factory.tests.runtime.harness import GIT, command
-from software_factory.tests.shared.fakes import workflow_run
-from software_factory.tests.stages.pr_support import NUMBER, SLUG, AddressAgent
-from software_factory.tests.stages.watch_support import MaintainerAgent, WatchRig
-from software_factory.workflows.pr_babysit import NAME
-from software_factory.workflows.pr_babysit.__main__ import Runtime, main
-from software_factory.workflows.pr_babysit.intake import REVISION
+from tests.runtime.harness import GIT, command
+from tests.shared.fakes import workflow_run
+from tests.stages.pr_support import NUMBER, SLUG, AddressAgent
+from tests.stages.watch_support import MaintainerAgent, WatchRig
+from factory_workflows.pr_babysit import NAME
+from factory_workflows.pr_babysit.__main__ import Runtime, main
+from factory_workflows.pr_babysit.intake import REVISION
 
 URL = f"https://github.com/{SLUG}/pull/{NUMBER}"
 
