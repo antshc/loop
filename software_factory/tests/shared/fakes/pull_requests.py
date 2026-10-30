@@ -31,7 +31,7 @@ def comment_node(
         "body": body,
         "createdAt": "2026-03-01T10:00:00Z",
         "diffHunk": "@@ -1 +1 @@\n-old\n+new",
-        "author": None if login is None else {"login": login},
+        "author": None if login is None else {"login": login, "__typename": "Bot" if login.endswith("[bot]") else "User"},
         "authorAssociation": association,
         "pullRequestReview": None if review_state is None else {"state": review_state},
         "url": f"https://github.com/a/b/pull/1#discussion_{id}",

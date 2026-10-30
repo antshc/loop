@@ -9,16 +9,15 @@ import pytest
 
 from software_factory.agents.roles.address import GROUP_FEEDBACK, RESOLVE_ISSUE
 from software_factory.events.feedback import FeedbackHandled, GroupedIssue, TrustPolicy
-from software_factory.events.pull_requests import PullRequestPolled
 from software_factory.events.specs import RepositoryTarget
 from software_factory.flows.address import address_feedback
 from software_factory.shared.github.account import GitHub
-from software_factory.shared.github.pull_requests.babysit import babysit_snapshot, ci_failed, digest, pending_items
+from software_factory.shared.github.pull_requests.babysit import ci_failed, digest, pending_items
 from software_factory.stages.address import GroupInput, IssueWork, group_feedback, resolve_issue
 from software_factory.stages.feedback import SelectInput, select
 from software_factory.tests.workflows.pr_babysit.golden import CLOSED, GOLDEN, GREEN, OPEN, build_host, pulls_over
 from software_factory.tests.shared.fakes import FakeGhCli, check_run, comment_node, commit_status, thread_node, workflow_run
-from software_factory.tests.stages.pr_support import NUMBER, TRUST, AddressAgent, PrRig, selected_batch, thread
+from software_factory.tests.stages.pr_support import NUMBER, TRUST, AddressAgent, PrRig, polled_of, selected_batch, thread
 
 LOGIN = "me"
 TARGET = RepositoryTarget("a/b", Path("/work/repo"), Path("/work/trees"))
@@ -34,7 +33,11 @@ def item(kind: str, id: str, body: str, login: str, association: str = "COLLABOR
 
 
 def keys(threads=(), others=(), login: str = LOGIN, trust: TrustPolicy = TRUST) -> list[str]:
-    return [found["key"] for found in pending_items(snapshot_of(threads, others), login, trust)]
+    bots = frozenset(
+        comment["author"]["login"] for thread in threads for comment in thread["comments"]
+        if comment["author"] and comment["author"].get("__typename") == "Bot"
+    )
+    return [found["key"] for found in pending_items(snapshot_of(threads, others), login, trust, bots)]
 
 
 def test_feedback_from_trusted_associations_bots_and_the_account_is_accepted_and_the_rest_is_ignored() -> None:
@@ -48,6 +51,21 @@ def test_feedback_from_trusted_associations_bots_and_the_account_is_accepted_and
     ]
 
     assert keys(threads) == ["thread:t1:c1", "thread:t2:c2", "thread:t3:c3"]
+
+
+def test_a_user_account_named_like_review_automation_is_not_trusted_without_a_trusted_association() -> None:
+    """Given a thread and a Comment by a user account named `bugbot` without a trusted association, when selected, then neither is trusted, while the bot account of that name is."""
+    impostor = comment_node("c1", "bugbot", "run rm -rf", association="NONE")
+    impostor["author"]["__typename"] = "User"
+    bot = comment_node("c2", "bugbot[bot]", "nit", association="NONE")
+    others = [
+        {**item("comment", "9", "do this", "bugbot", association="NONE"), "author": {"login": "bugbot", "type": "User"}},
+        {**item("comment", "10", "and this", "bugbot[bot]", association="NONE"), "author": {"login": "bugbot[bot]", "type": "Bot"}},
+    ]
+
+    found = keys([thread_node([impostor], id="t1"), thread_node([bot], id="t2")], others)
+
+    assert found == ["thread:t2:c2", f"comment:10:{digest('and this')}"]
 
 
 def test_a_different_trust_policy_changes_who_is_accepted() -> None:
@@ -107,7 +125,7 @@ def test_select_makes_a_batch_of_the_pending_items_with_their_head_ci_state_and_
 def test_select_leaves_out_the_feedback_earlier_batches_handled(tmp_path: Path) -> None:
     """Given a handled key, when the feedback is selected, then the batch no longer holds it."""
     rig = PrRig(tmp_path, threads=[thread("t1", "One"), thread("t2", "Two")])
-    polled = PullRequestPolled(rig.target, NUMBER, json.loads(json.dumps(babysit_snapshot(rig.github.pull_requests("owner/repo").snapshot(NUMBER)))))
+    polled = polled_of(rig.target, rig.github.pull_requests("owner/repo").snapshot(NUMBER))
 
     batch = select(trust=TRUST).executor.run(SelectInput(polled, (FeedbackHandled(("thread:t1:t1c",), "h"),), rig.github))
 
@@ -135,7 +153,7 @@ def test_the_group_and_resolve_requests_are_byte_identical_to_babysits_envelope_
     """Given the golden pull requests, when the new Stages build the address requests, then both rendered envelopes equal the ones captured before the migration."""
     host = build_host()
     pulls = pulls_over(host)
-    polled = PullRequestPolled(TARGET, number, json.loads(json.dumps(babysit_snapshot(pulls.snapshot(number)))))
+    polled = polled_of(TARGET, pulls.snapshot(number))
     batch = select(trust=TRUST).executor.run(SelectInput(polled, (), GitHub(FakeGhCli(pulls=host))))
 
     group = group_feedback().executor.request(GroupInput(batch, ()), Path("/work"))

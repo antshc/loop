@@ -13,7 +13,7 @@ from software_factory.events.ci import BranchBroken
 from software_factory.events.feedback import FeedbackBatch, GroupedIssue
 from software_factory.events.pull_requests import NextAction, PullRequestPolled
 from software_factory.events.specs import RepositoryTarget
-from software_factory.shared.github.pull_requests.babysit import babysit_snapshot, ci_state
+from software_factory.shared.github.pull_requests.babysit import babysit_snapshot, bot_logins, ci_state
 from software_factory.stages import ci, pull_requests
 from software_factory.stages.address import GroupInput, IssueWork, group_feedback, resolve_issue
 from software_factory.workflows.pr_babysit.policy import TRUST, fingerprint
@@ -31,8 +31,8 @@ def golden() -> dict:
 
 def polled_of(number: int) -> PullRequestPolled:
     """The golden pull request as the snapshot Stage reads it, for the acting account `me`."""
-    snapshot = babysit_snapshot(pulls_over(build_host()).snapshot(number))
-    return PullRequestPolled(TARGET, number, json.loads(json.dumps(snapshot)), "me")
+    read = pulls_over(build_host()).snapshot(number)
+    return PullRequestPolled(TARGET, number, json.loads(json.dumps(babysit_snapshot(read))), "me", bot_logins(read))
 
 
 def decided(polled: PullRequestPolled) -> NextAction:

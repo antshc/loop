@@ -33,12 +33,13 @@ class PollStarted(Event):
 
 @dataclass(frozen=True)
 class PullRequestPolled(Event):
-    """One read of pull request `number` of `target`'s repository, as the snapshot dictionaries babysit's fingerprints and agent envelopes are built on; `login` is the acting account."""
+    """One read of pull request `number` of `target`'s repository, as the snapshot dictionaries babysit's fingerprints and agent envelopes are built on; `login` is the acting account and `bots` the review-thread authors that are bot accounts."""
 
     target: RepositoryTarget
     number: int
     snapshot: dict[str, Json]
     login: str = ""
+    bots: tuple[str, ...] = ()
 
     @property
     def is_open(self) -> bool:

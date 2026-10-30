@@ -20,7 +20,7 @@ from software_factory.shared.git import GitClient
 from software_factory.shared.github.account import GitHub
 from software_factory.shared.github.pull_requests import PullRequests
 from software_factory.shared.github.pull_requests.babysit import (
-    babysit_snapshot, ci_failed, ci_state, is_copilot, unhandled_items,
+    babysit_snapshot, bot_logins, ci_failed, ci_state, is_copilot, unhandled_items,
 )
 from software_factory.shared.github.pull_requests.model import PullRequestSnapshot
 from software_factory.shared.github.repo import CommandError
@@ -226,7 +226,7 @@ def _poll(i: SnapshotInput) -> PullRequestPolled:
     read = i.github.pull_requests(target.slug).snapshot(number)
     # Plain JSON, so the Event equals what the ledger replays.
     projected = json.loads(json.dumps(babysit_snapshot(read)))
-    return PullRequestPolled(target, number, projected, i.github.login())
+    return PullRequestPolled(target, number, projected, i.github.login(), bot_logins(read))
 
 
 def _decide(
@@ -257,7 +257,7 @@ def _unsupported(polled: PullRequestPolled, author: str | None) -> bool:
 def _feedback(i: DecideInput, trust: TrustPolicy) -> FeedbackBatch | None:
     """The trusted feedback no earlier batch replied to, with the CI state of the head; None when there is none."""
     handled = {key for event in i.handled for key in event.keys}
-    items = unhandled_items(i.polled.snapshot, i.polled.login, trust, handled)
+    items = unhandled_items(i.polled.snapshot, i.polled.login, trust, handled, frozenset(i.polled.bots))
     return FeedbackBatch(i.polled.head, ci_failed(i.polled.snapshot), tuple(items)) if items else None
 
 

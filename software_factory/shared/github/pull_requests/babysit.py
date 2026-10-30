@@ -38,25 +38,33 @@ def babysit_snapshot(snapshot: PullRequestSnapshot) -> dict[str, Any]:
     return projected
 
 
+def bot_logins(snapshot: PullRequestSnapshot) -> tuple[str, ...]:
+    """The review-thread authors whose account is a bot; kept beside the snapshot dictionary, which fingerprints and agent envelopes are built on."""
+    return tuple(sorted({comment.author for thread in snapshot.threads for comment in thread.comments if comment.author_is_bot and comment.author}))
+
+
 def digest(value: object) -> str:
     """A stable key for a piece of remote work."""
     return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
 
 
-def trusted(comment: dict[str, Any], login: str, trust: Trust) -> bool:
-    """Accepts the acting account, authors with a trusted association and known review automation."""
+def trusted(comment: dict[str, Any], login: str, trust: Trust, bots: frozenset[str] = frozenset()) -> bool:
+    """Accepts the acting account, authors with a trusted association and known review automation whose account is a bot: a REST `user.type` of Bot, or a login in `bots`."""
     author = comment.get("author")
     name = (author.get("login") if isinstance(author, dict) else author) or ""
     association = comment.get("authorAssociation", comment.get("author_association"))
-    return name == login or association in trust.associations or name.lower().removesuffix("[bot]") in trust.bots
+    is_bot = (isinstance(author, dict) and author.get("type") == "Bot") or name in bots
+    return name == login or association in trust.associations or (is_bot and name.lower().removesuffix("[bot]") in trust.bots)
 
 
-def pending_threads(threads: list[dict[str, Any]], login: str, trust: Trust) -> list[dict[str, Any]]:
-    """The open review threads whose first comment is trusted and whose latest comment is not the account's own answer."""
+def pending_threads(
+    threads: list[dict[str, Any]], login: str, trust: Trust, bots: frozenset[str] = frozenset(),
+) -> list[dict[str, Any]]:
+    """The open review threads whose first comment is trusted and whose latest comment is not the account's own answer; `bots` are the logins that are bot accounts."""
     pending = []
     for thread in threads:
         comments = thread["comments"]
-        if thread["isResolved"] or not comments or not trusted(comments[0], login, trust):
+        if thread["isResolved"] or not comments or not trusted(comments[0], login, trust, bots):
             continue
         latest_comment = comments[-1]
         own = (latest_comment.get("author") or {}).get("login") == login
@@ -73,9 +81,9 @@ def pending_threads(threads: list[dict[str, Any]], login: str, trust: Trust) -> 
     return pending
 
 
-def pending_items(snapshot: dict[str, Any], login: str, trust: Trust) -> list[dict[str, Any]]:
-    """Every trusted, unanswered feedback item of the snapshot: review threads first, then conversation Comments and reviews."""
-    pending = pending_threads(snapshot["threads"], login, trust)
+def pending_items(snapshot: dict[str, Any], login: str, trust: Trust, bots: frozenset[str] = frozenset()) -> list[dict[str, Any]]:
+    """Every trusted, unanswered feedback item of the snapshot: review threads first, then conversation Comments and reviews; `bots` are the thread authors that are bot accounts."""
+    pending = pending_threads(snapshot["threads"], login, trust, bots)
     for item in snapshot["other"]:
         if not trusted(item, login, trust) or (_is_by(item, login) and FIX_MARKER not in item["body"].lower()):
             continue
@@ -83,9 +91,11 @@ def pending_items(snapshot: dict[str, Any], login: str, trust: Trust) -> list[di
     return pending
 
 
-def unhandled_items(snapshot: dict[str, Any], login: str, trust: Trust, handled: set[str]) -> list[dict[str, Any]]:
+def unhandled_items(
+    snapshot: dict[str, Any], login: str, trust: Trust, handled: set[str], bots: frozenset[str] = frozenset(),
+) -> list[dict[str, Any]]:
     """The pending feedback items whose key no earlier batch replied to, each marked `pending` as persisted before."""
-    return [{**item, "status": "pending"} for item in pending_items(snapshot, login, trust) if item["key"] not in handled]
+    return [{**item, "status": "pending"} for item in pending_items(snapshot, login, trust, bots) if item["key"] not in handled]
 
 
 def latest(items: list[dict[str, Any]], key: Callable[[dict[str, Any]], Any]) -> list[dict[str, Any]]:

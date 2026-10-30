@@ -137,6 +137,7 @@ class ReviewComment:
     diff_hunk: str
     url: str
     review_state: ReviewVerdict | None
+    author_is_bot: bool = False
 
 
 @dataclass(frozen=True)

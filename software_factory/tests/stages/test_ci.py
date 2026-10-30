@@ -15,13 +15,12 @@ from software_factory.events.feedback import IssueResolved, IssueUnclear
 from software_factory.events.pull_requests import PrBlocked, PullRequestPolled, Unsupported
 from software_factory.events.specs import RepositoryTarget
 from software_factory.runtime import Evidence, Fail, Flow, Hold, Pass, Workflow, handoff
-from software_factory.shared.github.pull_requests.babysit import babysit_snapshot
 from software_factory.shared.github.repo import CommandError
 from software_factory.stages import ci, pull_requests, workspaces
 from software_factory.tests.runtime.harness import command
 from software_factory.tests.workflows.pr_babysit.golden import CLOSED, GOLDEN, GREEN, OPEN, build_host, pulls_over
 from software_factory.tests.shared.fakes import check_run
-from software_factory.tests.stages.pr_support import BRANCH, Verifier
+from software_factory.tests.stages.pr_support import BRANCH, Verifier, polled_of
 from software_factory.tests.stages.watch_support import MaintainerAgent, WatchRig, fingerprint_of, produces, watch
 
 EVIDENCE = Evidence("", "", False)
@@ -271,7 +270,7 @@ def golden() -> dict:
 
 def golden_polled(number: int):
     pulls = pulls_over(build_host())
-    return PullRequestPolled(RepositoryTarget("a/b", Path("/work"), Path("/trees")), number, json.loads(json.dumps(babysit_snapshot(pulls.snapshot(number)))), "me")
+    return polled_of(RepositoryTarget("a/b", Path("/work"), Path("/trees")), pulls.snapshot(number), "me")
 
 
 def test_the_diagnose_request_is_byte_identical_to_babysits_envelope_golden_and_asks_for_the_failed_runs_logs(golden) -> None:

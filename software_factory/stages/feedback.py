@@ -30,7 +30,7 @@ def select(*, trust: TrustPolicy) -> Stage[SelectInput, FeedbackBatch, FeedbackB
 def _batch(i: SelectInput, trust: TrustPolicy) -> FeedbackBatch:
     snapshot = i.polled.snapshot
     handled = {key for event in i.handled for key in event.keys}
-    items = unhandled_items(snapshot, i.github.login(), trust, handled)
+    items = unhandled_items(snapshot, i.github.login(), trust, handled, frozenset(i.polled.bots))
     return FeedbackBatch(i.polled.head, ci_failed(snapshot), tuple(items))
 
 

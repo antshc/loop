@@ -28,12 +28,12 @@ _THREADS = """query($owner:String!,$name:String!,$number:Int!,$cursor:String){
 repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100,after:$cursor){
 pageInfo{hasNextPage endCursor} nodes{id isResolved isOutdated path line originalLine
 comments(first:100){pageInfo{hasNextPage endCursor} nodes{id databaseId body createdAt diffHunk
- author{login} authorAssociation pullRequestReview{state} url}}}}}}}"""
+ author{login __typename} authorAssociation pullRequestReview{state} url}}}}}}}"""
 
 
 _COMMENTS = """query($id:ID!,$cursor:String){node(id:$id){... on PullRequestReviewThread{
 comments(first:100,after:$cursor){pageInfo{hasNextPage endCursor} nodes{id databaseId body createdAt diffHunk
- author{login} authorAssociation pullRequestReview{state} url}}}}}"""
+ author{login __typename} authorAssociation pullRequestReview{state} url}}}}}"""
 
 
 _PER_PAGE = "per_page=100"
@@ -208,6 +208,7 @@ def _review_comment(node: dict[str, Any]) -> ReviewComment:
         database_id=node["databaseId"],
         author=author["login"] if author else None,
         author_association=node["authorAssociation"],
+        author_is_bot=bool(author) and author.get("__typename") == "Bot",
         body=node["body"],
         created_at=node["createdAt"],
         diff_hunk=node["diffHunk"],

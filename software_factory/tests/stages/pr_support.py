@@ -23,7 +23,8 @@ from software_factory.runtime import (
 from software_factory.shared.agents.launcher import AgentLauncher
 from software_factory.shared.git import GitClient
 from software_factory.shared.github.account import GitHub
-from software_factory.shared.github.pull_requests.babysit import babysit_snapshot
+from software_factory.shared.github.pull_requests.babysit import babysit_snapshot, bot_logins
+from software_factory.shared.github.pull_requests.model import PullRequestSnapshot
 from software_factory.stages import feedback
 from software_factory.tests.runtime.harness import GIT, Repo, command
 from software_factory.tests.runtime.support import NoInput
@@ -166,9 +167,7 @@ class PrRig:
         """A Stage that reads the pull request as the snapshot Stage of a definition would."""
         return (
             Stage("poll-pull-request", PollInput, produces=PullRequestPolled)
-            .action(lambda i: PullRequestPolled(
-                self.target, NUMBER, json.loads(json.dumps(babysit_snapshot(i.github.pull_requests(SLUG).snapshot(NUMBER)))),
-            ))
+            .action(lambda i: polled_of(self.target, i.github.pull_requests(SLUG).snapshot(NUMBER)))
             .gate(lambda _, polled, __: Pass(polled))
         )
 
@@ -238,7 +237,12 @@ def blocking(blocked: list[str]) -> Stage[Any, Any, Nothing]:
     return Stage("block-pr", NoInput, produces=Nothing).action(lambda _: blocked.append("blocked")).gate(lambda *_: Pass(Nothing()))
 
 
+def polled_of(target: RepositoryTarget, read: PullRequestSnapshot, login: str = "") -> PullRequestPolled:
+    """The pull request as the snapshot Stage reads it: the snapshot dictionary and its bot authors."""
+    return PullRequestPolled(target, read.pull_request.number, json.loads(json.dumps(babysit_snapshot(read))), login, bot_logins(read))
+
+
 def selected_batch(rig: PrRig) -> FeedbackBatch:
     """The batch the select Stage makes of the rig's pull request."""
-    polled = PullRequestPolled(rig.target, NUMBER, json.loads(json.dumps(babysit_snapshot(rig.github.pull_requests(SLUG).snapshot(NUMBER)))))
+    polled = polled_of(rig.target, rig.github.pull_requests(SLUG).snapshot(NUMBER))
     return feedback.select(trust=TRUST).executor.run(feedback.SelectInput(polled, (), rig.github))
