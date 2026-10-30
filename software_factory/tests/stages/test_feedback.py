@@ -11,12 +11,11 @@ from software_factory.agents.roles.address import GROUP_FEEDBACK, RESOLVE_ISSUE
 from software_factory.events.feedback import FeedbackHandled, GroupedIssue, TrustPolicy
 from software_factory.events.pull_requests import PullRequestPolled
 from software_factory.events.specs import RepositoryTarget
-from software_factory.legacy_slices.pr_babysit.watch.snapshot import babysit_snapshot
 from software_factory.flows.address import address_feedback
 from software_factory.shared.github.account import GitHub
-from software_factory.stages import feedback
+from software_factory.shared.github.pull_requests.babysit import babysit_snapshot, ci_failed, digest, pending_items
 from software_factory.stages.address import GroupInput, IssueWork, group_feedback, resolve_issue
-from software_factory.stages.feedback import SelectInput, ci_failed, pending_items, select
+from software_factory.stages.feedback import SelectInput, select
 from software_factory.tests.legacy_slices.pr_babysit.watch.golden import CLOSED, GOLDEN, GREEN, OPEN, build_host, pulls_over
 from software_factory.tests.shared.fakes import FakeGhCli, check_run, comment_node, commit_status, thread_node, workflow_run
 from software_factory.tests.stages.pr_support import NUMBER, TRUST, AddressAgent, PrRig, selected_batch, thread
@@ -81,7 +80,7 @@ def test_conversation_items_get_a_key_from_their_kind_id_and_body() -> None:
     found = pending_items(snapshot_of(others=[item("comment", "5", "docs", "reviewer"), item("review", "6", "nits", "reviewer")]), LOGIN, TRUST)
 
     assert [entry["key"] for entry in found] == [
-        f"comment:5:{feedback.digest('docs')}", f"review:6:{feedback.digest('nits')}",
+        f"comment:5:{digest('docs')}", f"review:6:{digest('nits')}",
     ]
 
 

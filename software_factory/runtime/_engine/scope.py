@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import AbstractContextManager, ExitStack
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from loop import AgentWorkspace
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class Run:
-    """Everything one run shares: the definition, the work item, the services and where records and spans go."""
+    """Everything one run shares: the definition, the work item, the services, where records and spans go and the attributes a hand-off adds to the closed run."""
 
     workflow: Workflow[Any]
     context: Any
@@ -34,6 +34,7 @@ class Run:
     log: WorkItemLog
     spans: Spans
     stop: StopSignal | None
+    attributes: dict[str, str | int | bool] = field(default_factory=dict)
 
 
 def clean(attributes: dict[str, Any]) -> dict[str, str | int | bool]:

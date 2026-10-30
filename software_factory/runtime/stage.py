@@ -202,6 +202,7 @@ class Stage[I, R, P: Event]:
     limit_: Limit | None = None
     once_: Callable[[I], str] | None = None
     reads_: tuple[tuple[type[Event], str], ...] = ()
+    run_records_: Callable[[Any, str | None], Mapping[str, str | int | bool]] | None = None
     describe: Callable[[I], Mapping[str, str | int | bool]] = lambda _: {}
 
     def __post_init__(self) -> None:
@@ -281,6 +282,10 @@ class Stage[I, R, P: Event]:
     def reads[T: Event](self, event: type[T], *, from_: str) -> Stage[I, R, P]:
         """Names the producer of an Event that two or more Stages produce."""
         return replace(self, reads_=(*self.reads_, (event, from_)))
+
+    def records_run(self, attributes: Callable[[P, str | None], Mapping[str, str | int | bool]]) -> Stage[I, R, P]:
+        """Sets the run attributes a hand-off through this Stage records from its Event and the reason the route gave; a run's reader, such as an intake, finds them on the closed run."""
+        return replace(self, run_records_=attributes)
 
     def tune(self, **profile_fields: Any) -> Stage[I, R, P]:
         """Tunes the agent's profile; applies to an agent Stage only."""

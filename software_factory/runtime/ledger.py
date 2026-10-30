@@ -102,6 +102,14 @@ class WorkItemLog:
         scope.opened = True
         return scope
 
+    def started_under(self, budget: Mapping[str, str]) -> int:
+        """How many attempts, across every run, started against the budget; an interrupted attempt counts."""
+        return sum(1 for record in self._loaded() if _counts_against(record, budget) and record["status"] == "running")
+
+    def passed_under(self, budget: Mapping[str, str]) -> Mapping[str, Any] | None:
+        """The latest attempt, across every run, that passed against the budget."""
+        return next((record for record in reversed(self._loaded()) if _counts_against(record, budget) and record["status"] == "passed"), None)
+
     def history[T: Event](self, type_: type[T]) -> tuple[T, ...]:
         """Every `type_` event this work item recorded, across runs, in order; includes events not yet written."""
         stored = [*self._loaded(), *(record for scope in self._scopes for record in scope.pending)]
@@ -136,6 +144,10 @@ class WorkItemLog:
                 if number != len(lines) - 1:
                     raise
         return records
+
+
+def _counts_against(record: Mapping[str, Any], budget: Mapping[str, str]) -> bool:
+    return record["kind"] == "attempt" and record.get("budget") == dict(budget)
 
 
 def _event_of(record: Mapping[str, Any]) -> Json:
@@ -180,9 +192,9 @@ class ScopeLog:
             })
         self._flush()
 
-    def loop(self, key: WorkKey) -> AttemptLoop:
-        """The attempts under one work key."""
-        return AttemptLoop(self._log, self, key)
+    def loop(self, key: WorkKey, budget: Mapping[str, str] | None = None) -> AttemptLoop:
+        """The attempts under one work key; `budget` names the once-per-key or at-most-N rule they count against across runs."""
+        return AttemptLoop(self._log, self, key, budget)
 
     def close(self, status: str) -> None:
         """Records the scope's end if it ever wrote anything; a handed-off or interrupted scope stays open."""
@@ -201,10 +213,11 @@ class ScopeLog:
 class AttemptLoop:
     """The attempts of one Stage placement under one work key; every state change is a new appended record."""
 
-    def __init__(self, log: WorkItemLog, scope: ScopeLog, key: WorkKey) -> None:
+    def __init__(self, log: WorkItemLog, scope: ScopeLog, key: WorkKey, budget: Mapping[str, str] | None = None) -> None:
         self._log = log
         self._scope = scope
         self._key = key
+        self._budget = None if budget is None else dict(budget)
 
     def started(self) -> int:
         """How many attempts under this key have started."""
@@ -233,8 +246,9 @@ class AttemptLoop:
         self._record(attempt, status, reason=reason, commit=commit, event=encode(event))
 
     def _record(self, attempt: Attempt, status: AttemptStatus, **fields: Any) -> None:
+        budget = {} if self._budget is None else {"budget": self._budget}
         self._log.append({
-            "kind": "attempt", "key": self._key.as_json(), "n": attempt.n, "status": status, "base": attempt.base, **fields,
+            "kind": "attempt", "key": self._key.as_json(), "n": attempt.n, "status": status, "base": attempt.base, **budget, **fields,
         })
 
     def _is_start(self, record: Mapping[str, Any]) -> bool:

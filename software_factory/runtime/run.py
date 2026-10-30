@@ -88,10 +88,10 @@ def run[C](
     with spans.open(workflow.name, attributes, role="engineer") as handle:
         status = interpret(workflow.nodes, Scope.root(environment, context.revision, handle))
         result = RunResult(_terminal(status.kind), status.reason, epoch)
-        handle.set(**_run_attributes(result))
+        handle.set(**_run_attributes(result), **environment.attributes)
         if result.status in ("failed", "handed_off"):
             handle.fail(result.reason or result.status)
-    log.close_run(result.status, result.reason, {})
+    log.close_run(result.status, result.reason, environment.attributes)
     return result
 
 

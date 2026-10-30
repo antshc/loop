@@ -10,7 +10,9 @@ from collections.abc import Callable, Iterator
 import software_factory.stages as stages
 from software_factory.events.feedback import TrustPolicy
 from software_factory.runtime import Selector, Stage, WorkspaceOpener
-from software_factory.stages import address, checks, chore, feedback, finalize, plan, publish, pull_requests, review, specs, tickets, workspaces
+from software_factory.stages import (
+    address, checks, chore, ci, copilot, feedback, finalize, pacing, plan, publish, pull_requests, readiness, review, specs, tickets, workspaces,
+)
 
 FACTORIES = (Stage, Selector, WorkspaceOpener)
 
@@ -36,7 +38,7 @@ def test_no_stage_factory_takes_a_boolean_parameter() -> None:
         if parameter != "return" and hint is bool
     ]
 
-    assert len(found) >= 20
+    assert len(found) >= 30
     assert offenders == []
 
 
@@ -51,10 +53,14 @@ def test_the_stage_ids_are_unique_across_the_library_with_sample_parameters() ->
         workspaces.require_clean(), checks.run_checks(verify=lambda _: None), checks.run_checks(verify=lambda _: None).named("baseline"),
         feedback.select(trust=TrustPolicy(frozenset(), frozenset())), address.group_feedback(),
         address.resolve_issue(message=lambda _: "m", verify=lambda _: None), address.require_no_unclear(), pull_requests.publish_batch(),
+        pull_requests.validate_origin(), pull_requests.snapshot(), pull_requests.block_pr(fingerprint=lambda _: ""),
+        pull_requests.decide_next(trust=TrustPolicy(frozenset(), frozenset()), author=None, copilot=lambda _: False),
+        ci.diagnose(), ci.rerun_failed(), ci.fix(message=lambda _: "m", verify=lambda _: None), copilot.request_review(),
+        readiness.report(), pacing.pace(1),
     ]
     identities = [stage.id for stage in built] + [
         tickets.next_ready_ticket().id, address.issues().id, workspaces.checkout().id, workspaces.feature_worktree().id,
-        workspaces.pr_worktree().id,
+        workspaces.pr_worktree().id, pacing.polls().id,
     ]
 
     assert len(identities) == len(set(identities))

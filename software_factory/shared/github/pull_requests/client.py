@@ -7,7 +7,7 @@ import re
 from collections.abc import Iterable
 from dataclasses import replace
 
-from ..repo import GitHubRepo
+from ..repo import CommandError, GitHubRepo
 from .lifecycle import LifecycleAction, LifecycleDecision, PullRequestLifecycleError, PullRequestLifecyclePolicy
 from .model import PublishedPullRequest, PullRequest, PullRequestSnapshot, ReviewThread
 from .reader import PullRequestReader
@@ -127,3 +127,11 @@ class PullRequests:
     def request_copilot(self, number: int) -> None:
         """Requests a Copilot review of the PR."""
         self._repo.run(("pr", "edit", str(number), "-R", self.slug, "--add-reviewer", "@copilot"))
+
+    def try_request_copilot(self, number: int) -> bool:
+        """Requests a Copilot review; False when `gh` refuses it, as it does where Copilot review is not available."""
+        try:
+            self.request_copilot(number)
+        except CommandError:
+            return False
+        return True

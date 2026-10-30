@@ -159,6 +159,15 @@ def test_a_copilot_review_is_requested_for_a_pull_request() -> None:
     assert host.requested == [1]
 
 
+def test_a_copilot_review_request_that_gh_refuses_is_reported_as_not_accepted() -> None:
+    client, host, gh = _host_client()
+    gh.fail_on("pr", "edit")
+
+    accepted = client.try_request_copilot(1)
+
+    assert accepted is False and host.requested == []
+    assert client.try_request_copilot(1) is True and host.requested == [1]
+
 def test_a_comment_is_a_conversation_comment_and_not_a_review_comment() -> None:
     client, _, gh = _host_client()
 

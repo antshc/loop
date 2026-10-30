@@ -17,13 +17,13 @@ from loop import (
 from software_factory.events.feedback import FeedbackBatch, TrustPolicy
 from software_factory.events.pull_requests import PullRequestPolled
 from software_factory.events.specs import RepositoryTarget
-from software_factory.legacy_slices.pr_babysit.watch.snapshot import babysit_snapshot
 from software_factory.runtime import (
     Event, Fail, Flow, Ledger, Nothing, Pass, RecordingSpans, RunResult, Services, Stage, Workflow, WorkspaceOpener, run,
 )
 from software_factory.shared.agents.launcher import AgentLauncher
 from software_factory.shared.git import GitClient
 from software_factory.shared.github.account import GitHub
+from software_factory.shared.github.pull_requests.babysit import babysit_snapshot
 from software_factory.stages import feedback
 from software_factory.tests.runtime.harness import GIT, Repo, command
 from software_factory.tests.runtime.support import NoInput
@@ -143,7 +143,8 @@ class PrRig:
         self.host = FakePullRequestHost(slug=SLUG, login="me")
         self.pull = self.host.add(NUMBER, head_ref=BRANCH, head_sha=lambda: self.remote_head(BRANCH))
         self.pull.threads = list(threads if threads is not None else [thread("t1", "Handle the empty cart")])
-        self.github = GitHub(FakeGhCli(pulls=self.host))
+        self.gh = FakeGhCli(pulls=self.host)
+        self.github = GitHub(self.gh)
         self.runner = RecordingRunner()
         self.git = GitClient(self.runner)
         self.ledger = Ledger(tmp_path / "ledger")

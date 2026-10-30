@@ -12,11 +12,15 @@ import pytest
 
 import software_factory.events as events
 from software_factory.events.checks import ChecksPassed
+from software_factory.events.ci import BranchBroken, CiFixed, CiRerun, Diagnosis, Transient
 from software_factory.events.chore import ChoreDiscarded, ChoreRefined
 from software_factory.events.feedback import (
     FeedbackBatch, FeedbackGrouped, FeedbackHandled, GroupedIssue, IssueResolved, IssueUnclear, ReplyDraft,
 )
-from software_factory.events.pull_requests import DraftPullRequestPublished, Finalized, PullRequestPolled
+from software_factory.events.pull_requests import (
+    CiFailing, CopilotDue, CopilotRequested, DraftPullRequestPublished, Finalized, NextAction, OriginValidated, PrBlocked,
+    PullRequestClosed, PullRequestPolled, ReadinessCheck, ReadinessReported, Unsupported,
+)
 from software_factory.events.review import PullRequestReviewed, ReviewAxis, ReviewFailed, ReviewFinding
 from software_factory.events.specs import (
     CheckoutPrepared, DeliveryAnnounced, RepositoryTarget, SpecBlocked, SpecFailureCommented, SpecHandedToHuman, SpecHeld,
@@ -61,6 +65,19 @@ SAMPLES: list[Event] = [
     IssueUnclear("1f2e3d", "docs", "which docs?", (ReplyDraft("comment:5:x", "Could you say which?"),)),
     FeedbackHandled(("thread:t1:c1", "comment:5:x"), "def5678"),
     ChecksPassed(),
+    OriginValidated("owner/repo"),
+    PullRequestClosed("abc1234", merged=True),
+    Unsupported("fork head"),
+    CiFailing("abc1234"),
+    CopilotDue("abc1234"),
+    ReadinessCheck("abc1234", ready=False),
+    CopilotRequested("abc1234", "unavailable"),
+    ReadinessReported("abc1234", ready=True),
+    PrBlocked("fingerprint", "detail"),
+    Transient("flaky runner"),
+    BranchBroken("duplicate product"),
+    CiRerun("abc1234", "abc1234:digest", (11, 10)),
+    CiFixed("abc1234", "repaired"),
 ]
 
 
@@ -68,6 +85,19 @@ SAMPLES: list[Event] = [
 def test_an_event_round_trips_through_the_ledger_codec(event: Event) -> None:
     """Given an Event, when it is encoded and decoded as its own type, then the same Event comes back."""
     assert decode(encode(event), type(event)) == event
+
+
+@pytest.mark.parametrize(
+    ("event", "sum_type"),
+    [
+        (Transient("x"), Diagnosis), (BranchBroken("y"), Diagnosis), (PullRequestClosed("h", merged=False), NextAction),
+        (FeedbackBatch("h", False, ()), NextAction), (ReadinessCheck("h", ready=True), NextAction),
+    ],
+    ids=lambda value: getattr(value, "__name__", type(value).__name__),
+)
+def test_an_event_of_a_closed_sum_decodes_as_the_sum(event: Event, sum_type) -> None:
+    """Given an Event stored by a Stage that produces a closed sum, when decoded as the sum, then the variant it was stored as comes back."""
+    assert decode(encode(event), sum_type) == event
 
 
 def test_every_event_class_is_frozen_and_has_a_round_trip_sample() -> None:

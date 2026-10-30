@@ -364,6 +364,7 @@ class FakePullRequestHost:
             return ""
         if args[:2] == ("pr", "edit") and "--add-reviewer" in args and int(args[2]) in self.pulls:
             self.requested.append(int(args[2]))
+            self._pull(int(args[2])).requested_reviewers.append("copilot-pull-request-reviewer[bot]")
             return ""
         if args[:2] == ("pr", "edit") and "--body" in args and int(args[2]) in self.pulls:
             self._pull(int(args[2])).body = args[args.index("--body") + 1]

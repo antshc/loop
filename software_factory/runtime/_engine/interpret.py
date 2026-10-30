@@ -78,6 +78,8 @@ def _hand_off(stage: Stage[Any, Any, Any], scope: Scope, reason: str | None) -> 
         outcome = _run_and_record(stage, scope)
     if outcome.kind in ("failed", "held"):
         return ScopeStatus("failed", f"hand-off '{stage.id}' did not land: {outcome.reason}")
+    if stage.run_records_ is not None and outcome.event is not None:
+        scope.run.attributes.update(stage.run_records_(outcome.event, reason))
     return ScopeStatus("handed_off", reason)
 
 

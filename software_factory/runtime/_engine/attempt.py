@@ -17,6 +17,7 @@ from ..stage import (
     Action, AgentExecution, Effect, Evidence, Fail, HarnessCommits, Hold, Nothing, NoRepository, Pass, Stage, Verdict,
 )
 from ..worktree import WorktreeGit
+from .codec import decode
 from .contracts import Worktree, rolls_back, violation
 from .resolve import resolve
 from .scope import Scope, clean
@@ -37,7 +38,39 @@ def run_stage(stage: Stage[Any, Any, Any], scope: Scope) -> Outcome:
         return Outcome("skipped", Next())
     if _is_check(stage):
         return _run_check(stage, scope, stage_input)
-    return _Attempt.start(stage, scope, stage_input).run()
+    budget = _budget(stage, stage_input)
+    if budget is not None:
+        settled = _settled(stage, scope, budget)
+        if settled is not None:
+            return settled
+    return _Attempt.start(stage, scope, stage_input, budget).run()
+
+
+def _budget(stage: Stage[Any, Any, Any], stage_input: Any) -> dict[str, str] | None:
+    """The once-per-key or at-most-N rule the placement counts against across runs, keyed by the Stage and the key it derives."""
+    if stage.once_ is not None:
+        return {"stage": stage.id, "per": stage.once_(stage_input)}
+    if stage.limit_ is not None:
+        return {"stage": stage.id, "per": stage.limit_.per(stage_input)}
+    return None
+
+
+def _settled(stage: Stage[Any, Any, Any], scope: Scope, budget: dict[str, str]) -> Outcome | None:
+    """The outcome a once-per-key Stage already passed or an exhausted limit imposes without an attempt; None when the Stage may run."""
+    log = scope.run.log
+    if stage.once_ is not None:
+        passed = log.passed_under(budget)
+        if passed is None:
+            return None
+        scope.event("factory.replay", stage=stage.id, outcome="pass")
+        return Outcome("passed", _route(stage, "passed", 0, scope.event, None), decode(passed["event"], stage.produces))
+    assert stage.limit_ is not None
+    started = log.started_under(budget)
+    if started < stage.limit_.attempts:
+        return None
+    reason = f"Stage '{stage.id}' has already started {started} of its {stage.limit_.attempts} attempts for '{budget['per']}'"
+    scope.event("factory.limit", stage=stage.id, key=budget["per"], started=started)
+    return Outcome("failed", _route(stage, "failed", started, scope.event, None), None, reason)
 
 
 def _is_check(stage: Stage[Any, Any, Any]) -> bool:
@@ -77,12 +110,12 @@ class _Attempt:
     span: SpanHandle | None = None
 
     @classmethod
-    def start(cls, stage: Stage[Any, Any, Any], scope: Scope, stage_input: Any) -> _Attempt:
+    def start(cls, stage: Stage[Any, Any, Any], scope: Scope, stage_input: Any, budget: dict[str, str] | None = None) -> _Attempt:
         """Records the attempt's intent before anything executes."""
         worktree = _worktree(stage, scope)
         revision = stage.revision_(stage_input) if stage.revision_ is not None else None
         key = scope.key(stage.id, revision)
-        loop = scope.ledger.loop(key)
+        loop = scope.ledger.loop(key, budget)
         base = worktree.git.head(worktree.path) if worktree else None
         status = worktree.git.status(worktree.path) if worktree else None
         return cls(stage, scope, stage_input, worktree, loop, loop.begin(base, status), key)
