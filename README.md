@@ -134,7 +134,7 @@ The examples live in this repository and are not included in the installed
 | [PR scheduler and babysitter](software_factory/workflows/pr_babysit/README.md) | Discover user-authored PRs and address reviews/CI with ledger recovery and scoped telemetry |
 | [Address one pull request once](USAGE.md#other-factory-workflows) | Address the trusted review feedback of one pull request with `address_once`, assembled from existing Stages |
 | [Write a factory Workflow](software_factory/README.md) | Compose a Workflow definition from the factory's Stages and run it with the factory runtime |
-| [Plan and implement](loop/workflows/plan_implement.py) | Plan and implement with different models on one worktree |
+| [Plan and implement](workflows/loop/plan_implement.py) | Plan and implement with different models on one worktree |
 | [Implement Spec Workflow guide](USAGE.md#implement-spec-workflow) | Deliver GitHub Tickets, configure multiple repositories, and customize prompts |
 | [Multi-repository Workflow](USAGE.md#repositories-and-targets) | Route Specs to several repositories, each with its own agent steps |
 
@@ -174,8 +174,8 @@ has the delivery rules.
 
 | Path | Contents |
 |---|---|
-| `loop/src/` | The installable `loop` library. |
-| `loop/workflows/` | Standalone examples that use only the public `loop` API. |
+| `src/` | The installable `loop` library. |
+| `workflows/loop/` | Standalone examples that use only the public `loop` API. |
 | [`software_factory/`](software_factory/README.md) | Software factory built on `loop`: reusable Stages, Flow fragments, and Workflow definitions such as `implement_spec` and `pr_babysit`. It lives at the repository root, imports only the public `loop` package, and is not part of the installed `loop` distribution. |
 
 ## Documentation
@@ -196,7 +196,7 @@ python -m pip install -e ".[dev]" --config-settings editable_mode=strict
 python -m pytest
 ```
 
-The strict editable mode keeps `import loop` resolving to `loop/src` even though the repository also has a `loop/` directory.
+The strict editable mode keeps `import loop` resolving to the repository-root `src/` folder.
 The test suite includes library tests, example Workflow tests, and import-linter
 architecture checks. See the [test strategy](docs/concepts/ops-test-strategy.md)
 for testing boundaries.

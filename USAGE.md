@@ -231,7 +231,7 @@ All `implement_spec`-owned code and tests live in [`software_factory/workflows/i
 [`software_factory/src/stages/`](software_factory/src/stages/) over the [`software_factory/src/runtime/`](software_factory/src/runtime/),
 depends on the public `loop` package and on [`software_factory/src/shared/`](software_factory/src/shared/) (Git, GitHub,
 process, state, telemetry), never on a sibling Workflow, and uses no container. The independent
-[`plan_implement.py`](loop/workflows/plan_implement.py) remains a self-contained, function-based script.
+[`plan_implement.py`](workflows/loop/plan_implement.py) remains a self-contained, function-based script.
 
 - [`__init__.py`](software_factory/workflows/implement_spec/__init__.py): `implement_spec(settings, targets)`, the definition.
 - [`policy.py`](software_factory/workflows/implement_spec/policy.py): values and pure functions only: the `hitl` label, comment source, commit subjects, the Spec work item and when held work is released.
@@ -570,7 +570,7 @@ Agent(AgentOptions(start_mode=AgentStartMode.HARNESS, harness_dir=Path("/path/to
 ```
 
 See [`software_factory/workflows/implement_spec/`](software_factory/workflows/implement_spec/) for a complete Workflow,
-[`workflows/plan_implement.py`](loop/workflows/plan_implement.py) for two runs with
+[`workflows/loop/plan_implement.py`](workflows/loop/plan_implement.py) for two runs with
 different models on one worktree, and
 [`software_factory/src/agents/roles/developer/prompt.md`](software_factory/src/agents/roles/developer/prompt.md) for
 the default `implement_spec` prompt template.

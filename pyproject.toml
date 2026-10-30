@@ -57,7 +57,7 @@ packages = [
 ]
 
 [tool.setuptools.package-dir]
-loop = "loop/src"
+loop = "src"
 software_factory = "software_factory/src"
 factory_workflows = "software_factory/workflows"
 
@@ -72,8 +72,8 @@ factory_workflows = "software_factory/workflows"
 "factory_workflows.pr_babysit" = ["*.json"]
 
 [tool.pytest.ini_options]
-pythonpath = ["loop", "software_factory", "loop/tests"]
-testpaths = ["loop/tests", "software_factory/tests"]
+pythonpath = [".", "software_factory"]
+testpaths = ["tests", "workflows/tests", "software_factory/tests"]
 norecursedirs = ["archive", ".*"]
 
 [tool.importlinter]
@@ -167,7 +167,7 @@ allow_indirect_imports = true
 [[tool.importlinter.contracts]]
 name = "Factory and example source packages never import the factory test tree"
 type = "forbidden"
-source_modules = ["software_factory.agents", "software_factory.runtime", "software_factory.events", "software_factory.stages", "software_factory.flows", "software_factory.shared", "factory_workflows", "workflows.plan_implement"]
+source_modules = ["software_factory.agents", "software_factory.runtime", "software_factory.events", "software_factory.stages", "software_factory.flows", "software_factory.shared", "factory_workflows", "workflows.loop.plan_implement"]
 forbidden_modules = ["tests"]
 
 [[tool.importlinter.contracts]]
@@ -185,7 +185,7 @@ forbidden_modules = ["workflows"]
 [[tool.importlinter.contracts]]
 name = "No Workflow imports another: factory Workflow definitions and the examples are independent"
 type = "independence"
-modules = ["factory_workflows.*", "workflows.plan_implement"]
+modules = ["factory_workflows.*", "workflows.loop.plan_implement"]
 
 [[tool.importlinter.contracts]]
 name = "Agent roles are independent of each other"
