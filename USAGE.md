@@ -603,5 +603,5 @@ was removed. OTLP closes the run's span and marks retention independently of dis
 Loop has no isolated sandbox synchronization backend; patch-based sync recovery is
 not applicable to its host worktrees or Docker context adapter.
 
-See [PR maintenance](software_factory/legacy_slices/pr_babysit/README.md) for continuous PR discovery,
-Address/Maintainer profiles, JSON recovery, and workflow-owned commit/push operations.
+See [PR maintenance](software_factory/workflows/pr_babysit/README.md) for continuous PR discovery,
+Address/Maintainer profiles, Execution-ledger recovery, and workflow-owned commit/push operations.

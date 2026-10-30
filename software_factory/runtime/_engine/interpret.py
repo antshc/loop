@@ -149,7 +149,7 @@ def _dispatch(node: DispatchNode, scope: Scope) -> _Step | ScopeStatus:
         event = scope.latest(shape)
         assert event is not None
         variant, case = next((variant, case) for variant, case in node.cases if isinstance(event, variant))
-    scope.event("factory.dispatch", variant=variant.__name__)
+    scope.event("factory.dispatch", quiet=True, variant=variant.__name__)
     while True:
         if isinstance(case, Stop):
             return _Step(case)

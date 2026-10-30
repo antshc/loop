@@ -160,7 +160,7 @@ class _Attempt:
             return None
         event = _stored_event(self.stage, passed["event"])
         self.scope.ledger.replayed(self.key, event)
-        self.scope.event("factory.replay", stage=self.stage.id, outcome="pass")
+        self.scope.event("factory.replay", quiet=True, stage=self.stage.id, outcome="pass")
         if self._commit_gone(passed.get("commit")):
             return self._refused(COMMIT_GONE)
         return Outcome("passed", _route(self.stage, "passed", 0, self.scope.event, None), event)

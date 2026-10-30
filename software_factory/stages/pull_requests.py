@@ -82,6 +82,11 @@ def validate_origin() -> Stage[OriginInput, str, OriginValidated]:
     )
 
 
+def read(work: PullRequestWork, github: GitHub) -> PullRequestPolled:
+    """One read of the pull request exactly as the snapshot Stage takes it, for an intake that decides before any run."""
+    return _poll(SnapshotInput(work, github))
+
+
 def snapshot() -> Stage[SnapshotInput, PullRequestPolled, PullRequestPolled]:
     """Reads the pull request through the typed model and projects it to the dictionaries babysit's fingerprints and agent envelopes are built on."""
     return (

@@ -13,7 +13,7 @@ from software_factory.runtime import (
 )
 
 from .harness import TESTER, Ask, Rig, WorkCtx, editing
-from .support import Alpha, NeedsTicket, NoInput, Routed, Ticket
+from .support import Alpha, Beta, NeedsTicket, NoInput, Outcome, Routed, Ticket
 
 
 def shape(span: RecordedSpan) -> tuple[str, list[Any]]:
@@ -139,6 +139,35 @@ def test_a_scope_with_only_quiet_pure_passes_exports_no_span_and_writes_no_ledge
     assert result.status == "completed"
     assert [shape(span) for span in rig.spans.tree()] == [("t", [])] and rig.spans.tree()[0].events == []
     assert [record["kind"] for record in rig.records("t")] == ["run-opened", "run-closed"]
+
+
+def test_a_dispatch_in_a_scope_that_does_nothing_else_exports_no_span_and_writes_no_record(tmp_path: Path) -> None:
+    """Given a loop whose body only decides and switches to a case of pure checks, when it runs, then no scope span, no dispatch event and no scope record is exported."""
+    rig = Rig(tmp_path)
+    decide = Stage("decide", NeedsTicket, Outcome).gate(lambda i, r, e: Pass(Alpha()))
+    on_alpha = Stage("on-alpha", NeedsTicket, Alpha).gate(lambda i, r, e: Pass(Alpha()))
+    on_beta = Stage("on-beta", NeedsTicket, Beta).gate(lambda i, r, e: Pass(Beta()))
+    body = Flow("ticket").stage(decide).dispatch(Outcome, {Alpha: Flow("a").stage(on_alpha), Beta: Flow("b").stage(on_beta)})
+
+    result = rig.run(worked_tickets(rig, body, 1, 2))
+
+    assert result.status == "completed"
+    assert [shape(span) for span in rig.spans.tree()] == [("t", [])] and rig.spans.tree()[0].events == []
+    assert [record["kind"] for record in rig.records("t")] == ["run-opened", "run-closed"]
+
+
+def test_a_once_per_key_replay_in_a_scope_that_does_nothing_else_exports_no_span_and_writes_no_record(tmp_path: Path) -> None:
+    """Given a once-per-key Stage that passed in an earlier run, when a later run replays it in a loop item, then that run exports no scope span and writes neither a scope nor a replay record."""
+    rig = Rig(tmp_path)
+    once = Stage("push", NoInput, Routed).effect(lambda i: "x", reconcile=lambda i: None).gate(lambda i, r, e: Pass(Routed(r))).once(per=lambda _: "k")
+    definition = worked_tickets(rig, Flow("ticket").stage(once), 1)
+
+    rig.run(definition)
+    first = [record["kind"] for record in rig.records("t")]
+    rig.run(worked_tickets(rig, Flow("ticket").stage(once), 1))
+
+    assert [shape(span) for span in rig.spans.roots[1:]] == [("t", [])]
+    assert [record["kind"] for record in rig.records("t")][len(first):] == ["run-opened", "run-closed"]
 
 
 def test_a_quiet_pure_pass_is_reported_once_its_scope_opens_for_another_reason(tmp_path: Path) -> None:

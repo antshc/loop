@@ -16,7 +16,7 @@ from software_factory.shared.github.account import GitHub
 from software_factory.shared.github.pull_requests.babysit import babysit_snapshot, ci_failed, digest, pending_items
 from software_factory.stages.address import GroupInput, IssueWork, group_feedback, resolve_issue
 from software_factory.stages.feedback import SelectInput, select
-from software_factory.tests.legacy_slices.pr_babysit.watch.golden import CLOSED, GOLDEN, GREEN, OPEN, build_host, pulls_over
+from software_factory.tests.workflows.pr_babysit.golden import CLOSED, GOLDEN, GREEN, OPEN, build_host, pulls_over
 from software_factory.tests.shared.fakes import FakeGhCli, check_run, comment_node, commit_status, thread_node, workflow_run
 from software_factory.tests.stages.pr_support import NUMBER, TRUST, AddressAgent, PrRig, selected_batch, thread
 

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from ._engine.codec import encode
 from .definition import Flow, Workflow
 from .event import All, DefinitionError, Event, History
-from .ledger import Ledger, RunStatus, WorkItemLocked, WorkItemLog
+from .ledger import Ledger, RunStatus, WorkItemLocked, WorkItemLog, WorkKey
 from .routes import (
     Handoff, Next, NextItem, Reroute, Rework, Route, Routes, Stop, handoff, next_, next_item, reroute, rework, stop,
 )
@@ -22,5 +23,5 @@ __all__ = [
     "NextItem", "NoRepository", "Nothing", "NullSpans", "Pass", "ReadOnly", "RecordedEvent", "RecordedSpan",
     "RecordingSpans", "Reroute", "Restore", "Retain", "Rework", "Route", "Routes", "RunResult", "RunStatus", "Selector", "Services",
     "SpanHandle", "Spans", "Stage", "Stop", "StopSignal", "Verdict", "Verify", "WorkContract", "WorkItem", "WorkItemLocked", "WorkItemLog", "Workflow", "WorkspaceOpener",
-    "WorktreeCommit", "WorktreeGit", "handoff", "next_", "next_item", "reroute", "rework", "run", "stop",
+    "WorkKey", "WorktreeCommit", "WorktreeGit", "encode", "handoff", "next_", "next_item", "reroute", "rework", "run", "stop",
 ]

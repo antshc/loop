@@ -227,7 +227,8 @@ def test_every_record_kind_is_versioned_json_that_reads_back(tmp_path: Path) -> 
     rig = Rig(tmp_path)
     once = effect_stage("push", lambda i: "x").once(per=lambda _: "k")
     check = Stage("check", NoInput, Routed).gate(lambda i, r, e: Pass(Routed("ok")))
-    workflow = Workflow("t").context(WorkCtx).stage(check).within(rig.checkout(), Flow("repo").stage(once))
+    tail = effect_stage("tail", lambda i: "y", Alpha())
+    workflow = Workflow("t").context(WorkCtx).stage(check).within(rig.checkout(), Flow("repo").stage(once).stage(tail))
 
     rig.run(workflow)
     rig.run(workflow)
@@ -238,6 +239,18 @@ def test_every_record_kind_is_versioned_json_that_reads_back(tmp_path: Path) -> 
     assert {record["kind"] for record in records} == {
         "run-opened", "scope-opened", "attempt", "pure", "replayed", "released", "scope-closed", "run-closed",
     }
+
+
+def test_seeded_records_are_written_in_one_write_as_versioned_lines_that_read_back_in_order(tmp_path: Path) -> None:
+    """Given records adopted from another source, when they are seeded, then each is a versioned line that reads back in order and the status reflects them."""
+    log = Rig(tmp_path).ledger.item("t", "item-1")
+
+    log.seed([{"kind": "run-opened", "epoch": 1}, {"kind": "run-closed", "status": "completed", "reason": None, "attributes": {}}])
+
+    assert [record["kind"] for record in log.records()] == ["run-opened", "run-closed"]
+    assert {json.loads(line)["v"] for line in log.path.read_text().splitlines()} == {1}
+    status = log.status()
+    assert status is not None and (status.epoch, status.status) == (1, "completed")
 
 
 def test_a_record_written_after_a_torn_line_starts_on_a_line_of_its_own(tmp_path: Path) -> None:

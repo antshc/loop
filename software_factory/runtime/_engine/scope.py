@@ -198,8 +198,8 @@ class Scope:
 
     def key(self, stage_id: str, revision: str | None) -> WorkKey:
         """The work key of a Stage placed in this scope."""
-        item = "/".join((self.run.workflow.name, self.run.item, *self.path, stage_id))
-        return WorkKey(item, self.revision if revision is None else f"{self.revision}+{revision}", self.run.epoch)
+        revision = self.revision if revision is None else f"{self.revision}+{revision}"
+        return WorkKey.placed(self.run.workflow.name, self.run.item, self.path, stage_id, revision, self.run.epoch)
 
     @property
     def errors(self) -> tuple[type[BaseException], ...]:

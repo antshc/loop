@@ -7,7 +7,7 @@ import hashlib
 import json
 import os
 import re
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -33,6 +33,11 @@ class WorkKey:
     item: str
     revision: str
     epoch: int
+
+    @classmethod
+    def placed(cls, workflow: str, item: str, path: tuple[str, ...], stage_id: str, revision: str, epoch: int) -> WorkKey:
+        """The key of the Stage `stage_id` placed in the scope at `path` of work item `item`, bound to `revision` in `epoch`."""
+        return cls("/".join((workflow, item, *path, stage_id)), revision, epoch)
 
     def as_json(self) -> dict[str, Json]:
         """The stored form."""
@@ -211,8 +216,9 @@ class WorkItemLog:
         return scope
 
     def has_replay(self, key: WorkKey) -> bool:
-        """Whether a once-per-key replay is already recorded under `key`."""
-        return any(record["kind"] == "replayed" and record["key"] == key.as_json() for record in self._loaded())
+        """Whether a once-per-key replay is already recorded under `key`, or waits to be."""
+        stored = [*self._loaded(), *(record for scope in self._scopes for record in scope.pending)]
+        return any(record["kind"] == "replayed" and record["key"] == key.as_json() for record in stored)
 
     def root_scope(self, revision: str) -> ScopeLog:
         """The run's own scope; the run records already stand for its opening."""
@@ -236,17 +242,21 @@ class WorkItemLog:
 
     def append(self, record: Mapping[str, Any]) -> None:
         """Writes one record as a durable line."""
-        stored = {"v": LEDGER_VERSION, **record}
+        self.seed([record])
+
+    def seed(self, records: Sequence[Mapping[str, Any]]) -> None:
+        """Writes `records` as durable lines in one write, so a crash leaves a torn tail the next read drops rather than a partial history; for adopting state the factory did not produce."""
+        stored = [{"v": LEDGER_VERSION, **record} for record in records]
         self._loaded()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._drop_torn_tail()
-        line = json.dumps(stored, separators=(",", ":")) + "\n"
+        lines = "".join(json.dumps(record, separators=(",", ":")) + "\n" for record in stored)
         with self.path.open("a", encoding="utf-8") as handle:
-            handle.write(line)
+            handle.write(lines)
             handle.flush()
             os.fsync(handle.fileno())
-        self._intact += len(line.encode())
-        self._loaded().append(stored)
+        self._intact += len(lines.encode())
+        self._loaded().extend(stored)
 
     def _scan(self) -> _Scan:
         scan = _Scan()
@@ -373,11 +383,15 @@ class ScopeLog:
         self._flush()
 
     def replayed(self, key: WorkKey, event: Event | None) -> None:
-        """Records, once per epoch, that a once-per-key Stage replayed an earlier pass here."""
+        """Records, once per epoch, that a once-per-key Stage replayed an earlier pass here; in a scope not yet opened it waits for the scope's first durable record, so a quiet poll writes nothing."""
         if self._log.has_replay(key):
             return
+        record = {"kind": "replayed", "key": key.as_json(), "event": encode(event)}
+        if not self.opened:
+            self.pending.append(record)
+            return
         self.ensure()
-        self._log.append({"kind": "replayed", "key": key.as_json(), "event": encode(event)})
+        self._log.append(record)
 
     def loop(self, key: WorkKey, budget: Mapping[str, str] | None = None) -> AttemptLoop:
         """The attempts under one work key; `budget` names the once-per-key or at-most-N rule they count against across runs."""
