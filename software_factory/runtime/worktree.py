@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 
-type GitCommand = Callable[[Sequence[str], Path], str]
+
+class GitCommand(Protocol):
+    """Runs `git <args>` in a path, with `env` added to the environment, and returns stdout."""
+
+    def __call__(self, args: Sequence[str], path: Path, *, env: Mapping[str, str] | None = None) -> str: ...
 
 
 @dataclass(frozen=True)
@@ -34,6 +39,26 @@ class WorktreeGit:
     def is_clean(self, path: Path) -> bool:
         """Whether the worktree has no staged, unstaged or untracked change."""
         return not self.status(path).strip()
+
+    def parents(self, path: Path) -> tuple[str, ...]:
+        """The parent commits of HEAD."""
+        return tuple(self._command(("rev-list", "--parents", "-n", "1", "HEAD"), path).split()[1:])
+
+    def is_ancestor(self, path: Path, sha: str) -> bool:
+        """Whether `sha` is reachable from HEAD."""
+        return not self._command(("rev-list", "-n", "1", sha, "^HEAD"), path).strip()
+
+    def tree_id(self, path: Path) -> str:
+        """A content id of the worktree: the tree of HEAD plus every change and untracked file, written through a throwaway index so nothing is staged."""
+        git_dir = Path(self._command(("rev-parse", "--absolute-git-dir"), path).strip())
+        index = git_dir / "factory-tree.index"
+        env = {"GIT_INDEX_FILE": str(index)}
+        try:
+            self._command(("read-tree", "HEAD"), path, env=env)
+            self._command(("add", "-A"), path, env=env)
+            return self._command(("write-tree",), path, env=env).strip()
+        finally:
+            index.unlink(missing_ok=True)
 
     def commits_since(self, path: Path, sha: str) -> tuple[WorktreeCommit, ...]:
         """Commits after `sha` up to HEAD, oldest first."""

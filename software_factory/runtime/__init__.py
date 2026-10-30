@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from .definition import Flow, Workflow
 from .event import All, DefinitionError, Event, History
-from .ledger import Ledger, WorkItemLog
+from .ledger import Ledger, RunStatus, WorkItemLocked, WorkItemLog
 from .routes import (
     Handoff, Next, NextItem, Reroute, Rework, Route, Routes, Stop, handoff, next_, next_item, reroute, rework, stop,
 )
@@ -20,7 +20,7 @@ __all__ = [
     "Action", "AgentCommits", "AgentExecution", "All", "DefinitionError", "Effect", "Event", "Evidence", "Fail", "Flow",
     "Gate", "GitCommand", "Handoff", "HarnessCommits", "History", "Hold", "Item", "Ledger", "Limit", "LogSpans", "Next",
     "NextItem", "NoRepository", "Nothing", "NullSpans", "Pass", "ReadOnly", "RecordedEvent", "RecordedSpan",
-    "RecordingSpans", "Reroute", "Restore", "Retain", "Rework", "Route", "Routes", "RunResult", "Selector", "Services",
-    "SpanHandle", "Spans", "Stage", "Stop", "StopSignal", "Verdict", "Verify", "WorkContract", "WorkItem", "WorkItemLog", "Workflow", "WorkspaceOpener",
+    "RecordingSpans", "Reroute", "Restore", "Retain", "Rework", "Route", "Routes", "RunResult", "RunStatus", "Selector", "Services",
+    "SpanHandle", "Spans", "Stage", "Stop", "StopSignal", "Verdict", "Verify", "WorkContract", "WorkItem", "WorkItemLocked", "WorkItemLog", "Workflow", "WorkspaceOpener",
     "WorktreeCommit", "WorktreeGit", "handoff", "next_", "next_item", "reroute", "rework", "run", "stop",
 ]

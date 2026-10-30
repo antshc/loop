@@ -9,7 +9,7 @@ from ._engine.interpret import interpret
 from ._engine.scope import Run, Scope
 from .definition import Workflow
 from .event import DefinitionError
-from .ledger import Ledger
+from .ledger import Ledger, WorkItemLocked, WorkItemLog
 from .spans import NullSpans, Spans
 
 _TERMINAL = ("completed", "idle", "held", "handed_off", "failed", "interrupted")
@@ -76,18 +76,27 @@ def run[C](
     workflow: Workflow[C], context: C, *, services: Services, ledger: Ledger, spans: Spans | None = None,
     stop: StopSignal | None = None,
 ) -> RunResult:
-    """Runs one work item of a valid definition to a terminal status."""
+    """Runs one work item of a valid definition to a terminal status; a second process on the same item exits handed off without writing."""
     _require_runnable(workflow, context, services)
     assert isinstance(context, WorkItem)
-    item = context.id
-    log = ledger.item(workflow.name, item)
-    epoch = log.open_epoch()
-    spans = spans or NullSpans()
-    attributes = {"factory.workflow": workflow.name, "factory.work_item": item, "factory.epoch": epoch}
-    environment = Run(workflow, context, item, epoch, services, log, spans, stop)
+    log = ledger.item(workflow.name, context.id)
+    try:
+        with log.lock():
+            return _run_locked(workflow, context, services, log, spans or NullSpans(), stop)
+    except WorkItemLocked:
+        return RunResult("handed_off", f"work item '{context.id}' is locked by another run", log.last_epoch())
+
+
+def _run_locked[C](
+    workflow: Workflow[C], context: C, services: Services, log: WorkItemLog, spans: Spans, stop: StopSignal | None,
+) -> RunResult:
+    assert isinstance(context, WorkItem)
+    opening = log.open_epoch()
+    attributes = {"factory.workflow": workflow.name, "factory.work_item": context.id, "factory.epoch": opening.epoch}
+    environment = Run(workflow, context, context.id, opening.epoch, services, log, opening, spans, stop)
     with spans.open(workflow.name, attributes, role="engineer") as handle:
         status = interpret(workflow.nodes, Scope.root(environment, context.revision, handle))
-        result = RunResult(_terminal(status.kind), status.reason, epoch)
+        result = RunResult(_terminal(status.kind), status.reason, opening.epoch)
         handle.set(**_run_attributes(result), **environment.attributes)
         if result.status in ("failed", "handed_off"):
             handle.fail(result.reason or result.status)

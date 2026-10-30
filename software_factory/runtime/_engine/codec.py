@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import sys
 import types
 import typing
 from collections.abc import Mapping
@@ -55,6 +56,31 @@ def decode(value: Json, type_: Any) -> Any:
     if isinstance(type_, type):
         return _decode_class(value, type_)
     return value
+
+
+def decode_stored(value: Json) -> Any:
+    """Rebuilds a stored value whose type is known only by its tag; raises LookupError when a tagged class is not loaded."""
+    if isinstance(value, list):
+        return [decode_stored(item) for item in value]
+    if isinstance(value, dict) and isinstance(value.get("fields"), dict) and isinstance(value.get("type"), str):
+        return decode(value, _tagged_class(value["type"]))
+    if isinstance(value, dict) and "repr" in value:
+        raise LookupError(f"stored value {value['repr']} has no type tag")
+    if isinstance(value, dict):
+        return {key: decode_stored(item) for key, item in value.items()}
+    return value
+
+
+def _tagged_class(name: str) -> type:
+    parts = name.split(".")
+    for split in range(len(parts) - 1, 0, -1):
+        module = sys.modules.get(".".join(parts[:split]))
+        owner: Any = module
+        for part in parts[split:]:
+            owner = getattr(owner, part, None)
+        if isinstance(owner, type):
+            return owner
+    raise LookupError(f"stored type {name} is not loaded")
 
 
 def _decode_union(value: Json, arguments: tuple[Any, ...]) -> Any:

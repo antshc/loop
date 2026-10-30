@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 
 from software_factory.runtime import (
-    Event, Fail, Flow, History, Ledger, Pass, Stage, Workflow, rework,
+    Event, Fail, Flow, History, Ledger, Pass, Stage, WorkItemLocked, Workflow, handoff, rework,
 )
 from software_factory.runtime._engine.codec import decode, encode
 
@@ -151,3 +151,104 @@ def test_every_rework_attempt_is_a_started_attempt_in_the_ledger(tmp_path: Path)
 
     attempts = [(r["n"], r["status"]) for r in rig.records("t") if r["kind"] == "attempt"]
     assert attempts == [(1, "running"), (1, "executed"), (1, "failed"), (2, "running"), (2, "executed"), (2, "failed")]
+
+
+def test_a_second_process_on_a_locked_work_item_exits_handed_off_without_writing(tmp_path: Path) -> None:
+    """Given a work item whose lock another process holds, when a run starts, then it exits handed off, runs nothing and writes no record."""
+    rig = Rig(tmp_path)
+    ran: list[str] = []
+    publish = effect_stage("publish", lambda i: ran.append("x"))
+    log = rig.ledger.item("t", "item-1")
+
+    with log.lock():
+        with pytest.raises(WorkItemLocked):
+            with rig.ledger.item("t", "item-1").lock():
+                pass
+        result = rig.run(Workflow("t").context(WorkCtx).stage(publish))
+
+    assert (result.status, result.exit_code, ran) == ("handed_off", 1, [])
+    assert not log.path.exists() and "locked" in (result.reason or "")
+
+
+def test_the_lock_is_free_again_once_a_run_ends(tmp_path: Path) -> None:
+    """Given a finished run, when another run starts, then it takes the lock and completes."""
+    rig = Rig(tmp_path)
+    ok = Workflow("t").context(WorkCtx).stage(effect_stage("publish", lambda i: None))
+
+    assert [rig.run(ok).status, rig.run(ok).status] == ["completed", "completed"]
+
+
+def test_work_items_that_differ_only_in_punctuation_keep_separate_progress(tmp_path: Path) -> None:
+    """Given two work items whose ids differ only in punctuation, when each runs, then each has its own epoch counter and log."""
+    rig = Rig(tmp_path)
+    ok = Workflow("t").context(WorkCtx).stage(effect_stage("publish", lambda i: None))
+
+    epochs = [rig.run(ok, context=WorkCtx(id=item)).epoch for item in ("ticket/12", "ticket-12", "ticket/12")]
+
+    assert epochs == [1, 1, 2]
+    assert rig.records("t", "ticket/12") != rig.records("t", "ticket-12")
+
+
+def test_the_status_api_reports_the_latest_run_and_its_attributes(tmp_path: Path) -> None:
+    """Given a run handed off with a fingerprint, when intake reads the status, then it sees the status, the reason, the attributes and whether a release followed."""
+    rig = Rig(tmp_path)
+    block = effect_stage("block", lambda i: "fp-9", Routed("b")).records_run(lambda event, reason: {"fingerprint": "fp-9"})
+    check = Stage("check", NoInput, Routed).gate(lambda i, r, e: Fail("CI is red")).on_fail(handoff(block))
+    never = rig.ledger.status("t", "item-1")
+
+    rig.run(Workflow("t").context(WorkCtx).stage(check))
+    before = rig.ledger.status("t", "item-1")
+    rig.ledger.release("t", "item-1", "retry")
+    after = rig.ledger.status("t", "item-1")
+
+    assert never is None
+    assert before is not None and (before.epoch, before.status, before.reason) == (1, "handed_off", "CI is red")
+    assert dict(before.attributes) == {"fingerprint": "fp-9"} and before.released is False
+    assert after is not None and after.released is True
+
+
+def test_the_status_of_a_run_that_never_closed_is_running(tmp_path: Path) -> None:
+    """Given a run that crashed, when intake reads the status, then it reads running."""
+    rig = Rig(tmp_path)
+
+    def crash(_: NoInput) -> None:
+        raise RuntimeError("down")
+
+    with pytest.raises(RuntimeError):
+        rig.run(Workflow("t").context(WorkCtx).stage(effect_stage("publish", crash)))
+
+    status = rig.ledger.status("t", "item-1")
+
+    assert status is not None and (status.epoch, status.status) == (1, "running")
+
+
+def test_every_record_kind_is_versioned_json_that_reads_back(tmp_path: Path) -> None:
+    """Given runs that write every record kind, when the log is read line by line, then each line is a versioned JSON object and every kind appeared."""
+    rig = Rig(tmp_path)
+    once = effect_stage("push", lambda i: "x").once(per=lambda _: "k")
+    check = Stage("check", NoInput, Routed).gate(lambda i, r, e: Pass(Routed("ok")))
+    workflow = Workflow("t").context(WorkCtx).stage(check).within(rig.checkout(), Flow("repo").stage(once))
+
+    rig.run(workflow)
+    rig.run(workflow)
+    rig.ledger.release("t", "item-1", "go")
+
+    records = [json.loads(line) for line in rig.ledger.item("t", "item-1").path.read_text().splitlines()]
+    assert {record["v"] for record in records} == {1}
+    assert {record["kind"] for record in records} == {
+        "run-opened", "scope-opened", "attempt", "pure", "replayed", "released", "scope-closed", "run-closed",
+    }
+
+
+def test_a_record_written_after_a_torn_line_starts_on_a_line_of_its_own(tmp_path: Path) -> None:
+    """Given a log ending in a fragment, when the next run appends, then the fragment is gone and every line parses."""
+    rig = Rig(tmp_path)
+    ok = Workflow("t").context(WorkCtx).stage(effect_stage("publish", lambda i: None))
+    rig.run(ok)
+    log = rig.ledger.item("t", "item-1").path
+    log.write_text(log.read_text() + '{"v":1,"kind":"run-op')
+
+    rig.run(ok)
+
+    assert [json.loads(line)["kind"] for line in log.read_text().splitlines()][-2:] == ["attempt", "run-closed"]
+    assert [r["epoch"] for r in rig.records("t") if r["kind"] == "run-opened"] == [1, 2]

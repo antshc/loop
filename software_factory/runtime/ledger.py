@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
 import os
 import re
-from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Literal
 
@@ -46,8 +48,77 @@ class Attempt:
     status: str | None
 
 
+@dataclass(frozen=True)
+class AttemptState:
+    """The newest attempt under a key, merged from its records; `final` says whether its outcome ends the key's rework."""
+
+    n: int
+    status: AttemptStatus
+    base: str | None
+    porcelain: str | None
+    reply: Json
+    tree: str | None
+    message: str | None
+    commit: str | None
+    event: Json
+    reason: str | None
+    final: bool
+    error: str | None
+
+    @property
+    def settled(self) -> bool:
+        """Whether the attempt ended in an outcome a later run replays rather than redoes."""
+        return self.status == "passed" or (self.status in ("failed", "held") and self.final)
+
+    @property
+    def interrupted(self) -> bool:
+        """Whether the attempt started but never recorded an outcome."""
+        return self.status in ("running", "executed", "committing")
+
+
+@dataclass(frozen=True)
+class RunStatus:
+    """How a work item's latest run stands, read by an intake; `running` means a run started and has not closed."""
+
+    epoch: int
+    status: Literal["running", "completed", "idle", "held", "handed_off", "failed", "interrupted"]
+    reason: str | None
+    attributes: Mapping[str, Json]
+    released: bool
+
+
+@dataclass(frozen=True)
+class OpenScope:
+    """A scope a run started and never closed: the cursor a later run resumes from."""
+
+    path: tuple[str, ...]
+    item: Json
+    revision: str
+    head: str | None
+    last_commit: str | None = None
+
+    @property
+    def last_head(self) -> str | None:
+        """The commit a resumed scope must still be at: its last accepted commit, else the head it opened at."""
+        return self.last_commit or self.head
+
+
+@dataclass
+class RunOpening:
+    """What a run starts from: its epoch, whether it resumes an unfinished or held epoch, and that epoch's open scopes and recorded checks."""
+
+    epoch: int
+    resumed: bool
+    scopes: dict[tuple[str, ...], OpenScope]
+    pure: dict[tuple[tuple[str, ...], str], list[dict[str, Any]]]
+
+
+class WorkItemLocked(Exception):
+    """Another process holds the work item."""
+
+
 class Ledger:
-    """Root of every work item's log: `<root>/<workflow>/<slug>-<sha256(item)[:12]>/log.jsonl`."""
+    """Root of every work item's log: `<root>/<workflow>/<slug>-<sha256(item)[:12]>/log.jsonl` and `lock`."""
 
     def __init__(self, root: Path) -> None:
         self._root = root
@@ -58,31 +129,72 @@ class Ledger:
         digest = hashlib.sha256(item.encode()).hexdigest()[:12]
         return WorkItemLog(self._root / workflow / f"{slug}-{digest}")
 
+    def release(self, workflow: str, item: str, reason: str) -> None:
+        """Releases held work: the next run closes its handed-off scopes and starts a fresh epoch; written by intake under the item's lock."""
+        log = self.item(workflow, item)
+        with log.lock(wait=True):
+            log.append({"kind": "released", "reason": reason})
+
+    def status(self, workflow: str, item: str) -> RunStatus | None:
+        """The status and attributes of the work item's latest run, or None when it never ran."""
+        return self.item(workflow, item).status()
+
 
 class WorkItemLog:
-    """Append-only; each record is one fsynced JSON line."""
+    """Append-only; each record is one fsynced JSON line, and a torn last line is ignored as if never written."""
 
     def __init__(self, directory: Path) -> None:
+        self._directory = directory
         self.path = directory / "log.jsonl"
         self._records: list[dict[str, Any]] | None = None
+        self._intact = 0
         self._scopes: list[ScopeLog] = []
+
+    @contextmanager
+    def lock(self, *, wait: bool = False) -> Iterator[None]:
+        """Holds the item's lock; raises WorkItemLocked when another process holds it and `wait` is not set."""
+        self._directory.mkdir(parents=True, exist_ok=True)
+        with (self._directory / "lock").open("a") as handle:
+            try:
+                fcntl.flock(handle, fcntl.LOCK_EX | (0 if wait else fcntl.LOCK_NB))
+            except BlockingIOError:
+                raise WorkItemLocked(str(self._directory)) from None
+            try:
+                yield
+            finally:
+                fcntl.flock(handle, fcntl.LOCK_UN)
 
     def records(self) -> tuple[dict[str, Any], ...]:
         """Every record written so far, in order."""
         return tuple(self._loaded())
 
-    def open_epoch(self) -> int:
-        """The epoch of this run: the next one after a finished run, the same one after an unfinished run."""
-        epoch = 0
-        finished = True
-        for record in self._loaded():
-            if record["kind"] == "run-opened":
-                epoch, finished = record["epoch"], False
-            elif record["kind"] == "run-closed":
-                finished = True
-        epoch = epoch + 1 if finished else epoch
-        self.append({"kind": "run-opened", "epoch": epoch})
-        return epoch
+    def last_epoch(self) -> int:
+        """The newest epoch the log holds; 0 when it has none."""
+        return self._scan().epoch
+
+    def status(self) -> RunStatus | None:
+        """How the latest run stands; None when no run ever started."""
+        scan = self._scan()
+        if scan.epoch == 0:
+            return None
+        if scan.unfinished or scan.closed is None:
+            return RunStatus(scan.epoch, "running", None, {}, scan.released)
+        closed = scan.closed
+        return RunStatus(scan.epoch, closed["status"], closed.get("reason"), dict(closed.get("attributes", {})), scan.released)
+
+    def open_epoch(self) -> RunOpening:
+        """Opens this run's epoch: an unfinished or held-and-unreleased epoch is resumed, a released one is closed, and any other finished run is followed by the next epoch."""
+        scan = self._scan()
+        held = scan.closed is not None and scan.closed["status"] == "handed_off"
+        resumed = scan.unfinished or (held and not scan.released)
+        if resumed:
+            opening = RunOpening(scan.epoch, True, scan.scopes, scan.pure)
+        else:
+            for path in reversed(list(scan.scopes) if held else []):
+                self.append({"kind": "scope-closed", "path": list(path), "status": "released"})
+            opening = RunOpening(scan.epoch + 1, False, {}, {})
+        self.append({"kind": "run-opened", "epoch": opening.epoch})
+        return opening
 
     def close_run(self, status: str, reason: str | None, attributes: Mapping[str, Json]) -> None:
         """Records how the run ended."""
@@ -90,11 +202,17 @@ class WorkItemLog:
 
     def scope(
         self, parent: ScopeLog | None, path: tuple[str, ...], item: Any, revision: str, head: Callable[[], str | None],
+        resumed: OpenScope | None = None,
     ) -> ScopeLog:
-        """A scope that writes nothing until its first durable record."""
+        """A scope that writes nothing until its first durable record; a resumed one is already open."""
         scope = ScopeLog(self, parent, path, item, revision, head)
+        scope.opened = resumed is not None
         self._scopes.append(scope)
         return scope
+
+    def has_replay(self, key: WorkKey) -> bool:
+        """Whether a once-per-key replay is already recorded under `key`."""
+        return any(record["kind"] == "replayed" and record["key"] == key.as_json() for record in self._loaded())
 
     def root_scope(self, revision: str) -> ScopeLog:
         """The run's own scope; the run records already stand for its opening."""
@@ -119,22 +237,38 @@ class WorkItemLog:
     def append(self, record: Mapping[str, Any]) -> None:
         """Writes one record as a durable line."""
         stored = {"v": LEDGER_VERSION, **record}
+        self._loaded()
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._drop_torn_tail()
+        line = json.dumps(stored, separators=(",", ":")) + "\n"
         with self.path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(stored, separators=(",", ":")) + "\n")
+            handle.write(line)
             handle.flush()
             os.fsync(handle.fileno())
+        self._intact += len(line.encode())
         self._loaded().append(stored)
+
+    def _scan(self) -> _Scan:
+        scan = _Scan()
+        for record in self._loaded():
+            scan.take(record)
+        return scan
 
     def _loaded(self) -> list[dict[str, Any]]:
         if self._records is None:
             self._records = self._read()
         return self._records
 
+    def _drop_torn_tail(self) -> None:
+        """Cuts a torn last line off the file so the next record starts on a line of its own."""
+        if self.path.exists() and self.path.stat().st_size > self._intact:
+            os.truncate(self.path, self._intact)
+
     def _read(self) -> list[dict[str, Any]]:
+        self._intact = 0
         if not self.path.exists():
             return []
-        lines = self.path.read_text(encoding="utf-8").splitlines()
+        *lines, _unterminated = self.path.read_bytes().split(b"\n")
         records: list[dict[str, Any]] = []
         for number, line in enumerate(lines):
             try:
@@ -143,7 +277,48 @@ class WorkItemLog:
                 # A torn last line never happened; damage anywhere else is real.
                 if number != len(lines) - 1:
                     raise
+                break
+            self._intact += len(line) + 1
         return records
+
+
+@dataclass
+class _Scan:
+    """What a pass over the records yields: the run's standing and the scopes and checks of its latest epoch."""
+
+    epoch: int = 0
+    unfinished: bool = False
+    closed: dict[str, Any] | None = None
+    released: bool = False
+    scopes: dict[tuple[str, ...], OpenScope] = field(default_factory=dict)
+    pure: dict[tuple[tuple[str, ...], str], list[dict[str, Any]]] = field(default_factory=dict)
+
+    def take(self, record: dict[str, Any]) -> None:
+        """Folds one record in."""
+        match record["kind"]:
+            case "run-opened":
+                if record["epoch"] != self.epoch:
+                    self.epoch = record["epoch"]
+                    self.scopes, self.pure = {}, {}
+                self.unfinished, self.closed = True, None
+            case "run-closed":
+                self.unfinished, self.closed, self.released = False, record, False
+            case "released":
+                self.released = True
+            case "scope-opened":
+                path = tuple(record["path"])
+                self.scopes[path] = OpenScope(path, record["item"], record["revision"], record["head"])
+            case "scope-closed":
+                self.scopes.pop(tuple(record["path"]), None)
+            case "pure":
+                self.pure.setdefault((tuple(record["path"]), record["stage"]), []).append(record)
+            case "attempt" if record["status"] == "passed" and record.get("commit"):
+                self._advance(tuple(record["path"]), record["commit"])
+
+    def _advance(self, path: tuple[str, ...], commit: str) -> None:
+        for scope_path, scope in self.scopes.items():
+            if path[: len(scope_path)] == scope_path:
+                self.scopes[scope_path] = replace(scope, last_commit=commit)
 
 
 def _counts_against(record: Mapping[str, Any], budget: Mapping[str, str]) -> bool:
@@ -168,16 +343,21 @@ class ScopeLog:
     ) -> None:
         self._log = log
         self._parent = parent
-        self._path = path
+        self.path = path
         self._item = item
         self._revision = revision
         self._head = head
         self.opened = False
         self.pending: list[dict[str, Any]] = []
 
-    def pure(self, stage: str, outcome: str, event: Event | None, reason: str | None) -> None:
-        """Buffers a check Stage's outcome; it is written with the scope's next durable record, never alone."""
-        record = {"kind": "pure", "path": list(self._path), "stage": stage, "outcome": outcome, "event": encode(event), "reason": reason}
+    def pure(
+        self, stage: str, revision: str, outcome: str, event: Event | None, reason: str | None, error: str | None = None,
+    ) -> None:
+        """Buffers a check Stage's outcome, bound to the revision it saw; it is written with the scope's next durable record, never alone."""
+        record = {
+            "kind": "pure", "path": list(self.path), "stage": stage, "revision": revision, "outcome": outcome,
+            "event": encode(event), "reason": reason, "error": error,
+        }
         self.pending.append(record)
 
     def ensure(self) -> None:
@@ -187,10 +367,17 @@ class ScopeLog:
         if not self.opened:
             self.opened = True
             self._log.append({
-                "kind": "scope-opened", "path": list(self._path), "item": encode(self._item),
+                "kind": "scope-opened", "path": list(self.path), "item": encode(self._item),
                 "revision": self._revision, "head": self._head(),
             })
         self._flush()
+
+    def replayed(self, key: WorkKey, event: Event | None) -> None:
+        """Records, once per epoch, that a once-per-key Stage replayed an earlier pass here."""
+        if self._log.has_replay(key):
+            return
+        self.ensure()
+        self._log.append({"kind": "replayed", "key": key.as_json(), "event": encode(event)})
 
     def loop(self, key: WorkKey, budget: Mapping[str, str] | None = None) -> AttemptLoop:
         """The attempts under one work key; `budget` names the once-per-key or at-most-N rule they count against across runs."""
@@ -202,7 +389,7 @@ class ScopeLog:
         if not self.opened or closure is None:
             return
         self._flush()
-        self._log.append({"kind": "scope-closed", "path": list(self._path), "status": closure})
+        self._log.append({"kind": "scope-closed", "path": list(self.path), "status": closure})
 
     def _flush(self) -> None:
         pending, self.pending = self.pending, []
@@ -221,13 +408,29 @@ class AttemptLoop:
 
     def started(self) -> int:
         """How many attempts under this key have started."""
-        return sum(1 for record in self._log.records() if self._is_start(record))
+        return sum(1 for record in self._mine() if record["status"] == "running")
+
+    def last(self) -> AttemptState | None:
+        """The newest attempt under this key, or None when none was recorded."""
+        mine = self._mine()
+        if not mine:
+            return None
+        n = max(record["n"] for record in mine)
+        merged: dict[str, Any] = {}
+        for record in mine:
+            if record["n"] == n:
+                merged.update(record)
+        return AttemptState(
+            n=n, status=merged["status"], base=merged.get("base"), porcelain=merged.get("porcelain"),
+            reply=merged.get("reply"), tree=merged.get("tree"), message=merged.get("message"), commit=merged.get("commit"),
+            event=merged.get("event"), reason=merged.get("reason"), final=merged.get("final", True), error=merged.get("error"),
+        )
 
     def begin(self, base: str | None, status: str | None) -> Attempt:
         """Records the attempt's intent; call before the attempt has any external effect."""
         self._scope.ensure()
-        attempt = Attempt(self.started() + 1, base, status)
-        self._record(attempt, "running")
+        attempt = Attempt(self._next_n(), base, status)
+        self._record(attempt, "running", porcelain=status)
         return attempt
 
     def executed(self, attempt: Attempt, reply: Any, tree: str | None = None) -> None:
@@ -240,16 +443,25 @@ class AttemptLoop:
 
     def finish(
         self, attempt: Attempt, status: Literal["passed", "failed", "held"], *, reason: str | None = None,
-        commit: str | None = None, event: Event | None = None,
+        commit: str | None = None, event: Event | None = None, final: bool = True, error: str | None = None,
     ) -> None:
-        """Records the attempt's outcome."""
-        self._record(attempt, status, reason=reason, commit=commit, event=encode(event))
+        """Records the attempt's outcome; `final` is false for a failure the Stage's rework will follow with another attempt."""
+        self._record(attempt, status, reason=reason, commit=commit, event=encode(event), final=final, error=error)
+
+    def refuse(self, reason: str) -> None:
+        """Records a final failure for a placement that was refused before any attempt started, so a later run replays the refusal."""
+        self._scope.ensure()
+        self._record(Attempt(self._next_n(), None, None), "failed", reason=reason, final=True)
+
+    def _next_n(self) -> int:
+        return max((record["n"] for record in self._mine()), default=0) + 1
 
     def _record(self, attempt: Attempt, status: AttemptStatus, **fields: Any) -> None:
         budget = {} if self._budget is None else {"budget": self._budget}
         self._log.append({
-            "kind": "attempt", "key": self._key.as_json(), "n": attempt.n, "status": status, "base": attempt.base, **budget, **fields,
+            "kind": "attempt", "key": self._key.as_json(), "path": list(self._scope.path), "n": attempt.n,
+            "status": status, "base": attempt.base, **budget, **fields,
         })
 
-    def _is_start(self, record: Mapping[str, Any]) -> bool:
-        return record["kind"] == "attempt" and record["status"] == "running" and record["key"] == self._key.as_json()
+    def _mine(self) -> list[dict[str, Any]]:
+        return [record for record in self._log.records() if record["kind"] == "attempt" and record["key"] == self._key.as_json()]

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -49,9 +50,10 @@ def _decode(request: Ask, output: str) -> Done | Declined:
 TESTER: TypedAgent[Ask, Done | Declined] = TypedAgent("tester", DEFAULT, lambda request: request.text, _decode)
 
 
-def command(args: Sequence[str], path: Path) -> str:
+def command(args: Sequence[str], path: Path, *, env: Mapping[str, str] | None = None) -> str:
     """Runs `git <args>` in `path` and returns stdout."""
-    return subprocess.run(["git", *args], cwd=path, check=True, capture_output=True, text=True).stdout
+    environment = {**os.environ, **env} if env else None
+    return subprocess.run(["git", *args], cwd=path, check=True, capture_output=True, text=True, env=environment).stdout
 
 
 GIT = WorktreeGit(command)
@@ -165,10 +167,11 @@ class Rig:
 
     def run(
         self, workflow: Workflow[Any], *services: object, stop: StopSignal | None = None, context: WorkCtx | None = None,
+        git: WorktreeGit = GIT,
     ) -> RunResult:
         """Runs the Workflow with Git and the given services."""
         return run(
-            workflow, context or WorkCtx(), services=Services(GIT, *services), ledger=self.ledger, spans=self.spans,
+            workflow, context or WorkCtx(), services=Services(git, *services), ledger=self.ledger, spans=self.spans,
             stop=stop,
         )
 

@@ -5,11 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from ..event import Event
 from ..facts import closed_sum
 from ..nodes import DispatchNode, EachNode, Node, StageNode, WithinNode
 from ..routes import Handoff, Next, NextItem, Reroute, Route, Stop
 from ..stage import Item, Selector, Stage
 from .attempt import run_stage
+from .codec import decode, decode_stored
 from .resolve import resolve
 from .scope import Scope
 from .status import Again, Outcome, ScopeStatus
@@ -64,18 +66,18 @@ def _run_stage(stage: Stage[Any, Any, Any], scope: Scope) -> _Step:
     return _Step(outcome.route, outcome.reason)
 
 
-def _run_and_record(stage: Stage[Any, Any, Any], scope: Scope) -> Outcome:
+def _run_and_record(stage: Stage[Any, Any, Any], scope: Scope, *, handoff: bool = False) -> Outcome:
     """Runs the Stage and makes the Event it carries, pass, fail or hold, visible to later nodes."""
-    outcome = run_stage(stage, scope)
+    outcome = run_stage(stage, scope, handoff=handoff)
     scope.record(outcome.event, stage.id)
     return outcome
 
 
 def _hand_off(stage: Stage[Any, Any, Any], scope: Scope, reason: str | None) -> ScopeStatus:
     """Runs the hand-off Stage once, then ends the scope handed off; a hand-off that could not land fails the scope instead."""
-    outcome = _run_and_record(stage, scope)
+    outcome = _run_and_record(stage, scope, handoff=True)
     while isinstance(outcome.route, Again):
-        outcome = _run_and_record(stage, scope)
+        outcome = _run_and_record(stage, scope, handoff=True)
     if outcome.kind in ("failed", "held"):
         return ScopeStatus("failed", f"hand-off '{stage.id}' did not land: {outcome.reason}")
     if stage.run_records_ is not None and outcome.event is not None:
@@ -84,9 +86,11 @@ def _hand_off(stage: Stage[Any, Any, Any], scope: Scope, reason: str | None) -> 
 
 
 def _each(node: EachNode, scope: Scope) -> _Step | ScopeStatus:
-    """Runs the body per item, re-selecting after each; an item already run is never run again by this loop."""
+    """Runs the body per item, re-selecting after each; an item already run is never run again by this loop, and an unfinished item of an earlier run resumes first without a selection."""
     done: set[tuple[str, str]] = set()
-    while (item := _next_item(node.select, scope, done)) is not None:
+    unfinished = _unfinished_item(node, scope)
+    while (item := unfinished or _next_item(node.select, scope, done)) is not None:
+        unfinished = None
         if scope.run.stop is not None and scope.run.stop.requested():
             return ScopeStatus("interrupted")
         done.add((item.id, item.revision))
@@ -99,6 +103,14 @@ def _each(node: EachNode, scope: Scope) -> _Step | ScopeStatus:
             case "held":
                 return _Step(node.on_hold, status.reason)
     return _Step(Next())
+
+
+def _unfinished_item(node: EachNode, scope: Scope) -> Item[Any] | None:
+    """The item an earlier run left unfinished in this loop, as it was selected."""
+    stored = scope.unfinished_item(node.body)
+    if stored is None:
+        return None
+    return Item(decode(stored.item, node.select.item), stored.path[-1], stored.revision)
 
 
 def _next_item(select: Selector[Any, Any], scope: Scope, done: set[tuple[str, str]]) -> Item[Any] | None:
@@ -129,17 +141,21 @@ def _dispatch(node: DispatchNode, scope: Scope) -> _Step | ScopeStatus:
     """Runs the case of the latest variant; a reroute abandons it for a sibling case with the same facts."""
     shape = closed_sum(node.on)
     assert shape is not None
-    event = scope.latest(shape)
-    assert event is not None
-    variant, case = next((variant, case) for variant, case in node.cases if isinstance(event, variant))
-    scope.event("factory.dispatch", variant=variant.__name__)
     cases = dict(node.cases)
+    unfinished = _unfinished_case(node, scope)
+    if unfinished is not None:
+        variant, case, event = unfinished
+    else:
+        event = scope.latest(shape)
+        assert event is not None
+        variant, case = next((variant, case) for variant, case in node.cases if isinstance(event, variant))
+    scope.event("factory.dispatch", variant=variant.__name__)
     while True:
         if isinstance(case, Stop):
             return _Step(case)
         if isinstance(case, Handoff):
             return _hand_off(case.stage, scope, None)
-        child = scope.child_case(case, variant)
+        child = scope.child_case(case, variant, event)
         with child:
             status = interpret(case.nodes, child)
             child.finish(status)
@@ -149,6 +165,17 @@ def _dispatch(node: DispatchNode, scope: Scope) -> _Step | ScopeStatus:
         assert status.variant is not None
         variant, case = status.variant, cases[status.variant]
         scope.event("factory.reroute", to=variant.__name__)
+
+
+def _unfinished_case(node: DispatchNode, scope: Scope) -> tuple[type[Event], Any, Event | None] | None:
+    """The case an earlier run left unfinished, with the Event that selected it; the switch is not decided again."""
+    for variant, case in node.cases:
+        if isinstance(case, (Stop, Handoff)):
+            continue
+        stored = scope.unfinished((case.name, variant.__name__))
+        if stored is not None:
+            return variant, case, decode_stored(stored.item)
+    return None
 
 
 def _continue(status: ScopeStatus) -> _Step | ScopeStatus:
