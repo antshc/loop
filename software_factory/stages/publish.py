@@ -13,6 +13,7 @@ from software_factory.shared.git import GitClient
 from software_factory.shared.github.account import GitHub
 from software_factory.shared.github.issues.client import Issues
 from software_factory.shared.github.issues.graph import SpecGraphSnapshot
+from software_factory.stages.feature_branch import open_pull_request
 
 
 @dataclass(frozen=True)
@@ -48,7 +49,7 @@ def _published(i: PublishInput) -> DraftPullRequestPublished | None:
     routed = i.routed
     if i.git.is_ahead(routed.target.checkout, routed.feature_branch, routed.base_branch):
         return None
-    existing = i.github.pull_requests(routed.target.slug).find_open(routed.feature_branch)
+    existing = open_pull_request(i.github, routed)
     if existing is None or existing.body != pull_request_body(i.tracker.spec(i.work.number), i.closed):
         return None
     return DraftPullRequestPublished(existing.url, routed.feature_branch, pushed=False)
@@ -58,10 +59,9 @@ def _publish(i: PublishInput) -> DraftPullRequestPublished:
     routed = i.routed
     checkout, branch, base = routed.target.checkout, routed.feature_branch, routed.base_branch
     pushed = i.git.push_if_ahead(checkout, branch, base)
-    pulls = i.github.pull_requests(routed.target.slug)
-    if not pushed and pulls.find_open(branch) is None and not i.git.remote_branch_exists(checkout, branch):
+    if not pushed and open_pull_request(i.github, routed) is None and not i.git.remote_branch_exists(checkout, branch):
         return DraftPullRequestPublished(None, branch, pushed=False)
     spec = i.tracker.spec(i.work.number)
     title = f"{spec.initiative}: {spec.bare_title}"
-    pull_request = pulls.create_draft_pull_request(branch, base, title, pull_request_body(spec, i.closed))
+    pull_request = i.github.pull_requests(routed.target.slug).create_draft_pull_request(branch, base, title, pull_request_body(spec, i.closed))
     return DraftPullRequestPublished(pull_request.url, branch, pushed)
