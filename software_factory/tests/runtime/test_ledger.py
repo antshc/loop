@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 
 from software_factory.runtime import (
-    Event, Fail, Flow, History, Ledger, Pass, Stage, WorkItemLocked, Workflow, handoff, rework,
+    Event, Fail, Flow, History, Ledger, LedgerCorrupted, Pass, Stage, WorkItemLocked, Workflow, handoff, rework,
 )
 from software_factory.runtime._engine.codec import decode, encode
 
@@ -123,6 +123,18 @@ def test_a_torn_last_line_is_ignored_as_if_it_was_never_written(tmp_path: Path) 
     log.write_text(log.read_text() + '{"v":1,"kind":"run-op')
 
     assert rig.run(ok).epoch == 2
+
+
+def test_a_damaged_line_before_the_last_raises_an_error_that_names_the_log(tmp_path: Path) -> None:
+    """Given a log whose first line is damaged, when it is read, then a LedgerCorrupted names the file and the line."""
+    log = Ledger(tmp_path).item("t", "item-1")
+    log.seed([{"kind": "run-opened", "epoch": 1}, {"kind": "run-closed", "status": "completed", "reason": None, "attributes": {}}])
+    log.path.write_text("{damaged\n" + log.path.read_text().split("\n", 1)[1])
+
+    with pytest.raises(LedgerCorrupted, match="line 1") as raised:
+        Ledger(tmp_path).item("t", "item-1").status()
+
+    assert raised.value.path == log.path and str(log.path) in str(raised.value)
 
 
 def test_history_reads_the_events_of_earlier_runs_of_the_work_item(tmp_path: Path) -> None:

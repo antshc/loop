@@ -5,7 +5,7 @@ from __future__ import annotations
 from ._engine.codec import encode
 from .definition import Flow, Workflow
 from .event import All, DefinitionError, Event, History
-from .ledger import Ledger, RunStatus, WorkItemLocked, WorkItemLog, WorkKey
+from .ledger import Ledger, LedgerCorrupted, RunStatus, WorkItemLocked, WorkItemLog, WorkKey
 from .routes import (
     Handoff, Next, NextItem, Reroute, Rework, Route, Routes, Stop, handoff, next_, next_item, reroute, rework, stop,
 )
@@ -19,7 +19,7 @@ from .worktree import GitCommand, WorktreeCommit, WorktreeGit
 
 __all__ = [
     "Action", "AgentCommits", "AgentExecution", "All", "DefinitionError", "Effect", "Event", "Evidence", "Fail", "Flow",
-    "Gate", "GitCommand", "Handoff", "HarnessCommits", "History", "Hold", "Item", "Ledger", "Limit", "LogSpans", "Next",
+    "Gate", "GitCommand", "Handoff", "HarnessCommits", "History", "Hold", "Item", "Ledger", "LedgerCorrupted", "Limit", "LogSpans", "Next",
     "NextItem", "NoRepository", "Nothing", "NullSpans", "Pass", "ReadOnly", "RecordedEvent", "RecordedSpan",
     "RecordingSpans", "Reroute", "Restore", "Retain", "Rework", "Route", "Routes", "RunResult", "RunStatus", "Selector", "Services",
     "SpanHandle", "Spans", "Stage", "Stop", "StopSignal", "Verdict", "Verify", "WorkContract", "WorkItem", "WorkItemLocked", "WorkItemLog", "Workflow", "WorkspaceOpener",

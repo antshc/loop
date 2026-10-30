@@ -12,7 +12,7 @@ from typing import Protocol
 
 from software_factory.events.pull_requests import PullRequestWork
 from software_factory.events.specs import RepositoryTarget
-from software_factory.runtime import Ledger, RunStatus, StopSignal, WorkItemLocked
+from software_factory.runtime import Ledger, LedgerCorrupted, RunStatus, StopSignal, WorkItemLocked
 from software_factory.shared.github.account import GitHub
 from software_factory.shared.github.pull_requests.model import PullRequest
 from software_factory.shared.pacing import Pacer
@@ -205,7 +205,11 @@ class Scheduler:
                 continue
             del children[key]
             record = registry.prs[key]
-            status = self._ledger.status(NAME, f"{record['repo']}#{record['number']}")
+            try:
+                status = self._ledger.status(NAME, f"{record['repo']}#{record['number']}")
+            except LedgerCorrupted as exception:
+                self._quarantine(key, registry, exception)
+                continue
             if status is None or status.status not in _CLOSED:
                 logger.warning("%s: worker exited %s without closing its run; explicit retry required", key, child.returncode)
                 registry.mark(key, crashed=True)
@@ -220,7 +224,12 @@ class Scheduler:
                 if key in children or record.get("ignored") or key not in open_keys:
                     continue
                 explicit = retry == record["url"]
-                if not self._starts(key, record, registry, explicit) or len(children) >= self._settings.concurrency:
+                try:
+                    starts = self._starts(key, record, registry, explicit)
+                except LedgerCorrupted as exception:
+                    self._quarantine(key, registry, exception)
+                    continue
+                if not starts or len(children) >= self._settings.concurrency:
                     continue
                 logger.info("Starting babysit for %s", key)
                 children[key] = self._launcher.start(self._request.config, record["url"])
@@ -234,6 +243,8 @@ class Scheduler:
         work = work_of(self._settings, record["repo"], record["number"])
         try:
             adopt_state(self._settings, self._ledger, self._github, work)
+        except LedgerCorrupted:
+            raise
         except ValueError as exception:
             logger.warning("%s: %s", key, exception)
             return False
@@ -256,6 +267,11 @@ class Scheduler:
         if not status.attributes.get(ADOPTED):
             self._ledger.release(NAME, work.id, "the pull request changed since it was blocked")
         return True
+
+    def _quarantine(self, key: str, registry: Registry, exception: LedgerCorrupted) -> None:
+        """Marks one pull request crashed for a damaged log, so it needs a person and the others go on."""
+        logger.error("%s: %s; repair or move the log, then retry", key, exception)
+        registry.mark(key, crashed=True)
 
     def _free(self, work: PullRequestWork) -> bool:
         """False while a surviving worker of an interrupted scheduler still owns the pull request."""

@@ -213,6 +213,43 @@ def test_a_worker_that_died_without_closing_its_run_is_not_started_again_without
     assert discovery.registry()["prs"]["a/b#1"]["crashed"] is False
 
 
+def corrupt(discovery: Discovery, number: int) -> Path:
+    """Damages a line of the pull request's log that is not the last one."""
+    log = discovery.ledger.item(NAME, f"a/b#{number}")
+    log.seed([{"kind": "run-opened", "epoch": 1}, {"kind": "run-closed", "status": "completed", "reason": None, "attributes": {}}])
+    lines = log.path.read_text().splitlines(keepends=True)
+    log.path.write_text("{damaged\n" + "".join(lines[1:]))
+    return log.path
+
+
+def test_a_damaged_log_marks_only_its_pull_request_crashed_and_the_others_still_start(
+    discovery: Discovery, caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Given two pull requests and a damaged log for the first, when discovery scans, then the second still gets a worker, the first is marked crashed and the log names the file."""
+    discovery.host.add(2, head_sha="sha2")
+    path = corrupt(discovery, 1)
+
+    code = discovery.serve(2, "--include-existing")
+
+    assert code == 0 and discovery.children.started == ["https://github.com/a/b/pull/2"]
+    assert discovery.registry()["prs"]["a/b#1"]["crashed"] is True
+    assert any("a/b#1" in record.message and str(path) in record.message for record in caplog.records)
+
+
+def test_a_damaged_log_of_an_exited_worker_does_not_stop_the_scheduler(discovery: Discovery) -> None:
+    """Given a worker whose log is damaged when it exits, when discovery reaps it, then the scheduler goes on and marks the pull request crashed."""
+    def die_damaged(tick: int) -> None:
+        if tick == 1:
+            corrupt(discovery, 1)
+            for child in discovery.children.children:
+                child.returncode = 1
+
+    code = discovery.serve(3, "--include-existing", on_tick=die_damaged)
+
+    assert code == 0 and discovery.children.started == ["https://github.com/a/b/pull/1"]
+    assert discovery.registry()["prs"]["a/b#1"]["crashed"] is True
+
+
 def test_a_reopened_pull_request_whose_run_completed_starts_again(discovery: Discovery) -> None:
     """Given a pull request whose run completed, when it is open again, then discovery starts a worker for it."""
     discovery.serve(1, "--include-existing")

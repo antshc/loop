@@ -122,6 +122,14 @@ class WorkItemLocked(Exception):
     """Another process holds the work item."""
 
 
+class LedgerCorrupted(ValueError):
+    """A work item's log holds a damaged line other than a torn last one; `path` names the log."""
+
+    def __init__(self, path: Path, line: int, detail: str) -> None:
+        super().__init__(f"damaged ledger line {line} in {path}: {detail}")
+        self.path = path
+
+
 class Ledger:
     """Root of every work item's log: `<root>/<workflow>/<slug>-<sha256(item)[:12]>/log.jsonl` and `lock`."""
 
@@ -288,10 +296,10 @@ class WorkItemLog:
         for number, line in enumerate(lines):
             try:
                 records.append(json.loads(line))
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as exception:
                 # A torn last line never happened; damage anywhere else is real.
                 if number != len(lines) - 1:
-                    raise
+                    raise LedgerCorrupted(self.path, number + 1, str(exception)) from exception
                 break
             self._intact += len(line) + 1
         return records
