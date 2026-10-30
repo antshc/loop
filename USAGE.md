@@ -1,10 +1,11 @@
 # Usage guide
 
-Start with the [installation and quick start](../README.md#installation).
+Start with the [installation and quick start](README.md#installation).
 This guide covers the example `implement_spec` Workflow and advanced library usage.
 Run repository examples from the repository root.
 
 - [Implement Spec Workflow](#implement-spec-workflow)
+- [Other factory Workflows](#other-factory-workflows)
 - [Optional Workflow Builder](#optional-workflow-builder)
 - [Logging](#logging)
 - [Telemetry (optional)](#telemetry-optional)
@@ -103,13 +104,13 @@ builder-owned. Additional CLI-specific settings remain available through `args`.
 
 ## Implement Spec Workflow
 
-The self-contained [`software_factory/workflows/implement_spec/`](../software_factory/workflows/implement_spec/) package is an example,
+The self-contained [`software_factory/workflows/implement_spec/`](software_factory/workflows/implement_spec/) package is an example,
 not part of the installed library. It is one declarative definition over the factory's Stage library, run once per Spec by
 the factory runtime. It uses GitHub Specs and Tickets to drive
 agent work, commits, draft pull requests, and Ticket updates.
 
 Install the project (`python -m pip install -e .`); `--otlp-endpoint` needs the `otel` extra (`.[otel]`). Before running it, set `HARNESS_SLUG` and
-`harness_target()` in [`__main__.py`](../software_factory/workflows/implement_spec/__main__.py) for the repository holding your
+`harness_target()` in [`__main__.py`](software_factory/workflows/implement_spec/__main__.py) for the repository holding your
 Specs and Tickets and receiving the code. The supplied configuration
 targets `antshc/loop`; it is not a read-only demo.
 
@@ -180,7 +181,7 @@ python -m software_factory.workflows.implement_spec --dry --fake-speed 0 --no-ot
 Stage ids instead of phase names.
 
 The Stages and routes live in
-[`__init__.py`](../software_factory/workflows/implement_spec/__init__.py); `explain()` prints which Stage feeds which.
+[`__init__.py`](software_factory/workflows/implement_spec/__init__.py); `explain()` prints which Stage feeds which.
 
 ### Debugging with fakes
 
@@ -202,13 +203,13 @@ python -m software_factory.workflows.implement_spec --dry --fake-speed 0 --no-re
 ```
 
 By default the second Ticket fails its first attempt so the rework path shows up in the trace.
-In code, `Fakes` in [`dry.py`](../software_factory/workflows/implement_spec/dry.py) builds the same fakes, and a test passes
+In code, `Fakes` in [`dry.py`](software_factory/workflows/implement_spec/dry.py) builds the same fakes, and a test passes
 its own `Services` to `main(argv, services=...)`; the library offers
 `fake_agent`, `FakeCliRunner` and `DirectoryGit` to run any functional slice in isolation.
 
 ### Repositories and targets
 
-The example [`implement_spec`](../software_factory/workflows/implement_spec/) reads Specs and Tickets from the harness repository.
+The example [`implement_spec`](software_factory/workflows/implement_spec/) reads Specs and Tickets from the harness repository.
 By default it implements only Specs targeting the harness itself. Pass a `Targets` service to `main(argv, services=...)`, or
 change `harness_target()`, to route Specs by their `repo:target:<owner/repo>` label to
 explicitly configured checkouts under the harness's `workspace` folder.
@@ -231,23 +232,42 @@ repository; Ticket updates remain on the harness.
 
 ### Implement Spec package and named prompts
 
-All `implement_spec`-owned code and tests live in [`software_factory/workflows/implement_spec/`](../software_factory/workflows/implement_spec/) and
-[`software_factory/tests/workflows/implement_spec/`](../software_factory/tests/workflows/implement_spec/). The definition places Stages from
-[`software_factory/stages/`](../software_factory/stages/) over the [`software_factory/runtime/`](../software_factory/runtime/),
-depends on the public `loop` package and on [`software_factory/shared/`](../software_factory/shared/) (Git, GitHub,
+All `implement_spec`-owned code and tests live in [`software_factory/workflows/implement_spec/`](software_factory/workflows/implement_spec/) and
+[`software_factory/tests/workflows/implement_spec/`](software_factory/tests/workflows/implement_spec/). The definition places Stages from
+[`software_factory/stages/`](software_factory/stages/) over the [`software_factory/runtime/`](software_factory/runtime/),
+depends on the public `loop` package and on [`software_factory/shared/`](software_factory/shared/) (Git, GitHub,
 process, state, telemetry), never on a sibling Workflow, and uses no container. The independent
-[`plan_implement.py`](../workflows/plan_implement.py) remains a self-contained, function-based script.
+[`plan_implement.py`](workflows/plan_implement.py) remains a self-contained, function-based script.
 
-- [`__init__.py`](../software_factory/workflows/implement_spec/__init__.py): `implement_spec(settings, targets)`, the definition.
-- [`policy.py`](../software_factory/workflows/implement_spec/policy.py): values and pure functions only: the `hitl` label, comment source, commit subjects, the Spec work item and when held work is released.
-- [`intake.py`](../software_factory/workflows/implement_spec/intake.py): selects the open, complete Specs not awaiting a person and writes a release when `hitl` was removed.
-- [`__main__.py`](../software_factory/workflows/implement_spec/__main__.py): `main(argv, *, services=None)`, flags, logging, the real services and the interrupt signal.
-- [`dry.py`](../software_factory/workflows/implement_spec/dry.py): the `--fake`/`--dry` seams.
-- [`software_factory/agents/roles/`](../software_factory/agents/roles/): the role agents and their prompt templates (`prompt.md`), read relative to the package, not the current directory.
-- [`software_factory/tests/workflows/implement_spec/`](../software_factory/tests/workflows/implement_spec/): scenarios and harness under the factory test tree; run `pytest software_factory/tests/workflows/implement_spec`.
+- [`__init__.py`](software_factory/workflows/implement_spec/__init__.py): `implement_spec(settings, targets)`, the definition.
+- [`policy.py`](software_factory/workflows/implement_spec/policy.py): values and pure functions only: the `hitl` label, comment source, commit subjects, the Spec work item and when held work is released.
+- [`intake.py`](software_factory/workflows/implement_spec/intake.py): selects the open, complete Specs not awaiting a person and writes a release when `hitl` was removed.
+- [`__main__.py`](software_factory/workflows/implement_spec/__main__.py): `main(argv, *, services=None)`, flags, logging, the real services and the interrupt signal.
+- [`dry.py`](software_factory/workflows/implement_spec/dry.py): the `--fake`/`--dry` seams.
+- [`software_factory/agents/roles/`](software_factory/agents/roles/): the role agents and their prompt templates (`prompt.md`), read relative to the package, not the current directory.
+- [`software_factory/tests/workflows/implement_spec/`](software_factory/tests/workflows/implement_spec/): scenarios and harness under the factory test tree; run `pytest software_factory/tests/workflows/implement_spec`.
 
 To change a prompt, edit the role's `prompt.md`; a missing template raises an error rather
 than falling back to a different prompt.
+
+## Other factory Workflows
+
+`pr_babysit` and `address_once` are further definitions over the same Stage library, run by the same factory runtime, and use
+the same console span log, optional `--otlp-endpoint` export and Execution ledger as `implement_spec`. Both read their
+settings from a `--config` file; see [`pr_babysit/settings.example.json`](software_factory/workflows/pr_babysit/settings.example.json)
+and [`address_once/settings.example.json`](software_factory/workflows/address_once/settings.example.json).
+
+```sh
+python -m software_factory.workflows.pr_babysit --config cfg.json                  # discover your pull requests and babysit each one
+python -m software_factory.workflows.pr_babysit --config cfg.json --pr https://github.com/owner/repo/pull/123
+python -m software_factory.workflows.address_once --config cfg.json --pr https://github.com/owner/repo/pull/123
+```
+
+`pr_babysit` polls a pull request until it closes, addressing feedback, maintaining CI, requesting a Copilot review and
+reporting readiness ([PR maintenance](software_factory/workflows/pr_babysit/README.md)); `--include-existing` also enrolls
+open pull requests, and `--retry URL` releases a blocked one. `address_once` addresses the trusted review feedback of one pull
+request once, assembled only from existing Stages. To write a Workflow of your own, see the
+[factory quickstart](software_factory/README.md) and [Factory Workflow Runtime](docs/concepts/str-factory-workflow-runtime.md).
 
 ## Optional Workflow Builder
 
@@ -417,9 +437,10 @@ verifies the integrated app, performs optional cleanup, closes the implementatio
 then reviews the PR and checks readiness. Preserve that ordering in Python. The builder
 adds no GitHub writes, commits, Ticket policy, or review logic.
 
-The actual [`implement_spec` Workflow](#implement-spec-phases) uses the builder for the default phase pipeline.
-The smaller fake example demonstrates the library independently. Existing workflow-owned
-spans also remain supported.
+The [`implement_spec` Workflow](#implement-spec-phases) does not use the builder: the factory runtime reports
+Stage attempt spans instead ([Run Observation](docs/concepts/str-run-observation.md#factory-spans)). The builder serves
+user-written scripts such as the smaller fake example, which demonstrates the library independently. Existing
+workflow-owned spans also remain supported.
 
 ### Track phases without a builder
 
@@ -487,7 +508,7 @@ Name a profile from the shared `Role` vocabulary (`replace(DEFAULT, name=Role.RE
 | `CODE` | the Worktree and deterministic steps: checks, validation, Git, GitHub (`observer.span(..., role=Role.CODE)`) |
 | `PLANNER`, `DEVELOPER`, `REVIEWER` | the agents of those names (`AgentProfile(name=...)`) |
 
-`implement_spec` uses `ENGINEER` for each Spec, `CODE` for deterministic phases, and separate planner, developer, chore, and reviewer actors for agent phases; `plan_implement` names its agents `PLANNER` and `DEVELOPER`.
+The factory runtime uses `ENGINEER` for each run, `CODE` for scopes and deterministic Stages, and each agent Stage's role (planner, developer, chore, reviewer, address, maintainer) for its attempts; `plan_implement` names its agents `PLANNER` and `DEVELOPER`.
 See [Run Observation](docs/concepts/str-run-observation.md).
 
 ## Library examples
@@ -570,10 +591,10 @@ from loop import Agent, AgentOptions, AgentStartMode
 Agent(AgentOptions(start_mode=AgentStartMode.HARNESS, harness_dir=Path("/path/to/harness")))
 ```
 
-See [`software_factory/workflows/implement_spec/`](../software_factory/workflows/implement_spec/) for a complete Workflow,
-[`workflows/plan_implement.py`](../workflows/plan_implement.py) for two runs with
+See [`software_factory/workflows/implement_spec/`](software_factory/workflows/implement_spec/) for a complete Workflow,
+[`workflows/plan_implement.py`](workflows/plan_implement.py) for two runs with
 different models on one worktree, and
-[`software_factory/agents/roles/developer/prompt.md`](../software_factory/agents/roles/developer/prompt.md) for
+[`software_factory/agents/roles/developer/prompt.md`](software_factory/agents/roles/developer/prompt.md) for
 the default `implement_spec` prompt template.
 
 

@@ -1,19 +1,19 @@
 # Autonomous Spec Delivery
 
 ## Purpose
-Loop delivers the approved Tickets of every open Spec to a draft pull request without an operator in the session and escalates a Ticket to a human once it keeps failing. The default agent delegate uses one fresh implementation run per Ticket attempt; configured repositories may compose several agent steps per attempt.
+Loop delivers the approved Tickets of every open Spec to a draft pull request without an operator in the session and escalates a Ticket to a human once it keeps failing. Each Ticket attempt is one fresh run of the developer role agent.
 
 Specs and Tickets are read as immutable snapshots on the harness tracker and changed only by explicit commands (Comment, label, close, create Ticket, link Ticket), each applied on GitHub at once and in order. A failing command raises, earlier writes stay, and a retry re-reads GitHub and skips what is already applied. Each Spec's target
-selects an explicitly configured repository and its agent delegate; Git operations
-and the draft PR belong to that target. The reusable ticket workflow supplies the
-selected Ticket and refreshed Initiative history, invokes the delegate, and
-validates its typed result and exactly one final commit. Implement/Review delegates
-may amend that commit; retries restart the entire delegate after rollback.
-The process diagrams below describe the Ticket delivery portion; the surrounding default phases are listed next.
+selects an explicitly configured repository and which of the planner, chore and review Stages run there; Git operations
+and the draft PR belong to that target. The Ticket Stage supplies the
+selected Ticket and refreshed Initiative history to the developer, and the factory runtime
+validates its typed reply and exactly one final commit; a rejected attempt is restored to its base and reworked
+with a fresh agent session. The Workflow is one factory definition ([Factory Workflow Runtime](str-factory-workflow-runtime.md)).
+The process diagrams below describe the Ticket delivery portion; the surrounding default definition is listed next.
 
-## Default phases
+## Default definition
 
-`software_factory/workflows/implement_spec/__init__.py` declares the pipeline as one definition over the Stages
+`software_factory/workflows/implement_spec/__init__.py` declares the delivery as one definition over the Stages
 library, run once per Spec by the factory runtime: route the Spec; prepare the checkout; conditional planning and Ticket
 creation; publication of earlier work; delivery of each ready Ticket in the feature worktree with bounded rework,
 closing it and publishing the draft pull request after it; publication after delivery; announcement; best-effort chore
@@ -183,7 +183,7 @@ flowchart LR
 
 A solid edge is automatic; a dotted edge is a separately initiated step, labelled with its initiator.
 
-Decisions: [Run one fresh agent per Ticket](../adr/run-one-fresh-agent-per-ticket-from-python-and-let-the-agent-commit-it.md) (per-Ticket run, task commit, Git validation, Python owns push, pull request, and Ticket state), [Build agents with an agent builder](../adr/build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md) (the library returns raw output; the `implement_spec` Workflow extracts the response envelope).
+Decisions: [Compose factory Workflows as declarative definitions](../adr/compose-factory-workflows-as-declarative-definitions-over-a-stages-library-run-by-a-factory-runtime.md) (one definition over a Stages library, run by the factory runtime), [Run one fresh agent per Ticket](../adr/run-one-fresh-agent-per-ticket-from-python-and-let-the-agent-commit-it.md) (per-Ticket run, task commit, Git validation, Python owns push, pull request, and Ticket state), [Build agents with an agent builder](../adr/build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md) (the library returns raw output; the `implement_spec` Workflow extracts the response envelope).
 
 ## Implementation Map
 | Concern | Stable anchor | Semantic locator |

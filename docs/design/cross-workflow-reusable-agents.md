@@ -4,6 +4,8 @@ Ticket: [#149 — Design cross-Workflow reusable agents](https://github.com/ants
 
 > "Move the agents on the workflows level. Agents must be reusable across workflows."
 
+> **Status.** Adopted: the factory design in [Factory Workflow Runtime](../concepts/str-factory-workflow-runtime.md), recorded in [Compose factory Workflows as declarative definitions](../adr/compose-factory-workflows-as-declarative-definitions-over-a-stages-library-run-by-a-factory-runtime.md). The options below, and the paths and rules they cite (`workflows/...`, `composition/`, Dishka), describe the code as it was when the options were compared and are kept as history; see the [Recommendation](#recommendation).
+
 > **Current state.** The `dev` Workflow is now `implement_spec` (`workflows/implement_spec/`, `python -m workflows.implement_spec`). Its app-verification phase was removed with `verify/`, `AppVerifier`, the `verifier` agent, and `VerifyResponse`, so no option below carries a verifier agent or a `Verify` stage. The remaining `implement_spec` agents are `developer`, `planner`, `chore`, and `reviewer`.
 
 ## Context
@@ -12,13 +14,13 @@ Today each Workflow slice owns its agents end to end:
 
 | Piece | `pr_babysit` | `implement_spec` |
 |-------|--------------|-------|
-| Profile | `ADDRESS`, `MAINTAINER` in [`agents/profiles.py`](../../workflows/pr_babysit/agents/profiles.py): `copilot`, deny `git commit/push`, `gh`, 1800 s | `DEVELOPER`, `PLANNER`, `CHORE`, `REVIEWER` in [`agents/delegates.py`](../../workflows/implement_spec/agents/delegates.py): `replace(DEFAULT, name=...)` |
-| Prompt | Instructions files [`address.md`](../../workflows/pr_babysit/agents/address.md), [`maintainer.md`](../../workflows/pr_babysit/agents/maintainer.md) with `mode`s; request is a JSON payload | `{{KEY}}` templates in [`workflows/implement_spec/prompts/`](../../workflows/implement_spec/prompts/), rendered by [`agents/prompts.py`](../../workflows/implement_spec/agents/prompts.py) |
-| Request | `ask(workspace, profile, mode, payload: dict)` in [`agents/ask.py`](../../workflows/pr_babysit/agents/ask.py) | `*_args(context) -> dict[str, str]` per delegate |
-| Response | Untyped `dict`; non-zero exit or missing JSON → `Blocked` | `DevResponse`, `PlanResponse`, `ChoreResponse`, `ReviewResponse` in [`model/reply.py`](../../workflows/implement_spec/model/reply.py) → typed `*Result` records |
-| Selection | Features import `ADDRESS`/`MAINTAINER` and `replace(..., timeout_sec=settings.timeout)` | [`composition/repositories.py`](../../workflows/implement_spec/composition/repositories.py) binds `partial(delegate, template=load_prompt(name))` into `RepositoryWorkflow` per repository; stages receive `AgentWorkflow`, `PlanWorkflow`, … callables |
+| Profile | `ADDRESS`, `MAINTAINER` in `agents/profiles.py`: `copilot`, deny `git commit/push`, `gh`, 1800 s | `DEVELOPER`, `PLANNER`, `CHORE`, `REVIEWER` in `agents/delegates.py`: `replace(DEFAULT, name=...)` |
+| Prompt | Instructions files `address.md`, `maintainer.md` with `mode`s; request is a JSON payload | `{{KEY}}` templates in `workflows/implement_spec/prompts/`, rendered by `agents/prompts.py` |
+| Request | `ask(workspace, profile, mode, payload: dict)` in `agents/ask.py` | `*_args(context) -> dict[str, str]` per delegate |
+| Response | Untyped `dict`; non-zero exit or missing JSON → `Blocked` | `DevResponse`, `PlanResponse`, `ChoreResponse`, `ReviewResponse` in `model/reply.py` → typed `*Result` records |
+| Selection | Features import `ADDRESS`/`MAINTAINER` and `replace(..., timeout_sec=settings.timeout)` | `composition/repositories.py` binds `partial(delegate, template=load_prompt(name))` into `RepositoryWorkflow` per repository; stages receive `AgentWorkflow`, `PlanWorkflow`, … callables |
 
-Shared glue in [`workflows/shared/agents/`](../../workflows/shared/agents/): `LastJsonObject`/`ContentDecodeError` ([envelope.py](../../workflows/shared/agents/envelope.py)), `render`/`PromptLibrary`/`PromptError` ([prompts.py](../../workflows/shared/agents/prompts.py)), `AgentLauncher` ([launcher.py](../../workflows/shared/agents/launcher.py)).
+Shared glue in `workflows/shared/agents/`: `LastJsonObject`/`ContentDecodeError` (envelope.py), `render`/`PromptLibrary`/`PromptError` (prompts.py), `AgentLauncher` (launcher.py).
 
 ### Constraints any option must satisfy
 
@@ -247,8 +249,8 @@ classDiagram
     classDef memberChanged stroke:#8b949e,stroke-width:1px,stroke-dasharray:5 5
 ```
 
-- The grouping, resolving, gating, and commit logic in [`ReviewAddresser`](../../workflows/pr_babysit/address/reviews.py) moves into `Address`. Its resume state machine does not move; it is dropped for now.
-- [`ChangePublisher`](../../workflows/pr_babysit/publish/changes.py) keeps publishing over the shared `PullRequests` client.
+- The grouping, resolving, gating, and commit logic in `ReviewAddresser` moves into `Address`. Its resume state machine does not move; it is dropped for now.
+- `ChangePublisher` keeps publishing over the shared `PullRequests` client.
 - `Issues` and `PullRequests` are unchanged.
 
 ### Package layout
@@ -379,12 +381,14 @@ software_factory/
 
 ## Recommendation
 
-**Option A — the typed agent catalog in a new `workflows/agents/` layer.** It is the only option where the reusable unit is the *whole agent* behind a single `run`, which is what "agents must be reusable across workflows" asks for, while keeping both existing stage and slice-independence contracts intact.
+**Adopted: the factory design, which takes Option E's shape and replaces its runtime model.** The reusable unit is the *whole agent* behind one typed contract (Options A and E) and the *whole Stage* above it; Workflows are declarative definitions over those Stages, executed by a factory runtime ([Factory Workflow Runtime](../concepts/str-factory-workflow-runtime.md), [decision](../adr/compose-factory-workflows-as-declarative-definitions-over-a-stages-library-run-by-a-factory-runtime.md)). The earlier recommendation of Option A, a `workflows/agents/` layer beside vertical slices that keep slice-local delegates, is stale: the slices, delegates, per-slice composition roots and Dishka it preserved no longer exist.
 
-Specifics to carry forward:
+What was carried forward from the options, and what changed:
 
-- Place `workflows/agents/` as a middle layer (`slices > agents > shared`) enforced by a new import-linter `layers` contract; keep `workflows/shared/agents/` as the generic glue (`LastJsonObject`, `render`, `AgentLauncher`) underneath.
-- Keep implement_spec's stage contract: stages still receive delegates, and the contract also forbids `workflows.agents`, so delegates remain the slice-local seam that maps implement_spec records to agent requests (borrowing Option D's "features never see concrete agents" discipline without its `dishka` and per-repository costs).
-- Borrow Option B's two decoder flavours internally (strict envelope vs. best-effort) as private helpers in `workflows/agents/`, not as public parts.
-- Represent babysit's modes as one `TypedAgent` per mode sharing a profile and instructions file; avoid Option C's untyped `dict` replies.
-- Record the change as a new ADR that supersedes the per-slice `agents` package in the [vertical-slice ADR](../adr/structure-workflows-as-vertical-slices-over-a-shared-package-wired-by-dishka.md), and revise the [Workflow Architecture](../concepts/str-loop-library-workflow-architecture.md) rule and layout sketch as listed under Option A.
+- **Typed role agents.** `software_factory/agents/` holds one agent per Agent role (developer, planner, chore, reviewer, address, maintainer) behind one typed contract, with private strict and best-effort envelope decoders in `_kit/` (Option A, with Option B's two decoder flavours as private helpers). It imports only the public `loop` package, never `shared/` or another role.
+- **Stages above agents.** `software_factory/stages/` holds every Stage, and `software_factory/flows/` the fragments composed from several Stage modules (Option E's stages layer). A Stage is a typed definition value, not a class with a `run` method; its gate, repository contract and routes are data the runtime enforces.
+- **Workflows.** `software_factory/workflows/<name>/` holds a definition, a policy module of values and pure functions, settings and the entry point; implement_spec's delegates are replaced by role agents plus policy values, and per-repository variability is data on the routed `RepositoryTarget`.
+- **Layers.** `workflows > flows > stages > events > runtime > agents | shared`, enforced by import-linter; Stages, Workflows and role agents are mutually independent.
+- **Location.** A flat package at this repository's root, not a new repository ([Keep `software_factory` in this repository as an unpackaged root](../adr/keep-software-factory-in-this-repository-as-an-unpackaged-root.md)).
+- **Wiring.** Services are passed explicitly as a `Services` bundle; the Dishka rule is retired, not kept as Option E proposed.
+- **Reporting.** The factory reports Stage attempt spans, not Phases ([decision](../adr/report-factory-runs-as-opentelemetry-spans-bypassing-loops-phase-reporting.md)).
