@@ -6,15 +6,15 @@ Loop delivers the approved Tickets of every open Spec to a draft pull request wi
 Specs and Tickets are read as immutable snapshots on the harness tracker and changed only by explicit commands (Comment, label, close, create Ticket, link Ticket), each applied on GitHub at once and in order. A failing command raises, earlier writes stay, and a retry re-reads GitHub and skips what is already applied. Each Spec's target
 selects an explicitly configured repository and which of the planner, chore and review Stages run there; Git operations
 and the draft PR belong to that target. The Ticket Stage supplies the
-selected Ticket and refreshed Initiative history to the developer, and the factory runtime
+selected Ticket and refreshed Initiative history to the developer, and Loop's Workflow runtime
 validates its typed reply and exactly one final commit; a rejected attempt is restored to its base and reworked
 with a fresh agent session. The Workflow is one factory definition ([Factory Workflow Runtime](str-factory-workflow-runtime.md)).
 The process diagrams below describe the Ticket delivery portion; the surrounding default definition is listed next.
 
 ## Default definition
 
-`software_factory/workflows/implement_spec/__init__.py` declares the delivery as one definition over the Stages
-library, run once per Spec by the factory runtime: route the Spec; prepare the checkout; conditional planning and Ticket
+`workflows/software_factory/implement_spec/__init__.py` declares the delivery as one definition over the Stages
+library, run once per Spec by Loop's Workflow runtime: route the Spec; prepare the checkout; conditional planning and Ticket
 creation; publication of earlier work; delivery of each ready Ticket in the feature worktree with bounded rework,
 closing it and publishing the draft pull request after it; publication after delivery; announcement; best-effort chore
 cleanup; read-only PR review in the checkout; readiness checks. The `hitl` label, hand-off texts, commit subjects and the
@@ -183,13 +183,13 @@ flowchart LR
 
 A solid edge is automatic; a dotted edge is a separately initiated step, labelled with its initiator.
 
-Decisions: [Compose factory Workflows as declarative definitions](../adr/compose-factory-workflows-as-declarative-definitions-over-a-stages-library-run-by-a-factory-runtime.md) (one definition over a Stages library, run by the factory runtime), [Run one fresh agent per Ticket](../adr/run-one-fresh-agent-per-ticket-from-python-and-let-the-agent-commit-it.md) (per-Ticket run, task commit, Git validation, Python owns push, pull request, and Ticket state), [Build agents with an agent builder](../adr/build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md) (the library returns raw output; the `implement_spec` Workflow extracts the response envelope).
+Decisions: [Compose Workflows as declarative definitions](../adr/compose-factory-workflows-as-declarative-definitions-over-a-stages-library-run-by-a-factory-runtime.md) (one definition over a Stages library, run by Loop's Workflow runtime), [Run one fresh agent per Ticket](../adr/run-one-fresh-agent-per-ticket-from-python-and-let-the-agent-commit-it.md) (per-Ticket run, task commit, Git validation, Python owns push, pull request, and Ticket state), [Build agents with an agent builder](../adr/build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md) (the library returns raw output; the `implement_spec` Workflow extracts the response envelope).
 
 ## Implementation Map
 | Concern | Stable anchor | Semantic locator |
 |---|---|---|
-| External contract | Operator-run service for one repository board | `software_factory/workflows/implement_spec/__main__.py`: runnable package (`python -m factory_workflows.implement_spec`) `main(argv, *, services=None)`, options `--spec`, `--log-dir`, `--log-level`, `--otlp-endpoint`, `--no-otel`, `--fake`, `--dry`; run from the harness root |
-| Spec and Ticket selection | Open Specs; actionable Tickets | `software_factory/src/shared/github/issues/`: `Issues.specs` (complete reads), `SpecGraphSnapshot`, `IssueClassifier`; `software_factory/workflows/implement_spec/intake.py`: the open, complete Specs not awaiting a person; `software_factory/src/stages/tickets.py`: `next_ready_ticket` |
-| Execution | Fresh non-interactive Copilot run per Ticket by default | `loop`: `AgentBuilder`, `Worktree.agent`, `AgentClient`; `software_factory/src/stages/tickets.py`: `implement_ticket`; `software_factory/src/agents/roles/developer/`: the developer role agent, its prompt and its identifier-checking reply decoder |
-| Failure bound | Per-Ticket failure count per work item and release, across runs | `software_factory/workflows/implement_spec/__init__.py`: `rework(max_attempts=settings.max_failures, then=handoff(escalate_ticket))`, counted in the Execution ledger (`software_factory/src/runtime/ledger.py`); `policy.py`: `release_reason` |
-| Tests | Workflow scenarios against fakes | `software_factory/tests/workflows/implement_spec/`: scenarios through `main(argv, services=...)` over `harness.py` (fake tracker, real temporary repository, scripted agent, temporary ledger, recorded spans) |
+| External contract | Operator-run service for one repository board | `workflows/software_factory/implement_spec/__main__.py`: runnable package (`python -m workflows.software_factory.implement_spec`) `main(argv, *, services=None)`, options `--spec`, `--log-dir`, `--log-level`, `--otlp-endpoint`, `--no-otel`, `--fake`, `--dry`; run from the harness root |
+| Spec and Ticket selection | Open Specs; actionable Tickets | `src/shared/github/issues/`: `Issues.specs` (complete reads), `SpecGraphSnapshot`, `IssueClassifier`; `workflows/software_factory/implement_spec/intake.py`: the open, complete Specs not awaiting a person; `workflows/software_factory/stages/tickets.py`: `next_ready_ticket` |
+| Execution | Fresh non-interactive Copilot run per Ticket by default | `loop`: `AgentBuilder`, `Worktree.agent`, `AgentClient`; `workflows/software_factory/stages/tickets.py`: `implement_ticket`; `workflows/software_factory/agents/roles/developer/`: the developer role agent, its prompt and its identifier-checking reply decoder |
+| Failure bound | Per-Ticket failure count per work item and release, across runs | `workflows/software_factory/implement_spec/__init__.py`: `rework(max_attempts=settings.max_failures, then=handoff(escalate_ticket))`, counted in the Execution ledger (`src/runtime/ledger.py`); `policy.py`: `release_reason` |
+| Tests | Workflow scenarios against fakes | `workflows/tests/software_factory/workflows/implement_spec/`: scenarios through `main(argv, services=...)` over `harness.py` (fake tracker, real temporary repository, scripted agent, temporary ledger, recorded spans) |

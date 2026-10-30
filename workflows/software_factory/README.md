@@ -1,10 +1,10 @@
 # Write a Workflow
 
-The software factory is a library of reusable Stages and a small definition language over them. A Workflow is one declarative definition, run by the factory runtime once per work item. It imports only the public `loop` package and is not part of the installed `loop` distribution.
+The software factory is a library of reusable Stages and a small definition language over them. A Workflow is one declarative definition, run by Loop's Workflow runtime once per work item. It imports only the public `loop` package and is not part of the installed `loop` distribution.
 
 ```python
-from software_factory.runtime import Workflow, Flow, rework, handoff, stop, next_
-from software_factory.stages.tickets import next_ready_ticket, implement_ticket, close_ticket, escalate_ticket
+from loop import Workflow, Flow, rework, handoff, stop, next_
+from workflows.software_factory.stages.tickets import next_ready_ticket, implement_ticket, close_ticket, escalate_ticket
 
 deliver = (
     Flow("ticket")
@@ -47,28 +47,32 @@ ADDRESS_ONCE = (
 ```
 
 ```sh
-python -m factory_workflows.address_once --config address_once.json --pr https://github.com/owner/repo/pull/123
+python -m workflows.software_factory.address_once --config address_once.json --pr https://github.com/owner/repo/pull/123
 ```
 
 ## Layout
 
 ```text
-software_factory/
-├── runtime/     # the definition language and the interpreter; generic, knows no GitHub, Ticket or pull request
-├── events/      # the Event vocabulary Stages share; frozen dataclasses only
-├── agents/      # role agents: contract, private kit, one package per role
-├── stages/      # every Stage, Selector and workspace opener; flat modules independent of each other
-├── flows/       # Flow fragments composed from several Stage modules; no Stage logic
-├── workflows/   # one package per Workflow: definition, policy values, settings, entry point
-├── shared/      # concrete infrastructure: Git, `gh`, process execution, telemetry, the agent launcher
-└── tests/       # runtime, Stage, fragment, Workflow scenario and architecture tests
+workflows/software_factory/
+├── events/          # the Event vocabulary Stages share; frozen dataclasses only
+├── agents/          # role agents: private kit, one package per role (the typed agent contract is Loop's)
+├── stages/          # every Stage, Selector and workspace opener; flat modules independent of each other
+├── flows/           # Flow fragments composed from several Stage modules; no Stage logic
+├── shared/          # factory-only infrastructure: repository checks, pacing, state, telemetry, the agent launcher
+├── implement_spec/  # one package per Workflow: definition, policy values, settings, entry point
+├── pr_babysit/
+└── address_once/
+workflows/tests/software_factory/  # Stage, fragment, Workflow scenario and architecture tests
 ```
 
+Loop provides the runtime (`loop.runtime`, exported from `loop`), the typed agent contract and the Git, process and GitHub
+helpers (`loop.shared`); the factory is not installed and runs from the repository clone.
+
 ```text
-workflows → flows → stages → events → runtime → (agents | shared)
+Workflow packages → flows → stages → events → (agents | shared) → loop
 ```
 
 ## What keeps it this way
 
 - `lint-imports` (run by `python -m pytest`) enforces the layers, the independence of Stages, Workflows and role agents, the private runtime engine and agent kit, that no process starts in Stages, definitions or the runtime (the discovery scheduler excepted), that Events are pure data, that no dependency-injection container is imported and that source never imports tests.
-- `tests/architecture/` derives the rest from the code, with no hand-kept lists: every definition builds and validates, Stage ids are unique, every Stage is used by a Workflow, every fragment by two, no Stage factory takes a `bool`, policy modules hold values and pure functions only, nothing uses Loop's phase-reporting API, every Event and agent message round-trips through the ledger codec and each Workflow runs from its own import closure.
+- `workflows/tests/software_factory/architecture/` derives the rest from the code, with no hand-kept lists: every definition builds and validates, Stage ids are unique, every Stage is used by a Workflow, every fragment by two, no Stage factory takes a `bool`, policy modules hold values and pure functions only, nothing uses the retired phase-reporting names, every Event and agent message round-trips through the ledger codec and each Workflow runs from its own import closure.

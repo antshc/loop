@@ -10,11 +10,11 @@ Review handling follows the [Brain address skill](https://github.com/antshc/brai
 
 ## Structure
 
-`pr_babysit` is one declarative definition over the factory's Stage library, run by the
-factory runtime once per pull request. Git, GitHub, process, state, prompt, and telemetry
-infrastructure comes from [`software_factory/src/shared`](../../shared); the Stages are in
-[`software_factory/src/stages`](../../stages) and the address-feedback activity is the
-shared fragment in [`software_factory/src/flows`](../../flows).
+`pr_babysit` is one declarative definition over the factory's Stage library, run by
+Loop's Workflow runtime once per pull request. Git, GitHub and process helpers come from Loop (`loop.shared`); state,
+pacing and telemetry infrastructure from [`workflows/software_factory/shared`](../shared); the Stages are in
+[`workflows/software_factory/stages`](../stages) and the address-feedback activity is the
+shared fragment in [`workflows/software_factory/flows`](../flows).
 
 ```text
 pr_babysit/
@@ -46,10 +46,10 @@ without a shell. Include dependency preparation in those commands when needed in
 a fresh worktree. Set `author` to override the authenticated GitHub user.
 
 ```sh
-python3 -m factory_workflows.pr_babysit --config babysit.local.json
-python3 -m factory_workflows.pr_babysit --config babysit.local.json --include-existing
-python3 -m factory_workflows.pr_babysit --config babysit.local.json --pr https://github.com/owner/repo/pull/123
-python3 -m factory_workflows.pr_babysit --config babysit.local.json --retry https://github.com/owner/repo/pull/123
+python3 -m workflows.software_factory.pr_babysit --config babysit.local.json
+python3 -m workflows.software_factory.pr_babysit --config babysit.local.json --include-existing
+python3 -m workflows.software_factory.pr_babysit --config babysit.local.json --pr https://github.com/owner/repo/pull/123
+python3 -m workflows.software_factory.pr_babysit --config babysit.local.json --retry https://github.com/owner/repo/pull/123
 ```
 
 The default first scan baselines existing PRs. `--include-existing` enrolls them
@@ -80,7 +80,7 @@ review prevents the readiness milestone, while unavailable Copilot does not bloc
 | Maintainer | Diagnose CI read-only, fix branch defects, identify transient failures |
 | Factory runtime | Verify, commit each fix with the Workflow's subject, push, post replies, retry CI, record every attempt in the Execution ledger, serialize one pull request with a lock |
 
-The role agents' profiles and complete Markdown instructions live with the typed role agents under [`software_factory/src/agents`](../../agents).
+The role agents' profiles and complete Markdown instructions live with the typed role agents under [`workflows/software_factory/agents`](../agents).
 Agents must not commit, push, change branches, or use GitHub clients. Native deny
 rules reinforce the prompts, and Python checks actual HEAD changes. Host agent
 execution is not a sandbox.
@@ -169,7 +169,7 @@ nothing to the ledger. Retained worktrees end their active telemetry span withou
 disk removal.
 
 ```sh
-python3 -m pytest software_factory/tests/workflows/pr_babysit
+python3 -m pytest workflows/tests/software_factory/workflows/pr_babysit
 python3 -m pytest
 ```
 
