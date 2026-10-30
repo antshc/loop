@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import signal
 from pathlib import Path
 from subprocess import CalledProcessError, TimeoutExpired
@@ -56,6 +57,17 @@ def test_a_pull_request_of_an_unconfigured_repository_exits_1(tmp_path: Path) ->
 def test_a_missing_configuration_file_exits_1(tmp_path: Path) -> None:
     """Given a configuration file that does not exist, when the command runs, then it exits 1."""
     assert main(["--config", str(tmp_path / "missing.json")]) == 1
+
+
+@pytest.mark.parametrize(("extra", "expected"), [({}, "state/worktrees"), ({"worktrees_dir": ".wt"}, ".wt")])
+def test_the_worktrees_live_under_the_state_folder_unless_the_configuration_names_a_folder(
+    extra: dict[str, str], expected: str, tmp_path: Path
+) -> None:
+    """Given a configuration with or without `worktrees_dir`, when it loads, then the worktrees root is that folder relative to the file, else `worktrees` under the state folder."""
+    config = tmp_path / "cfg.json"
+    repository = {"name": "a/b", "path": ".", "build": ["build"], "test": ["test"]}
+    config.write_text(json.dumps({"repositories": [repository], "state_dir": "state", **extra}), encoding="utf-8")
+    assert Settings.load(config).worktrees_root == (tmp_path / expected).resolve()
 
 
 def test_a_worktree_that_cannot_be_closed_clean_is_recorded_as_a_hand_off_at_the_pull_requests_fingerprint(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

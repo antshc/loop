@@ -8,6 +8,7 @@
     }
   ],
   "state_dir": "../../.loop/pr-babysit",
+  "worktrees_dir": "../../.loop/.worktrees",
   "interval": 60,
   "concurrency": 2,
   "retries": 3,

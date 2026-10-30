@@ -82,9 +82,9 @@ class ProcessLauncher:
 
 
 def work_of(settings: Settings, slug: str, number: int) -> PullRequestWork:
-    """The work item of one configured repository's pull request; its recovery worktrees live under the state folder."""
+    """The work item of one configured repository's pull request; its recovery worktrees live under the configured worktrees folder."""
     repository = settings.repository(slug)
-    return PullRequestWork(RepositoryTarget(slug, repository.path, settings.state_dir / "worktrees"), number, REVISION)
+    return PullRequestWork(RepositoryTarget(slug, repository.path, settings.worktrees_root), number, REVISION)
 
 
 def adopt_state(settings: Settings, ledger: Ledger, github: GitHub, work: PullRequestWork) -> bool:

@@ -32,11 +32,17 @@ class Settings:
     copilot_review: bool = False
     otel_endpoint: str | None = None
     timeout: float = 1800
+    worktrees_dir: Path | None = None
 
     @property
     def ledger_root(self) -> Path:
         """Where every pull request's Execution ledger lives."""
         return self.state_dir / "ledger"
+
+    @property
+    def worktrees_root(self) -> Path:
+        """Where the pull request worktrees live: `worktrees_dir`, else `worktrees` under the state folder."""
+        return self.worktrees_dir or self.state_dir / "worktrees"
 
     @classmethod
     def load(cls, path: Path) -> Settings:
@@ -57,7 +63,8 @@ class Settings:
                        value.get("author", ""), float(value.get("interval", 60)),
                        int(value.get("concurrency", 2)), int(value.get("retries", 3)),
                        bool(value.get("copilot_review", False)), value.get("otel_endpoint"),
-                       float(value.get("timeout", 1800)))
+                       float(value.get("timeout", 1800)),
+                       (path.parent / value["worktrees_dir"]).resolve() if value.get("worktrees_dir") else None)
         if not repositories or len({repo.name for repo in repositories}) != len(repositories):
             raise ValueError("configure at least one repository, without duplicates")
         if (not math.isfinite(settings.interval) or not math.isfinite(settings.timeout)

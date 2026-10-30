@@ -96,7 +96,8 @@ before review edits; Maintainer can repair a failing CI baseline first.
 
 Every PR uses a persistent local branch `babysit/<owner>/<repo>/<number>` through
 Loop's built-in `BranchStrategy`. There is no workflow-specific worktree strategy.
-Worktree roots are explicitly configured absolute paths under the state directory.
+Worktree roots are explicitly configured absolute paths: `worktrees_dir` in the settings file
+(resolved relative to it), by default `worktrees` under the state directory.
 
 | Case | Result |
 |---|---|
@@ -138,7 +139,7 @@ discovery baseline:
     scheduler.lock
     ledger/pr_babysit/<owner>-<repo>-<number>-<hash>/log.jsonl
     ledger/pr_babysit/<owner>-<repo>-<number>-<hash>/lock
-    worktrees/babysit/owner/repo/123/
+    worktrees/babysit/owner/repo/123/        # default; `worktrees_dir` moves it elsewhere
 ```
 
 Keep state outside tracked files. Writes use file fsync; a torn last line is ignored.
