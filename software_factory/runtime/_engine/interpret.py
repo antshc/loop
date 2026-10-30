@@ -123,8 +123,8 @@ def _run_item(node: EachNode, scope: Scope, item: Item[Any]) -> ScopeStatus:
     with child:
         status = interpret(node.body.nodes, child)
         child.finish(status)
-    # An item that wrote nothing leaves nothing a restarted run would see either, so a long loop of quiet items holds no Events.
-    if child.ledger.opened:
+    # An item that completed without writing leaves nothing a restarted run would see either, so a long loop of quiet items holds no Events.
+    if child.ledger.opened or status.kind not in ("completed", "idle", "next_item"):
         scope.adopt(child)
     return status
 
