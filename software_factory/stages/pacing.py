@@ -2,24 +2,30 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import itertools
+from collections.abc import Iterator
 from dataclasses import dataclass
 
-from software_factory.events.pull_requests import PullRequestPolled
+from software_factory.events.pull_requests import PollStarted
 from software_factory.runtime import Evidence, History, Item, Nothing, Pass, Selector, Stage, Verdict
 from software_factory.shared.pacing import Pacer
 
 
 @dataclass(frozen=True)
 class Poll:
-    """The loop item of one poll: its number, from 1, counted over every snapshot this work item took."""
+    """The loop item of one poll: its number, from 1, above every poll this work item recorded."""
 
     number: int
 
 
 @dataclass(frozen=True)
 class PollInput:
-    polled: History[PullRequestPolled]
+    started: History[PollStarted]
+
+
+@dataclass(frozen=True)
+class StartInput:
+    poll: Poll
 
 
 @dataclass(frozen=True)
@@ -32,6 +38,15 @@ def polls() -> Selector[PollInput, Poll]:
     return Selector("polls", PollInput, Poll, _next_poll)
 
 
+def start() -> Stage[StartInput, PollStarted, PollStarted]:
+    """Records the poll's number; the first Stage of a poll, so a poll that writes anything carries it."""
+    return (
+        Stage("start-poll", StartInput, produces=PollStarted)
+        .action(lambda i: PollStarted(i.poll.number))
+        .gate(lambda _, started, __: Pass(started))
+    )
+
+
 def pace(interval: float) -> Stage[PaceInput, None, Nothing]:
     """Waits `interval` seconds through the pacer service."""
     return (
@@ -41,9 +56,10 @@ def pace(interval: float) -> Stage[PaceInput, None, Nothing]:
     )
 
 
-def _next_poll(i: PollInput) -> Sequence[Item[Poll]]:
-    number = len(i.polled) + 1
-    return [Item(Poll(number), f"poll-{number}", f"poll-{number}")]
+def _next_poll(i: PollInput) -> Iterator[Item[Poll]]:
+    """Every number above the highest recorded poll; a quiet poll records nothing, so the loop skips the ids it already ran in this process."""
+    first = max((event.number for event in i.started), default=0) + 1
+    return (Item(Poll(number), f"poll-{number}", f"poll-{number}") for number in itertools.count(first))
 
 
 def _waited(_: PaceInput, __: None, ___: Evidence) -> Verdict[Nothing]:

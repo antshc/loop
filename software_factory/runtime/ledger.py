@@ -215,6 +215,11 @@ class WorkItemLog:
         self._scopes.append(scope)
         return scope
 
+    def forget(self, scope: ScopeLog) -> None:
+        """Stops tracking a closed scope, so a long run holds only the scopes still open."""
+        if scope in self._scopes:
+            self._scopes.remove(scope)
+
     def has_replay(self, key: WorkKey) -> bool:
         """Whether a once-per-key replay is already recorded under `key`, or waits to be."""
         stored = [*self._loaded(), *(record for scope in self._scopes for record in scope.pending)]
@@ -398,12 +403,18 @@ class ScopeLog:
         return AttemptLoop(self._log, self, key, budget)
 
     def close(self, status: str) -> None:
-        """Records the scope's end if it ever wrote anything; a handed-off or interrupted scope stays open."""
+        """Records the scope's end if it ever wrote anything; a handed-off or interrupted scope stays open. A scope that completed without writing is forgotten with its buffered outcomes, which nothing will ever write."""
         closure = {"completed": "completed", "idle": "completed", "failed": "failed", "held": "held"}.get(status)
-        if not self.opened or closure is None:
+        if closure is None:
+            return
+        if not self.opened:
+            if closure == "completed":
+                self.pending.clear()
+                self._log.forget(self)
             return
         self._flush()
         self._log.append({"kind": "scope-closed", "path": list(self.path), "status": closure})
+        self._log.forget(self)
 
     def _flush(self) -> None:
         pending, self.pending = self.pending, []

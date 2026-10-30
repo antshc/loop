@@ -19,7 +19,7 @@ from software_factory.events.feedback import (
 )
 from software_factory.events.pull_requests import (
     CiFailing, CopilotDue, CopilotRequested, DraftPullRequestPublished, Finalized, NextAction, OriginValidated, PrBlocked,
-    PullRequestClosed, PullRequestPolled, ReadinessCheck, ReadinessReported, Unsupported,
+    PollStarted, PullRequestClosed, PullRequestPolled, ReadinessCheck, ReadinessReported, Unsupported,
 )
 from software_factory.events.review import PullRequestReviewed, ReviewAxis, ReviewFailed, ReviewFinding
 from software_factory.events.specs import (
@@ -58,6 +58,7 @@ SAMPLES: list[Event] = [
     PullRequestReviewed((ReviewAxis("bugs", "completed", "ok"),), (ReviewFinding("bug", "null", "bugs"),), ("comment-1",), "abc1234"),
     ReviewFailed("no diff"),
     Finalized(ready=False, pull_request="https://example.test/pull/1", blockers=("the review did not run",)),
+    PollStarted(3),
     PullRequestPolled(TARGET, 7, {"pr": {"head": {"sha": "abc1234", "ref": "feature"}}, "threads": [], "other": []}),
     FeedbackBatch("abc1234", True, ({"key": "thread:t1:c1", "kind": "thread", "line": None, "comments": [{"id": "c1"}], "status": "pending"},)),
     FeedbackGrouped("1f2e3d", "abc1234", (GroupedIssue("cart", "duplicate products", ("thread:t1:c1",)), GroupedIssue("docs", None, ("comment:5:x",)))),

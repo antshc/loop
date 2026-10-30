@@ -5,7 +5,8 @@ block-pr                work         context PullRequestWork
 block-pr                polled       history PullRequestPolled
 block-pr                unsupported  history Unsupported
 block-pr                github       service GitHub
-polls                   polled       history PullRequestPolled
+polls                   started      history PollStarted
+start-poll              poll         item Poll
 snapshot                work         context PullRequestWork
 snapshot                github       service GitHub
 decide-next             polled       event PullRequestPolled from snapshot

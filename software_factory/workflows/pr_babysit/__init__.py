@@ -51,6 +51,7 @@ def pr_babysit(settings: Settings, verify: Verify) -> Workflow[PullRequestWork]:
         .each(
             pacing.polls(),
             Flow("poll")
+            .stage(pacing.start())
             .stage(pull_requests.snapshot())
             .stage(pull_requests.decide_next(trust=TRUST, author=settings.author or None, copilot=lambda _: settings.copilot_review))
             .dispatch(NextAction, {

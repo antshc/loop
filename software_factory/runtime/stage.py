@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -152,12 +152,12 @@ class Item[T]:
 
 @dataclass(frozen=True)
 class Selector[I, T]:
-    """Pure: given the scope's facts, the candidate items in order; re-run after every item and never an effect."""
+    """Pure: given the scope's facts, the candidate items in order, possibly without end; re-run after every item, the loop takes the first it has not run, and never an effect."""
 
     id: str
     input: type[I]
     item: type[T]
-    select: Callable[[I], Sequence[Item[T]]]
+    select: Callable[[I], Iterable[Item[T]]]
 
     def __post_init__(self) -> None:
         """Rejects a non-kebab-case id and an input that cannot resolve."""

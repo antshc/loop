@@ -25,6 +25,13 @@ class PullRequestWork:
 
 
 @dataclass(frozen=True)
+class PollStarted(Event):
+    """Poll `number` began; durable only when its poll wrote something, so the highest one recorded bounds every poll id the ledger knows."""
+
+    number: int
+
+
+@dataclass(frozen=True)
 class PullRequestPolled(Event):
     """One read of pull request `number` of `target`'s repository, as the snapshot dictionaries babysit's fingerprints and agent envelopes are built on; `login` is the acting account."""
 
