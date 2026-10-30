@@ -14,7 +14,7 @@ from software_factory.events.feedback import (
     FeedbackBatch, FeedbackGrouped, FeedbackHandled, GroupedIssue, IssueResolved, IssueUnclear, ReplyDraft,
 )
 from software_factory.events.pull_requests import CiFailing, CopilotRequested, PullRequestWork
-from software_factory.runtime import Event, Ledger, Nothing, WorkKey, encode
+from software_factory.runtime import Event, Ledger, Nothing, WorkItemLocked, WorkKey, encode
 from software_factory.stages.pacing import Poll
 
 from . import NAME
@@ -46,14 +46,20 @@ def read_status(path: Path) -> str | None:
 
 
 def adopt_v1(state_file: Path, ledger: Ledger, work: PullRequestWork, *, ci_signal: Callable[[], str]) -> bool:
-    """Seeds the pull request's ledger from the earlier version's state, once and under the work item's lock; False when there is no state or the ledger already holds records. `ci_signal` reads the CI signal of the pull request now, which an open CI batch needs to not be diagnosed again."""
+    """Seeds the pull request's ledger from the earlier version's state, once and under the work item's lock; False when there is no state, the ledger already holds records or another process holds the lock. `ci_signal` reads the CI signal of the pull request now, which an open CI batch needs to not be diagnosed again."""
     if not state_file.exists():
         return False
     log = ledger.item(NAME, work.id)
-    with log.lock(wait=True):
-        if log.records():
-            return False
-        log.seed(_Adoption(_read(state_file, work), work, state_file, ci_signal).records())
+    # The state file stays after adoption, so this runs on every scan: never wait on a lock a live run holds.
+    if log.records():
+        return False
+    try:
+        with log.lock():
+            if log.records():
+                return False
+            log.seed(_Adoption(_read(state_file, work), work, state_file, ci_signal).records())
+    except WorkItemLocked:
+        return False
     return True
 
 

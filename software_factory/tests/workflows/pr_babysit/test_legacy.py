@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
+import threading
 from pathlib import Path
 
 from software_factory.shared.github.pull_requests.babysit import digest
 from software_factory.tests.runtime.harness import command
 from software_factory.tests.stages.pr_support import NUMBER, SLUG, answer, reply_text, selected_batch, thread
-from software_factory.workflows.pr_babysit.legacy import state_path
+from software_factory.workflows.pr_babysit.legacy import adopt_v1, state_path
 from software_factory.workflows.pr_babysit.policy import ADOPTED, FINGERPRINT
 
 from .golden import GOLDEN, OPEN, build_host
@@ -207,6 +208,37 @@ def test_the_state_is_adopted_once_and_the_old_file_stays(tmp_path: Path) -> Non
     rig.babysit()
 
     assert rig.kinds().count("adopted") == 1 and path.read_bytes() == before
+
+
+def test_adoption_never_waits_on_the_lock_of_a_live_run(tmp_path: Path) -> None:
+    """Given a state file and another process holding the work item's lock, when adoption is attempted, then it returns at once without seeding the ledger."""
+    rig = Babysit(tmp_path)
+    path = write_state(rig)
+    log = rig.ledger.item("pr_babysit", rig.pr.id)
+    outcome: list[bool] = []
+
+    with log.lock():
+        attempt = threading.Thread(target=lambda: outcome.append(adopt_v1(path, rig.ledger, rig.pr, ci_signal=lambda: "")), daemon=True)
+        attempt.start()
+        attempt.join(timeout=5)
+
+    assert not attempt.is_alive() and outcome == [False] and not log.records()
+
+
+def test_adoption_skips_a_ledger_that_already_holds_records_without_locking(tmp_path: Path) -> None:
+    """Given a state already adopted and a live run holding the lock, when the next scan attempts adoption, then it returns at once."""
+    rig = Babysit(tmp_path)
+    path = write_state(rig)
+    assert adopt_v1(path, rig.ledger, rig.pr, ci_signal=lambda: "")
+    log = rig.ledger.item("pr_babysit", rig.pr.id)
+    outcome: list[bool] = []
+
+    with log.lock():
+        attempt = threading.Thread(target=lambda: outcome.append(adopt_v1(path, rig.ledger, rig.pr, ci_signal=lambda: "")), daemon=True)
+        attempt.start()
+        attempt.join(timeout=5)
+
+    assert not attempt.is_alive() and outcome == [False]
 
 
 def test_a_pull_request_with_no_earlier_state_adopts_nothing(tmp_path: Path) -> None:
