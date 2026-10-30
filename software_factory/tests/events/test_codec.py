@@ -46,7 +46,7 @@ SAMPLES: list[Event] = [
     SpecFailureCommented("failed"),
     TicketImplemented(10, "abc1234", "summary", "verification"),
     TicketRejected(10, "declined"),
-    TicketClosed(10, "abc1234"),
+    TicketClosed(10, "abc1234", "Add login form"),
     TicketEscalated(10, "hitl", "declined"),
     Delivery("abc1234", ("abc1234 ccode(Checkout|10): implement",)),
     DraftPullRequestPublished("https://example.test/pull/1", "add-login-page", pushed=True),

@@ -173,6 +173,20 @@ def test_services_are_keyed_by_exact_type_and_a_copy_can_replace_one() -> None:
     assert services.types() == {Client, str}
 
 
+def test_services_can_serve_a_subclass_as_the_service_it_replaces_and_keep_it_through_a_replacement() -> None:
+    """Given a fake that subclasses a service, when it is bound under the service's type, then it is served as that type and survives replacing another service."""
+    class FakeClient(Client):
+        pass
+
+    fake = FakeClient()
+    services = Services("text").bind(Client, fake)
+
+    replaced = services.replace("other")
+
+    assert services.get(Client) is fake and replaced.get(Client) is fake and replaced.get(str) == "other"
+    assert replaced.types() == {Client, str}
+
+
 def test_services_refuse_two_instances_of_one_type_and_name_a_missing_type() -> None:
     """Given Services, when two instances share a type or an absent type is read, then the error names the type."""
     with pytest.raises(ValueError, match="Client"):

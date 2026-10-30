@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Protocol
 
@@ -44,3 +45,16 @@ class CommandRunner:
         if completed.returncode != 0:
             raise CommandError(label, completed.returncode, completed.stdout + completed.stderr)
         return completed.stdout
+
+
+def git_command(args: Sequence[str], path: Path, *, env: Mapping[str, str] | None = None) -> str:
+    """Runs `git <args>` in `path` with `env` added to the environment and returns stdout; the runtime's Git command."""
+    label = f"git {' '.join(args)}"
+    environment = {**os.environ, **env} if env else None
+    try:
+        completed = subprocess.run(["git", *args], cwd=path, capture_output=True, text=True, check=False, env=environment)
+    except FileNotFoundError as exception:
+        raise CommandError(label, None, str(exception)) from exception
+    if completed.returncode != 0:
+        raise CommandError(label, completed.returncode, completed.stdout + completed.stderr)
+    return completed.stdout

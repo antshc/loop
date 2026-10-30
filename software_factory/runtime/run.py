@@ -43,8 +43,18 @@ class Services:
     def replace(self, *instances: object) -> Services:
         """A copy in which each given instance takes the place of the one of its type."""
         replacements = {type(instance): instance for instance in instances}
-        kept = (instance for type_, instance in self._instances.items() if type_ not in replacements)
-        return Services(*kept, *replacements.values())
+        kept = {type_: instance for type_, instance in self._instances.items() if type_ not in replacements}
+        return self._holding({**kept, **replacements})
+
+    def bind[T](self, type_: type[T], instance: T) -> Services:
+        """A copy that serves `instance` as the service of `type_`, whatever its own class; for a fake that subclasses a service."""
+        return self._holding({**self._instances, type_: instance})
+
+    @staticmethod
+    def _holding(instances: dict[type, object]) -> Services:
+        held = Services()
+        held._instances = instances
+        return held
 
     def types(self) -> frozenset[type]:
         """The service types held."""

@@ -110,7 +110,7 @@ Product and SDLC language for user-owned workflows built **on** Loop. Warp Facto
 | **Evidence** | Inspectable proof of a claim: test report, screenshot, API response, logs, changed-file diff, or CI result. **Avoid:** relying on an agent's success statement alone. |
 | **Gate** | Explicit predicate over evidence and policy with pass, fail, or hold outcome; it determines whether work may advance. **Avoid:** synonymous with a stage or reviewer. |
 | **Automated gate** | Machine-checkable gate such as tests pass, artifacts exist, no prohibited files changed, or required CI checks succeeded. |
-| **Human gate (HITL)** | Hold requiring a human decision, clarification, or risk acceptance. In the proposed Loop workflow, `hitl` blocks Ticket execution until removed; it is not applied to every generated Ticket. |
+| **Human gate (HITL)** | Hold requiring a human decision, clarification, or risk acceptance. In the proposed Loop workflow, `hitl` blocks Ticket execution until removed; it is not applied to every generated Ticket. In `implement_spec`, removing `hitl` from a held Spec or Ticket releases it: the next run records the release in the Execution ledger and starts a fresh scope with a fresh rework budget. |
 | **Merge gate** | Combined PR readiness rule over required checks, approvals, unresolved discussions, and repository policy. A green test alone is insufficient. |
 | **Verification** | Establishes that actual behavior meets acceptance criteria using reproducible checks and evidence; distinct from reviewing code quality. |
 | **Rework loop** | Bounded return to implementation or an earlier stage after gate failure or review feedback, followed by fresh validation. |

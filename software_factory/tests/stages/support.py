@@ -13,6 +13,7 @@ from typing import Any
 from loop import AgentContext, AgentRequest, AgentResult, AgentWorkspace, RunContext, SessionName
 
 from software_factory.events.specs import RepositoryTarget, SpecWork
+from software_factory.events.tickets import TicketClosed
 from software_factory.runtime import (
     Event, Flow, Ledger, Pass, RecordingSpans, RunResult, Services, Stage, Workflow, WorkspaceOpener, run,
 )
@@ -199,6 +200,11 @@ def seeded(event: Event) -> Stage[Any, Any, Any]:
     """A Stage that produces `event` as an upstream Stage would, so a Stage under test can read it."""
     name = re.sub(r"(?<!^)(?=[A-Z])", "-", type(event).__name__).lower()
     return Stage(f"seed-{name}", NoInput, produces=type(event)).action(lambda _: event).gate(lambda *_: Pass(event))
+
+
+def never_closes() -> Stage[Any, Any, Any]:
+    """A Stage that declares the Ticket closures of a Workflow but is always skipped, so a Stage reading their history sees none."""
+    return Stage("close-nothing", NoInput, produces=TicketClosed).action(lambda _: None).gate(lambda *_: Pass(TicketClosed(0, ""))).when(lambda _: False)
 
 
 def delivers(ticket: int, *, subject: str | None = None, report: str | None = None, commits: int = 1) -> Callable[[Repo], str]:

@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+from subprocess import CalledProcessError
 
 import pytest
 
 from software_factory.events.tickets import Delivery, TicketImplemented, TicketRejected
 from software_factory.runtime import Flow, Item, Selector, Stage, handoff, next_, rework
 from software_factory.shared.github.issues.spec import Ticket
-from software_factory.stages import tickets
+from software_factory.stages import specs, tickets
 from software_factory.tests.runtime.support import NoInput
 from software_factory.tests.shared.fakes import issue
 from software_factory.tests.stages.support import (
@@ -214,6 +215,21 @@ def test_the_delivery_check_holds_while_tickets_remain_held(tmp_path: Path) -> N
 
     assert result.status == "held"
     assert "#10" in (result.reason or "")
+
+
+def test_the_delivery_check_fails_while_an_actionable_ticket_is_left_undelivered(tmp_path: Path) -> None:
+    """Given a Ticket whose scope ended in an infrastructure hand-off and stays open, when the delivery is required, then the run fails instead of announcing it delivered."""
+    rig = StageRig(tmp_path)
+    script = DeveloperScript(rig.repo, [delivers(10)])
+    rig.gh.fail_on("issue", "close")
+    workflow = rig.in_worktree(script, tickets.require_delivered(), flow=ticket_loop(
+        escalating(), tickets.close_ticket()
+    )).on_error((CalledProcessError,), handoff(specs.comment_failure()))
+
+    result = rig.run(workflow)
+
+    assert result.status == "failed"
+    assert "undelivered" in (result.reason or "") and "#10" in (result.reason or "")
 
 
 def test_the_delivery_check_passes_with_the_head_and_commits_once_every_ticket_is_delivered(tmp_path: Path) -> None:

@@ -164,7 +164,7 @@ def _chore_lines(chore: ChoreRefined | ChoreDiscarded | None) -> list[str]:
         return []
     if isinstance(chore, ChoreDiscarded):
         return [f"Chore: discarded ({chore.reason})", *(f"- out of scope: {item}" for item in chore.out_of_scope)]
-    status = "committed" if chore.committed else "nothing to change"
+    status = "committed" if chore.committed else "nothing"
     return [f"Chore: {status}" + (f" ({chore.summary})" if chore.summary else ""), *(f"- out of scope: {item}" for item in chore.out_of_scope)]
 
 

@@ -148,44 +148,31 @@ and update Tickets. Read its configuration guide before running it.
 ### Multi-repository example
 
 The `implement_spec` Workflow routes Specs by their `repo:target:<owner/repo>` label to
-repositories you configure. Each `RepositoryWorkflow` pairs a checkout with a
-function that owns its agent steps; here `api` only implements while `web`
+repositories you configure. Each `RepositoryTarget` pairs a checkout with whether the
+planner, the chore cleanup and the reviewer run there; here `api` only implements while `web`
 implements and then reviews. Repositories must already be cloned under
 `workspace/`, and unknown targets are handed to a human.
 
 ```python
-from functools import partial
 from pathlib import Path
 
-from software_factory.legacy_slices.implement_spec import (
-    Repository, RepositoryId, RepositoryWorkflow, implement_ticket, load_prompt, main,
-)
+from software_factory.events.specs import RepositoryTarget
+from software_factory.workflows.implement_spec.__main__ import build_services, main
+from software_factory.workflows.implement_spec.dry import Fakes
+from software_factory.workflows.implement_spec.settings import Targets
 
 workspace = Path.cwd() / "workspace"
-implement = partial(implement_ticket, template=load_prompt("implement"))
-
-
-def implement_and_review(context, worktree):
-    result = implement(context, worktree)
-    ...  # run a reviewer agent on result.commit; return a TicketResult
-    return result
-
+targets = Targets((
+    RepositoryTarget("acme/api", workspace / "api", workspace / "api.worktrees", plan=False, chore=False, review=False),
+    RepositoryTarget("acme/web", workspace / "web", workspace / "web.worktrees"),
+))
 
 if __name__ == "__main__":
-    raise SystemExit(main(repositories=(
-        RepositoryWorkflow(
-            Repository(workspace / "api", workspace / "api.worktrees", RepositoryId("acme", "api")),
-            implement,
-        ),
-        RepositoryWorkflow(
-            Repository(workspace / "web", workspace / "web.worktrees", RepositoryId("acme", "web")),
-            implement_and_review,
-        ),
-    )))
+    raise SystemExit(main(services=build_services(Fakes([]), None).bind(Targets, targets)))
 ```
 
-Run it from the harness root. The [usage guide](docs/usage.md#different-agent-workflows-per-repository)
-has the complete reviewer step and delivery rules.
+Run it from the harness root. The [usage guide](USAGE.md#repositories-and-targets)
+has the delivery rules.
 
 ### Optional: visualize flows with scenarios (BDD style)
 

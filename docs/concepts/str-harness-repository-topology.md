@@ -7,9 +7,8 @@ The harness contains agent instructions, skills, Specs, and Tickets. The impleme
 
 ## Harness and target repositories
 
-`software_factory/legacy_slices/implement_spec/` reads Specs and Tickets from the immutable `HARNESS: Repository` configured in `model/repositories.py`; target repositories come from `composition/repositories.py` or a `use_repositories(...)` provider passed to `main`.
-Each target is an explicit `RepositoryWorkflow` pairing a `Repository` with an
-agent delegate. `RepositoryId` is the shared GitHub repository identity in `software_factory/shared/github/`; `Repository` pairs it with the checkout and worktrees and stays in implement_spec. With no target configuration, the workflow defaults to
+`software_factory/workflows/implement_spec/` reads Specs and Tickets from the harness repository (`HARNESS_SLUG`, `harness_target()` in `__main__.py`); target repositories are `RepositoryTarget` values (slug, checkout, worktrees, and whether it plans, runs the chore and reviews) the entry point passes as `Targets`, which tests replace through `main(argv, services=...)`.
+`RepositoryId` is the shared GitHub repository identity in `software_factory/shared/github/`. With no other target configuration, the workflow defaults to
 implementation on the harness repository.
 
 ```python
@@ -22,26 +21,29 @@ class RepositoryId(NamedTuple):
 
 
 @dataclass(frozen=True)
-class Repository:
+class RepositoryTarget:
+    slug: str
     checkout: Path
     worktrees: Path
-    owner_name: RepositoryId
+    plan: bool = True
+    chore: bool = True
+    review: bool = True
 
 
-ROOT = Path(__file__).resolve().parents[3]  # software_factory/legacy_slices/implement_spec/model/repositories.py
-HARNESS = Repository(
+ROOT = Path(__file__).resolve().parents[3]  # software_factory/workflows/implement_spec/__main__.py
+HARNESS = RepositoryTarget(
+    slug="antshc/loop",
     checkout=ROOT,
     worktrees=ROOT / "workspace" / f"{ROOT.name}.worktrees",
-    owner_name=RepositoryId("antshc", "loop"),
 )
 ```
 
 - MUST resolve each Spec's `repo:target:<owner/repo>` label against the configured repositories, case-insensitively.
 - MUST mark missing, malformed, duplicated, or unconfigured targets `hitl` when they block actionable Tickets, without fetching Git or opening a worktree.
-- MUST reject duplicate repository configurations rather than choose one delegate implicitly.
+- MUST reject duplicate repository configurations rather than choose one implicitly.
 - MUST use the selected repository's `checkout` for Git fetch and repository operations; the agent edits only its worktree.
 - MUST create feature-branch worktrees beneath the selected repository's `worktrees`, one directory per branch.
-- MUST keep Spec/Ticket reads, updates, and execution-log identities on `HARNESS.owner_name`.
+- MUST keep Spec/Ticket reads and updates on the harness repository; the Execution ledger keys each Spec's work item by its number.
 - MUST publish PRs to the selected target's GitHub repository; create its `PullRequestClient` only when Git has work to publish, and keep it out of Ticket orchestration.
 - `PullRequestClient` exposes only `create_draft_pull_request`; finding an existing open PR is internal, and PR editing and review-thread operations are outside this ticket-delivery module.
 - MUST NOT clone a missing repository or fall back to a different target when a Spec label does not match.
@@ -77,10 +79,9 @@ harness/
 ```
 
 Specs remain on the harness tracker and identify their target and base branch by
-labels. The selected agent delegate receives only the current Ticket's context
-and the open `AgentWorkspace`, not the Spec or tracker. Ticket iteration,
+labels. Which optional activities (planning, chore, review) run is data on the routed target, not a Python delegate. Ticket iteration,
 Initiative history, retry/rollback, and one-commit validation do not vary with
-the delegate. There is no directory discovery or repository cloning.
+the target. There is no directory discovery or repository cloning.
 
 See the [multi-repository example](../../README.md#different-agent-workflows-per-repository)
 for configuration and an Implement/Review delegate.

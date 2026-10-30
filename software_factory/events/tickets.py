@@ -27,10 +27,11 @@ class TicketRejected(Event):
 
 @dataclass(frozen=True)
 class TicketClosed(Event):
-    """`ticket` is closed with its delivery comment."""
+    """`ticket` is closed with its delivery comment; `title` is kept so a pull request description can list it as delivered."""
 
     ticket: int
     commit: str
+    title: str = ""
 
 
 @dataclass(frozen=True)

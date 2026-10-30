@@ -149,7 +149,7 @@ def _implemented(i: TicketInput, reply: DeveloperReply, _: Evidence) -> Verdict[
 def _closed(i: CloseInput) -> TicketClosed | None:
     """The closure a crashed attempt already made."""
     if i.tracker.issue(i.ticket.number).state is IssueState.CLOSED:
-        return TicketClosed(i.ticket.number, i.implemented.commit)
+        return TicketClosed(i.ticket.number, i.implemented.commit, i.ticket.title)
     return None
 
 
@@ -157,7 +157,7 @@ def _close(i: CloseInput) -> TicketClosed:
     implemented = i.implemented
     comment = f"Delivered in {implemented.commit}.\n\n{implemented.summary}\n\n{implemented.verification}"
     i.tracker.close(i.ticket.number, comment)
-    return TicketClosed(i.ticket.number, implemented.commit)
+    return TicketClosed(i.ticket.number, implemented.commit, i.ticket.title)
 
 
 def _escalation_reason(i: EscalateInput) -> str:
@@ -191,6 +191,10 @@ def _delivered(i: DeliveredInput, spec: SpecGraphSnapshot, _: Evidence) -> Verdi
     if spec.held_tickets:
         numbers = ", ".join(f"#{number}" for number in spec.held_tickets)
         return Hold(f"Tickets remain held: {numbers}")
+    undelivered = [ticket.number for ticket in spec.deliverable_tickets if ticket.actionable]
+    if undelivered:
+        numbers = ", ".join(f"#{number}" for number in undelivered)
+        return Fail(f"Tickets remain undelivered although the delivery loop ended: {numbers}")
     path = i.worktree.path
     commits = tuple(f"{commit.sha[:7]} {commit.subject}" for commit in i.git.branch_commits(path, i.routed.base_branch))
     return Pass(Delivery(i.git.head(path).sha, commits))

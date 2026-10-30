@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from software_factory.events.pull_requests import DraftPullRequestPublished
 from software_factory.events.specs import SpecRouted, SpecWork
-from software_factory.runtime import Stage
+from software_factory.events.tickets import TicketClosed
+from software_factory.runtime import History, Stage
 from software_factory.shared.git import GitClient
 from software_factory.shared.github.account import GitHub
 from software_factory.shared.github.issues.client import Issues
@@ -20,6 +22,7 @@ class PublishInput:
     tracker: Issues
     git: GitClient
     github: GitHub
+    closed: History[TicketClosed]
 
 
 def publish_draft_pr() -> Stage[PublishInput, DraftPullRequestPublished, DraftPullRequestPublished]:
@@ -29,11 +32,15 @@ def publish_draft_pr() -> Stage[PublishInput, DraftPullRequestPublished, DraftPu
     )
 
 
-def pull_request_body(spec: SpecGraphSnapshot) -> str:
-    """The initiative ID on the first line (the code-review initiative gate reads it), then every Ticket and whether it is delivered."""
+def pull_request_body(spec: SpecGraphSnapshot, closed: Sequence[TicketClosed] = ()) -> str:
+    """The initiative ID on the first line (the code-review initiative gate reads it), then every Ticket by number and whether it is delivered; the tracker's Spec read drops closed Tickets, so those this work item closed come from `closed`."""
+    open_numbers = {ticket.number for ticket in spec.deliverable_tickets}
+    entries = {event.ticket: f"- [x] #{event.ticket} {event.title}".rstrip() for event in closed if event.ticket not in open_numbers}
+    entries.update(
+        {ticket.number: f"- [{'x' if ticket.state == 'closed' else ' '}] #{ticket.number} {ticket.title}" for ticket in spec.deliverable_tickets}
+    )
     lines = [spec.initiative, "", f"Spec: {spec.url}", "", "Tickets:"]
-    lines += [f"- [{'x' if ticket.state == 'closed' else ' '}] #{ticket.number} {ticket.title}" for ticket in spec.deliverable_tickets]
-    return "\n".join(lines)
+    return "\n".join(lines + [entries[number] for number in sorted(entries)])
 
 
 def _published(i: PublishInput) -> DraftPullRequestPublished | None:
@@ -42,7 +49,7 @@ def _published(i: PublishInput) -> DraftPullRequestPublished | None:
     if i.git.is_ahead(routed.target.checkout, routed.feature_branch, routed.base_branch):
         return None
     existing = i.github.pull_requests(routed.target.slug).find_open(routed.feature_branch)
-    if existing is None or existing.body != pull_request_body(i.tracker.spec(i.work.number)):
+    if existing is None or existing.body != pull_request_body(i.tracker.spec(i.work.number), i.closed):
         return None
     return DraftPullRequestPublished(existing.url, routed.feature_branch, pushed=False)
 
@@ -56,5 +63,5 @@ def _publish(i: PublishInput) -> DraftPullRequestPublished:
         return DraftPullRequestPublished(None, branch, pushed=False)
     spec = i.tracker.spec(i.work.number)
     title = f"{spec.initiative}: {spec.bare_title}"
-    pull_request = pulls.create_draft_pull_request(branch, base, title, pull_request_body(spec))
+    pull_request = pulls.create_draft_pull_request(branch, base, title, pull_request_body(spec, i.closed))
     return DraftPullRequestPublished(pull_request.url, branch, pushed)

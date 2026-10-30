@@ -70,47 +70,10 @@ ignore_imports = ["software_factory.tests.shared.test_telemetry -> loop.observe.
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
-name = "Implement-spec stages run the delegates they are given, never a concrete agent"
-type = "forbidden"
-source_modules = [
-    "software_factory.legacy_slices.implement_spec.backlog",
-    "software_factory.legacy_slices.implement_spec.chore",
-    "software_factory.legacy_slices.implement_spec.deliver",
-    "software_factory.legacy_slices.implement_spec.model",
-    "software_factory.legacy_slices.implement_spec.plan",
-    "software_factory.legacy_slices.implement_spec.review",
-]
-forbidden_modules = ["software_factory.legacy_slices.implement_spec.agents"]
-
-[[tool.importlinter.contracts]]
-name = "Implement-spec features never reach back into their composition root"
-type = "forbidden"
-source_modules = [
-    "software_factory.legacy_slices.implement_spec.agents",
-    "software_factory.legacy_slices.implement_spec.backlog",
-    "software_factory.legacy_slices.implement_spec.chore",
-    "software_factory.legacy_slices.implement_spec.deliver",
-    "software_factory.legacy_slices.implement_spec.model",
-    "software_factory.legacy_slices.implement_spec.plan",
-    "software_factory.legacy_slices.implement_spec.review",
-]
-forbidden_modules = ["software_factory.legacy_slices.implement_spec.composition"]
-
-[[tool.importlinter.contracts]]
-name = "Implement-spec stages are independent; only the backlog router sequences them"
-type = "independence"
-modules = [
-    "software_factory.legacy_slices.implement_spec.chore",
-    "software_factory.legacy_slices.implement_spec.deliver",
-    "software_factory.legacy_slices.implement_spec.plan",
-    "software_factory.legacy_slices.implement_spec.review",
-]
-
-[[tool.importlinter.contracts]]
 name = "Shared workflow infrastructure imports no workflow slice"
 type = "forbidden"
 source_modules = ["software_factory.shared"]
-forbidden_modules = ["software_factory.legacy_slices.implement_spec", "software_factory.legacy_slices.pr_babysit", "workflows.plan_implement", "workflows.workflow_reporting"]
+forbidden_modules = ["software_factory.workflows", "software_factory.legacy_slices.pr_babysit", "workflows.plan_implement", "workflows.workflow_reporting"]
 
 [[tool.importlinter.contracts]]
 name = "Pure modules of the shared GitHub issues package never import the gh process layer; only its reader, commands, ticketing service, and client do"
@@ -151,7 +114,7 @@ allow_indirect_imports = true
 [[tool.importlinter.contracts]]
 name = "Factory and example source packages never import the factory test tree"
 type = "forbidden"
-source_modules = ["software_factory.agents", "software_factory.runtime", "software_factory.events", "software_factory.stages", "software_factory.flows", "software_factory.shared", "software_factory.legacy_slices.implement_spec", "software_factory.legacy_slices.pr_babysit", "workflows.plan_implement", "workflows.workflow_reporting"]
+source_modules = ["software_factory.agents", "software_factory.runtime", "software_factory.events", "software_factory.stages", "software_factory.flows", "software_factory.shared", "software_factory.workflows", "software_factory.legacy_slices.pr_babysit", "workflows.plan_implement", "workflows.workflow_reporting"]
 forbidden_modules = ["software_factory.tests"]
 
 [[tool.importlinter.contracts]]
@@ -163,6 +126,7 @@ source_modules = [
     "software_factory.events",
     "software_factory.stages",
     "software_factory.flows",
+    "software_factory.workflows",
     "software_factory.shared.agents",
     "software_factory.shared.git",
     "software_factory.shared.github",
@@ -178,13 +142,6 @@ source_modules = [
     "software_factory.legacy_slices.pr_babysit.publish",
     "software_factory.legacy_slices.pr_babysit.settings",
     "software_factory.legacy_slices.pr_babysit.watch",
-    "software_factory.legacy_slices.implement_spec.agents",
-    "software_factory.legacy_slices.implement_spec.backlog",
-    "software_factory.legacy_slices.implement_spec.chore",
-    "software_factory.legacy_slices.implement_spec.deliver",
-    "software_factory.legacy_slices.implement_spec.model",
-    "software_factory.legacy_slices.implement_spec.plan",
-    "software_factory.legacy_slices.implement_spec.review",
 ]
 forbidden_modules = ["dishka"]
 
@@ -207,7 +164,7 @@ forbidden_modules = ["software_factory.legacy_slices.pr_babysit.composition"]
 [[tool.importlinter.contracts]]
 name = "No workflow imports another workflow"
 type = "independence"
-modules = ["software_factory.legacy_slices.implement_spec", "workflows.plan_implement", "workflows.workflow_reporting", "software_factory.legacy_slices.pr_babysit"]
+modules = ["software_factory.workflows.implement_spec", "workflows.plan_implement", "workflows.workflow_reporting", "software_factory.legacy_slices.pr_babysit"]
 
 [[tool.importlinter.contracts]]
 name = "PR maintenance decisions do not depend on the discovery scheduler"
@@ -235,14 +192,14 @@ modules = ["software_factory.agents", "software_factory.shared"]
 [[tool.importlinter.contracts]]
 name = "The private agent kit is unreachable outside the agents package"
 type = "forbidden"
-source_modules = ["software_factory.legacy_slices", "software_factory.runtime", "software_factory.events", "software_factory.stages", "software_factory.flows", "software_factory.shared", "workflows"]
+source_modules = ["software_factory.legacy_slices", "software_factory.workflows", "software_factory.runtime", "software_factory.events", "software_factory.stages", "software_factory.flows", "software_factory.shared", "workflows"]
 forbidden_modules = ["software_factory.agents._kit"]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "The runtime engine is private: only the runtime package reaches it"
 type = "forbidden"
-source_modules = ["software_factory.agents", "software_factory.legacy_slices", "software_factory.events", "software_factory.stages", "software_factory.flows", "software_factory.shared", "workflows"]
+source_modules = ["software_factory.agents", "software_factory.legacy_slices", "software_factory.workflows", "software_factory.events", "software_factory.stages", "software_factory.flows", "software_factory.shared", "workflows"]
 forbidden_modules = ["software_factory.runtime._engine"]
 allow_indirect_imports = true
 
@@ -289,4 +246,45 @@ name = "Stages and Flow fragments never start processes themselves"
 type = "forbidden"
 source_modules = ["software_factory.stages", "software_factory.flows"]
 forbidden_modules = ["software_factory.shared.process", "subprocess"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Workflow definitions sit on top: nothing below them imports one"
+type = "forbidden"
+source_modules = [
+    "software_factory.runtime",
+    "software_factory.events",
+    "software_factory.agents",
+    "software_factory.stages",
+    "software_factory.flows",
+    "software_factory.shared",
+]
+forbidden_modules = ["software_factory.workflows"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "A Workflow's policy module holds values and pure functions: no process, Git or GitHub client"
+type = "forbidden"
+source_modules = ["software_factory.workflows.implement_spec.policy"]
+forbidden_modules = [
+    "software_factory.shared.process",
+    "software_factory.shared.git",
+    "software_factory.shared.github.repo",
+    "software_factory.shared.github.account",
+    "software_factory.shared.github.issues.client",
+    "subprocess",
+]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "A Workflow's definition, policy and intake never start processes; only its entry point and dry-run seams do"
+type = "forbidden"
+source_modules = ["software_factory.workflows.implement_spec"]
+forbidden_modules = ["software_factory.shared.process", "subprocess"]
+# The definition names the hook and process errors its error route turns into a hand-off.
+ignore_imports = [
+    "software_factory.workflows.implement_spec -> subprocess",
+    "software_factory.workflows.implement_spec.__main__ -> software_factory.shared.process",
+    "software_factory.workflows.implement_spec.dry -> software_factory.shared.process",
+]
 allow_indirect_imports = true
