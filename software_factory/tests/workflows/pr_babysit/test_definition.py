@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
-from software_factory.runtime import WorktreeGit
+from software_factory.runtime import AgentExecution, WorktreeGit
+from software_factory.runtime.analysis import _stages_in
 from software_factory.shared.agents.launcher import AgentLauncher
 from software_factory.shared.git import GitClient
 from software_factory.shared.github.account import GitHub
@@ -23,6 +25,15 @@ def definition():
 def test_the_definition_is_valid_for_default_settings() -> None:
     """Given default settings, when the definition is built, then every route, reroute, Event and workspace requirement resolves."""
     definition().check()
+
+
+def test_the_configured_timeout_bounds_every_agent_stage() -> None:
+    """Given a configured timeout, when the definition is built, then every agent Stage runs its role with that timeout."""
+    settings = replace(Settings((Repository("a/b", Path("."), ("build",), ("test",)),), Path(".")), timeout=42)
+
+    agents = {stage.id: stage.executor.agent.profile.timeout_sec for stage in _stages_in(pr_babysit(settings, lambda path: None).nodes) if isinstance(stage.executor, AgentExecution)}
+
+    assert set(agents) == {"diagnose-ci", "fix-ci", "group-feedback", "resolve-issue"} and set(agents.values()) == {42}
 
 
 def test_the_wiring_table_equals_the_checked_in_golden() -> None:

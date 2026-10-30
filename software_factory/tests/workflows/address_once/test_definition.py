@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from software_factory.runtime import WorktreeGit
+from software_factory.runtime import AgentExecution, WorktreeGit
+from software_factory.runtime.analysis import _stages_in
 from software_factory.shared.agents.launcher import AgentLauncher
 from software_factory.shared.git import GitClient
 from software_factory.shared.github.account import GitHub
@@ -16,6 +17,15 @@ WIRING = Path(__file__).with_name("wiring.txt")
 
 def definition():
     return address_once(lambda path: None)
+
+
+def test_the_agent_timeout_bounds_every_agent_stage() -> None:
+    """Given an agent timeout, when the definition is built, then the grouping and resolving agents run with it."""
+    stages = _stages_in(address_once(lambda path: None, agent_timeout=42).nodes)
+
+    agents = {stage.id: stage.executor.agent.profile.timeout_sec for stage in stages if isinstance(stage.executor, AgentExecution)}
+
+    assert agents == {"group-feedback": 42, "resolve-issue": 42}
 
 
 def test_the_definition_is_valid() -> None:

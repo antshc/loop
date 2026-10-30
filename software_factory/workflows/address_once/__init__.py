@@ -14,12 +14,12 @@ NAME = "address_once"
 __all__ = ["NAME", "address_once"]
 
 
-def address_once(verify: Verify) -> Workflow[PullRequestWork]:
-    """One pull request: validate its origin, snapshot it, select the trusted feedback, then address, publish and reply once; no feedback holds."""
+def address_once(verify: Verify, *, agent_timeout: float | None = None) -> Workflow[PullRequestWork]:
+    """One pull request: validate its origin, snapshot it, select the trusted feedback, then address, publish and reply once; no feedback holds; `agent_timeout` bounds each agent run in seconds."""
     return (
         Workflow(NAME).context(PullRequestWork)
         .stage(pull_requests.validate_origin())
         .stage(pull_requests.snapshot())
         .stage(feedback.select(trust=TRUST))
-        .then(address.address_feedback(message=address_subject, verify=verify))
+        .then(address.address_feedback(message=address_subject, verify=verify, agent_timeout=agent_timeout))
     )

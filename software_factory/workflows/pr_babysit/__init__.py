@@ -27,18 +27,18 @@ HANDED_OFF_ERRORS: tuple[type[Exception], ...] = (Blocked, WorktreeError, Called
 
 
 def pr_babysit(settings: Settings, verify: Verify) -> Workflow[PullRequestWork]:
-    """One pull request until it closes: on every poll exactly one of address feedback, maintain CI, request a Copilot review or report readiness."""
+    """One pull request until it closes: on every poll exactly one of address feedback, maintain CI, request a Copilot review or report readiness; `settings.timeout` bounds every agent run and every check."""
     block = handoff(pull_requests.block_pr(fingerprint=fingerprint))
     maintain_ci = (
         Flow("maintain-ci")
         .within(workspaces.pr_worktree(), Flow("ci")
             .stage(workspaces.require_clean().named("require-clean-ci").on_hold(block))
-            .stage(ci.diagnose().on_hold(block).on_fail(block))
+            .stage(ci.diagnose().tune(timeout_sec=settings.timeout).on_hold(block).on_fail(block))
             .dispatch(ci.Diagnosis, {
                 ci.Transient: Flow("rerun").stage(ci.rerun_failed().limit(settings.retries, per=ci.head).on_fail(block)),
                 ci.BranchBroken: (
                     Flow("fix")
-                    .stage(ci.fix(message=ci_subject, verify=verify).on_fail(block))
+                    .stage(ci.fix(message=ci_subject, verify=verify).tune(timeout_sec=settings.timeout).on_fail(block))
                     .stage(pull_requests.publish_batch().named("publish-ci-fix").reads(CiFixed, from_="fix-ci").on_fail(block))
                 ),
             }))
@@ -60,6 +60,7 @@ def pr_babysit(settings: Settings, verify: Verify) -> Workflow[PullRequestWork]:
                 Unsupported: block,
                 FeedbackBatch: address.address_feedback(
                     message=address_subject, verify=verify, on_baseline_red=reroute(CiFailing), on_stuck=block,
+                    agent_timeout=settings.timeout,
                 ),
                 CiFailing: maintain_ci,
                 CopilotDue: Flow("copilot").stage(copilot.request_review()),

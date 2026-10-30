@@ -83,7 +83,7 @@ def _address(settings: Settings, services: Services, slug: str, number: int) -> 
     repository = settings.repository(slug)
     runtime = services.get(Runtime) if Runtime in services.types() else Runtime(Ledger(settings.ledger_root), LogSpans())
     work = PullRequestWork(RepositoryTarget(slug, repository.path, settings.state_dir / "worktrees"), number, _REVISION)
-    definition = address_once(as_verify(repository.test, timeout_s=settings.timeout, run=CommandRunner()))
+    definition = address_once(as_verify(repository.test, timeout_s=settings.timeout, run=CommandRunner()), agent_timeout=settings.timeout)
     try:
         result = run(definition, work, services=services, ledger=runtime.ledger, spans=runtime.spans)
     except WorktreeError as exception:
