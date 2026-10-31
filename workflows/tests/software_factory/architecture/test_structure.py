@@ -13,6 +13,15 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
+from loop.runtime._engine.codec import decode, encode
+from loop.runtime.nodes import DispatchNode, EachNode, StageNode, WithinNode
+
+import workflows.software_factory as factory
+import workflows.software_factory.agents as agents
+import workflows.software_factory.events as events
+import workflows.software_factory.flows as flows
+import workflows.software_factory.stages as stages
+import workflows.software_factory.workflows as workflows
 from loop import (
     Declined,
     Event,
@@ -26,16 +35,11 @@ from loop import (
     Workflow,
     WorkspaceOpener,
 )
-from loop.runtime._engine.codec import decode, encode
-from loop.runtime.nodes import DispatchNode, EachNode, StageNode, WithinNode
-
-import workflows.software_factory as factory
-import workflows.software_factory.agents as agents
-import workflows.software_factory.events as events
-import workflows.software_factory.flows as flows
-import workflows.software_factory.stages as stages
-import workflows.software_factory.workflows as workflows
+from workflows.software_factory.infrastructure.jenkins import JenkinsSettings
 from workflows.software_factory.stages import pull_requests
+from workflows.software_factory.workflows.pr_babysit.settings import (
+    Settings as BabysitSettings,
+)
 
 from .samples import call_with_samples, sample_dataclass
 
@@ -114,11 +118,17 @@ def fragment_factories() -> dict[str, Callable[..., Flow]]:
 
 
 def built_definitions() -> dict[str, Workflow]:
-    """Every Workflow definition built with default settings."""
-    return {
-        name: call_with_samples(factory)
-        for name, factory in definition_factories().items()
-    }
+    """Every default definition plus the optional Jenkins composition."""
+    factories = definition_factories()
+    found = {name: call_with_samples(factory) for name, factory in factories.items()}
+    configured = dataclasses.replace(
+        sample_dataclass(BabysitSettings),
+        jenkins=JenkinsSettings(
+            "https://jenkins.example.com", ("/job/CI/",), Path("unused.user")
+        ),
+    )
+    found["pr_babysit:jenkins"] = factories["pr_babysit"](configured, lambda _: None)
+    return found
 
 
 def identity(part: Part) -> tuple[type, type, object]:

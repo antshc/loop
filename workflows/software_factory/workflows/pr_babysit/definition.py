@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from subprocess import CalledProcessError, TimeoutExpired
 
 from loop import Flow, Verify, Workflow, WorktreeError, handoff, reroute, stop
-
 from workflows.software_factory.events.ci import CiFixed
 from workflows.software_factory.events.feedback import FeedbackBatch
+from workflows.software_factory.events.jenkins import (
+    JenkinsFailed,
+    JenkinsObservation,
+    JenkinsReadiness,
+    JenkinsWaiting,
+    OtherCi,
+)
 from workflows.software_factory.events.pull_requests import (
     CiFailing,
     CopilotDue,
@@ -23,6 +30,7 @@ from workflows.software_factory.stages import (
     ci,
     conflicts,
     copilot,
+    jenkins,
     pacing,
     pull_requests,
     readiness,
@@ -111,6 +119,84 @@ def pr_babysit(settings: Settings, verify: Verify) -> Workflow[PullRequestWork]:
         )
         .stage(pacing.pace(settings.interval).named("pace-ci"))
     )
+    report_readiness = (
+        Flow("ready")
+        .stage(readiness.report())
+        .stage(pacing.pace(settings.interval).named("pace-ready"))
+    )
+    if settings.jenkins is not None:
+        report_readiness = (
+            Flow("check-jenkins-readiness")
+            .stage(jenkins.readiness().on_fail(reroute(CiFailing)))
+            .dispatch(
+                JenkinsReadiness,
+                {
+                    OtherCi: report_readiness,
+                    JenkinsWaiting: Flow("await-jenkins-head").stage(
+                        pacing.pace(settings.interval).named("pace-jenkins-head")
+                    ),
+                },
+            )
+        )
+        jenkins_fix = (
+            Flow("fix-jenkins")
+            .stage(jenkins.capacity().named("admit-jenkins-fix").on_fail(block))
+            .stage(
+                ci.fix(message=ci_subject, verify=verify)
+                .named("fix-jenkins")
+                .tune(timeout_sec=settings.timeout)
+                .on_fail(block)
+            )
+            .stage(jenkins.capacity().named("admit-jenkins-publication").on_fail(block))
+            .stage(
+                pull_requests.publish_batch()
+                .named("publish-jenkins-fix")
+                .reads(CiFixed, from_="fix-jenkins")
+                .on_fail(block)
+            )
+        )
+        jenkins_recovery = (
+            Flow("maintain-jenkins")
+            .within(
+                replace(workspaces.pr_worktree(), id="jenkins-worktree"),
+                Flow("jenkins")
+                .stage(
+                    workspaces.require_clean()
+                    .named("require-clean-jenkins")
+                    .on_hold(block)
+                )
+                .stage(
+                    jenkins.diagnose()
+                    .tune(timeout_sec=settings.timeout)
+                    .on_hold(block)
+                    .on_fail(block)
+                )
+                .dispatch(
+                    ci.Diagnosis,
+                    {
+                        ci.Transient: Flow("restart-jenkins").stage(
+                            jenkins.restart().on_fail(block)
+                        ),
+                        ci.BranchBroken: jenkins_fix,
+                    },
+                ),
+            )
+            .stage(pacing.pace(settings.interval).named("pace-jenkins"))
+        )
+        maintain_ci = (
+            Flow("select-ci-provider")
+            .stage(jenkins.observe().on_fail(block))
+            .dispatch(
+                JenkinsObservation,
+                {
+                    OtherCi: maintain_ci,
+                    JenkinsFailed: jenkins_recovery,
+                    JenkinsWaiting: Flow("wait-jenkins").stage(
+                        pacing.pace(settings.interval).named("pace-jenkins-wait")
+                    ),
+                },
+            )
+        )
     return (
         Workflow(NAME)
         .context(PullRequestWork)
@@ -144,9 +230,7 @@ def pr_babysit(settings: Settings, verify: Verify) -> Workflow[PullRequestWork]:
                     ),
                     CiFailing: maintain_ci,
                     CopilotDue: Flow("copilot").stage(copilot.request_review()),
-                    ReadinessCheck: Flow("ready")
-                    .stage(readiness.report())
-                    .stage(pacing.pace(settings.interval).named("pace-ready")),
+                    ReadinessCheck: report_readiness,
                 },
             ),
             # A hand-off inside a poll ends the poll handed off; the loop turns it into the run's own, which records the same fingerprint again.

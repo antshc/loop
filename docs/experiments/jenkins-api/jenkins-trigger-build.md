@@ -60,6 +60,16 @@ Original result at the end of the run: partly confirmed. A `buildWithParameters`
 
 ## Caveats
 
+- A later GET-only follow-up found builds #1 and #2 successful and completed a
+  guarded live-definition dry-run without submitting a build. It did not test
+  failed-build recovery or renewed write permission. Multiple SCM actions were
+  present; use the PR revision's `pullHash`, not an arbitrary checkout SHA.
+- Set `JENKINS_JSON` explicitly: the disposable script's default still names the
+  former prototype directory. Its dry-run reads the network and prints live
+  defaults/payload values. Review output sensitivity before capturing it.
+- The script disables TLS verification. The follow-up first failed with normal
+  certificate verification and proceeded only after explicit authorization for
+  insecure TLS on the selected internal server. Prefer a trusted CA in production.
 - One trigger only, by instruction; no second run to see the build start. The queued item (id 9042632) is left in the queue and will start after #1 finishes; cancelling it (`POST /queue/cancelItem?id=9042632`) was not done.
 - Dialog values equal the defaults, so this does not show that overrides of non-default values work.
 - The `303` path (equivalent item already queued) was not exercised.

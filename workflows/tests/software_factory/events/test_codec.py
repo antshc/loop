@@ -9,10 +9,10 @@ import pkgutil
 from pathlib import Path
 
 import pytest
-from loop import Event
 from loop.runtime._engine.codec import decode, encode
 
 import workflows.software_factory.events as events
+from loop import Event
 from workflows.software_factory.events.checks import ChecksPassed
 from workflows.software_factory.events.chore import ChoreDiscarded, ChoreRefined
 from workflows.software_factory.events.ci import (
@@ -30,6 +30,14 @@ from workflows.software_factory.events.feedback import (
     IssueResolved,
     IssueUnclear,
     ReplyDraft,
+)
+from workflows.software_factory.events.jenkins import (
+    JenkinsCapacity,
+    JenkinsFailed,
+    JenkinsObservation,
+    JenkinsRestarted,
+    JenkinsWaiting,
+    OtherCi,
 )
 from workflows.software_factory.events.pull_requests import (
     CiFailing,
@@ -184,6 +192,25 @@ SAMPLES: list[Event] = [
     BranchBroken("duplicate product"),
     CiRerun("abc1234", "abc1234:digest", (11, 10)),
     CiFixed("abc1234", "repaired"),
+    JenkinsFailed(
+        "https://jenkins.example.com/job/PR-7/",
+        1,
+        "abc1234",
+        "FAILURE",
+        1,
+        "untrusted log",
+        ("https://jenkins.example.com/job/PR-7/",),
+    ),
+    OtherCi(),
+    JenkinsWaiting(),
+    JenkinsRestarted("abc1234", "https://jenkins.example.com/job/PR-7/", 1, None),
+    JenkinsRestarted(
+        "abc1234",
+        "https://jenkins.example.com/job/PR-7/",
+        1,
+        "https://jenkins.example.com/queue/item/42/",
+    ),
+    JenkinsCapacity(),
 ]
 
 
@@ -202,6 +229,8 @@ def test_an_event_round_trips_through_the_ledger_codec(event: Event) -> None:
         (FeedbackBatch("h", False, ()), NextAction),
         (ReadinessCheck("h", ready=True), NextAction),
         (MergeConflict("h", "main", "b"), NextAction),
+        (JenkinsWaiting(), JenkinsObservation),
+        (OtherCi(), JenkinsObservation),
     ],
     ids=lambda value: getattr(value, "__name__", type(value).__name__),
 )

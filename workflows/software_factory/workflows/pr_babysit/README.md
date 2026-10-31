@@ -90,9 +90,79 @@ execution is not a sandbox.
 Python commits each verified review issue and pushes once per batch, confirms the
 remote SHA, then replies. Rejected pushes produce no replies. Threads remain open
 for reviewers; no code merges PRs. Maintainer uses the same explicit publication
-sequence. Three transient retry cycles per SHA are allowed by default; repeated
+sequence. Three GitHub Actions transient retry cycles per SHA are allowed by default; repeated
 stale CI snapshots do not spend another cycle. Baseline verification must pass
 before review edits; Maintainer can repair a failing CI baseline first.
+
+### Optional Jenkins recovery
+
+The global `jenkins` object in [settings.example.json](settings.example.json)
+applies to every watched repository. Missing configuration or `enabled: false`
+performs no Jenkins requests or credential reads and preserves Actions behavior.
+A disabled integration does not make a failed external check green.
+
+To enable it, configure the HTTPS server origin, trusted classic job-root paths
+(including trailing `/`), and a local `credentials_file`. Paths resolve relative
+to the configuration file. Credentials use `jenkinsUser` and `jenkinsApiToken`;
+keep that file outside Git and restrict its permissions. Do not put tokens in
+status URLs or settings. Only recognized current-head failed statuses/checks on
+the configured server are selected. Classic and Blue Ocean links must resolve
+under a trusted job root to this PR's `PR-<number>` job.
+
+Certificate verification is on by default. Supply `ca_bundle` for an internal CA.
+An explicit `insecure_tls: true` disables verification for this integration and
+logs a warning; do not combine it with `ca_bundle`. There is no global TLS bypass.
+`timeout` bounds each request; `log_bytes` bounds the console tail (1 KiB to 1 MiB,
+default 256 KiB). Credentials never follow redirects.
+
+Jenkins history must identify the watched repository and provide an unambiguous
+PR SCM revision `pullHash`. Multiple checkout SHAs are not substitutes for that
+revision. Missing/incomplete retained history or ambiguous identities hand off
+rather than guessing capacity. Jobs without supported PR revision metadata need
+manual handling. Once observed, job identities survive head changes. Missing GitHub
+statuses do not make a tracked job green: readiness waits for its new-head build,
+and a failed tracked build still enters diagnosis. An entirely undiscovered job
+with no check/status or retained identity cannot be inferred.
+
+| Diagnosis | Recovery |
+|---|---|
+| Timeout, likely flaky test, Docker/container infrastructure failure | Restart the whole PR job |
+| Other failure the maintainer judges likely transient | Restart with an evidence-backed rationale |
+| Genuine test failure or branch defect | Investigate, fix, verify, commit, publish |
+| Unknown cause, manual abort, inaccessible evidence | Hand off with a reason |
+
+Diagnosis is read-only and treats console text as untrusted evidence. It
+distinguishes infrastructure failure from a real test failure inside Docker.
+An `ABORTED` result is inspected for a timeout versus an operator cancellation;
+the result alone does not authorize restart.
+The agent supplies a category and rationale; Python owns every Jenkins trigger
+and code publication. API/auth/transport errors are not transient build failures.
+
+The limit is **three total Jenkins builds per repository/PR/head**, including the
+initial build and all observed manual/SCM builds: normally one original build
+and at most two restarts. This is separate from the Actions `retries` setting.
+Repeated observations do not spend capacity. After the third failure, the
+Workflow hands off without a fourth build or another automatic fix for that
+head. A verified, published fix creates a new head with a fresh budget; its normal
+SCM-triggered build is awaited, not duplicated. Returning to an old SHA retains
+its old accounting.
+
+Restarts reuse supported string/choice/boolean parameters from the failed build,
+validated against current job definitions, or current defaults if the original
+build had no value. Unsupported or sensitive parameter types require manual
+handling. The branch-based trigger cannot pin an immutable SHA: Python rechecks
+the current head before submission and checks the actual build revision later.
+A changed/ambiguous checkout hands off instead of being attributed to the old head.
+
+Capacity and unresolved submissions are durably stored under `state_dir/jenkins`
+with a per-PR lock. A slot is reserved and fsynced before one POST; `201` means
+queued, not recovered. Queue identity is reconciled against build history.
+An interrupted/lost response retains its reservation and requires investigation
+when it cannot be reconciled; there is no blind resend. A queued/running job
+waits. `--retry`, process restart and disable/re-enable do not erase this state.
+Keep this directory alongside the Execution ledger; workers must share it for
+cooperative locking. Independent human/SCM triggers cannot be globally capped
+by the Workflow.
 
 ### Merge conflict recovery
 
@@ -158,7 +228,7 @@ reviewer follow-ups. Repository collaborators, the operator, and known review bo
 are accepted; unrelated authors are ignored.
 
 State is the Execution ledger (one append-only JSONL log and lock per pull request) next to the
-discovery baseline:
+discovery baseline and optional Jenkins admission journal:
 
 ```text
 .loop/pr-babysit/
@@ -166,6 +236,8 @@ discovery baseline:
     scheduler.lock
     ledger/pr_babysit/<owner>-<repo>-<number>-<hash>/log.jsonl
     ledger/pr_babysit/<owner>-<repo>-<number>-<hash>/lock
+    jenkins/<hash>.json                   # head-bound builds and unresolved submission
+    jenkins/<hash>.lock
     worktrees/babysit/owner/repo/123/        # default; `worktrees_dir` moves it elsewhere
 ```
 
@@ -205,5 +277,5 @@ python3 -m pytest workflows/tests/software_factory/workflows/pr_babysit
 python3 -m pytest
 ```
 
-Tests use fake GitHub/agent responses, isolated local Git remotes, a temporary ledger,
-and in-memory spans. They never invoke live agents or contact GitHub.
+Tests use fake GitHub/Jenkins/agent responses, isolated local Git remotes, temporary
+state, and in-memory spans. They never invoke live agents or contact GitHub/Jenkins.

@@ -14,5 +14,15 @@
   "retries": 3,
   "timeout": 1800,
   "copilot_review": false,
+  "jenkins": {
+    "enabled": false,
+    "url": "https://jenkins.example.com",
+    "job_roots": ["/job/CI/job/Product/job/PR-checks/"],
+    "credentials_file": "jenkins.json.user",
+    "ca_bundle": null,
+    "insecure_tls": false,
+    "timeout": 30,
+    "log_bytes": 262144
+  },
   "otel_endpoint": null
 }

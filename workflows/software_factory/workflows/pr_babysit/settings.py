@@ -8,6 +8,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from workflows.software_factory.infrastructure.jenkins import JenkinsSettings
+
 
 @dataclass(frozen=True)
 class Repository:
@@ -33,6 +35,7 @@ class Settings:
     otel_endpoint: str | None = None
     timeout: float = 1800
     worktrees_dir: Path | None = None
+    jenkins: JenkinsSettings | None = None
 
     @property
     def ledger_root(self) -> Path:
@@ -84,6 +87,7 @@ class Settings:
             (path.parent / value["worktrees_dir"]).resolve()
             if value.get("worktrees_dir")
             else None,
+            JenkinsSettings.load(value.get("jenkins"), path.parent),
         )
         if not repositories or len({repo.name for repo in repositories}) != len(
             repositories

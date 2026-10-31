@@ -5,7 +5,15 @@ from __future__ import annotations
 from loop import ReplyMismatch, TypedAgent
 
 from ... import _kit
-from .messages import ConflictRequest, DiagnoseRequest, Diagnosis, Fixed, FixRequest
+from .messages import (
+    ConflictRequest,
+    DiagnoseRequest,
+    Diagnosis,
+    Fixed,
+    FixRequest,
+    JenkinsDiagnoseRequest,
+    JenkinsDiagnosis,
+)
 
 _CLASSIFICATIONS = ("branch", "transient", "blocked")
 _VERDICTS = ("fixed", "blocked")
@@ -34,8 +42,35 @@ def _decode_fix(request: FixRequest | ConflictRequest, output: str) -> Fixed:
     return Fixed(result["verdict"], _reason(result))
 
 
+def _decode_jenkins(request: JenkinsDiagnoseRequest, output: str) -> JenkinsDiagnosis:
+    result = _kit.read_object(output)
+    classification, category = result.get("classification"), result.get("category")
+    categories = {
+        "timeout": "transient",
+        "flaky_test": "transient",
+        "container_error": "transient",
+        "likely_transient": "transient",
+        "test_failure": "branch",
+        "branch_defect": "branch",
+        "unknown": "blocked",
+    }
+    if (
+        not isinstance(category, str)
+        or category not in categories
+        or categories[category] != classification
+    ):
+        raise ReplyMismatch("Jenkins category and classification are inconsistent")
+    reason = _reason(result)
+    if not reason.strip():
+        raise ReplyMismatch("Jenkins diagnosis requires evidence-backed reasoning")
+    return JenkinsDiagnosis(classification, category, reason)
+
+
 DIAGNOSE_CI: TypedAgent[DiagnoseRequest, Diagnosis] = _kit.mode_agent(
     "maintainer", "diagnose", profile=_PROFILE, decode=_decode_diagnose
+)
+DIAGNOSE_JENKINS: TypedAgent[JenkinsDiagnoseRequest, JenkinsDiagnosis] = (
+    _kit.mode_agent("maintainer", "diagnose", profile=_PROFILE, decode=_decode_jenkins)
 )
 FIX_CI: TypedAgent[FixRequest, Fixed] = _kit.mode_agent(
     "maintainer", "fix", profile=_PROFILE, decode=_decode_fix
@@ -46,6 +81,7 @@ RESOLVE_CONFLICTS: TypedAgent[ConflictRequest, Fixed] = _kit.mode_agent(
 
 __all__ = [
     "DIAGNOSE_CI",
+    "DIAGNOSE_JENKINS",
     "FIX_CI",
     "RESOLVE_CONFLICTS",
     "ConflictRequest",
@@ -53,4 +89,6 @@ __all__ = [
     "DiagnoseRequest",
     "Fixed",
     "FixRequest",
+    "JenkinsDiagnoseRequest",
+    "JenkinsDiagnosis",
 ]

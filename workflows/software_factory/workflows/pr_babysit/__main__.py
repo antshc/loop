@@ -15,6 +15,9 @@ from subprocess import CalledProcessError, TimeoutExpired
 from types import FrameType
 from typing import Any
 
+from loop.shared.git import GitClient
+from loop.shared.process import CommandRunner, git_command
+
 from loop import (
     Agent,
     DefinitionError,
@@ -28,13 +31,11 @@ from loop import (
     WorktreeGit,
     run,
 )
-from loop.shared.git import GitClient
-from loop.shared.process import CommandRunner, git_command
-
 from workflows.software_factory.events.pull_requests import PullRequestWork
 from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
 from workflows.software_factory.infrastructure.github.account import GitHub
 from workflows.software_factory.infrastructure.github.repo import GhCli
+from workflows.software_factory.infrastructure.jenkins import Jenkins
 from workflows.software_factory.infrastructure.ledger import Ledger
 from workflows.software_factory.infrastructure.pacing import Pacer
 from workflows.software_factory.infrastructure.telemetry import (
@@ -196,6 +197,10 @@ def _maintain(
     """Maintains one pull request until it closes, blocks or is interrupted; the exit code of its run."""
     with closing_observer(_observer(settings) if given is None else None) as observer:
         services = given or build_services(observer, stop)
+        if given is None and settings.jenkins is not None:
+            services = services.bind(
+                Jenkins, Jenkins(settings.jenkins, settings.state_dir / "jenkins")
+            )
         runtime = _runtime_of(settings, services, observer, stop)
         work = work_of(settings, slug, number)
         github = services.get(GitHub)

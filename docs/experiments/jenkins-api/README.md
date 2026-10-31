@@ -23,6 +23,32 @@ Reasoning: logs compress about 15 to 1, so a full download is cheap and is the s
 
 Settings go in `jenkins.json.user` in this folder (`jenkinsUrl`, `jenkinsUser`, `jenkinsApiToken`). Git ignores it. Do not commit a token.
 
+### Babysit integration follow-up
+
+A later read-only check of the selected PR-518 job found builds #1 and #2 both
+successful. A guarded trigger `--dry-run` read live parameter definitions and
+constructed the four-parameter payload without a POST. A bounded progressive
+console read also succeeded. These observations validate reads and payload
+construction, not failed-build recovery or current write permission.
+
+The builds expose a PR SCM revision's `pullHash` as well as multiple generic
+`lastBuiltRevision.SHA1` values from different checkouts. Match the PR revision;
+do not select the first checkout SHA or infer identity from the job name alone.
+The demonstrated branch-based payload does not pin an immutable head. Recheck
+the current head before submission and reconcile the actual built revision.
+
+Verified TLS failed for this internal server's self-signed certificate. The
+follow-up used an explicitly authorized insecure TLS mode for that server only.
+Production clients should verify certificates by default, accept a configured
+trusted CA, and require explicit opt-in for insecure mode.
+
+The prototypes are reference experiments, not production imports. Several
+credential defaults still point to the former `docs/prototypes/jenkins-api`
+location: set `JENKINS_JSON` explicitly for the trigger, and
+`JENKINS_CREDENTIALS` for log-search tooling. Inspect each tool's options before
+running it; a default log-search run writes a baseline, and trigger dry-run
+still performs a live GET and prints definitions/payload values.
+
 ## What we did
 
 - **PR check state:** Read four PRs through the GitHub commit status and Jenkins, read-only. State, result, parameters and queue phase were all found. **Confirmed**
@@ -40,8 +66,8 @@ Settings go in `jenkins.json.user` in this folder (`jenkinsUrl`, `jenkinsUser`, 
 
 ## Next steps
 
-1. Build the CI wait step in loop on the commit status, the job address and the queue-then-build phases. End the wait on Jenkins `building=false`, and map the result: `SUCCESS` to pass, `FAILURE` to fail.
-2. Move the trigger, download and search code from these prototypes into the loop Jenkins integration, with one trigger per request.
+1. Keep Jenkins integration in the software factory, not the installed Loop library. Observe commit statuses, validated job addresses, and queue-then-build phases; `building=false` alone is not proof of success.
+2. Use these prototypes as reference for a bounded, authenticated factory adapter, not production imports. Submit once, persist the queue identity, and reconcile uncertain outcomes rather than retrying blindly.
 3. Keep the credentials file outside git, as now (`*.user` is ignored).
 
 ## References

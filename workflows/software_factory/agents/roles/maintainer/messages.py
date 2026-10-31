@@ -24,6 +24,27 @@ class Diagnosis(Message):
 
 
 @dataclass(frozen=True)
+class JenkinsDiagnoseRequest(Message):
+    """A failed Jenkins job's untrusted evidence, requiring an explicit failure category."""
+
+    snapshot: Json
+    logs: str
+    job: str
+    build: int
+    result: str
+    provider: str = "jenkins"
+
+
+@dataclass(frozen=True)
+class JenkinsDiagnosis(Message):
+    """A Jenkins classification with its failure category and evidence-backed rationale."""
+
+    classification: str
+    category: str
+    reason: str
+
+
+@dataclass(frozen=True)
 class FixRequest(Message):
     """A branch-related diagnosis to repair in the worktree."""
 
