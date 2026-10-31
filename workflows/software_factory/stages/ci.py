@@ -5,15 +5,50 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from workflows.software_factory.agents.roles.maintainer import DIAGNOSE_CI, FIX_CI, DiagnoseRequest, Fixed, FixRequest
-from workflows.software_factory.agents.roles.maintainer import Diagnosis as Classification
-from workflows.software_factory.events.ci import BranchBroken, CiFixed, CiRerun, Diagnosis, Transient
-from workflows.software_factory.events.pull_requests import PullRequestPolled
-from loop import Evidence, Fail, HarnessCommits, History, Hold, Pass, ReadOnly, Retain, Stage, Verdict, Verify
+from loop import (
+    Evidence,
+    Fail,
+    HarnessCommits,
+    History,
+    Hold,
+    Pass,
+    ReadOnly,
+    Retain,
+    Stage,
+    Verdict,
+    Verify,
+)
 from loop.shared.github.account import GitHub
 from loop.shared.github.pull_requests.babysit import ci_state, digest
 
-__all__ = ["BranchBroken", "Diagnosis", "Transient", "diagnose", "fix", "head", "rerun_failed"]
+from workflows.software_factory.agents.roles.maintainer import (
+    DIAGNOSE_CI,
+    FIX_CI,
+    DiagnoseRequest,
+    Fixed,
+    FixRequest,
+)
+from workflows.software_factory.agents.roles.maintainer import (
+    Diagnosis as Classification,
+)
+from workflows.software_factory.events.ci import (
+    BranchBroken,
+    CiFixed,
+    CiRerun,
+    Diagnosis,
+    Transient,
+)
+from workflows.software_factory.events.pull_requests import PullRequestPolled
+
+__all__ = [
+    "BranchBroken",
+    "Diagnosis",
+    "Transient",
+    "diagnose",
+    "fix",
+    "head",
+    "rerun_failed",
+]
 
 _NO_LOGS = "No Actions run logs; inspect check/status links."
 
@@ -52,7 +87,10 @@ def diagnose() -> Stage[DiagnoseInput, Classification, Diagnosis]:
     """Read-only maintainer agent in diagnose mode classifies the failure as transient or branch-related; anything else holds. Once per head and CI-run signal across runs, so a diagnosis is replayed while CI is still being waited on."""
     return (
         Stage("diagnose-ci", DiagnoseInput, produces=Diagnosis)
-        .agent(DIAGNOSE_CI, request=lambda i, _: DiagnoseRequest(i.polled.snapshot, _logs(i)))
+        .agent(
+            DIAGNOSE_CI,
+            request=lambda i, _: DiagnoseRequest(i.polled.snapshot, _logs(i)),
+        )
         .gate(_diagnosed)
         .contract(ReadOnly())
         .revision(signal)
@@ -70,13 +108,24 @@ def rerun_failed() -> Stage[RerunInput, CiRerun, CiRerun]:
     )
 
 
-def fix(*, message: Callable[[FixInput], str], verify: Verify) -> Stage[FixInput, Fixed, CiFixed]:
+def fix(
+    *, message: Callable[[FixInput], str], verify: Verify
+) -> Stage[FixInput, Fixed, CiFixed]:
     """Maintainer agent in fix mode repairs the branch; a fix that changes nothing or is not reported as fixed fails, the runtime verifies then commits with `message(input)`, and a failed attempt keeps its worktree."""
     return (
         Stage("fix-ci", FixInput, produces=CiFixed)
-        .agent(FIX_CI, request=lambda i, _: FixRequest(Classification("branch", i.broken.reason), i.polled.snapshot))
+        .agent(
+            FIX_CI,
+            request=lambda i, _: FixRequest(
+                Classification("branch", i.broken.reason), i.polled.snapshot
+            ),
+        )
         .gate(_fixed)
-        .contract(HarnessCommits(message=lambda i, _: message(i), verify=verify, on_fail=Retain()))
+        .contract(
+            HarnessCommits(
+                message=lambda i, _: message(i), verify=verify, on_fail=Retain()
+            )
+        )
     )
 
 
@@ -84,10 +133,14 @@ def _logs(i: DiagnoseInput) -> str:
     runs = ci_state(i.polled.snapshot)["runs"]
     if not runs:
         return _NO_LOGS
-    return i.github.pull_requests(i.polled.target.slug).failed_logs(run["id"] for run in runs)
+    return i.github.pull_requests(i.polled.target.slug).failed_logs(
+        run["id"] for run in runs
+    )
 
 
-def _diagnosed(_: DiagnoseInput, reply: Classification, __: Evidence) -> Verdict[Diagnosis]:
+def _diagnosed(
+    _: DiagnoseInput, reply: Classification, __: Evidence
+) -> Verdict[Diagnosis]:
     match reply.classification:
         case "transient":
             return Pass(Transient(reply.reason))
@@ -99,7 +152,9 @@ def _diagnosed(_: DiagnoseInput, reply: Classification, __: Evidence) -> Verdict
 def _rerun_due(i: RerunInput) -> bool:
     """CI is not pending, and this failure, by head and signal, was not rerun yet."""
     snapshot = i.polled.snapshot
-    return not ci_state(snapshot)["pending"] and not any(event.signal == signal(i) for event in i.reruns)
+    return not ci_state(snapshot)["pending"] and not any(
+        event.signal == signal(i) for event in i.reruns
+    )
 
 
 def _rerun(i: RerunInput) -> CiRerun:

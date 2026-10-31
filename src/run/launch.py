@@ -25,13 +25,19 @@ def directory_instruction(worktree: Path) -> str:
     )
 
 
-def apply_start_mode(agent: AgentContext, request: AgentRequest) -> tuple[AgentContext, AgentRequest]:
+def apply_start_mode(
+    agent: AgentContext, request: AgentRequest
+) -> tuple[AgentContext, AgentRequest]:
     """In harness mode: launch in the harness, grant access to the worktree, and prefix the prompt with the cd instruction."""
     if agent.start_mode is AgentStartMode.WORKTREE:
         return agent, request
     if agent.harness_dir is None:
         raise ValueError("start_mode 'harness' requires harness_dir")
     worktree = agent.cwd
-    add_dirs = agent.add_dirs if worktree in agent.add_dirs else (*agent.add_dirs, worktree)
+    add_dirs = (
+        agent.add_dirs if worktree in agent.add_dirs else (*agent.add_dirs, worktree)
+    )
     launched = replace(agent, cwd=agent.harness_dir, add_dirs=add_dirs)
-    return launched, replace(request, prompt=f"{directory_instruction(worktree)}\n\n{request.prompt}")
+    return launched, replace(
+        request, prompt=f"{directory_instruction(worktree)}\n\n{request.prompt}"
+    )

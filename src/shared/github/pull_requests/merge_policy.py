@@ -41,8 +41,10 @@ class MergePolicySnapshot:
             required_checks=self.required_checks | other.required_checks,
             required_approvals=max(self.required_approvals, other.required_approvals),
             code_owner_review=self.code_owner_review or other.code_owner_review,
-            dismiss_stale_reviews=self.dismiss_stale_reviews or other.dismiss_stale_reviews,
-            conversation_resolution=self.conversation_resolution or other.conversation_resolution,
+            dismiss_stale_reviews=self.dismiss_stale_reviews
+            or other.dismiss_stale_reviews,
+            conversation_resolution=self.conversation_resolution
+            or other.conversation_resolution,
             linear_history=self.linear_history or other.linear_history,
             up_to_date=self.up_to_date or other.up_to_date,
             unavailable=tuple(dict.fromkeys((*self.unavailable, *other.unavailable))),
@@ -54,7 +56,9 @@ def unavailable_policy(base_ref: str, source: PolicySource) -> MergePolicySnapsh
     return MergePolicySnapshot(base_ref, unavailable=(source,))
 
 
-def policy_from_rules(base_ref: str, rules: Iterable[Mapping[str, Any]]) -> MergePolicySnapshot:
+def policy_from_rules(
+    base_ref: str, rules: Iterable[Mapping[str, Any]]
+) -> MergePolicySnapshot:
     """The requirements of the repository rules that apply to `base_ref`, the strictest wherever several rulesets name the same one."""
     policy = MergePolicySnapshot(base_ref)
     for rule in rules:
@@ -62,7 +66,9 @@ def policy_from_rules(base_ref: str, rules: Iterable[Mapping[str, Any]]) -> Merg
     return policy
 
 
-def policy_from_protection(base_ref: str, protection: Mapping[str, Any]) -> MergePolicySnapshot:
+def policy_from_protection(
+    base_ref: str, protection: Mapping[str, Any]
+) -> MergePolicySnapshot:
     """The requirements of the classic branch protection of `base_ref`."""
     checks = protection.get("required_status_checks") or {}
     reviews = protection.get("required_pull_request_reviews") or {}
@@ -72,7 +78,9 @@ def policy_from_protection(base_ref: str, protection: Mapping[str, Any]) -> Merg
         required_approvals=reviews.get("required_approving_review_count") or 0,
         code_owner_review=bool(reviews.get("require_code_owner_reviews")),
         dismiss_stale_reviews=bool(reviews.get("dismiss_stale_reviews")),
-        conversation_resolution=_enabled(protection, "required_conversation_resolution"),
+        conversation_resolution=_enabled(
+            protection, "required_conversation_resolution"
+        ),
         linear_history=_enabled(protection, "required_linear_history"),
         up_to_date=bool(checks.get("strict")),
     )
@@ -84,14 +92,26 @@ def _rule_policy(base_ref: str, rule: Mapping[str, Any]) -> MergePolicySnapshot:
         case "pull_request":
             return MergePolicySnapshot(
                 base_ref,
-                required_approvals=parameters.get("required_approving_review_count") or 0,
+                required_approvals=parameters.get("required_approving_review_count")
+                or 0,
                 code_owner_review=bool(parameters.get("require_code_owner_review")),
-                dismiss_stale_reviews=bool(parameters.get("dismiss_stale_reviews_on_push")),
-                conversation_resolution=bool(parameters.get("required_review_thread_resolution")),
+                dismiss_stale_reviews=bool(
+                    parameters.get("dismiss_stale_reviews_on_push")
+                ),
+                conversation_resolution=bool(
+                    parameters.get("required_review_thread_resolution")
+                ),
             )
         case "required_status_checks":
-            checks = frozenset(check["context"] for check in parameters.get("required_status_checks") or ())
-            return MergePolicySnapshot(base_ref, required_checks=checks, up_to_date=bool(parameters.get("strict_required_status_checks_policy")))
+            checks = frozenset(
+                check["context"]
+                for check in parameters.get("required_status_checks") or ()
+            )
+            return MergePolicySnapshot(
+                base_ref,
+                required_checks=checks,
+                up_to_date=bool(parameters.get("strict_required_status_checks_policy")),
+            )
         case "required_linear_history":
             return MergePolicySnapshot(base_ref, linear_history=True)
         case _:
@@ -100,7 +120,10 @@ def _rule_policy(base_ref: str, rule: Mapping[str, Any]) -> MergePolicySnapshot:
 
 def _protection_checks(checks: Mapping[str, Any]) -> frozenset[str]:
     # `contexts` is the legacy list of the same checks that `checks` names with their app.
-    names = [*(checks.get("contexts") or ()), *(check["context"] for check in checks.get("checks") or ())]
+    names = [
+        *(checks.get("contexts") or ()),
+        *(check["context"] for check in checks.get("checks") or ()),
+    ]
     return frozenset(names)
 
 

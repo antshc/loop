@@ -5,15 +5,22 @@ import time
 from unittest.mock import patch
 
 import pytest
-
 from loop.shared.process import CommandError, git_command
-from workflows.software_factory.infrastructure.state import JsonFile, StateError, process_lock
+
+from workflows.software_factory.infrastructure.state import (
+    JsonFile,
+    StateError,
+    process_lock,
+)
 
 
 def test_atomic_failure_preserves_previous_state(tmp_path) -> None:
     state = JsonFile(tmp_path / "state.json")
     state.write({"version": 1, "value": "before"})
-    with patch("workflows.software_factory.infrastructure.state.os.replace", side_effect=OSError("interrupted")):
+    with patch(
+        "workflows.software_factory.infrastructure.state.os.replace",
+        side_effect=OSError("interrupted"),
+    ):
         with pytest.raises(OSError):
             state.write({"version": 1, "value": "after"})
     assert state.read_versioned({})["value"] == "before"
@@ -46,8 +53,9 @@ def test_process_lock_excludes_a_duplicate_worker_and_releases(tmp_path) -> None
         pass
 
 
-
-def test_a_git_command_that_hangs_fails_as_a_command_error_after_its_timeout(tmp_path, monkeypatch) -> None:
+def test_a_git_command_that_hangs_fails_as_a_command_error_after_its_timeout(
+    tmp_path, monkeypatch
+) -> None:
     """Given a git that never returns, when the runtime's Git command runs it with a short timeout, then it fails as a CommandError naming the timeout instead of blocking."""
     fake = tmp_path / "bin"
     fake.mkdir()

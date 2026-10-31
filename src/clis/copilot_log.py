@@ -42,7 +42,12 @@ class CopilotLogReader:
     def read(self, turn: Turn) -> LogReading | None:
         """This turn's usage and tools; None when there is no log or it holds no per-call usage records."""
         session_id = copilot_session_id(turn.name)
-        path = (self._home or copilot_home()) / "session-state" / session_id / "events.jsonl"
+        path = (
+            (self._home or copilot_home())
+            / "session-state"
+            / session_id
+            / "events.jsonl"
+        )
         if not path.is_file():
             return None
         return read_turn(session_id, _load(path))
@@ -51,16 +56,25 @@ class CopilotLogReader:
 def read_turn(session_id: str, events: list[dict[str, object]]) -> LogReading | None:
     """Reads the last turn of a session log: the events from its final `session.start` or `session.resume`."""
     window = _last_turn(events)
-    records = [event["data"]["usage"] for event in window if event["type"] == "session.usage_record"]
+    records = [
+        event["data"]["usage"]
+        for event in window
+        if event["type"] == "session.usage_record"
+    ]
     # CLIs before 1.0.95 write no per-call records; their shutdown totals are cumulative and cannot be sliced.
     if not records:
         return None
-    messages = [event["data"] for event in window if event["type"] == "assistant.message"]
+    messages = [
+        event["data"] for event in window if event["type"] == "assistant.message"
+    ]
     start = window[0]["data"] if window[0]["type"] in _WINDOW_STARTS else {}
     return LogReading(
         native_id=session_id,
-        model=(messages[-1].get("model") if messages else None) or records[-1].get("model") or start.get("selectedModel"),
-        reasoning_effort=records[-1].get("reasoningEffort") or start.get("reasoningEffort"),
+        model=(messages[-1].get("model") if messages else None)
+        or records[-1].get("model")
+        or start.get("selectedModel"),
+        reasoning_effort=records[-1].get("reasoningEffort")
+        or start.get("reasoningEffort"),
         usage=_usage(records),
         tools=_tools(window),
     )
@@ -71,8 +85,10 @@ def _load(path: Path) -> list[dict[str, object]]:
 
 
 def _last_turn(events: list[dict[str, object]]) -> list[dict[str, object]]:
-    starts = [index for index, event in enumerate(events) if event["type"] in _WINDOW_STARTS]
-    return events[starts[-1]:] if starts else events
+    starts = [
+        index for index, event in enumerate(events) if event["type"] in _WINDOW_STARTS
+    ]
+    return events[starts[-1] :] if starts else events
 
 
 def _usage(records: list[dict[str, object]]) -> Usage:
@@ -92,7 +108,9 @@ def _usage(records: list[dict[str, object]]) -> Usage:
     cache_write = sum(record["cacheWriteTokens"] for record in records)
     return Usage(
         api_calls=len(records),
-        input_tokens=sum(record["inputTokens"] for record in records) - cache_read - cache_write,
+        input_tokens=sum(record["inputTokens"] for record in records)
+        - cache_read
+        - cache_write,
         output_tokens=sum(record["outputTokens"] for record in records),
         reasoning_tokens=sum(record.get("reasoningTokens", 0) for record in records),
         cache_read_tokens=cache_read,
@@ -103,7 +121,11 @@ def _usage(records: list[dict[str, object]]) -> Usage:
 
 
 def _tools(window: list[dict[str, object]]) -> tuple[ToolCall, ...]:
-    completed = {event["data"]["toolCallId"]: event for event in window if event["type"] == "tool.execution_complete"}
+    completed = {
+        event["data"]["toolCallId"]: event
+        for event in window
+        if event["type"] == "tool.execution_complete"
+    }
     calls = []
     for start in (event for event in window if event["type"] == "tool.execution_start"):
         data = start["data"]

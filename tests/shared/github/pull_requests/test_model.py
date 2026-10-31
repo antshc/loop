@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from loop.shared.github.pull_requests.model import (
     CheckKind,
     CheckOutcome,
@@ -13,18 +12,31 @@ from loop.shared.github.pull_requests.model import (
 
 @pytest.mark.parametrize(
     ("computed", "expected"),
-    [(True, Mergeability.MERGEABLE), (False, Mergeability.CONFLICTING), (None, Mergeability.UNKNOWN)],
+    [
+        (True, Mergeability.MERGEABLE),
+        (False, Mergeability.CONFLICTING),
+        (None, Mergeability.UNKNOWN),
+    ],
 )
-def test_mergeability_is_unknown_until_github_computes_it(computed: bool | None, expected: Mergeability) -> None:
+def test_mergeability_is_unknown_until_github_computes_it(
+    computed: bool | None, expected: Mergeability
+) -> None:
     assert Mergeability.of(computed) is expected
 
 
 @pytest.mark.parametrize(
     ("reported", "expected"),
-    [("clean", MergeState.CLEAN), ("dirty", MergeState.DIRTY), ("has_hooks", MergeState.HAS_HOOKS),
-     ("unknown", MergeState.UNKNOWN), ("a state GitHub adds later", MergeState.UNKNOWN)],
+    [
+        ("clean", MergeState.CLEAN),
+        ("dirty", MergeState.DIRTY),
+        ("has_hooks", MergeState.HAS_HOOKS),
+        ("unknown", MergeState.UNKNOWN),
+        ("a state GitHub adds later", MergeState.UNKNOWN),
+    ],
 )
-def test_a_merge_state_github_does_not_name_is_unknown(reported: str, expected: MergeState) -> None:
+def test_a_merge_state_github_does_not_name_is_unknown(
+    reported: str, expected: MergeState
+) -> None:
     assert MergeState(reported) is expected
 
 

@@ -7,7 +7,7 @@ import uuid
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import MappingProxyType
 
@@ -23,7 +23,9 @@ class FakeToolUse:
     """One tool call the fake agent pretends to make."""
 
     name: str
-    arguments: Mapping[str, object] = field(default_factory=lambda: MappingProxyType({}))
+    arguments: Mapping[str, object] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
     result: str = ""
     ok: bool = True
     seconds: float = 0.5
@@ -43,7 +45,7 @@ Respond = Callable[[AgentRequest, RunContext], FakeReply]
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class FakeCliRunner:
@@ -76,10 +78,20 @@ class FakeCliRunner:
         """The reading of the turn just run, once; None for an unknown turn."""
         return self._readings.pop(turn.name.value, None)
 
-    def run(self, profile: AgentProfile, request: AgentRequest, turn: Turn, context: RunContext) -> CliOutcome:
+    def run(
+        self,
+        profile: AgentProfile,
+        request: AgentRequest,
+        turn: Turn,
+        context: RunContext,
+    ) -> CliOutcome:
         """Runs one fake turn; whatever `respond` raises propagates as a failed run."""
         reply = self._respond(request, context)
-        handle = turn.handle if isinstance(turn, Resume) else NativeHandle(self.cli, f"fake-{uuid.uuid4().hex}")
+        handle = (
+            turn.handle
+            if isinstance(turn, Resume)
+            else NativeHandle(self.cli, f"fake-{uuid.uuid4().hex}")
+        )
         started = self._clock()
         tools = self._tool_calls(reply.tools, started)
         self._sleep(sum(use.seconds for use in reply.tools) * self._speed)
@@ -92,12 +104,24 @@ class FakeCliRunner:
         )
         return CliOutcome(reply.output, handle, 0)
 
-    def _tool_calls(self, uses: tuple[FakeToolUse, ...], started: datetime) -> tuple[ToolCall, ...]:
+    def _tool_calls(
+        self, uses: tuple[FakeToolUse, ...], started: datetime
+    ) -> tuple[ToolCall, ...]:
         calls: list[ToolCall] = []
         cursor = started
         for index, use in enumerate(uses, start=1):
             ended = cursor + timedelta(seconds=use.seconds * self._speed)
-            calls.append(ToolCall(f"fake-call-{index}", use.name, use.arguments, use.result, use.ok, cursor, ended))
+            calls.append(
+                ToolCall(
+                    f"fake-call-{index}",
+                    use.name,
+                    use.arguments,
+                    use.result,
+                    use.ok,
+                    cursor,
+                    ended,
+                )
+            )
             cursor = ended
         return tuple(calls)
 

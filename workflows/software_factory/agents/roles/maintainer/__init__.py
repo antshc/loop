@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from ... import _kit
 from loop import ReplyMismatch, TypedAgent
-from .messages import Diagnosis, DiagnoseRequest, Fixed, FixRequest
+
+from ... import _kit
+from .messages import DiagnoseRequest, Diagnosis, Fixed, FixRequest
 
 _CLASSIFICATIONS = ("branch", "transient", "blocked")
 _VERDICTS = ("fixed", "blocked")
@@ -33,7 +34,18 @@ def _decode_fix(request: FixRequest, output: str) -> Fixed:
     return Fixed(result["verdict"], _reason(result))
 
 
-DIAGNOSE_CI: TypedAgent[DiagnoseRequest, Diagnosis] = _kit.mode_agent("maintainer", "diagnose", profile=_PROFILE, decode=_decode_diagnose)
-FIX_CI: TypedAgent[FixRequest, Fixed] = _kit.mode_agent("maintainer", "fix", profile=_PROFILE, decode=_decode_fix)
+DIAGNOSE_CI: TypedAgent[DiagnoseRequest, Diagnosis] = _kit.mode_agent(
+    "maintainer", "diagnose", profile=_PROFILE, decode=_decode_diagnose
+)
+FIX_CI: TypedAgent[FixRequest, Fixed] = _kit.mode_agent(
+    "maintainer", "fix", profile=_PROFILE, decode=_decode_fix
+)
 
-__all__ = ["DIAGNOSE_CI", "FIX_CI", "Diagnosis", "DiagnoseRequest", "Fixed", "FixRequest"]
+__all__ = [
+    "DIAGNOSE_CI",
+    "FIX_CI",
+    "Diagnosis",
+    "DiagnoseRequest",
+    "Fixed",
+    "FixRequest",
+]

@@ -3,10 +3,11 @@ from __future__ import annotations
 import logging
 import secrets
 import subprocess
+from collections.abc import Iterator
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterator, Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from ..hooks import LoopHookPoint
 from .errors import WorktreeError
@@ -32,7 +33,9 @@ class HeadStrategy:
     """No worktree or branch: the agent works directly in the repository directory."""
 
     @contextmanager
-    def open(self, git: GitCli, cwd: Path, repository: Path, options: GitOptions) -> Iterator[Path]:
+    def open(
+        self, git: GitCli, cwd: Path, repository: Path, options: GitOptions
+    ) -> Iterator[Path]:
         yield repository
 
 
@@ -41,7 +44,9 @@ class MergeToHeadStrategy:
     """Temp-branch worktree, fast-forward merged into the current HEAD on success, then the temp branch is deleted."""
 
     @contextmanager
-    def open(self, git: GitCli, cwd: Path, repository: Path, options: GitOptions) -> Iterator[Path]:
+    def open(
+        self, git: GitCli, cwd: Path, repository: Path, options: GitOptions
+    ) -> Iterator[Path]:
         branch = f"tmp_{secrets.token_hex(4)}"
         with _worktree(git, cwd, repository, options, branch, "HEAD") as target:
             yield target
@@ -58,15 +63,24 @@ class BranchStrategy:
     base_branch: str | None = None
 
     @contextmanager
-    def open(self, git: GitCli, cwd: Path, repository: Path, options: GitOptions) -> Iterator[Path]:
+    def open(
+        self, git: GitCli, cwd: Path, repository: Path, options: GitOptions
+    ) -> Iterator[Path]:
         git.fetch(repository)
-        with _worktree(git, cwd, repository, options, self.branch, self.base_branch) as target:
+        with _worktree(
+            git, cwd, repository, options, self.branch, self.base_branch
+        ) as target:
             yield target
 
 
 @contextmanager
 def _worktree(
-    git: GitCli, cwd: Path, repository: Path, options: GitOptions, branch: str, base: str | None
+    git: GitCli,
+    cwd: Path,
+    repository: Path,
+    options: GitOptions,
+    branch: str,
+    base: str | None,
 ) -> Iterator[Path]:
     root = (cwd / options.root_path).resolve()
     if not options.root_path.is_absolute() and not root.is_relative_to(cwd.resolve()):
@@ -86,11 +100,15 @@ def _worktree(
         try:
             _cleanup(git, repository, target)
         except (OSError, subprocess.CalledProcessError) as cleanup:
-            exception.add_note(f"worktree cleanup also failed; retained {target}: {cleanup}")
+            exception.add_note(
+                f"worktree cleanup also failed; retained {target}: {cleanup}"
+            )
         raise
     else:
         if not _cleanup(git, repository, target):
-            raise WorktreeError(f"Worktree has uncommitted changes; preserved at {target}")
+            raise WorktreeError(
+                f"Worktree has uncommitted changes; preserved at {target}"
+            )
 
 
 def _cleanup(git: GitCli, repository: Path, target: Path) -> bool:

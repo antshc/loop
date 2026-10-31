@@ -25,7 +25,7 @@ class Basket:
     def total(self) -> float:
         return round(sum(self.prices), 2)
 ''',
-    "test_basket.py": '''from basket import Basket
+    "test_basket.py": """from basket import Basket
 
 
 def test_total_sums_prices():
@@ -33,7 +33,7 @@ def test_total_sums_prices():
     basket.add(10.0)
     basket.add(5.5)
     assert basket.total() == 15.5
-''',
+""",
     "README.md": "# Basket\n\nRun the tests with `python3 -m pytest`.\n",
 }
 
@@ -58,7 +58,10 @@ class ScratchRepo:
         shutil.rmtree(self.path, ignore_errors=True)
 
     def _git(self, *args: str) -> str:
-        result = subprocess.run(["git", "-C", str(self.path), *args], check=True,
-                                capture_output=True, text=True)
+        result = subprocess.run(
+            ["git", "-C", str(self.path), *args],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
         return result.stdout.strip()
-

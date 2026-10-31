@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
-from typing import Iterator
 
 from .agents import AgentClient, CliAgentClient, DockerAgent, GitAgent
 from .clis import DEFAULT, AgentProfile, CliRunner
@@ -36,7 +35,9 @@ class Worktree:
         self._defaults = replace(defaults, agent=replace(defaults.agent, cwd=path))
         self._closed = False
 
-    def agent(self, profile: AgentProfile | None = None, session: SessionName | None = None) -> AgentClient:
+    def agent(
+        self, profile: AgentProfile | None = None, session: SessionName | None = None
+    ) -> AgentClient:
         if self._closed:
             raise RuntimeError("worktree closed")
         if session is not None and self.session is None:
@@ -85,7 +86,9 @@ class AgentBuilder:
             hook
             for item in hooks
             for hook in (
-                (SessionStartAgentCliHook(item), SessionEndAgentCliHook(item)) if isinstance(item, str) else (item,)
+                (SessionStartAgentCliHook(item), SessionEndAgentCliHook(item))
+                if isinstance(item, str)
+                else (item,)
             )
         )
         self._defaults = replace(self._defaults, agent_cli_hooks=resolved)
@@ -95,17 +98,25 @@ class AgentBuilder:
         if session is not None and not self._use_session:
             raise ValueError("session requires with_session()")
 
-    def _validate_agent_cli_hooks(self, profile: AgentProfile, defaults: RunContext) -> None:
+    def _validate_agent_cli_hooks(
+        self, profile: AgentProfile, defaults: RunContext
+    ) -> None:
         requested = {hook.point for hook in defaults.agent_cli_hooks}
         missing = requested - profile.cli.hook_points
         if missing:
             names = ", ".join(sorted(point.value for point in missing))
-            raise UnsupportedAgentCliHookPoint(f"{profile.cli.name} cannot fire {names}")
+            raise UnsupportedAgentCliHookPoint(
+                f"{profile.cli.name} cannot fire {names}"
+            )
 
-    def _stack(self, profile: AgentProfile, defaults: RunContext, session: SessionName | None) -> AgentClient:
+    def _stack(
+        self, profile: AgentProfile, defaults: RunContext, session: SessionName | None
+    ) -> AgentClient:
         self._validate_agent_cli_hooks(profile, defaults)
         store = self._sessions if self._use_session else None
-        client: AgentClient = CliAgentClient(self._runner, profile, defaults, store=store, session=session)
+        client: AgentClient = CliAgentClient(
+            self._runner, profile, defaults, store=store, session=session
+        )
         if self._use_docker:
             client = DockerAgent(client, self._docker, defaults.agent)
         return client
@@ -118,20 +129,28 @@ class AgentBuilder:
         worktree: Worktree | None = None
         try:
             if self._use_git:
-                with self._git.open(self._defaults.agent.cwd, self._git_options or GitOptions()) as path:
+                with self._git.open(
+                    self._defaults.agent.cwd, self._git_options or GitOptions()
+                ) as path:
                     worktree = Worktree(path, self._stack, self._defaults, shared)
                     yield worktree
             else:
-                worktree = Worktree(self._defaults.agent.cwd, self._stack, self._defaults, shared)
+                worktree = Worktree(
+                    self._defaults.agent.cwd, self._stack, self._defaults, shared
+                )
                 yield worktree
         finally:
             if worktree is not None:
                 worktree._closed = True
 
-    def create(self, profile: AgentProfile | None = None, session: SessionName | None = None) -> AgentClient:
+    def create(
+        self, profile: AgentProfile | None = None, session: SessionName | None = None
+    ) -> AgentClient:
         """One-shot client: a separate git lifecycle per run()."""
         self._require_session_enabled(session)
         client = self._stack(profile or DEFAULT, self._defaults, session)
         if self._use_git:
-            client = GitAgent(client, self._git, self._git_options, self._defaults.agent)
+            client = GitAgent(
+                client, self._git, self._git_options, self._defaults.agent
+            )
         return client

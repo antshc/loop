@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import pytest
-
 from loop.shared.github.issues.client import Issues
 from loop.shared.github.issues.errors import IncompleteReadError, IssueError
 from loop.shared.github.repo import GitHubRepo
 from loop.shared.process import CommandError
+
 from tests.shared.fakes import FakeGhCli, issue
 
 _SPEC_LABELS = ("spec", "repo:target:o/r", "repo:base:main")
@@ -16,7 +16,9 @@ def _issues(gh: FakeGhCli) -> Issues:
 
 
 def _empty_spec_gh() -> FakeGhCli:
-    return FakeGhCli(tickets={1: []}, specs=[issue(1, "Add login page", labels=_SPEC_LABELS)])
+    return FakeGhCli(
+        tickets={1: []}, specs=[issue(1, "Add login page", labels=_SPEC_LABELS)]
+    )
 
 
 def test_each_command_is_a_gh_write_sent_in_the_order_issued() -> None:
@@ -38,14 +40,18 @@ def test_each_command_is_a_gh_write_sent_in_the_order_issued() -> None:
     assert gh.writes()[2][-2:] == ("--remove-label", "spec")
 
 
-def test_close_and_add_label_decide_from_one_read_of_the_issue_without_its_comments() -> None:
+def test_close_and_add_label_decide_from_one_read_of_the_issue_without_its_comments() -> (
+    None
+):
     gh = FakeGhCli(specs=[issue(1, "Busy", comments=("a", "b"))], tickets={})
     issues = _issues(gh)
 
     issues.add_label(1, "hitl")
     issues.close(1, "done")
 
-    assert [call[-1] for call in gh.calls if call[0] == "api"] == ["repos/owner/repo/issues/1"] * 2
+    assert [call[-1] for call in gh.calls if call[0] == "api"] == [
+        "repos/owner/repo/issues/1"
+    ] * 2
 
 
 def test_a_change_is_on_github_before_the_next_step_reads_it() -> None:
@@ -109,7 +115,9 @@ def test_a_removed_label_that_is_already_absent_sends_no_write() -> None:
     assert gh.writes() == []
 
 
-def test_a_comment_whose_fingerprint_is_already_on_the_issue_is_not_posted_twice() -> None:
+def test_a_comment_whose_fingerprint_is_already_on_the_issue_is_not_posted_twice() -> (
+    None
+):
     gh = FakeGhCli()
     issues = _issues(gh)
 
@@ -128,7 +136,12 @@ def test_a_comment_whose_fingerprint_is_already_on_the_issue_is_not_posted_twice
 
 def test_a_comment_is_not_posted_when_its_issue_comments_were_not_fully_read() -> None:
     gh = FakeGhCli()
-    gh.fail_on("api", "--paginate", "--slurp", "repos/owner/repo/issues/1/comments?per_page=100")
+    gh.fail_on(
+        "api",
+        "--paginate",
+        "--slurp",
+        "repos/owner/repo/issues/1/comments?per_page=100",
+    )
 
     with pytest.raises(IncompleteReadError):
         _issues(gh).comment(1, "hand-off", "stuck")
@@ -146,13 +159,17 @@ def test_a_closed_issue_is_not_closed_again() -> None:
     assert [call[1:3] for call in gh.writes()] == [("close", "10")]
 
 
-def test_a_crash_between_creating_and_linking_a_ticket_is_completed_on_retry_without_a_second_ticket() -> None:
+def test_a_crash_between_creating_and_linking_a_ticket_is_completed_on_retry_without_a_second_ticket() -> (
+    None
+):
     gh = _empty_spec_gh()
     issues = _issues(gh)
     spec = next(iter(issues.specs()))
     gh.fail_on("api", "--method", "POST", "repos/owner/repo/issues/1/sub_issues")
 
-    created = issues.create_ticket(spec, "0-add-basket", "Add basket", "Create a basket")
+    created = issues.create_ticket(
+        spec, "0-add-basket", "Add basket", "Create a basket"
+    )
     with pytest.raises(CommandError):
         issues.link_ticket(spec, created)
 
@@ -161,46 +178,70 @@ def test_a_crash_between_creating_and_linking_a_ticket_is_completed_on_retry_wit
     issues.link_ticket(spec, found)
 
     assert len(gh.created_issues()) == 1
-    assert [ticket.number for ticket in next(iter(issues.specs())).tickets] == [created.number]
+    assert [ticket.number for ticket in next(iter(issues.specs())).tickets] == [
+        created.number
+    ]
 
 
 def test_a_ticket_already_linked_to_its_spec_is_not_linked_again() -> None:
     gh = _empty_spec_gh()
     issues = _issues(gh)
     spec = next(iter(issues.specs()))
-    created = issues.create_ticket(spec, "0-add-basket", "Add basket", "Create a basket")
+    created = issues.create_ticket(
+        spec, "0-add-basket", "Add basket", "Create a basket"
+    )
 
     issues.link_ticket(spec, created)
     issues.link_ticket(spec, created)
 
-    assert len(gh.calls_matching("api", "--method", "POST", "repos/owner/repo/issues/1/sub_issues")) == 1
+    assert (
+        len(
+            gh.calls_matching(
+                "api", "--method", "POST", "repos/owner/repo/issues/1/sub_issues"
+            )
+        )
+        == 1
+    )
 
 
 def test_linking_sends_the_ticket_rest_id() -> None:
     gh = _empty_spec_gh()
     issues = _issues(gh)
     spec = next(iter(issues.specs()))
-    created = issues.create_ticket(spec, "0-add-basket", "Add basket", "Create a basket")
+    created = issues.create_ticket(
+        spec, "0-add-basket", "Add basket", "Create a basket"
+    )
 
     issues.link_ticket(spec, created)
 
-    [link] = gh.calls_matching("api", "--method", "POST", "repos/owner/repo/issues/1/sub_issues")
+    [link] = gh.calls_matching(
+        "api", "--method", "POST", "repos/owner/repo/issues/1/sub_issues"
+    )
     assert link[-2:] == ("-F", f"sub_issue_id={created.identity.id}")
 
 
 def _two_tickets(issues: Issues):
     spec = next(iter(issues.specs()))
-    return issues.create_ticket(spec, "0-first", "First", "one"), issues.create_ticket(spec, "1-second", "Second", "two")
+    return issues.create_ticket(spec, "0-first", "First", "one"), issues.create_ticket(
+        spec, "1-second", "Second", "two"
+    )
 
 
-def test_a_blocked_by_dependency_sends_the_blockers_internal_id_not_its_number() -> None:
+def test_a_blocked_by_dependency_sends_the_blockers_internal_id_not_its_number() -> (
+    None
+):
     gh = _empty_spec_gh()
     issues = _issues(gh)
     first, second = _two_tickets(issues)
 
     issues.add_blocked_by(second, first)
 
-    [call] = gh.calls_matching("api", "--method", "POST", f"repos/owner/repo/issues/{second.number}/dependencies/blocked_by")
+    [call] = gh.calls_matching(
+        "api",
+        "--method",
+        "POST",
+        f"repos/owner/repo/issues/{second.number}/dependencies/blocked_by",
+    )
     assert call[-2:] == ("-F", f"issue_id={first.identity.id}")
     assert first.identity.id != first.number
     assert gh.blockers_of(second.number) == [first.number]
@@ -214,37 +255,68 @@ def test_a_blocked_by_dependency_already_on_github_is_not_added_again() -> None:
     issues.add_blocked_by(second, first)
     issues.add_blocked_by(second, first)
 
-    assert len(gh.calls_matching("api", "--method", "POST", f"repos/owner/repo/issues/{second.number}/dependencies/blocked_by")) == 1
+    assert (
+        len(
+            gh.calls_matching(
+                "api",
+                "--method",
+                "POST",
+                f"repos/owner/repo/issues/{second.number}/dependencies/blocked_by",
+            )
+        )
+        == 1
+    )
     assert gh.blockers_of(second.number) == [first.number]
 
 
-def test_a_blocked_by_dependency_is_not_added_when_the_existing_ones_cannot_be_read() -> None:
+def test_a_blocked_by_dependency_is_not_added_when_the_existing_ones_cannot_be_read() -> (
+    None
+):
     gh = _empty_spec_gh()
     issues = _issues(gh)
     first, second = _two_tickets(issues)
-    gh.deny_on("api", "--paginate", "--slurp", f"repos/owner/repo/issues/{second.number}/dependencies/blocked_by?per_page=100")
+    gh.deny_on(
+        "api",
+        "--paginate",
+        "--slurp",
+        f"repos/owner/repo/issues/{second.number}/dependencies/blocked_by?per_page=100",
+    )
 
     with pytest.raises(CommandError, match="HTTP 403"):
         issues.add_blocked_by(second, first)
 
-    assert gh.writes()[-1][3].endswith("/issues") and gh.blockers_of(second.number) == []
+    assert (
+        gh.writes()[-1][3].endswith("/issues") and gh.blockers_of(second.number) == []
+    )
 
 
 def test_find_tickets_ignores_other_specs_and_closed_issues() -> None:
     gh = _empty_spec_gh()
     issues = _issues(gh)
     spec = next(iter(issues.specs()))
-    created = issues.create_ticket(spec, "0-add-basket", "Add basket", "Create a basket")
+    created = issues.create_ticket(
+        spec, "0-add-basket", "Add basket", "Create a basket"
+    )
 
     assert list(issues.find_tickets(spec)) == ["0-add-basket"]
-    other = next(iter(_issues(FakeGhCli(specs=[issue(2, "Other", labels=_SPEC_LABELS)], tickets={})).specs()))
+    other = next(
+        iter(
+            _issues(
+                FakeGhCli(specs=[issue(2, "Other", labels=_SPEC_LABELS)], tickets={})
+            ).specs()
+        )
+    )
     assert issues.find_tickets(other) == {}
     issues.close(created.number, "done")
     assert issues.find_tickets(spec) == {}
 
 
 def test_find_tickets_follows_every_page_of_the_routing_label_listing() -> None:
-    gh = FakeGhCli(tickets={1: []}, specs=[issue(1, "Add login page", labels=_SPEC_LABELS)], page_size=1)
+    gh = FakeGhCli(
+        tickets={1: []},
+        specs=[issue(1, "Add login page", labels=_SPEC_LABELS)],
+        page_size=1,
+    )
     issues = _issues(gh)
     spec = next(iter(issues.specs()))
     first = issues.create_ticket(spec, "0-first", "First", "one")
@@ -252,25 +324,40 @@ def test_find_tickets_follows_every_page_of_the_routing_label_listing() -> None:
 
     found = issues.find_tickets(spec)
 
-    assert {key: ticket.number for key, ticket in found.items()} == {"0-first": first.number, "1-second": second.number}
+    assert {key: ticket.number for key, ticket in found.items()} == {
+        "0-first": first.number,
+        "1-second": second.number,
+    }
 
 
-def test_a_created_ticket_carries_the_routing_label_a_hidden_marker_and_a_stable_identity() -> None:
+def test_a_created_ticket_carries_the_routing_label_a_hidden_marker_and_a_stable_identity() -> (
+    None
+):
     gh = _empty_spec_gh()
     issues = _issues(gh)
     spec = next(iter(issues.specs()))
 
-    created = issues.create_ticket(spec, "0-add-basket", "Add basket", "Create a basket")
+    created = issues.create_ticket(
+        spec, "0-add-basket", "Add basket", "Create a basket"
+    )
 
     [call] = gh.calls_matching("api", "--method", "POST", "repos/owner/repo/issues")
     assert "labels[]=repo:target:o/r" in call
     assert created.labels == ("repo:target:o/r",)
-    assert created.body == "Create a basket\n\n<!-- loop:ticket spec=1 key=0-add-basket -->"
-    assert (created.identity.id, created.ref.number) == (1000 + created.number, created.number)
+    assert (
+        created.body
+        == "Create a basket\n\n<!-- loop:ticket spec=1 key=0-add-basket -->"
+    )
+    assert (created.identity.id, created.ref.number) == (
+        1000 + created.number,
+        created.number,
+    )
 
 
 def test_a_ticket_cannot_be_created_for_a_spec_without_a_valid_target() -> None:
-    gh = FakeGhCli(tickets={1: []}, specs=[issue(1, "Add login page", labels=("spec",))])
+    gh = FakeGhCli(
+        tickets={1: []}, specs=[issue(1, "Add login page", labels=("spec",))]
+    )
     issues = _issues(gh)
 
     with pytest.raises(IssueError, match="target repository"):

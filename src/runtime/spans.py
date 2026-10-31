@@ -29,7 +29,9 @@ class SpanHandle(Protocol):
 class Spans(Protocol):
     """Opens the runtime's spans; the span ends, and its parent is the span open when it started, when the context exits."""
 
-    def open(self, name: str, attributes: Attributes, *, role: str) -> AbstractContextManager[SpanHandle]: ...
+    def open(
+        self, name: str, attributes: Attributes, *, role: str
+    ) -> AbstractContextManager[SpanHandle]: ...
 
 
 class _NoSpan:
@@ -47,7 +49,9 @@ class NullSpans:
     """Reports nothing."""
 
     @contextmanager
-    def open(self, name: str, attributes: Attributes, *, role: str) -> Iterator[SpanHandle]:
+    def open(
+        self, name: str, attributes: Attributes, *, role: str
+    ) -> Iterator[SpanHandle]:
         """Opens a span that discards everything."""
         yield _NoSpan()
 
@@ -92,7 +96,9 @@ class RecordingSpans:
         self._open: list[RecordedSpan] = []
 
     @contextmanager
-    def open(self, name: str, attributes: Attributes, *, role: str) -> Iterator[SpanHandle]:
+    def open(
+        self, name: str, attributes: Attributes, *, role: str
+    ) -> Iterator[SpanHandle]:
         """Opens a span under the span open now; an exception leaving the block marks it failed."""
         span = RecordedSpan(name, role, dict(attributes))
         (self._open[-1].children if self._open else self.roots).append(span)
@@ -115,11 +121,20 @@ class RecordingSpans:
 
     def attempts(self, stage_id: str) -> list[RecordedSpan]:
         """The attempt spans of one Stage, in the order they started."""
-        return [span for span in self.find(stage_id) if span.attributes.get("factory.stage.id") == stage_id]
+        return [
+            span
+            for span in self.find(stage_id)
+            if span.attributes.get("factory.stage.id") == stage_id
+        ]
 
     def events(self, stage_id: str, name: str) -> list[dict[str, str | int | bool]]:
         """The attributes of every `name` event on the Stage's attempt spans, in order."""
-        return [event.attributes for span in self.attempts(stage_id) for event in span.events if event.name == name]
+        return [
+            event.attributes
+            for span in self.attempts(stage_id)
+            for event in span.events
+            if event.name == name
+        ]
 
     def _walk(self, spans: list[RecordedSpan]) -> Iterator[RecordedSpan]:
         for span in spans:
@@ -135,7 +150,9 @@ class LogSpans:
         self._names: list[str] = []
 
     @contextmanager
-    def open(self, name: str, attributes: Attributes, *, role: str) -> Iterator[SpanHandle]:
+    def open(
+        self, name: str, attributes: Attributes, *, role: str
+    ) -> Iterator[SpanHandle]:
         """Opens a span that logs one line when it ends."""
         span = RecordedSpan(name, role, dict(attributes))
         self._names.append(_label(span))
@@ -150,9 +167,27 @@ class LogSpans:
 
     def _line(self, span: RecordedSpan) -> str:
         """The scope path below the run, then the span's own label, outcome and reason."""
-        names = [*self._names[1:-1], _label(span)] if len(self._names) > 1 else [_label(span)]
-        outcome = next((str(span.attributes[key]) for key in _OUTCOME_KEYS if key in span.attributes), None)
-        reason = span.error or next((str(span.attributes[key]) for key in _REASON_KEYS if key in span.attributes), None)
+        names = (
+            [*self._names[1:-1], _label(span)]
+            if len(self._names) > 1
+            else [_label(span)]
+        )
+        outcome = next(
+            (
+                str(span.attributes[key])
+                for key in _OUTCOME_KEYS
+                if key in span.attributes
+            ),
+            None,
+        )
+        reason = span.error or next(
+            (
+                str(span.attributes[key])
+                for key in _REASON_KEYS
+                if key in span.attributes
+            ),
+            None,
+        )
         return " · ".join(part for part in (*names, outcome, reason) if part)
 
 

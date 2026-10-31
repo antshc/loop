@@ -7,13 +7,25 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from loop import AgentWorkspace, BranchStrategy, GitOptions, LoopHook, WorktreeError
+from loop import (
+    AgentWorkspace,
+    BranchStrategy,
+    Evidence,
+    GitOptions,
+    Hold,
+    LoopHook,
+    Nothing,
+    Pass,
+    Stage,
+    Verdict,
+    WorkspaceOpener,
+    WorktreeError,
+)
+from loop.shared.git import GitClient
 
 from workflows.software_factory.events.pull_requests import PullRequestPolled
 from workflows.software_factory.events.specs import SpecRouted
-from loop import Evidence, Hold, Nothing, Pass, Stage, Verdict, WorkspaceOpener
 from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
-from loop.shared.git import GitClient
 
 
 @dataclass(frozen=True)
@@ -45,14 +57,19 @@ def checkout() -> WorkspaceOpener[CheckoutInput]:
     return WorkspaceOpener("checkout", CheckoutInput, lambda i: i.launcher().open())
 
 
-def feature_worktree(*, hooks: Sequence[LoopHook] = ()) -> WorkspaceOpener[FeatureWorktreeInput]:
+def feature_worktree(
+    *, hooks: Sequence[LoopHook] = ()
+) -> WorkspaceOpener[FeatureWorktreeInput]:
     """A worktree of the routed repository on the Spec's feature branch, started from origin's base branch, with the Loop `hooks`."""
+
     def open_worktree(i: FeatureWorktreeInput):
         target = i.routed.target
         options = GitOptions(
             root_path=target.worktrees,
             repository_path=target.checkout,
-            strategy=BranchStrategy(i.routed.feature_branch, f"origin/{i.routed.base_branch}"),
+            strategy=BranchStrategy(
+                i.routed.feature_branch, f"origin/{i.routed.base_branch}"
+            ),
             loop_hooks=tuple(hooks),
         )
         return i.launcher().with_git(options).open()
@@ -62,7 +79,9 @@ def feature_worktree(*, hooks: Sequence[LoopHook] = ()) -> WorkspaceOpener[Featu
 
 def pr_worktree() -> WorkspaceOpener[PullRequestWorktreeInput]:
     """The pull request's recovery worktree on `babysit/<repository>/<number>`, at the head the batch opens at; commits an earlier run kept ahead of that head stay, a branch left behind is advanced to it, a stale pre-rebase copy of it is reset to it, any other diverged one raises WorktreeError."""
-    return WorkspaceOpener("pr-worktree", PullRequestWorktreeInput, _open_pull_request_worktree)
+    return WorkspaceOpener(
+        "pr-worktree", PullRequestWorktreeInput, _open_pull_request_worktree
+    )
 
 
 def require_clean() -> Stage[CleanInput, bool, Nothing]:
@@ -75,7 +94,9 @@ def require_clean() -> Stage[CleanInput, bool, Nothing]:
 
 
 @contextmanager
-def _open_pull_request_worktree(i: PullRequestWorktreeInput) -> Iterator[AgentWorkspace]:
+def _open_pull_request_worktree(
+    i: PullRequestWorktreeInput,
+) -> Iterator[AgentWorkspace]:
     target, head = i.polled.target, i.polled.head
     i.git.fetch_revision(target.checkout, head)
     options = GitOptions(
@@ -99,7 +120,9 @@ def _align(git: GitClient, path: Path, head: str) -> None:
         # The pull request was rebased or force-pushed: every local commit is already on the new head.
         git.restore(path, head)
     else:
-        raise WorktreeError(f"Unexpected local commits; inspect recovery branch at {path}")
+        raise WorktreeError(
+            f"Unexpected local commits; inspect recovery branch at {path}"
+        )
 
 
 def _clean(_: CleanInput, clean: bool, __: Evidence) -> Verdict[Nothing]:

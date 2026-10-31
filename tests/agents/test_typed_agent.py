@@ -6,9 +6,16 @@ import subprocess
 from dataclasses import dataclass
 
 import pytest
-
 from loop import (
-    AgentProfile, AgentReplyError, AgentRequest, AgentResult, AgentRunError, Message, ReplyMismatch, TypedAgent, copilot,
+    AgentProfile,
+    AgentReplyError,
+    AgentRequest,
+    AgentResult,
+    AgentRunError,
+    Message,
+    ReplyMismatch,
+    TypedAgent,
+    copilot,
 )
 
 
@@ -46,7 +53,10 @@ def decode(_: Greeting, output: str) -> str:
 
 
 GREETER: TypedAgent[Greeting, str] = TypedAgent(
-    "greeter", AgentProfile(copilot), lambda request: f"greet {request.name}", decode,
+    "greeter",
+    AgentProfile(copilot),
+    lambda request: f"greet {request.name}",
+    decode,
 )
 
 
@@ -54,7 +64,9 @@ def test_a_matching_output_is_decoded_into_the_typed_reply() -> None:
     """Given output the decoder accepts, when the agent runs, then the reply is the decoded value."""
     client = FakeClient(AgentResult("hello Ada", "s1", 0))
 
-    assert GREETER.run(FakeWorkspace(client), Greeting("Ada"), session="s1") == "hello Ada"
+    assert (
+        GREETER.run(FakeWorkspace(client), Greeting("Ada"), session="s1") == "hello Ada"
+    )
     assert client.requests[0].prompt == "greet Ada"
 
 
@@ -73,13 +85,17 @@ def test_the_encoded_prompt_and_the_session_name_reach_the_agent_request() -> No
 def test_a_reply_mismatch_is_reported_as_an_agent_reply_error() -> None:
     """Given output the decoder rejects, when the agent runs, then an AgentReplyError names the role."""
     with pytest.raises(AgentReplyError, match="greeter agent: no greeting"):
-        GREETER.run(FakeWorkspace(FakeClient(AgentResult("bye", "s1", 0))), Greeting("Ada"))
+        GREETER.run(
+            FakeWorkspace(FakeClient(AgentResult("bye", "s1", 0))), Greeting("Ada")
+        )
 
 
 def test_a_non_zero_exit_code_is_reported_as_an_agent_run_error() -> None:
     """Given an agent that exits non-zero, when it runs, then an AgentRunError carries the exit code."""
     with pytest.raises(AgentRunError, match="exited with code 2"):
-        GREETER.run(FakeWorkspace(FakeClient(AgentResult("hello", "s1", 2))), Greeting("Ada"))
+        GREETER.run(
+            FakeWorkspace(FakeClient(AgentResult("hello", "s1", 2))), Greeting("Ada")
+        )
 
 
 def test_a_failing_process_is_reported_as_an_agent_run_error() -> None:

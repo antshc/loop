@@ -10,25 +10,43 @@ from pathlib import Path
 from typing import Any
 
 from loop import (
-    AgentBuilder, AgentContext, AgentRequest, AgentWorkspace, DockerRuntime, FakeCliRunner, FakeReply, GitCli, GitRuntime,
+    AgentBuilder,
+    AgentContext,
+    AgentRequest,
+    AgentWorkspace,
+    DockerRuntime,
+    Event,
+    Fail,
+    FakeCliRunner,
+    FakeReply,
+    Flow,
+    GitCli,
+    GitRuntime,
+    Ledger,
+    Nothing,
+    Pass,
+    RecordingSpans,
     RunContext,
+    RunResult,
+    Services,
+    Stage,
+    Workflow,
+    WorkspaceOpener,
+    run,
 )
-
-from workflows.software_factory.events.feedback import FeedbackBatch, TrustPolicy
-from workflows.software_factory.events.pull_requests import PullRequestPolled
-from workflows.software_factory.events.specs import RepositoryTarget
-from loop import (
-    Event, Fail, Flow, Ledger, Nothing, Pass, RecordingSpans, RunResult, Services, Stage, Workflow, WorkspaceOpener, run,
-)
-from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
 from loop.shared.git import GitClient
 from loop.shared.github.account import GitHub
 from loop.shared.github.pull_requests.babysit import babysit_snapshot, bot_logins
 from loop.shared.github.pull_requests.model import PullRequestSnapshot
-from workflows.software_factory.stages import feedback
+
 from tests.runtime.harness import GIT, Repo, command
 from tests.runtime.support import NoInput
 from tests.shared.fakes import FakeGhCli, FakePullRequestHost, comment_node, thread_node
+from workflows.software_factory.events.feedback import FeedbackBatch, TrustPolicy
+from workflows.software_factory.events.pull_requests import PullRequestPolled
+from workflows.software_factory.events.specs import RepositoryTarget
+from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
+from workflows.software_factory.stages import feedback
 from workflows.tests.software_factory.stages.support import RecordingRunner
 
 SLUG = "owner/repo"
@@ -36,7 +54,16 @@ NUMBER = 7
 BRANCH = "feature"
 TRUST = TrustPolicy(
     frozenset({"OWNER", "MEMBER", "COLLABORATOR"}),
-    frozenset({"copilot", "copilot-pull-request-reviewer", "chatgpt-codex-connector", "coderabbitai", "claude", "bugbot"}),
+    frozenset(
+        {
+            "copilot",
+            "copilot-pull-request-reviewer",
+            "chatgpt-codex-connector",
+            "coderabbitai",
+            "claude",
+            "bugbot",
+        }
+    ),
 )
 
 
@@ -63,7 +90,9 @@ class PollInput:
 
 def thread(id: str, body: str, *, line: int = 4, path: str = "cart.py") -> dict:
     """An open review thread of one reviewer comment, whose key is `thread:<id>:<id>c`."""
-    return thread_node([comment_node(f"{id}c", "reviewer", body)], id=id, path=path, line=line)
+    return thread_node(
+        [comment_node(f"{id}c", "reviewer", body)], id=id, path=path, line=line
+    )
 
 
 def reply_text(key: str) -> str:
@@ -71,19 +100,35 @@ def reply_text(key: str) -> str:
     return f"Done: {key}"
 
 
-def answer(verdict: str, *, edit: str | None = None, evidence: Sequence[str] = ("cart.py:4",), reason: str = "why") -> Callable[[Path, dict], dict]:
+def answer(
+    verdict: str,
+    *,
+    edit: str | None = None,
+    evidence: Sequence[str] = ("cart.py:4",),
+    reason: str = "why",
+) -> Callable[[Path, dict], dict]:
     """A resolve handler: optionally writes file `edit` in the worktree, then answers with `verdict` and a reply for every key."""
+
     def act(cwd: Path, request: dict) -> dict:
         if edit is not None:
             (cwd / edit).write_text(f"{edit}\n")
         replies = {key: reply_text(key) for key in request["issue"]["keys"]}
-        return {"verdict": verdict, "evidence": list(evidence), "replies": replies, "reason": reason}
+        return {
+            "verdict": verdict,
+            "evidence": list(evidence),
+            "replies": replies,
+            "reason": reason,
+        }
+
     return act
 
 
 def one_issue_per_item(items: list[dict]) -> list[dict]:
     """A grouping with one issue `i1`, `i2`, ... per feedback item."""
-    return [{"id": f"i{n}", "statement": f"concern {n}", "keys": [item["key"]]} for n, item in enumerate(items, 1)]
+    return [
+        {"id": f"i{n}", "statement": f"concern {n}", "keys": [item["key"]]}
+        for n, item in enumerate(items, 1)
+    ]
 
 
 @dataclass
@@ -99,11 +144,20 @@ class AddressAgent:
         self.requests.append(payload)
         if payload["mode"] == "group":
             return FakeReply(json.dumps({"issues": self.grouping(payload["items"])}))
-        return FakeReply(json.dumps(self.handlers[payload["issue"]["id"]](context.agent.cwd, payload)))
+        return FakeReply(
+            json.dumps(
+                self.handlers[payload["issue"]["id"]](context.agent.cwd, payload)
+            )
+        )
 
     def modes(self) -> list[str]:
         """The mode of each request, in order."""
-        return [payload["mode"] if payload["mode"] == "group" else f"resolve:{payload['issue']['id']}" for payload in self.requests]
+        return [
+            payload["mode"]
+            if payload["mode"] == "group"
+            else f"resolve:{payload['issue']['id']}"
+            for payload in self.requests
+        ]
 
 
 class Verifier:
@@ -129,7 +183,9 @@ type Action = FeedbackBatch | Elsewhere
 class PrRig:
     """A pull request on a repository with a local bare remote, a temporary ledger and recorded spans."""
 
-    def __init__(self, tmp_path: Path, *, threads: Sequence[dict] | None = None) -> None:
+    def __init__(
+        self, tmp_path: Path, *, threads: Sequence[dict] | None = None
+    ) -> None:
         self.remote = tmp_path / "remote.git"
         self.remote.mkdir(parents=True)
         command(("init", "--bare", "-q", "-b", "main"), self.remote)
@@ -142,8 +198,12 @@ class PrRig:
         command(("push", "-q", "-u", "origin", BRANCH), self.repo.path)
         command(("checkout", "-q", "main"), self.repo.path)
         self.host = FakePullRequestHost(slug=SLUG, login="me")
-        self.pull = self.host.add(NUMBER, head_ref=BRANCH, head_sha=lambda: self.remote_head(BRANCH))
-        self.pull.threads = list(threads if threads is not None else [thread("t1", "Handle the empty cart")])
+        self.pull = self.host.add(
+            NUMBER, head_ref=BRANCH, head_sha=lambda: self.remote_head(BRANCH)
+        )
+        self.pull.threads = list(
+            threads if threads is not None else [thread("t1", "Handle the empty cart")]
+        )
         self.gh = FakeGhCli(pulls=self.host)
         self.github = GitHub(self.gh)
         self.runner = RecordingRunner()
@@ -155,26 +215,38 @@ class PrRig:
 
     def remote_head(self, branch: str) -> str:
         """The commit a branch of the bare remote points at."""
-        return command(("--git-dir", str(self.remote), "rev-parse", branch), self.repo.path).strip()
+        return command(
+            ("--git-dir", str(self.remote), "rev-parse", branch), self.repo.path
+        ).strip()
 
     def launcher(self, agent: AddressAgent) -> AgentLauncher:
         """A launcher whose agents answer from `agent` and run real Git."""
         return AgentLauncher(
-            lambda: AgentBuilder(FakeCliRunner(agent), GitRuntime(GitCli()), DockerRuntime(), AgentContext(cwd=self.repo.path)),
+            lambda: AgentBuilder(
+                FakeCliRunner(agent),
+                GitRuntime(GitCli()),
+                DockerRuntime(),
+                AgentContext(cwd=self.repo.path),
+            ),
         )
 
     def poll(self) -> Stage[Any, Any, PullRequestPolled]:
         """A Stage that reads the pull request as the snapshot Stage of a definition would."""
         return (
             Stage("poll-pull-request", PollInput, produces=PullRequestPolled)
-            .action(lambda i: polled_of(self.target, i.github.pull_requests(SLUG).snapshot(NUMBER)))
+            .action(
+                lambda i: polled_of(
+                    self.target, i.github.pull_requests(SLUG).snapshot(NUMBER)
+                )
+            )
             .gate(lambda _, polled, __: Pass(polled))
         )
 
     def workflow(self, fragment: Flow) -> Workflow[PrWork]:
         """Poll, select the trusted feedback, then the fragment."""
         return (
-            Workflow("address-once").context(PrWork)
+            Workflow("address-once")
+            .context(PrWork)
             .stage(self.poll())
             .stage(feedback.select(trust=TRUST))
             .then(fragment)
@@ -183,11 +255,24 @@ class PrRig:
     def run(self, workflow: Workflow[PrWork], agent: AddressAgent) -> RunResult:
         """Runs the Workflow for the pull request with the agent and the rig's services."""
         services = Services(self.git, self.github, GIT, self.launcher(agent))
-        return run(workflow, self.work, services=services, ledger=self.ledger, spans=self.spans)
+        return run(
+            workflow, self.work, services=services, ledger=self.ledger, spans=self.spans
+        )
 
     def leave_untracked_edit(self) -> None:
         """Leaves the recovery worktree behind with an untracked file, as a run that retained its work would."""
-        command(("worktree", "add", "-q", "-b", self.recovery_branch(), str(self.worktree()), self.head), self.repo.path)
+        command(
+            (
+                "worktree",
+                "add",
+                "-q",
+                "-b",
+                self.recovery_branch(),
+                str(self.worktree()),
+                self.head,
+            ),
+            self.repo.path,
+        )
         (self.worktree() / "junk.txt").write_text("unrelated\n")
 
     def skipped(self) -> list[str]:
@@ -196,7 +281,11 @@ class PrRig:
         pending = list(self.spans.roots)
         while pending:
             span = pending.pop(0)
-            found += [str(event.attributes["stage"]) for event in span.events if event.name == "factory.skipped"]
+            found += [
+                str(event.attributes["stage"])
+                for event in span.events
+                if event.name == "factory.skipped"
+            ]
             pending += span.children
         return found
 
@@ -214,7 +303,15 @@ class PrRig:
 
     def subjects(self) -> list[str]:
         """The commit subjects the recovery branch adds to the pull request head, oldest first."""
-        out = command(("log", "--reverse", "--format=%s", f"{self.head}..{self.recovery_branch()}"), self.repo.path)
+        out = command(
+            (
+                "log",
+                "--reverse",
+                "--format=%s",
+                f"{self.head}..{self.recovery_branch()}",
+            ),
+            self.repo.path,
+        )
         return out.splitlines()
 
     def replies(self) -> list[str]:
@@ -229,20 +326,36 @@ def workspace_at(path: Path) -> AgentWorkspace:
 
 def in_workspace(path: Path) -> WorkspaceOpener[Any]:
     """An opener of the workspace over `path`, for Stages that need a worktree but no agent."""
-    return WorkspaceOpener("workspace", NoInput, lambda _: nullcontext(workspace_at(path)))
+    return WorkspaceOpener(
+        "workspace", NoInput, lambda _: nullcontext(workspace_at(path))
+    )
 
 
 def blocking(blocked: list[str]) -> Stage[Any, Any, Nothing]:
     """A hand-off Stage that records it ran."""
-    return Stage("block-pr", NoInput, produces=Nothing).action(lambda _: blocked.append("blocked")).gate(lambda *_: Pass(Nothing()))
+    return (
+        Stage("block-pr", NoInput, produces=Nothing)
+        .action(lambda _: blocked.append("blocked"))
+        .gate(lambda *_: Pass(Nothing()))
+    )
 
 
-def polled_of(target: RepositoryTarget, read: PullRequestSnapshot, login: str = "") -> PullRequestPolled:
+def polled_of(
+    target: RepositoryTarget, read: PullRequestSnapshot, login: str = ""
+) -> PullRequestPolled:
     """The pull request as the snapshot Stage reads it: the snapshot dictionary and its bot authors."""
-    return PullRequestPolled(target, read.pull_request.number, json.loads(json.dumps(babysit_snapshot(read))), login, bot_logins(read))
+    return PullRequestPolled(
+        target,
+        read.pull_request.number,
+        json.loads(json.dumps(babysit_snapshot(read))),
+        login,
+        bot_logins(read),
+    )
 
 
 def selected_batch(rig: PrRig) -> FeedbackBatch:
     """The batch the select Stage makes of the rig's pull request."""
     polled = polled_of(rig.target, rig.github.pull_requests(SLUG).snapshot(NUMBER))
-    return feedback.select(trust=TRUST).executor.run(feedback.SelectInput(polled, (), rig.github))
+    return feedback.select(trust=TRUST).executor.run(
+        feedback.SelectInput(polled, (), rig.github)
+    )

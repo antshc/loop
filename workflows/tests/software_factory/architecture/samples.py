@@ -44,13 +44,18 @@ def _plain_sample(hint: Any, depth: int) -> Any:
 
 def _generic_sample(origin: Any, arguments: tuple[Any, ...], depth: int) -> Any:
     if origin in (types.UnionType, typing.Union):
-        return sample_of(next(argument for argument in arguments if argument is not type(None)), depth + 1)
+        return sample_of(
+            next(argument for argument in arguments if argument is not type(None)),
+            depth + 1,
+        )
     if origin is typing.Literal:
         return arguments[0]
     if origin is tuple:
         return _tuple_sample(arguments, depth)
     if origin in (list, set, frozenset, Sequence, Iterable, Collection):
-        return (origin if origin in (list, set, frozenset) else tuple)([sample_of(arguments[0], depth + 1)])
+        return (origin if origin in (list, set, frozenset) else tuple)(
+            [sample_of(arguments[0], depth + 1)]
+        )
     if origin in (dict, Mapping):
         return {sample_of(arguments[0], depth + 1): sample_of(arguments[1], depth + 1)}
     if origin is Callable:
@@ -67,16 +72,29 @@ def _tuple_sample(arguments: tuple[Any, ...], depth: int) -> tuple[Any, ...]:
 def sample_dataclass(cls: type, depth: int = 0) -> Any:
     """An instance of the dataclass `cls` whose required fields hold samples of their hints."""
     hints = typing.get_type_hints(cls)
-    required = [field.name for field in dataclasses.fields(cls) if field.init and _is_required(field)]
+    required = [
+        field.name
+        for field in dataclasses.fields(cls)
+        if field.init and _is_required(field)
+    ]
     return cls(**{name: sample_of(hints[name], depth + 1) for name in required})
 
 
 def _is_required(field: dataclasses.Field) -> bool:
-    return field.default is dataclasses.MISSING and field.default_factory is dataclasses.MISSING
+    return (
+        field.default is dataclasses.MISSING
+        and field.default_factory is dataclasses.MISSING
+    )
 
 
 def call_with_samples(function: Callable[..., Any]) -> Any:
     """Calls `function` with a sample for every parameter without a default."""
     hints = typing.get_type_hints(function)
     parameters = inspect.signature(function).parameters.values()
-    return function(**{p.name: sample_of(hints[p.name]) for p in parameters if p.default is inspect.Parameter.empty})
+    return function(
+        **{
+            p.name: sample_of(hints[p.name])
+            for p in parameters
+            if p.default is inspect.Parameter.empty
+        }
+    )

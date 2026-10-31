@@ -17,7 +17,14 @@ from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider as SdkTracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.trace import Span, SpanKind, Status, StatusCode, Tracer, TracerProvider
+from opentelemetry.trace import (
+    Span,
+    SpanKind,
+    Status,
+    StatusCode,
+    Tracer,
+    TracerProvider,
+)
 
 from .roles import Role
 from .values import AgentRunRecord, ToolCall, Usage, WorktreeEvent
@@ -46,7 +53,9 @@ class OtlpObserver:
         capture_content: bool = False,
         resource_providers: Callable[[str], TracerProvider] | None = None,
     ) -> None:
-        self._tracer = (tracer_provider or trace.get_tracer_provider()).get_tracer(SCOPE)
+        self._tracer = (tracer_provider or trace.get_tracer_provider()).get_tracer(
+            SCOPE
+        )
         self._resource_providers = resource_providers
         meter = (meter_provider or metrics.get_meter_provider()).get_meter(SCOPE)
         self._capture_content = capture_content
@@ -66,7 +75,11 @@ class OtlpObserver:
             self._export_tool(tracer, span, tool)
         failed = record.error is not None or record.exit_code != 0
         if failed:
-            span.set_status(Status(StatusCode.ERROR, record.error or f"exit code {record.exit_code}"))
+            span.set_status(
+                Status(
+                    StatusCode.ERROR, record.error or f"exit code {record.exit_code}"
+                )
+            )
         span.end(end_time=_nanos(record.ended_at))
         self._record_metrics(record, failed)
 
@@ -90,10 +103,16 @@ class OtlpObserver:
         span.end(end_time=_nanos(event.at))
 
     def span(
-        self, name: str, attributes: Mapping[str, str | int | bool] | None = None, *, role: str | None = None
+        self,
+        name: str,
+        attributes: Mapping[str, str | int | bool] | None = None,
+        *,
+        role: str | None = None,
     ) -> AbstractContextManager[Span]:
         """A Workflow-owned span, exported as resource `role` when given; Agent Run and Worktree spans started inside nest under it."""
-        return self._resource_tracer(role).start_as_current_span(name, attributes=dict(attributes or {}))
+        return self._resource_tracer(role).start_as_current_span(
+            name, attributes=dict(attributes or {})
+        )
 
     def _resource_tracer(self, resource: str | None) -> Tracer:
         """The tracer exporting as its own resource when the observer has resource providers, else the shared one."""
@@ -122,7 +141,9 @@ class OtlpObserver:
             "loop.agent.native_session_id": record.native_id,
             "loop.agent.exit_code": record.exit_code,
         }
-        attributes.update({key: value for key, value in optional.items() if value is not None})
+        attributes.update(
+            {key: value for key, value in optional.items() if value is not None}
+        )
         if record.usage is not None:
             attributes.update(_usage_attributes(record.usage))
         if self._capture_content:
@@ -151,16 +172,24 @@ class OtlpObserver:
 
     def _create_instruments(self, meter: Meter) -> None:
         self._token_usage = meter.create_histogram(
-            "gen_ai.client.token.usage", unit="{token}", description="Tokens used per agent invocation, by token type."
+            "gen_ai.client.token.usage",
+            unit="{token}",
+            description="Tokens used per agent invocation, by token type.",
         )
         self._operation_duration = meter.create_histogram(
-            "gen_ai.client.operation.duration", unit="s", description="Duration of an agent invocation."
+            "gen_ai.client.operation.duration",
+            unit="s",
+            description="Duration of an agent invocation.",
         )
         self._aiu = meter.create_counter(
-            "loop.agent.aiu", unit="{AIU}", description="GitHub AI units the agent consumed."
+            "loop.agent.aiu",
+            unit="{AIU}",
+            description="GitHub AI units the agent consumed.",
         )
         self._premium_requests = meter.create_counter(
-            "loop.agent.premium_requests", unit="{request}", description="Premium requests the user's prompts billed."
+            "loop.agent.premium_requests",
+            unit="{request}",
+            description="Premium requests the user's prompts billed.",
         )
 
     def _record_metrics(self, record: AgentRunRecord, failed: bool) -> None:
@@ -170,13 +199,21 @@ class OtlpObserver:
         }
         if record.model is not None:
             shared["gen_ai.request.model"] = record.model
-        duration_attributes = {**shared, "error.type": "agent_failed"} if failed else shared
-        self._operation_duration.record(_seconds(record.started_at, record.ended_at), duration_attributes)
+        duration_attributes = (
+            {**shared, "error.type": "agent_failed"} if failed else shared
+        )
+        self._operation_duration.record(
+            _seconds(record.started_at, record.ended_at), duration_attributes
+        )
         usage = record.usage
         if usage is None:
             return
-        self._token_usage.record(usage.total_input_tokens, {**shared, "gen_ai.token.type": "input"})
-        self._token_usage.record(usage.output_tokens, {**shared, "gen_ai.token.type": "output"})
+        self._token_usage.record(
+            usage.total_input_tokens, {**shared, "gen_ai.token.type": "input"}
+        )
+        self._token_usage.record(
+            usage.output_tokens, {**shared, "gen_ai.token.type": "output"}
+        )
         self._aiu.add(usage.total_aiu, shared)
         self._premium_requests.add(usage.premium_requests, shared)
 
@@ -195,17 +232,26 @@ def _usage_attributes(usage: Usage) -> dict[str, object]:
         "loop.usage.premium_requests": usage.premium_requests,
         "loop.agent.api_calls": usage.api_calls,
     }
-    attributes.update({f"loop.usage.{kind}_aiu": value for kind, value in usage.aiu.items()})
+    attributes.update(
+        {f"loop.usage.{kind}_aiu": value for kind, value in usage.aiu.items()}
+    )
     return attributes
 
 
 def _content_attributes(record: AgentRunRecord) -> dict[str, object]:
     attributes: dict[str, object] = {
-        "gen_ai.input.messages": json.dumps([{"role": "user", "parts": [{"type": "text", "content": record.prompt}]}])
+        "gen_ai.input.messages": json.dumps(
+            [{"role": "user", "parts": [{"type": "text", "content": record.prompt}]}]
+        )
     }
     if record.output is not None:
         attributes["gen_ai.output.messages"] = json.dumps(
-            [{"role": "assistant", "parts": [{"type": "text", "content": record.output}]}]
+            [
+                {
+                    "role": "assistant",
+                    "parts": [{"type": "text", "content": record.output}],
+                }
+            ]
         )
     return attributes
 
@@ -225,12 +271,19 @@ def otlp_observer(
     """
     name = service_name or os.environ.get("OTEL_SERVICE_NAME") or DEFAULT_SERVICE_NAME
     # Resource-per-agent backends list each resource by name, so drop the per-process suffix there too.
-    resource = Resource.create({"service.name": name, **({"service.instance.id": name} if resource_per_agent else {})})
+    resource = Resource.create(
+        {
+            "service.name": name,
+            **({"service.instance.id": name} if resource_per_agent else {}),
+        }
+    )
     return OtlpObserver(
         tracer_provider=tracer_provider or _own_tracer_provider(resource, endpoint),
         meter_provider=meter_provider or _own_meter_provider(resource, endpoint),
         capture_content=capture_content,
-        resource_providers=_resource_providers(endpoint) if resource_per_agent else None,
+        resource_providers=_resource_providers(endpoint)
+        if resource_per_agent
+        else None,
     )
 
 
@@ -240,7 +293,9 @@ def _resource_providers(endpoint: str | None) -> Callable[[str], TracerProvider]
     def provider(name: str) -> TracerProvider:
         if name not in providers:
             # A fixed instance id keeps Aspire from suffixing the resource name with a per-process id.
-            resource = Resource.create({"service.name": name, "service.instance.id": name})
+            resource = Resource.create(
+                {"service.name": name, "service.instance.id": name}
+            )
             providers[name] = _own_tracer_provider(resource, endpoint)
         return providers[name]
 
@@ -253,11 +308,16 @@ def _signal_endpoint(endpoint: str | None, signal: str) -> str | None:
 
 def _own_tracer_provider(resource: Resource, endpoint: str | None) -> SdkTracerProvider:
     provider = SdkTracerProvider(resource=resource)
-    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=_signal_endpoint(endpoint, "traces"))))
+    provider.add_span_processor(
+        BatchSpanProcessor(
+            OTLPSpanExporter(endpoint=_signal_endpoint(endpoint, "traces"))
+        )
+    )
     return provider
 
 
 def _own_meter_provider(resource: Resource, endpoint: str | None) -> SdkMeterProvider:
-    reader = PeriodicExportingMetricReader(OTLPMetricExporter(endpoint=_signal_endpoint(endpoint, "metrics")))
+    reader = PeriodicExportingMetricReader(
+        OTLPMetricExporter(endpoint=_signal_endpoint(endpoint, "metrics"))
+    )
     return SdkMeterProvider(resource=resource, metric_readers=[reader])
-

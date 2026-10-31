@@ -8,7 +8,6 @@ from enum import StrEnum
 from .issue import Issue
 from .spec import SPEC_LABEL
 
-
 _SPEC_TYPE = "spec"
 
 
@@ -46,6 +45,9 @@ class IssueClassifier:
         """The `spec` label decides; a native type that says otherwise is reported, not obeyed."""
         has_label = SPEC_LABEL in {label.casefold() for label in issue.labels}
         kind = IssueKind.SPEC if has_label else IssueKind.ISSUE
-        if issue.issue_type is None or (issue.issue_type.casefold() == _SPEC_TYPE) == has_label:
+        if (
+            issue.issue_type is None
+            or (issue.issue_type.casefold() == _SPEC_TYPE) == has_label
+        ):
             return Classification(kind)
         return Classification(kind, LabelTypeDisagreement(has_label, issue.issue_type))

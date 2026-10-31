@@ -48,13 +48,26 @@ def main(argv: Sequence[str] | None = None) -> int:
             raw = {}
         payload = normalise(args.cli, args.point, raw if isinstance(raw, dict) else {})
         payload["session"] = args.session
-        env = {**os.environ, "LOOP_SESSION": args.session, "LOOP_CLI": args.cli, "LOOP_HOOK_POINT": args.point}
+        env = {
+            **os.environ,
+            "LOOP_SESSION": args.session,
+            "LOOP_CLI": args.cli,
+            "LOOP_HOOK_POINT": args.point,
+        }
         result = subprocess.run(
-            " ".join(command), shell=True, input=json.dumps(payload) + "\n", env=env,
-            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
+            " ".join(command),
+            shell=True,
+            input=json.dumps(payload) + "\n",
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
         )
         if result.returncode != 0:
-            print(f"agent-cli-hook: {args.point} command exited {result.returncode}", file=sys.stderr)
+            print(
+                f"agent-cli-hook: {args.point} command exited {result.returncode}",
+                file=sys.stderr,
+            )
     except BaseException as error:  # fail open: a hook must never break the CLI run
         print(f"agent-cli-hook: {error!r}", file=sys.stderr)
     return 0

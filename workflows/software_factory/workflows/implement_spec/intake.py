@@ -30,7 +30,11 @@ def select_specs(tracker: Issues, number: int | None = None) -> Selection:
     waiting: list[SpecGraphSnapshot] = []
     for spec in tracker.specs(number):
         if not spec.complete:
-            logger.warning("Spec #%s was not read completely; no decision is made from it: %s", spec.number, spec.gaps)
+            logger.warning(
+                "Spec #%s was not read completely; no decision is made from it: %s",
+                spec.number,
+                spec.gaps,
+            )
             unreadable.append(spec)
         elif spec.awaiting_human:
             waiting.append(spec)

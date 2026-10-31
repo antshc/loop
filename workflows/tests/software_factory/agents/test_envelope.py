@@ -16,7 +16,10 @@ class LastJsonObjectTests(unittest.TestCase):
     def test_nested_objects_and_braces_inside_strings_parse_correctly(self) -> None:
         text = '{"status": "completed", "result": {"plan": "do {this} first", "steps": {"a": 1}}}'
         decoder = LastJsonObject(lambda value: "status" in value)
-        self.assertEqual(decoder.decode(text)["result"], {"plan": "do {this} first", "steps": {"a": 1}})
+        self.assertEqual(
+            decoder.decode(text)["result"],
+            {"plan": "do {this} first", "steps": {"a": 1}},
+        )
 
     def test_prose_around_the_object_is_ignored(self) -> None:
         text = 'thinking out loud\n{"status": "completed", "result": {}}\ndone'

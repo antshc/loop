@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import secrets
+from collections.abc import Iterator
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterator, Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from ..hooks import LoopHookPoint
 from .git_cli import GitCli
@@ -27,7 +28,9 @@ class HeadStrategy:
     """No worktree or branch: the agent works directly in the repository directory."""
 
     @contextmanager
-    def open(self, git: GitCli, cwd: Path, repository: Path, options: GitOptions) -> Iterator[Path]:
+    def open(
+        self, git: GitCli, cwd: Path, repository: Path, options: GitOptions
+    ) -> Iterator[Path]:
         yield repository
 
 
@@ -36,7 +39,9 @@ class MergeToHeadStrategy:
     """Temp-branch worktree, fast-forward merged into the current HEAD on success, then the temp branch is deleted."""
 
     @contextmanager
-    def open(self, git: GitCli, cwd: Path, repository: Path, options: GitOptions) -> Iterator[Path]:
+    def open(
+        self, git: GitCli, cwd: Path, repository: Path, options: GitOptions
+    ) -> Iterator[Path]:
         branch = f"tmp_{secrets.token_hex(4)}"
         with _worktree(git, cwd, repository, options, branch, "HEAD") as target:
             yield target
@@ -55,9 +60,13 @@ class BranchStrategy:
     base_branch: str | None = None
 
     @contextmanager
-    def open(self, git: GitCli, cwd: Path, repository: Path, options: GitOptions) -> Iterator[Path]:
+    def open(
+        self, git: GitCli, cwd: Path, repository: Path, options: GitOptions
+    ) -> Iterator[Path]:
         git.fetch(repository)
-        with _worktree(git, cwd, repository, options, self.branch, self.base_branch or "HEAD") as target:
+        with _worktree(
+            git, cwd, repository, options, self.branch, self.base_branch or "HEAD"
+        ) as target:
             yield target
             # Safety net: git refuses to remove a dirty worktree.
             git.commit_all(target, options.commit_message)
@@ -65,7 +74,12 @@ class BranchStrategy:
 
 @contextmanager
 def _worktree(
-    git: GitCli, cwd: Path, repository: Path, options: GitOptions, branch: str, base: str
+    git: GitCli,
+    cwd: Path,
+    repository: Path,
+    options: GitOptions,
+    branch: str,
+    base: str,
 ) -> Iterator[Path]:
     root = (cwd / options.root_path).resolve()
     if not root.is_relative_to(cwd.resolve()):

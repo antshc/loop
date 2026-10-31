@@ -6,7 +6,6 @@ from collections.abc import Callable, Sequence
 
 from loop import AgentBuilder, RunObserver, SessionLogReader
 
-
 AgentFactory = Callable[[], AgentBuilder]
 
 

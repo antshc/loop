@@ -6,8 +6,9 @@ import itertools
 from collections.abc import Iterator
 from dataclasses import dataclass
 
-from workflows.software_factory.events.pull_requests import PollStarted
 from loop import Evidence, History, Item, Nothing, Pass, Selector, Stage, Verdict
+
+from workflows.software_factory.events.pull_requests import PollStarted
 from workflows.software_factory.infrastructure.pacing import Pacer
 
 
@@ -59,7 +60,10 @@ def pace(interval: float) -> Stage[PaceInput, None, Nothing]:
 def _next_poll(i: PollInput) -> Iterator[Item[Poll]]:
     """Every number above the highest recorded poll; a quiet poll records nothing, so the loop skips the ids it already ran in this process."""
     first = max((event.number for event in i.started), default=0) + 1
-    return (Item(Poll(number), f"poll-{number}", f"poll-{number}") for number in itertools.count(first))
+    return (
+        Item(Poll(number), f"poll-{number}", f"poll-{number}")
+        for number in itertools.count(first)
+    )
 
 
 def _waited(_: PaceInput, __: None, ___: Evidence) -> Verdict[Nothing]:

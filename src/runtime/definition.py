@@ -34,13 +34,22 @@ class Flow:
         return self._extended(StageNode(stage))
 
     def each[T](
-        self, select: Selector[Any, T], body: Flow, *, on_fail: Route = Stop("failed"), on_hold: Route = Stop("held"),
+        self,
+        select: Selector[Any, T],
+        body: Flow,
+        *,
+        on_fail: Route = Stop("failed"),
+        on_hold: Route = Stop("held"),
     ) -> Self:
         """Runs `body` per selected item; Events produced inside are only maybe produced afterwards."""
         self._require_body(body, "each")
         return self._extended(EachNode(select, body, on_fail, on_hold))
 
-    def dispatch(self, on: Any, cases: Mapping[type, CaseTarget] | Iterable[tuple[type, CaseTarget]]) -> Self:
+    def dispatch(
+        self,
+        on: Any,
+        cases: Mapping[type, CaseTarget] | Iterable[tuple[type, CaseTarget]],
+    ) -> Self:
         """Switches on the latest Event of the closed sum `on`; `cases` must cover every variant exactly once."""
         pairs = tuple(cases.items() if isinstance(cases, Mapping) else cases)
         for _, case in pairs:
@@ -61,7 +70,9 @@ class Flow:
     def _require_body(self, body: object, construct: str) -> None:
         """A body is a Flow fragment, never a whole Workflow."""
         if not isinstance(body, Flow) or isinstance(body, Workflow):
-            raise DefinitionError(f"Flow '{self.name}': {construct} takes a Flow fragment, not {body!r}")
+            raise DefinitionError(
+                f"Flow '{self.name}': {construct} takes a Flow fragment, not {body!r}"
+            )
 
     def _extended(self, *nodes: Node) -> Self:
         """A copy with `nodes` appended, validated as far as it can be."""
@@ -87,28 +98,46 @@ class Workflow[C](Flow):
         changed._analysis(whole=False)
         return changed
 
-    def on_error(self, errors: tuple[type[BaseException], ...], route: Stop | Handoff) -> Self:
+    def on_error(
+        self, errors: tuple[type[BaseException], ...], route: Stop | Handoff
+    ) -> Self:
         """The only exception types the runtime turns into a route; anything else propagates."""
         self._require_error_route(errors, route)
-        changed = replace(self, error_routes=(*self.error_routes, ErrorRoute(tuple(errors), route)))
+        changed = replace(
+            self, error_routes=(*self.error_routes, ErrorRoute(tuple(errors), route))
+        )
         changed._analysis(whole=False)
         return changed
 
-    def _require_error_route(self, errors: tuple[type[BaseException], ...], route: object) -> None:
+    def _require_error_route(
+        self, errors: tuple[type[BaseException], ...], route: object
+    ) -> None:
         """Error types are specific exception classes, listed once, and the route stops or hands off."""
         if not errors:
-            raise DefinitionError(f"Workflow '{self.name}': on_error needs at least one exception type")
+            raise DefinitionError(
+                f"Workflow '{self.name}': on_error needs at least one exception type"
+            )
         for error in errors:
             if not (isinstance(error, type) and issubclass(error, BaseException)):
-                raise DefinitionError(f"Workflow '{self.name}': {error!r} is not an exception type")
+                raise DefinitionError(
+                    f"Workflow '{self.name}': {error!r} is not an exception type"
+                )
             if error in (Exception, BaseException):
-                raise DefinitionError(f"Workflow '{self.name}': on_error cannot catch every exception; list specific types")
-        known = {error for error_route in self.error_routes for error in error_route.errors}
+                raise DefinitionError(
+                    f"Workflow '{self.name}': on_error cannot catch every exception; list specific types"
+                )
+        known = {
+            error for error_route in self.error_routes for error in error_route.errors
+        }
         repeated = sorted(error.__name__ for error in errors if error in known)
         if repeated:
-            raise DefinitionError(f"Workflow '{self.name}': {', '.join(repeated)} already has an error route")
+            raise DefinitionError(
+                f"Workflow '{self.name}': {', '.join(repeated)} already has an error route"
+            )
         if not isinstance(route, (Stop, Handoff)):
-            raise DefinitionError(f"Workflow '{self.name}': an error route stops or hands off, not {route!r}")
+            raise DefinitionError(
+                f"Workflow '{self.name}': an error route stops or hands off, not {route!r}"
+            )
 
     def check(self) -> Self:
         """Whole-definition validation: unique identities, History producers, acyclic reroutes and exhaustive switches."""
@@ -125,4 +154,10 @@ class Workflow[C](Flow):
 
     def _analysis(self, *, whole: bool) -> Analysis:
         """Validates the Workflow with every input resolved against what is upstream of it."""
-        return analyze(self.nodes, strict=True, context=self.context_type, error_routes=self.error_routes, whole=whole)
+        return analyze(
+            self.nodes,
+            strict=True,
+            context=self.context_type,
+            error_routes=self.error_routes,
+            whole=whole,
+        )

@@ -8,7 +8,6 @@ from typing import Self
 
 from .issue import Issue, IssueState
 
-
 SPEC_LABEL = "spec"
 
 
@@ -43,12 +42,22 @@ class SpecMetadata:
     def of(cls, number: int, title: str, labels: tuple[str, ...]) -> SpecMetadata:
         """Reads the metadata; the Initiative falls back to the Spec number without a `<initiative>: ` title prefix."""
         match = _INITIATIVE.match(title)
-        targets = [label[len(_TARGET_PREFIX) :] for label in labels if label.startswith(_TARGET_PREFIX)]
-        bases = [label[len(_BASE_PREFIX) :] for label in labels if label.startswith(_BASE_PREFIX)]
+        targets = [
+            label[len(_TARGET_PREFIX) :]
+            for label in labels
+            if label.startswith(_TARGET_PREFIX)
+        ]
+        bases = [
+            label[len(_BASE_PREFIX) :]
+            for label in labels
+            if label.startswith(_BASE_PREFIX)
+        ]
         return cls(
             initiative=str(number) if match is None else match["initiative"].strip(),
             bare_title=title if match is None else match["title"].strip(),
-            target=targets[0] if len(targets) == 1 and _SLUG.match(targets[0]) else None,
+            target=targets[0]
+            if len(targets) == 1 and _SLUG.match(targets[0])
+            else None,
             base_branch=bases[0] if len(bases) == 1 and bases[0] else None,
         )
 
@@ -89,4 +98,6 @@ class Ticket(Issue):
     @property
     def actionable(self) -> bool:
         """Open and carrying neither the `hitl` nor the `spec` label."""
-        return self.state == IssueState.OPEN and not ({label.casefold() for label in self.labels} & _BLOCKING_LABELS)
+        return self.state == IssueState.OPEN and not (
+            {label.casefold() for label in self.labels} & _BLOCKING_LABELS
+        )

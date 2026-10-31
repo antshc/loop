@@ -14,7 +14,13 @@ OUTPUT_LIMIT = 2000
 class CheckCommand:
     """One check command run in a worktree through the process runner; a failure is its description and the tail of its output."""
 
-    def __init__(self, command: Sequence[str], *, run: CheckRunner | None = None, timeout_s: float | None = None) -> None:
+    def __init__(
+        self,
+        command: Sequence[str],
+        *,
+        run: CheckRunner | None = None,
+        timeout_s: float | None = None,
+    ) -> None:
         if not command or any(not part for part in command):
             raise ValueError("a check command needs a non-empty argument array")
         self._command = tuple(command)

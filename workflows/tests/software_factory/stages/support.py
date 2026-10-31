@@ -10,22 +10,37 @@ from dataclasses import dataclass, field, make_dataclass
 from pathlib import Path
 from typing import Any
 
-from loop import AgentContext, AgentRequest, AgentResult, AgentWorkspace, RunContext, SessionName
-
-from workflows.software_factory.events.specs import RepositoryTarget, SpecWork
-from workflows.software_factory.events.tickets import TicketClosed
 from loop import (
-    Event, Flow, Ledger, Pass, RecordingSpans, RunResult, Services, Stage, Workflow, WorkspaceOpener, run,
+    AgentContext,
+    AgentRequest,
+    AgentResult,
+    AgentWorkspace,
+    Event,
+    Flow,
+    Ledger,
+    Pass,
+    RecordingSpans,
+    RunContext,
+    RunResult,
+    Services,
+    SessionName,
+    Stage,
+    Workflow,
+    WorkspaceOpener,
+    run,
 )
 from loop.shared.git import GitClient
 from loop.shared.github.account import GitHub
 from loop.shared.github.issues.client import Issues
 from loop.shared.github.repo import GitHubRepo
 from loop.shared.process import CommandRunner
-from workflows.software_factory.stages import specs
+
 from tests.runtime.harness import GIT, Repo, command
 from tests.runtime.support import NoInput
 from tests.shared.fakes import FakeGhCli, issue
+from workflows.software_factory.events.specs import RepositoryTarget, SpecWork
+from workflows.software_factory.events.tickets import TicketClosed
+from workflows.software_factory.stages import specs
 
 LABELS = ("spec", "repo:target:owner/repo", "repo:base:main")
 TITLE = "Checkout: Add login page"
@@ -41,7 +56,13 @@ class RecordingRunner:
         self._run = CommandRunner()
         self.calls: list[tuple[str, ...]] = []
 
-    def __call__(self, args: Sequence[str], *, cwd: Path | None = None, timeout_s: float | None = None) -> str:
+    def __call__(
+        self,
+        args: Sequence[str],
+        *,
+        cwd: Path | None = None,
+        timeout_s: float | None = None,
+    ) -> str:
         self.calls.append(tuple(args))
         return self._run(args, cwd=cwd, timeout_s=timeout_s)
 
@@ -58,7 +79,9 @@ class Probed(Event):
 def probe(event: type[Event], seen: list[Any]) -> Stage[Any, Any, Probed]:
     """A Stage that records the latest `event` it reads, so a test can assert on what an upstream Stage produced."""
     name = re.sub(r"(?<!^)(?=[A-Z])", "-", event.__name__).lower()
-    input_type = make_dataclass(f"Probe{event.__name__}", [("event", event)], frozen=True)
+    input_type = make_dataclass(
+        f"Probe{event.__name__}", [("event", event)], frozen=True
+    )
     return (
         Stage(f"probe-{name}", input_type, produces=Probed)
         .action(lambda i: seen.append(i.event))
@@ -85,7 +108,9 @@ class StageRig:
         command(("push", "-q", "-u", "origin", "main"), self.repo.path)
         self.gh = FakeGhCli(
             specs=[issue(1, TITLE, labels=labels)],
-            tickets={1: tickets if tickets is not None else [issue(10, "Add login form")]},
+            tickets={
+                1: tickets if tickets is not None else [issue(10, "Add login form")]
+            },
             blocked_by=blocked_by,
             prs=[],
         )
@@ -96,7 +121,9 @@ class StageRig:
         self.ledger = Ledger(tmp_path / "ledger")
         self.spans = RecordingSpans()
         self.work = SpecWork(1, "r1")
-        self.target = RepositoryTarget("owner/repo", self.repo.path, tmp_path / "worktrees")
+        self.target = RepositoryTarget(
+            "owner/repo", self.repo.path, tmp_path / "worktrees"
+        )
 
     def route(self) -> Stage[Any, Any, Any]:
         """The routing Stage configured with this rig's repository."""
@@ -112,21 +139,31 @@ class StageRig:
     def run(self, workflow: Workflow[SpecWork], *services: object) -> RunResult:
         """Runs the Workflow for the Spec with the rig's services and any `services` given."""
         passed = Services(self.issues, self.git, self.github, GIT, *services)
-        return run(workflow, self.work, services=passed, ledger=self.ledger, spans=self.spans)
+        return run(
+            workflow, self.work, services=passed, ledger=self.ledger, spans=self.spans
+        )
 
     def worktree(self, script: DeveloperScript) -> WorkspaceOpener[Any]:
         """An opener of a workspace at the repository whose developer agent follows `script`."""
-        workspace = AgentWorkspace(self.repo.path, lambda *_: script, RunContext(AgentContext()), None)
+        workspace = AgentWorkspace(
+            self.repo.path, lambda *_: script, RunContext(AgentContext()), None
+        )
         return WorkspaceOpener("worktree", NoInput, lambda _: nullcontext(workspace))
 
     def in_worktree(
-        self, script: DeveloperScript, *stages: Stage[Any, Any, Any], flow: Flow | None = None, seeds: Sequence[Event] = (),
+        self,
+        script: DeveloperScript,
+        *stages: Stage[Any, Any, Any],
+        flow: Flow | None = None,
+        seeds: Sequence[Event] = (),
     ) -> Workflow[SpecWork]:
         """The routing Stage, the Stages producing `seeds`, then a workspace scope of `stages` or `flow`."""
         body = flow or Flow("work")
         for stage in stages:
             body = body.stage(stage)
-        return self.workflow(*(seeded(event) for event in seeds)).within(self.worktree(script), body)
+        return self.workflow(*(seeded(event) for event in seeds)).within(
+            self.worktree(script), body
+        )
 
     def deliver(self) -> str:
         """Checks the feature branch out with one delivered Ticket commit, pushes it and opens its draft pull request; returns the head."""
@@ -134,7 +171,9 @@ class StageRig:
         self.repo.write("ticket-10-0.txt", "0\n")
         head = self.repo.commit("ccode(Checkout|10): implement 0")
         command(("push", "-q", "-u", "origin", BRANCH), self.repo.path)
-        self.github.pull_requests("owner/repo").create_draft_pull_request(BRANCH, "main", TITLE, "Checkout")
+        self.github.pull_requests("owner/repo").create_draft_pull_request(
+            BRANCH, "main", TITLE, "Checkout"
+        )
         return head
 
     def history[T: Event](self, event: type[T]) -> tuple[T, ...]:
@@ -147,7 +186,11 @@ class StageRig:
         pending = list(self.spans.roots)
         while pending:
             span = pending.pop(0)
-            found += [str(event.attributes["stage"]) for event in span.events if event.name == "factory.skipped"]
+            found += [
+                str(event.attributes["stage"])
+                for event in span.events
+                if event.name == "factory.skipped"
+            ]
             pending += span.children
         return found
 
@@ -157,11 +200,16 @@ class StageRig:
 
     def comments(self, number: int) -> list[str]:
         """The Comment bodies the tracker holds on an issue, without the hidden markers."""
-        return [comment.body.split("\n\n<!--")[0] for comment in self.issues.issue(number).comments]
+        return [
+            comment.body.split("\n\n<!--")[0]
+            for comment in self.issues.issue(number).comments
+        ]
 
     def remote_head(self, branch: str) -> str:
         """The commit a branch of the bare remote points at; the remote is addressed explicitly because Git refuses implicit bare repositories."""
-        return command(("--git-dir", str(self.remote), "rev-parse", branch), self.repo.path).strip()
+        return command(
+            ("--git-dir", str(self.remote), "rev-parse", branch), self.repo.path
+        ).strip()
 
     def branch_off_main(self, branch: str, subject: str = "work") -> str:
         """Commits on a new local branch and goes back to main; returns the branch head."""
@@ -193,39 +241,74 @@ def envelope(status: str, identifier: str, **result: str) -> str:
 
 def answers(status: str, **result: Any) -> Callable[[Repo], str]:
     """An agent action whose output ends in the `{status, result}` envelope of the planner, chore and reviewer roles."""
-    return lambda repo: f"working...\n{json.dumps({'status': status, 'result': result})}\n"
+    return lambda repo: (
+        f"working...\n{json.dumps({'status': status, 'result': result})}\n"
+    )
 
 
 def seeded(event: Event) -> Stage[Any, Any, Any]:
     """A Stage that produces `event` as an upstream Stage would, so a Stage under test can read it."""
     name = re.sub(r"(?<!^)(?=[A-Z])", "-", type(event).__name__).lower()
-    return Stage(f"seed-{name}", NoInput, produces=type(event)).action(lambda _: event).gate(lambda *_: Pass(event))
+    return (
+        Stage(f"seed-{name}", NoInput, produces=type(event))
+        .action(lambda _: event)
+        .gate(lambda *_: Pass(event))
+    )
 
 
 def never_closes() -> Stage[Any, Any, Any]:
     """A Stage that declares the Ticket closures of a Workflow but is always skipped, so a Stage reading their history sees none."""
-    return Stage("close-nothing", NoInput, produces=TicketClosed).action(lambda _: None).gate(lambda *_: Pass(TicketClosed(0, ""))).when(lambda _: False)
+    return (
+        Stage("close-nothing", NoInput, produces=TicketClosed)
+        .action(lambda _: None)
+        .gate(lambda *_: Pass(TicketClosed(0, "")))
+        .when(lambda _: False)
+    )
 
 
-def delivers(ticket: int, *, subject: str | None = None, report: str | None = None, commits: int = 1) -> Callable[[Repo], str]:
+def delivers(
+    ticket: int,
+    *,
+    subject: str | None = None,
+    report: str | None = None,
+    commits: int = 1,
+) -> Callable[[Repo], str]:
     """A developer action that makes `commits` commits for `ticket` and reports the last one (or `report`)."""
+
     def act(repo: Repo) -> str:
         head = repo.head()
         for number in range(commits):
             repo.write(f"ticket-{ticket}-{number}.txt", f"{number}\n")
-            head = repo.commit(subject or f"ccode(Checkout|{ticket}): implement {number}")
-        return envelope("completed", f"Checkout|{ticket}", commit=report or head, summary="Added the form.", verification="pytest passed")
+            head = repo.commit(
+                subject or f"ccode(Checkout|{ticket}): implement {number}"
+            )
+        return envelope(
+            "completed",
+            f"Checkout|{ticket}",
+            commit=report or head,
+            summary="Added the form.",
+            verification="pytest passed",
+        )
+
     return act
 
 
 def commits_nothing(ticket: int) -> Callable[[Repo], str]:
     """A developer action that edits nothing, commits nothing and reports the unchanged head."""
-    return lambda repo: envelope("completed", f"Checkout|{ticket}", commit=repo.head(), summary="s", verification="v")
+    return lambda repo: envelope(
+        "completed",
+        f"Checkout|{ticket}",
+        commit=repo.head(),
+        summary="s",
+        verification="v",
+    )
 
 
 def declines(ticket: int, reason: str = "cannot do it") -> Callable[[Repo], str]:
     """A developer action that edits the working tree and then reports `failed`."""
+
     def act(repo: Repo) -> str:
         repo.write("half.txt", "half\n")
         return envelope("failed", f"Checkout|{ticket}", reason=reason)
+
     return act

@@ -7,23 +7,42 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from loop import AgentWorkspace
-
-from workflows.software_factory.events.ci import CiFixed
-from workflows.software_factory.events.feedback import FeedbackBatch, FeedbackHandled, IssueResolved, IssueUnclear, TrustPolicy
-from workflows.software_factory.events.pull_requests import (
-    CiFailing, CopilotDue, CopilotRequested, NextAction, OriginValidated, PrBlocked, PullRequestClosed, PullRequestPolled,
-    PullRequestWork, ReadinessCheck, Unsupported,
-)
-from loop import Evidence, Fail, Hold, History, Pass, Stage, Verdict
+from loop import AgentWorkspace, Evidence, Fail, History, Hold, Pass, Stage, Verdict
 from loop.shared.git import GitClient
 from loop.shared.github.account import GitHub
 from loop.shared.github.pull_requests import PullRequests
 from loop.shared.github.pull_requests.babysit import (
-    babysit_snapshot, bot_logins, ci_failed, ci_state, is_copilot, unhandled_items,
+    babysit_snapshot,
+    bot_logins,
+    ci_failed,
+    ci_state,
+    is_copilot,
+    unhandled_items,
 )
 from loop.shared.github.pull_requests.model import PullRequestSnapshot
 from loop.shared.github.repo import CommandError
+
+from workflows.software_factory.events.ci import CiFixed
+from workflows.software_factory.events.feedback import (
+    FeedbackBatch,
+    FeedbackHandled,
+    IssueResolved,
+    IssueUnclear,
+    TrustPolicy,
+)
+from workflows.software_factory.events.pull_requests import (
+    CiFailing,
+    CopilotDue,
+    CopilotRequested,
+    NextAction,
+    OriginValidated,
+    PrBlocked,
+    PullRequestClosed,
+    PullRequestPolled,
+    PullRequestWork,
+    ReadinessCheck,
+    Unsupported,
+)
 
 _POSTED, _MISSING, _SUPERSEDED = "posted", "missing", "superseded"
 _UNSUPPORTED = "PR author changed or fork head is not supported by this checkout"
@@ -97,7 +116,10 @@ def snapshot() -> Stage[SnapshotInput, PullRequestPolled, PullRequestPolled]:
 
 
 def decide_next(
-    *, trust: TrustPolicy, author: str | None, copilot: Callable[[PullRequestPolled], bool],
+    *,
+    trust: TrustPolicy,
+    author: str | None,
+    copilot: Callable[[PullRequestPolled], bool],
 ) -> Stage[DecideInput, NextAction, NextAction]:
     """Pure: closed, then author or fork mismatch, then trusted feedback not handled in earlier runs, then failed CI, then a Copilot review `copilot` wants for a head not requested yet, otherwise a readiness check; `author` defaults to the acting account."""
     return (
@@ -107,7 +129,9 @@ def decide_next(
     )
 
 
-def block_pr(*, fingerprint: Callable[[PullRequestPolled], str]) -> Stage[BlockInput, PrBlocked, PrBlocked]:
+def block_pr(
+    *, fingerprint: Callable[[PullRequestPolled], str]
+) -> Stage[BlockInput, PrBlocked, PrBlocked]:
     """Hand-off that blocks the pull request: re-reads it so the fingerprint, computed by `fingerprint`, includes our own replies, and records the blocking reason and that fingerprint as run attributes for intake."""
     return (
         Stage("block-pr", BlockInput, produces=PrBlocked)
@@ -126,7 +150,9 @@ def publish_batch() -> Stage[PublishInput, FeedbackHandled | _Refused, FeedbackH
     )
 
 
-def _accepted(_: PublishInput, reply: FeedbackHandled | _Refused, __: Evidence) -> Verdict[FeedbackHandled]:
+def _accepted(
+    _: PublishInput, reply: FeedbackHandled | _Refused, __: Evidence
+) -> Verdict[FeedbackHandled]:
     return Fail(reply.reason) if isinstance(reply, _Refused) else Pass(reply)
 
 
@@ -137,17 +163,24 @@ def _published(i: PublishInput) -> FeedbackHandled | None:
     if not pull.is_open or pull.head_ref != i.polled.branch or pull.head_sha != local:
         return None
     snapshot, login = pulls.snapshot(number), i.github.login()
-    states = {key: _reply_state(snapshot, _item(i, key), _text(_item(i, key), body), login) for key, body in _drafts(i).items()}
+    states = {
+        key: _reply_state(snapshot, _item(i, key), _text(_item(i, key), body), login)
+        for key, body in _drafts(i).items()
+    }
     if _MISSING in states.values():
         return None
-    return FeedbackHandled(tuple(key for key, state in states.items() if state == _POSTED), local)
+    return FeedbackHandled(
+        tuple(key for key, state in states.items() if state == _POSTED), local
+    )
 
 
 def _publish(i: PublishInput) -> FeedbackHandled | _Refused:
     pulls, number, path = _pulls(i), i.polled.number, i.worktree.path
     local, pull = i.git.head(path).sha, pulls.pull_request(number)
     if not pull.is_open:
-        return _Refused("PR closed during publication; inspect retained work before retrying")
+        return _Refused(
+            "PR closed during publication; inspect retained work before retrying"
+        )
     if pull.head_ref != i.polled.branch:
         return _Refused("PR branch changed during publication")
     if pull.head_sha not in {i.batch.head, local}:
@@ -181,24 +214,52 @@ def _post(pulls: PullRequests, number: int, item: dict[str, Any], text: str) -> 
         pulls.comment(number, text)
 
 
-def _reply_state(snapshot: PullRequestSnapshot, item: dict[str, Any], text: str, login: str) -> str:
+def _reply_state(
+    snapshot: PullRequestSnapshot, item: dict[str, Any], text: str, login: str
+) -> str:
     """Whether `text` already stands as the reply to `item`, is still owed, or was overtaken by a newer comment in its thread."""
     if item["kind"] != "thread":
-        return _POSTED if any(c.author == login and c.body == text for c in snapshot.comments) else _MISSING
-    thread = next((candidate for candidate in snapshot.threads if candidate.id == item["thread_id"]), None)
+        return (
+            _POSTED
+            if any(c.author == login and c.body == text for c in snapshot.comments)
+            else _MISSING
+        )
+    thread = next(
+        (
+            candidate
+            for candidate in snapshot.threads
+            if candidate.id == item["thread_id"]
+        ),
+        None,
+    )
     if thread is None or thread.resolved:
         return _POSTED
     source = item["key"].rsplit(":", 1)[-1]
-    index = next((n for n, comment in enumerate(thread.comments) if comment.id == source), len(thread.comments))
-    if any(comment.author == login and comment.body == text for comment in thread.comments[index + 1:]):
+    index = next(
+        (n for n, comment in enumerate(thread.comments) if comment.id == source),
+        len(thread.comments),
+    )
+    if any(
+        comment.author == login and comment.body == text
+        for comment in thread.comments[index + 1 :]
+    ):
         return _POSTED
-    return _SUPERSEDED if thread.comments and thread.comments[-1].id != source else _MISSING
+    return (
+        _SUPERSEDED
+        if thread.comments and thread.comments[-1].id != source
+        else _MISSING
+    )
 
 
 def _drafts(i: PublishInput) -> dict[str, str]:
     """The reply drafted for each feedback key of the batch, in batch order."""
     token = i.batch.token
-    drafted = {draft.key: draft.body for event in (*i.resolved, *i.unclear) if event.batch == token for draft in event.replies}
+    drafted = {
+        draft.key: draft.body
+        for event in (*i.resolved, *i.unclear)
+        if event.batch == token
+        for draft in event.replies
+    }
     return {key: drafted[key] for key in i.batch.keys if key in drafted}
 
 
@@ -207,7 +268,9 @@ def _item(i: PublishInput, key: str) -> dict[str, Any]:
 
 
 def _text(item: dict[str, Any], body: str) -> str:
-    return body if item["kind"] == "thread" else f"In response to {item['url']}:\n\n{body}"
+    return (
+        body if item["kind"] == "thread" else f"In response to {item['url']}:\n\n{body}"
+    )
 
 
 def _pulls(i: PublishInput) -> PullRequests:
@@ -226,11 +289,16 @@ def _poll(i: SnapshotInput) -> PullRequestPolled:
     read = i.github.pull_requests(target.slug).snapshot(number)
     # Plain JSON, so the Event equals what the ledger replays.
     projected = json.loads(json.dumps(babysit_snapshot(read)))
-    return PullRequestPolled(target, number, projected, i.github.login(), bot_logins(read))
+    return PullRequestPolled(
+        target, number, projected, i.github.login(), bot_logins(read)
+    )
 
 
 def _decide(
-    i: DecideInput, trust: TrustPolicy, author: str | None, copilot: Callable[[PullRequestPolled], bool],
+    i: DecideInput,
+    trust: TrustPolicy,
+    author: str | None,
+    copilot: Callable[[PullRequestPolled], bool],
 ) -> NextAction:
     polled = i.polled
     if not polled.is_open:
@@ -251,28 +319,45 @@ def _unsupported(polled: PullRequestPolled, author: str | None) -> bool:
     """The pull request is by someone other than the expected author, or its head lives in another repository."""
     pr = polled.snapshot["pr"]
     head_repository = (pr["head"].get("repo") or {}).get("full_name", "")
-    return pr["user"]["login"].lower() != (author or polled.login).lower() or head_repository.lower() != polled.target.slug.lower()
+    return (
+        pr["user"]["login"].lower() != (author or polled.login).lower()
+        or head_repository.lower() != polled.target.slug.lower()
+    )
 
 
 def _feedback(i: DecideInput, trust: TrustPolicy) -> FeedbackBatch | None:
     """The trusted feedback no earlier batch replied to, with the CI state of the head; None when there is none."""
     handled = {key for event in i.handled for key in event.keys}
-    items = unhandled_items(i.polled.snapshot, i.polled.login, trust, handled, frozenset(i.polled.bots))
-    return FeedbackBatch(i.polled.head, ci_failed(i.polled.snapshot), tuple(items)) if items else None
+    items = unhandled_items(
+        i.polled.snapshot, i.polled.login, trust, handled, frozenset(i.polled.bots)
+    )
+    return (
+        FeedbackBatch(i.polled.head, ci_failed(i.polled.snapshot), tuple(items))
+        if items
+        else None
+    )
 
 
 def _ready(snapshot: dict[str, Any]) -> bool:
     """CI is green, no Copilot review is pending, and GitHub reports the non-draft pull request clean and not waiting on a review."""
     pr = snapshot["pr"]
-    copilot_pending = any(is_copilot(user["login"]) for user in pr.get("requested_reviewers", []))
+    copilot_pending = any(
+        is_copilot(user["login"]) for user in pr.get("requested_reviewers", [])
+    )
     decision = snapshot.get("review", {}).get("reviewDecision")
     return (
-        ci_state(snapshot)["green"] and not copilot_pending and not pr["draft"]
-        and pr.get("mergeable") is True and pr.get("mergeable_state") == "clean" and decision not in _UNREADY_DECISIONS
+        ci_state(snapshot)["green"]
+        and not copilot_pending
+        and not pr["draft"]
+        and pr.get("mergeable") is True
+        and pr.get("mergeable_state") == "clean"
+        and decision not in _UNREADY_DECISIONS
     )
 
 
-def _blocked(i: BlockInput, fingerprint: Callable[[PullRequestPolled], str]) -> PrBlocked:
+def _blocked(
+    i: BlockInput, fingerprint: Callable[[PullRequestPolled], str]
+) -> PrBlocked:
     polled = _reread(i) or (i.polled[-1] if i.polled else None)
     detail = i.unsupported[-1].reason if i.unsupported else ""
     return PrBlocked(fingerprint(polled) if polled is not None else "", detail)
@@ -282,9 +367,12 @@ def _reread(i: BlockInput) -> PullRequestPolled | None:
     """A fresh read, so our own replies are in the fingerprint and cannot retrigger the blocked pull request; None when GitHub cannot be read."""
     try:
         return _poll(SnapshotInput(i.work, i.github))
-    except (CommandError, OSError, ValueError):
+    except CommandError, OSError, ValueError:
         return None
 
 
 def _blocked_attributes(blocked: PrBlocked, reason: str | None) -> dict[str, str]:
-    return {"factory.pr.fingerprint": blocked.fingerprint, "factory.pr.reason": reason or blocked.detail}
+    return {
+        "factory.pr.fingerprint": blocked.fingerprint,
+        "factory.pr.reason": reason or blocked.detail,
+    }

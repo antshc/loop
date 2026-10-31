@@ -6,17 +6,28 @@ import hashlib
 import json
 from typing import TYPE_CHECKING
 
+from loop import RunStatus
+
 from workflows.software_factory.events.feedback import TrustPolicy
 from workflows.software_factory.events.pull_requests import PullRequestPolled
-from loop import RunStatus
 
 if TYPE_CHECKING:
     from workflows.software_factory.stages.address import IssueWork
     from workflows.software_factory.stages.ci import FixInput
 
 __all__ = [
-    "ADOPTED", "CRASHED", "FINGERPRINT", "REASON", "TRUST", "Blocked", "address_subject", "ci_subject", "fingerprint",
-    "has_changed", "is_blocked", "released_for_change",
+    "ADOPTED",
+    "CRASHED",
+    "FINGERPRINT",
+    "REASON",
+    "TRUST",
+    "Blocked",
+    "address_subject",
+    "ci_subject",
+    "fingerprint",
+    "has_changed",
+    "is_blocked",
+    "released_for_change",
 ]
 
 # Run attributes a hand-off records on the closed run, so intake can tell what a blocked pull request waits on.
@@ -32,7 +43,16 @@ CRASHED = "worker-crash"
 # The authors whose review feedback is acted on; the acting account always is.
 TRUST = TrustPolicy(
     associations=frozenset({"OWNER", "MEMBER", "COLLABORATOR"}),
-    bots=frozenset({"copilot", "copilot-pull-request-reviewer", "chatgpt-codex-connector", "coderabbitai", "claude", "bugbot"}),
+    bots=frozenset(
+        {
+            "copilot",
+            "copilot-pull-request-reviewer",
+            "chatgpt-codex-connector",
+            "coderabbitai",
+            "claude",
+            "bugbot",
+        }
+    ),
 )
 
 
@@ -48,11 +68,22 @@ def digest(value: object) -> str:
 def fingerprint(polled: PullRequestPolled) -> str:
     """Identifies changed review and CI inputs without scheduler telemetry."""
     snapshot = polled.snapshot
-    return digest({"sha": snapshot["pr"]["head"]["sha"], "state": snapshot["pr"]["state"],
-                   "threads": snapshot["threads"], "other": snapshot["other"],
-                   "checks": [(c["id"], c["status"], c.get("conclusion")) for c in snapshot["checks"]],
-                   "statuses": [(s["id"], s["state"]) for s in snapshot["statuses"]],
-                   "runs": [(r["id"], r["status"], r.get("conclusion"), r.get("run_attempt")) for r in snapshot["runs"]]})
+    return digest(
+        {
+            "sha": snapshot["pr"]["head"]["sha"],
+            "state": snapshot["pr"]["state"],
+            "threads": snapshot["threads"],
+            "other": snapshot["other"],
+            "checks": [
+                (c["id"], c["status"], c.get("conclusion")) for c in snapshot["checks"]
+            ],
+            "statuses": [(s["id"], s["state"]) for s in snapshot["statuses"]],
+            "runs": [
+                (r["id"], r["status"], r.get("conclusion"), r.get("run_attempt"))
+                for r in snapshot["runs"]
+            ],
+        }
+    )
 
 
 def address_subject(work: IssueWork) -> str:

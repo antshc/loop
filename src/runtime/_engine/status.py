@@ -21,7 +21,16 @@ class Recorded:
 class ScopeStatus:
     """How a scope ended; `next_item` and `rerouted` only travel up to the loop item or dispatch case they address."""
 
-    kind: Literal["completed", "idle", "held", "handed_off", "failed", "interrupted", "next_item", "rerouted"]
+    kind: Literal[
+        "completed",
+        "idle",
+        "held",
+        "handed_off",
+        "failed",
+        "interrupted",
+        "next_item",
+        "rerouted",
+    ]
     reason: str | None = None
     variant: type[Event] | None = None
 

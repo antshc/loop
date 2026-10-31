@@ -67,11 +67,19 @@ STATUS_OF_REASON: dict[ReasonCode, ReadinessStatus] = {
 }
 
 # A verdict that is certain beats an unseen input, which beats a wait that time resolves.
-_PRECEDENCE = (ReadinessStatus.BLOCKED, ReadinessStatus.UNKNOWN, ReadinessStatus.WAITING)
+_PRECEDENCE = (
+    ReadinessStatus.BLOCKED,
+    ReadinessStatus.UNKNOWN,
+    ReadinessStatus.WAITING,
+)
 
 _REQUIRED_CHECK_KINDS = (CheckKind.CHECK_RUN, CheckKind.STATUS)
 
-_DECISIVE_VERDICTS = (ReviewVerdict.APPROVED, ReviewVerdict.CHANGES_REQUESTED, ReviewVerdict.DISMISSED)
+_DECISIVE_VERDICTS = (
+    ReviewVerdict.APPROVED,
+    ReviewVerdict.CHANGES_REQUESTED,
+    ReviewVerdict.DISMISSED,
+)
 
 
 @dataclass(frozen=True)
@@ -108,7 +116,9 @@ class MergeReadiness:
 class MergeGateEvaluator:
     """Evaluates merge readiness from loaded snapshots; it merges nothing and reads nothing."""
 
-    def evaluate(self, snapshot: PullRequestSnapshot, policy: MergePolicySnapshot) -> MergeReadiness:
+    def evaluate(
+        self, snapshot: PullRequestSnapshot, policy: MergePolicySnapshot
+    ) -> MergeReadiness:
         """The readiness of the pull request under `policy`; unknown or incomplete input never gives READY."""
         reasons = (
             *self._state(snapshot),
@@ -134,21 +144,36 @@ class MergeGateEvaluator:
         return reasons
 
     @staticmethod
-    def _policy_inputs(snapshot: PullRequestSnapshot, policy: MergePolicySnapshot) -> list[MergeReason]:
+    def _policy_inputs(
+        snapshot: PullRequestSnapshot, policy: MergePolicySnapshot
+    ) -> list[MergeReason]:
         pull = snapshot.pull_request
-        reasons = [MergeReason(ReasonCode.POLICY_UNAVAILABLE, source) for source in policy.unavailable]
+        reasons = [
+            MergeReason(ReasonCode.POLICY_UNAVAILABLE, source)
+            for source in policy.unavailable
+        ]
         if policy.base_ref != pull.base_ref:
-            reasons.append(MergeReason(ReasonCode.INCOMPLETE_INPUT, f"policy of {policy.base_ref}, base is {pull.base_ref}"))
+            reasons.append(
+                MergeReason(
+                    ReasonCode.INCOMPLETE_INPUT,
+                    f"policy of {policy.base_ref}, base is {pull.base_ref}",
+                )
+            )
         if not pull.head_sha:
             reasons.append(MergeReason(ReasonCode.INCOMPLETE_INPUT, "head commit"))
-        if policy.code_owner_review and snapshot.review_decision is ReviewDecision.UNKNOWN:
+        if (
+            policy.code_owner_review
+            and snapshot.review_decision is ReviewDecision.UNKNOWN
+        ):
             reasons.append(MergeReason(ReasonCode.INCOMPLETE_INPUT, "review decision"))
         if policy.up_to_date and pull.merge_state is MergeState.BEHIND:
             reasons.append(MergeReason(ReasonCode.BRANCH_BEHIND))
         return reasons
 
     @classmethod
-    def _checks(cls, snapshot: PullRequestSnapshot, policy: MergePolicySnapshot) -> list[MergeReason]:
+    def _checks(
+        cls, snapshot: PullRequestSnapshot, policy: MergePolicySnapshot
+    ) -> list[MergeReason]:
         reasons = []
         for name in sorted(policy.required_checks):
             code = cls._check_problem(snapshot, name)
@@ -159,7 +184,13 @@ class MergeGateEvaluator:
     @staticmethod
     def _check_problem(snapshot: PullRequestSnapshot, name: str) -> ReasonCode | None:
         head = snapshot.pull_request.head_sha
-        named = _latest_statuses([check for check in snapshot.checks if check.name == name and check.kind in _REQUIRED_CHECK_KINDS])
+        named = _latest_statuses(
+            [
+                check
+                for check in snapshot.checks
+                if check.name == name and check.kind in _REQUIRED_CHECK_KINDS
+            ]
+        )
         current = [check for check in named if not check.stale(head)]
         if any(check.outcome is CheckOutcome.FAILED for check in current):
             return ReasonCode.CHECK_FAILING
@@ -170,33 +201,54 @@ class MergeGateEvaluator:
         return ReasonCode.CHECK_STALE if named else ReasonCode.CHECK_MISSING
 
     @classmethod
-    def _reviews(cls, snapshot: PullRequestSnapshot, policy: MergePolicySnapshot) -> list[MergeReason]:
+    def _reviews(
+        cls, snapshot: PullRequestSnapshot, policy: MergePolicySnapshot
+    ) -> list[MergeReason]:
         reasons = []
         verdicts = cls._verdicts(snapshot, policy)
         if ReviewVerdict.CHANGES_REQUESTED in verdicts.values():
             reasons.append(MergeReason(ReasonCode.CHANGES_REQUESTED))
-        approvals = sum(1 for verdict in verdicts.values() if verdict is ReviewVerdict.APPROVED)
+        approvals = sum(
+            1 for verdict in verdicts.values() if verdict is ReviewVerdict.APPROVED
+        )
         if approvals < policy.required_approvals:
-            reasons.append(MergeReason(ReasonCode.APPROVALS_MISSING, f"{approvals} of {policy.required_approvals}"))
-        if policy.code_owner_review and snapshot.review_decision is ReviewDecision.REVIEW_REQUIRED:
+            reasons.append(
+                MergeReason(
+                    ReasonCode.APPROVALS_MISSING,
+                    f"{approvals} of {policy.required_approvals}",
+                )
+            )
+        if (
+            policy.code_owner_review
+            and snapshot.review_decision is ReviewDecision.REVIEW_REQUIRED
+        ):
             reasons.append(MergeReason(ReasonCode.CODE_OWNER_REVIEW_MISSING))
         return reasons
 
     @staticmethod
-    def _verdicts(snapshot: PullRequestSnapshot, policy: MergePolicySnapshot) -> dict[str, ReviewVerdict]:
+    def _verdicts(
+        snapshot: PullRequestSnapshot, policy: MergePolicySnapshot
+    ) -> dict[str, ReviewVerdict]:
         """Each reviewer's standing verdict: their latest approval, request for changes, or dismissal; the author never approves their own change."""
         head = snapshot.pull_request.head_sha
         latest = {}
         for review in sorted(snapshot.reviews, key=lambda review: review.id):
-            if review.verdict in _DECISIVE_VERDICTS and review.reviewer != snapshot.pull_request.author:
+            if (
+                review.verdict in _DECISIVE_VERDICTS
+                and review.reviewer != snapshot.pull_request.author
+            ):
                 latest[review.reviewer] = review
         return {
-            reviewer: ReviewVerdict.DISMISSED if _outdated(review.verdict, review.commit, head, policy) else review.verdict
+            reviewer: ReviewVerdict.DISMISSED
+            if _outdated(review.verdict, review.commit, head, policy)
+            else review.verdict
             for reviewer, review in latest.items()
         }
 
     @staticmethod
-    def _threads(snapshot: PullRequestSnapshot, policy: MergePolicySnapshot) -> list[MergeReason]:
+    def _threads(
+        snapshot: PullRequestSnapshot, policy: MergePolicySnapshot
+    ) -> list[MergeReason]:
         unresolved = [thread for thread in snapshot.threads if not thread.resolved]
         if policy.conversation_resolution and unresolved:
             return [MergeReason(ReasonCode.UNRESOLVED_THREADS, str(len(unresolved)))]
@@ -207,14 +259,26 @@ def _latest_statuses(checks: list[CheckResult]) -> list[CheckResult]:
     """`checks` with only the newest commit status of each commit; the statuses endpoint lists every status ever posted, so an earlier `pending` or `failure` is superseded."""
     newest: dict[str, CheckResult] = {}
     for check in checks:
-        if check.kind is CheckKind.STATUS and (check.commit not in newest or check.id > newest[check.commit].id):
+        if check.kind is CheckKind.STATUS and (
+            check.commit not in newest or check.id > newest[check.commit].id
+        ):
             newest[check.commit] = check
-    return [check for check in checks if check.kind is not CheckKind.STATUS or newest[check.commit] is check]
+    return [
+        check
+        for check in checks
+        if check.kind is not CheckKind.STATUS or newest[check.commit] is check
+    ]
 
 
-def _outdated(verdict: ReviewVerdict, commit: str, head: str, policy: MergePolicySnapshot) -> bool:
+def _outdated(
+    verdict: ReviewVerdict, commit: str, head: str, policy: MergePolicySnapshot
+) -> bool:
     # A push dismisses approvals, never requests for changes, when the policy says so.
-    return policy.dismiss_stale_reviews and verdict is ReviewVerdict.APPROVED and commit != head
+    return (
+        policy.dismiss_stale_reviews
+        and verdict is ReviewVerdict.APPROVED
+        and commit != head
+    )
 
 
 def _status(reasons: tuple[MergeReason, ...]) -> ReadinessStatus:

@@ -14,7 +14,16 @@ __all__ = ["TRUST", "address_subject"]
 # The authors whose review feedback is acted on, the same rules pr_babysit applies; the acting account always is.
 TRUST = TrustPolicy(
     associations=frozenset({"OWNER", "MEMBER", "COLLABORATOR"}),
-    bots=frozenset({"copilot", "copilot-pull-request-reviewer", "chatgpt-codex-connector", "coderabbitai", "claude", "bugbot"}),
+    bots=frozenset(
+        {
+            "copilot",
+            "copilot-pull-request-reviewer",
+            "chatgpt-codex-connector",
+            "coderabbitai",
+            "claude",
+            "bugbot",
+        }
+    ),
 )
 
 

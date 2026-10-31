@@ -7,15 +7,26 @@ from dataclasses import dataclass
 from typing import Any
 
 from ...agents.contract import AgentError, Declined, Json
-
-from ..facts import event_shape
 from ..event import DefinitionError, Event
+from ..facts import event_shape
 from ..ledger import Attempt, AttemptLoop, AttemptState, WorkKey
 from ..routes import Handoff, Next, Rework, Route
 from ..spans import SpanHandle
 from ..stage import (
-    Action, AgentCommits, AgentExecution, Effect, Evidence, Fail, HarnessCommits, Hold, Nothing, NoRepository, Pass,
-    Retain, Stage, Verdict,
+    Action,
+    AgentCommits,
+    AgentExecution,
+    Effect,
+    Evidence,
+    Fail,
+    HarnessCommits,
+    Hold,
+    NoRepository,
+    Nothing,
+    Pass,
+    Retain,
+    Stage,
+    Verdict,
 )
 from ..worktree import WorktreeGit
 from .codec import decode, decode_stored, is_tagged
@@ -33,10 +44,17 @@ COMMIT_GONE = "the accepted commit is no longer on the branch"
 _KINDS = {Pass: "passed", Fail: "failed", Hold: "held"}
 _WORDS = {"passed": "pass", "failed": "fail", "held": "hold"}
 _KIND_OF_WORD = {word: kind for kind, word in _WORDS.items()}
-_EXECUTORS = {AgentExecution: "agent", Action: "action", Effect: "effect", type(None): "none"}
+_EXECUTORS = {
+    AgentExecution: "agent",
+    Action: "action",
+    Effect: "effect",
+    type(None): "none",
+}
 
 
-def run_stage(stage: Stage[Any, Any, Any], scope: Scope, *, handoff: bool = False) -> Outcome:
+def run_stage(
+    stage: Stage[Any, Any, Any], scope: Scope, *, handoff: bool = False
+) -> Outcome:
     """Runs one placement of `stage` in `scope` and returns how it ended and where control goes next; a hand-off lands without the resume check."""
     stage_input = resolve(stage.input, scope, stage.reads_)
     if stage.when_ is not None and not stage.when_(stage_input):
@@ -64,7 +82,9 @@ def _stored_event(stage: Stage[Any, Any, Any], stored: Json) -> Event | None:
     for event in declared:
         if is_tagged(stored, event):
             return decode(stored, event)
-    raise LookupError(f"Stage '{stage.id}' stored an Event it does not declare: {stored!r}")
+    raise LookupError(
+        f"Stage '{stage.id}' stored an Event it does not declare: {stored!r}"
+    )
 
 
 def _recorded_error_route(scope: Scope, name: str | None) -> Route | None:
@@ -75,35 +95,63 @@ def _recorded_error_route(scope: Scope, name: str | None) -> Route | None:
 
 def _is_check(stage: Stage[Any, Any, Any]) -> bool:
     """A pure Stage: no executor or a deterministic action, and no worktree."""
-    return isinstance(stage.executor, (Action, type(None))) and isinstance(stage.work, NoRepository)
+    return isinstance(stage.executor, (Action, type(None))) and isinstance(
+        stage.work, NoRepository
+    )
 
 
 def _run_check(stage: Stage[Any, Any, Any], scope: Scope, stage_input: Any) -> Outcome:
     """A check Stage opens no span; its outcome is a scope event and a buffered ledger record, replayed when the epoch already ran it."""
     started = scope.count_pure(stage.id)
-    revision = scope.key(stage.id, stage.revision_(stage_input) if stage.revision_ is not None else None).revision
+    revision = scope.key(
+        stage.id, stage.revision_(stage_input) if stage.revision_ is not None else None
+    ).revision
     recorded = scope.recorded_pure(stage.id, revision)
     if recorded is not None:
         return _replay_check(stage, scope, recorded, started)
     error_route: Route | None = None
     error: str | None = None
     try:
-        reply = stage.executor.run(stage_input) if isinstance(stage.executor, Action) else Nothing()
+        reply = (
+            stage.executor.run(stage_input)
+            if isinstance(stage.executor, Action)
+            else Nothing()
+        )
         verdict = _judge(stage, stage_input, reply, NO_EVIDENCE)
     except scope.errors as exception:
         verdict, error_route, error = _declared_failure(scope, exception)
     kind, event, reason = _summary(verdict)
     scope.ledger.pure(stage.id, revision, _WORDS[kind], event, reason, error)
-    scope.event("factory.gate", quiet=kind == "passed", stage=stage.id, verdict=_WORDS[kind], reason=reason)
-    return Outcome(kind, _route(stage, kind, started, scope.event, error_route), event, reason)
+    scope.event(
+        "factory.gate",
+        quiet=kind == "passed",
+        stage=stage.id,
+        verdict=_WORDS[kind],
+        reason=reason,
+    )
+    return Outcome(
+        kind, _route(stage, kind, started, scope.event, error_route), event, reason
+    )
 
 
-def _replay_check(stage: Stage[Any, Any, Any], scope: Scope, recorded: dict[str, Any], started: int) -> Outcome:
+def _replay_check(
+    stage: Stage[Any, Any, Any], scope: Scope, recorded: dict[str, Any], started: int
+) -> Outcome:
     """A check Stage's recorded outcome, verdict included, without evaluating it again."""
     kind = _KIND_OF_WORD[recorded["outcome"]]
-    scope.event("factory.replay", quiet=True, stage=stage.id, outcome=recorded["outcome"])
-    route = _route(stage, kind, started, scope.event, _recorded_error_route(scope, recorded.get("error")))
-    return Outcome(kind, route, _stored_event(stage, recorded["event"]), recorded["reason"])
+    scope.event(
+        "factory.replay", quiet=True, stage=stage.id, outcome=recorded["outcome"]
+    )
+    route = _route(
+        stage,
+        kind,
+        started,
+        scope.event,
+        _recorded_error_route(scope, recorded.get("error")),
+    )
+    return Outcome(
+        kind, route, _stored_event(stage, recorded["event"]), recorded["reason"]
+    )
 
 
 @dataclass
@@ -128,12 +176,23 @@ class _Attempt:
     span: SpanHandle | None = None
 
     @classmethod
-    def place(cls, stage: Stage[Any, Any, Any], scope: Scope, stage_input: Any, handoff: bool) -> _Attempt:
+    def place(
+        cls, stage: Stage[Any, Any, Any], scope: Scope, stage_input: Any, handoff: bool
+    ) -> _Attempt:
         """The placement's worktree and the ledger loop of its work key."""
         revision = stage.revision_(stage_input) if stage.revision_ is not None else None
         key = scope.key(stage.id, revision)
         budget = _budget(stage, stage_input)
-        return cls(stage, scope, stage_input, _worktree(stage, scope), scope.ledger.loop(key, budget), key, budget, handoff)
+        return cls(
+            stage,
+            scope,
+            stage_input,
+            _worktree(stage, scope),
+            scope.ledger.loop(key, budget),
+            key,
+            budget,
+            handoff,
+        )
 
     def run(self) -> Outcome:
         """Replays what the work key already finished, reconciles an interrupted attempt, else starts a new one."""
@@ -160,27 +219,49 @@ class _Attempt:
             return None
         event = _stored_event(self.stage, passed["event"])
         self.scope.ledger.replayed(self.key, event)
-        self.scope.event("factory.replay", quiet=True, stage=self.stage.id, outcome="pass")
+        self.scope.event(
+            "factory.replay", quiet=True, stage=self.stage.id, outcome="pass"
+        )
         if self._commit_gone(passed.get("commit")):
             return self._refused(COMMIT_GONE)
-        return Outcome("passed", _route(self.stage, "passed", 0, self.scope.event, None), event)
+        return Outcome(
+            "passed", _route(self.stage, "passed", 0, self.scope.event, None), event
+        )
 
     def _replay(self, last: AttemptState) -> Outcome:
         """The outcome the work key already recorded, without running anything."""
-        self.scope.event("factory.replay", quiet=last.status == "passed", stage=self.stage.id, outcome=_WORDS[last.status])
+        self.scope.event(
+            "factory.replay",
+            quiet=last.status == "passed",
+            stage=self.stage.id,
+            outcome=_WORDS[last.status],
+        )
         event = _stored_event(self.stage, last.event)
         if last.status == "passed":
             if self._commit_gone(last.commit):
                 return self._refused(COMMIT_GONE)
-            return Outcome("passed", _route(self.stage, "passed", last.n, self.scope.event, None), event)
+            return Outcome(
+                "passed",
+                _route(self.stage, "passed", last.n, self.scope.event, None),
+                event,
+            )
         route = _route(
-            self.stage, last.status, last.n, self.scope.event, _recorded_error_route(self.scope, last.error), final=True,
+            self.stage,
+            last.status,
+            last.n,
+            self.scope.event,
+            _recorded_error_route(self.scope, last.error),
+            final=True,
         )
         return Outcome(last.status, route, event, last.reason)  # type: ignore[arg-type]
 
     def _commit_gone(self, commit: str | None) -> bool:
         """Whether an accepted commit is no longer an ancestor of the branch head."""
-        return commit is not None and self.worktree is not None and not self.worktree.git.is_ancestor(self.worktree.path, commit)
+        return (
+            commit is not None
+            and self.worktree is not None
+            and not self.worktree.git.is_ancestor(self.worktree.path, commit)
+        )
 
     def _refused(self, reason: str) -> Outcome:
         """A failure that never reruns the Stage: its route's rework, if any, is skipped."""
@@ -212,14 +293,23 @@ class _Attempt:
         started = self.scope.run.log.started_under(self.budget)
         if started < limit.attempts:
             return None
-        self.scope.event("factory.limit", stage=self.stage.id, key=self.budget["per"], started=started)
+        self.scope.event(
+            "factory.limit",
+            stage=self.stage.id,
+            key=self.budget["per"],
+            started=started,
+        )
         reason = f"Stage '{self.stage.id}' has already started {started} of its {limit.attempts} attempts for '{self.budget['per']}'"
         return self._refused(reason)
 
     def _resume_violation(self) -> str | None:
         """Before the first new attempt of a resumed workspace scope: the reason the tree is dirty or the head is not the last recorded commit, else None."""
         owner = None if self.handoff else self.scope.resume_owner()
-        if owner is None or owner.workspace is None or WorktreeGit not in self.scope.run.services.types():
+        if (
+            owner is None
+            or owner.workspace is None
+            or WorktreeGit not in self.scope.run.services.types()
+        ):
             return None
         git = self.scope.run.services.get(WorktreeGit)
         path = owner.workspace.path
@@ -238,7 +328,9 @@ class _Attempt:
         if isinstance(executor, AgentExecution):
             assert workspace is not None
             request = executor.request(self.stage_input, workspace.path)
-            return executor.agent.run(workspace, request, session=executor.session(self.stage_input))
+            return executor.agent.run(
+                workspace, request, session=executor.session(self.stage_input)
+            )
         if isinstance(executor, (Action, Effect)):
             return executor.run(self.stage_input)
         return Nothing()
@@ -257,7 +349,9 @@ class _Attempt:
         except AgentError as exception:
             return Fail(str(exception))
         except self.scope.errors as exception:
-            verdict, self.error_route, self.error_name = _declared_failure(self.scope, exception)
+            verdict, self.error_route, self.error_name = _declared_failure(
+                self.scope, exception
+            )
             return verdict
 
     # ---- reconciling an interrupted attempt --------------------------------------------------------------
@@ -295,7 +389,10 @@ class _Attempt:
 
     def _clean_at_base(self) -> bool:
         assert self.worktree is not None
-        return self.worktree.git.is_clean(self.worktree.path) and self.worktree.git.head(self.worktree.path) == self.attempt.base
+        return (
+            self.worktree.git.is_clean(self.worktree.path)
+            and self.worktree.git.head(self.worktree.path) == self.attempt.base
+        )
 
     def _interrupted_after_reply(self, last: AttemptState) -> Verdict[Any] | None:
         """The stored reply is gated again, without the agent, while the worktree content is the one the reply left."""
@@ -303,7 +400,11 @@ class _Attempt:
             reply = decode_stored(last.reply)
         except LookupError:
             executor = self.stage.executor
-            return self._adopt_or_rerun(executor) if isinstance(executor, Effect) else self._unverified()
+            return (
+                self._adopt_or_rerun(executor)
+                if isinstance(executor, Effect)
+                else self._unverified()
+            )
         if self.worktree is not None and self._tree() != last.tree:
             return self._unverified()
         return self._enforce(self._guard(lambda: self._gate(reply)))
@@ -312,7 +413,9 @@ class _Attempt:
         """A commit the runtime was making: adopted when it is the intended one, redone when nothing moved and the work is restorable."""
         work, worktree = self.stage.work, self.worktree
         if worktree is None or not isinstance(work, HarnessCommits):
-            return self._unrecognized("the commit belongs to no runtime-committing attempt")
+            return self._unrecognized(
+                "the commit belongs to no runtime-committing attempt"
+            )
         event = _stored_event(self.stage, last.event)
         assert event is not None
         if worktree.git.head(worktree.path) != last.base:
@@ -321,14 +424,23 @@ class _Attempt:
             return self._unverified()
         return self._verify_then_commit(work, Pass(event), worktree, last.message)
 
-    def _adopt_commit(self, worktree: Worktree, last: AttemptState, event: Event) -> Verdict[Any]:
+    def _adopt_commit(
+        self, worktree: Worktree, last: AttemptState, event: Event
+    ) -> Verdict[Any]:
         git, path = worktree.git, worktree.path
         commits = git.commits_since(path, last.base or "")
-        if git.parents(path) == (last.base,) and commits and commits[-1].subject == last.message and git.is_clean(path):
+        if (
+            git.parents(path) == (last.base,)
+            and commits
+            and commits[-1].subject == last.message
+            and git.is_clean(path)
+        ):
             self.commit = git.head(path)
             self._event("factory.adopt", sha=self.commit)
             return Pass(event)
-        return self._unrecognized(f"head {git.head(path)} is not the attempt's intended commit")
+        return self._unrecognized(
+            f"head {git.head(path)} is not the attempt's intended commit"
+        )
 
     def _unverified(self) -> Fail[Any]:
         """The attempt cannot be verified: nothing is staged, restored or committed, and the failure is final so a person looks."""
@@ -343,37 +455,68 @@ class _Attempt:
 
     def _in_span(self, decide: Callable[[], Verdict[Any] | None]) -> Outcome | None:
         """Decides the attempt's verdict inside its span, rolls back, records the outcome and picks the route; None when `decide` says to run again."""
-        with self.scope.attempt_span(self.stage.id, self._attributes(), role=self._role()) as span:
+        with self.scope.attempt_span(
+            self.stage.id, self._attributes(), role=self._role()
+        ) as span:
             self.span = span
             verdict = decide()
             if verdict is None:
                 return None
             self._roll_back(verdict)
             kind, event, reason = _summary(verdict)
-            route = _route(self.stage, kind, self.attempt.n, span.event, self.error_route, final=self.force_final)
+            route = _route(
+                self.stage,
+                kind,
+                self.attempt.n,
+                span.event,
+                self.error_route,
+                final=self.force_final,
+            )
             self.loop.finish(
-                self.attempt, kind, reason=reason, commit=self.commit, event=event, final=not isinstance(route, Again),
+                self.attempt,
+                kind,
+                reason=reason,
+                commit=self.commit,
+                event=event,
+                final=not isinstance(route, Again),
                 error=self.error_name,
             )
             if kind == "passed" and self.commit is not None:
                 self.scope.advance_head(self.commit)
-            span.set(**clean({"factory.stage.outcome": _WORDS[kind], "factory.stage.reason": reason}))
+            span.set(
+                **clean(
+                    {
+                        "factory.stage.outcome": _WORDS[kind],
+                        "factory.stage.reason": reason,
+                    }
+                )
+            )
             if kind == "failed":
                 span.fail(reason or "failed")
         return Outcome(kind, route, event, reason)
 
     def _gate(self, reply: Any) -> Verdict[Any]:
         if self.worktree is not None:
-            self.evidence = self.worktree.evidence(self.attempt.base or "", self.attempt.status or "")
+            self.evidence = self.worktree.evidence(
+                self.attempt.base or "", self.attempt.status or ""
+            )
         verdict = _judge(self.stage, self.stage_input, reply, self.evidence)
         _, _, reason = _summary(verdict)
-        self._event("factory.gate", verdict=_WORDS[_KINDS[type(verdict)]], reason=reason)
+        self._event(
+            "factory.gate", verdict=_WORDS[_KINDS[type(verdict)]], reason=reason
+        )
         return verdict
 
     def _enforce(self, verdict: Verdict[Any]) -> Verdict[Any]:
         if not isinstance(verdict, Pass) or self.worktree is None:
             return verdict
-        found = violation(self.stage.work, self.stage_input, verdict.event, self.evidence, self.worktree)
+        found = violation(
+            self.stage.work,
+            self.stage_input,
+            verdict.event,
+            self.evidence,
+            self.worktree,
+        )
         self._event("factory.contract", ok=found is None, violation=found)
         if found is not None:
             return Fail(found)
@@ -384,14 +527,22 @@ class _Attempt:
         return verdict
 
     def _verify_then_commit(
-        self, work: HarnessCommits[Any, Any], verdict: Pass[Any], worktree: Worktree, message: str | None = None,
+        self,
+        work: HarnessCommits[Any, Any],
+        verdict: Pass[Any],
+        worktree: Worktree,
+        message: str | None = None,
     ) -> Verdict[Any]:
         if work.verify is not None:
             failed = work.verify(worktree.path)
             self._event("factory.verify", ok=failed is None)
             if failed is not None:
                 return failed
-        message = message if message is not None else work.message(self.stage_input, verdict.event)
+        message = (
+            message
+            if message is not None
+            else work.message(self.stage_input, verdict.event)
+        )
         self.loop.committing(self.attempt, message, verdict.event)
         self.commit = worktree.git.commit(worktree.path, message)
         self._event("factory.commit", sha=self.commit)
@@ -401,7 +552,9 @@ class _Attempt:
         """A held attempt always leaves the repository as it found it; a failed one only when its contract restores; an unverified one is left for a person."""
         if self.worktree is None or self.attempt.base is None or self.keep_tree:
             return
-        if isinstance(verdict, Hold) or (isinstance(verdict, Fail) and rolls_back(self.stage.work)):
+        if isinstance(verdict, Hold) or (
+            isinstance(verdict, Fail) and rolls_back(self.stage.work)
+        ):
             self.worktree.git.restore(self.worktree.path, self.attempt.base)
             self._event("factory.restore", to=self.attempt.base)
 
@@ -411,12 +564,19 @@ class _Attempt:
         self.span.event(name, **clean(attributes))
 
     def _attributes(self) -> dict[str, str | int | bool]:
-        described = {f"factory.{name}": value for name, value in self.stage.describe(self.stage_input).items()}
+        described = {
+            f"factory.{name}": value
+            for name, value in self.stage.describe(self.stage_input).items()
+        }
         return {
-            "factory.stage.id": self.stage.id, "factory.stage.attempt": self.attempt.n,
+            "factory.stage.id": self.stage.id,
+            "factory.stage.attempt": self.attempt.n,
             "factory.stage.executor": _EXECUTORS[type(self.stage.executor)],
-            "factory.stage.contract": type(self.stage.work).__name__, "factory.key.item": self.key.item,
-            "factory.key.revision": self.key.revision, "factory.key.epoch": self.key.epoch, **described,
+            "factory.stage.contract": type(self.stage.work).__name__,
+            "factory.key.item": self.key.item,
+            "factory.key.revision": self.key.revision,
+            "factory.key.epoch": self.key.epoch,
+            **described,
         }
 
     def _role(self) -> str:
@@ -432,7 +592,9 @@ def _worktree(stage: Stage[Any, Any, Any], scope: Scope) -> Worktree | None:
     return Worktree(scope.run.services.get(WorktreeGit), scope.workspace.path)
 
 
-def _judge(stage: Stage[Any, Any, Any], stage_input: Any, reply: Any, evidence: Evidence) -> Verdict[Any]:
+def _judge(
+    stage: Stage[Any, Any, Any], stage_input: Any, reply: Any, evidence: Evidence
+) -> Verdict[Any]:
     """The trusted gate's verdict; an agent's reply never passes by itself, and a declined one fails."""
     if stage.judge is not None:
         verdict = stage.judge(stage_input, reply, evidence)
@@ -447,19 +609,33 @@ def _judge(stage: Stage[Any, Any, Any], stage_input: Any, reply: Any, evidence: 
 def _require_declared(stage: Stage[Any, Any, Any], verdict: Any) -> None:
     """A verdict is Pass, Fail or Hold, and its Event is one the Stage declares."""
     if not isinstance(verdict, (Pass, Fail, Hold)):
-        raise DefinitionError(f"Stage '{stage.id}': the gate returned {verdict!r}, not a Pass, Fail or Hold")
-    declared = tuple(event_shape(stage.produces) or ()) if isinstance(verdict, Pass) else stage.may_emit
+        raise DefinitionError(
+            f"Stage '{stage.id}': the gate returned {verdict!r}, not a Pass, Fail or Hold"
+        )
+    declared = (
+        tuple(event_shape(stage.produces) or ())
+        if isinstance(verdict, Pass)
+        else stage.may_emit
+    )
     event = verdict.event
     if event is None and not isinstance(verdict, Pass):
         return
     if not isinstance(event, Event) or not isinstance(event, declared):
         word = "produces" if isinstance(verdict, Pass) else "may_emit"
-        raise DefinitionError(f"Stage '{stage.id}': {event!r} is not an Event the Stage declares in {word}")
+        raise DefinitionError(
+            f"Stage '{stage.id}': {event!r} is not an Event the Stage declares in {word}"
+        )
 
 
-def _declared_failure(scope: Scope, exception: BaseException) -> tuple[Fail[Any], Route, str]:
+def _declared_failure(
+    scope: Scope, exception: BaseException
+) -> tuple[Fail[Any], Route, str]:
     """A declared exception becomes a failure that takes the Workflow's error route; the exception's name is recorded to replay that route."""
-    return Fail(f"{type(exception).__name__}: {exception}"), scope.error_route(exception).route, type(exception).__name__
+    return (
+        Fail(f"{type(exception).__name__}: {exception}"),
+        scope.error_route(exception).route,
+        type(exception).__name__,
+    )
 
 
 def _summary(verdict: Verdict[Any]) -> tuple[str, Event | None, str | None]:
@@ -469,11 +645,23 @@ def _summary(verdict: Verdict[Any]) -> tuple[str, Event | None, str | None]:
 
 
 def _route(
-    stage: Stage[Any, Any, Any], kind: str, started: int, emit: Callable[..., None], error_route: Route | None,
-    *, final: bool = False,
+    stage: Stage[Any, Any, Any],
+    kind: str,
+    started: int,
+    emit: Callable[..., None],
+    error_route: Route | None,
+    *,
+    final: bool = False,
 ) -> Route | Again:
     """The route an outcome takes; a failure with rework budget left runs the same Stage again unless the outcome is final."""
-    route = error_route or {"passed": stage.routes.passed, "failed": stage.routes.failed, "held": stage.routes.held}[kind]
+    route = (
+        error_route
+        or {
+            "passed": stage.routes.passed,
+            "failed": stage.routes.failed,
+            "held": stage.routes.held,
+        }[kind]
+    )
     if isinstance(route, Rework):
         if started < route.max_attempts and not final:
             emit("factory.rework", next_attempt=started + 1, budget=route.max_attempts)

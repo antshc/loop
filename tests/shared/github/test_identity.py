@@ -3,8 +3,12 @@ from __future__ import annotations
 from dataclasses import FrozenInstanceError
 
 import pytest
-
-from loop.shared.github.identity import CommentRef, IssueIdentity, IssueRef, RepositoryId
+from loop.shared.github.identity import (
+    CommentRef,
+    IssueIdentity,
+    IssueRef,
+    RepositoryId,
+)
 
 
 def test_repository_id_contains_owner_and_repo_and_renders_slug() -> None:

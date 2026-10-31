@@ -9,30 +9,75 @@ import pkgutil
 from pathlib import Path
 
 import pytest
-
-import workflows.software_factory.events as events
-from workflows.software_factory.events.checks import ChecksPassed
-from workflows.software_factory.events.ci import BranchBroken, CiFixed, CiRerun, Diagnosis, Transient
-from workflows.software_factory.events.chore import ChoreDiscarded, ChoreRefined
-from workflows.software_factory.events.feedback import (
-    FeedbackBatch, FeedbackGrouped, FeedbackHandled, GroupedIssue, IssueResolved, IssueUnclear, ReplyDraft,
-)
-from workflows.software_factory.events.pull_requests import (
-    CiFailing, CopilotDue, CopilotRequested, DraftPullRequestPublished, Finalized, NextAction, OriginValidated, PrBlocked,
-    PollStarted, PullRequestClosed, PullRequestPolled, ReadinessCheck, ReadinessReported, Unsupported,
-)
-from workflows.software_factory.events.review import PullRequestReviewed, ReviewAxis, ReviewFailed, ReviewFinding
-from workflows.software_factory.events.specs import (
-    CheckoutPrepared, DeliveryAnnounced, RepositoryTarget, SpecBlocked, SpecFailureCommented, SpecHandedToHuman, SpecHeld,
-    SpecRouted, WorkFound,
-)
-from workflows.software_factory.events.tickets import (
-    Delivery, PlannedTicket, PlanProposed, TicketClosed, TicketEscalated, TicketImplemented, TicketRejected, TicketsCreated,
-)
 from loop import Event
 from loop.runtime._engine.codec import decode, encode
 
-TARGET = RepositoryTarget("owner/repo", Path("/work/repo"), Path("/work/repo.worktrees"), chore=False)
+import workflows.software_factory.events as events
+from workflows.software_factory.events.checks import ChecksPassed
+from workflows.software_factory.events.chore import ChoreDiscarded, ChoreRefined
+from workflows.software_factory.events.ci import (
+    BranchBroken,
+    CiFixed,
+    CiRerun,
+    Diagnosis,
+    Transient,
+)
+from workflows.software_factory.events.feedback import (
+    FeedbackBatch,
+    FeedbackGrouped,
+    FeedbackHandled,
+    GroupedIssue,
+    IssueResolved,
+    IssueUnclear,
+    ReplyDraft,
+)
+from workflows.software_factory.events.pull_requests import (
+    CiFailing,
+    CopilotDue,
+    CopilotRequested,
+    DraftPullRequestPublished,
+    Finalized,
+    NextAction,
+    OriginValidated,
+    PollStarted,
+    PrBlocked,
+    PullRequestClosed,
+    PullRequestPolled,
+    ReadinessCheck,
+    ReadinessReported,
+    Unsupported,
+)
+from workflows.software_factory.events.review import (
+    PullRequestReviewed,
+    ReviewAxis,
+    ReviewFailed,
+    ReviewFinding,
+)
+from workflows.software_factory.events.specs import (
+    CheckoutPrepared,
+    DeliveryAnnounced,
+    RepositoryTarget,
+    SpecBlocked,
+    SpecFailureCommented,
+    SpecHandedToHuman,
+    SpecHeld,
+    SpecRouted,
+    WorkFound,
+)
+from workflows.software_factory.events.tickets import (
+    Delivery,
+    PlannedTicket,
+    PlanProposed,
+    TicketClosed,
+    TicketEscalated,
+    TicketImplemented,
+    TicketRejected,
+    TicketsCreated,
+)
+
+TARGET = RepositoryTarget(
+    "owner/repo", Path("/work/repo"), Path("/work/repo.worktrees"), chore=False
+)
 
 SAMPLES: list[Event] = [
     SpecRouted(TARGET, "Checkout", "main", "add-login-page"),
@@ -49,21 +94,71 @@ SAMPLES: list[Event] = [
     TicketClosed(10, "abc1234", "Add login form"),
     TicketEscalated(10, "hitl", "declined"),
     Delivery("abc1234", ("abc1234 ccode(Checkout|10): implement",)),
-    DraftPullRequestPublished("https://example.test/pull/1", "add-login-page", pushed=True),
+    DraftPullRequestPublished(
+        "https://example.test/pull/1", "add-login-page", pushed=True
+    ),
     DraftPullRequestPublished(None, "add-login-page", pushed=False),
-    PlanProposed((PlannedTicket("Add form", "Build it"), PlannedTicket("Add tests", "Cover it", (0,)))),
+    PlanProposed(
+        (
+            PlannedTicket("Add form", "Build it"),
+            PlannedTicket("Add tests", "Cover it", (0,)),
+        )
+    ),
     TicketsCreated((10, 11)),
     ChoreRefined("renamed a helper", ("old bug",), "tidy", committed=True),
     ChoreDiscarded("tests failed", ("old bug",)),
-    PullRequestReviewed((ReviewAxis("bugs", "completed", "ok"),), (ReviewFinding("bug", "null", "bugs"),), ("comment-1",), "abc1234"),
+    PullRequestReviewed(
+        (ReviewAxis("bugs", "completed", "ok"),),
+        (ReviewFinding("bug", "null", "bugs"),),
+        ("comment-1",),
+        "abc1234",
+    ),
     ReviewFailed("no diff"),
-    Finalized(ready=False, pull_request="https://example.test/pull/1", blockers=("the review did not run",)),
+    Finalized(
+        ready=False,
+        pull_request="https://example.test/pull/1",
+        blockers=("the review did not run",),
+    ),
     PollStarted(3),
-    PullRequestPolled(TARGET, 7, {"pr": {"head": {"sha": "abc1234", "ref": "feature"}}, "threads": [], "other": []}),
-    FeedbackBatch("abc1234", True, ({"key": "thread:t1:c1", "kind": "thread", "line": None, "comments": [{"id": "c1"}], "status": "pending"},)),
-    FeedbackGrouped("1f2e3d", "abc1234", (GroupedIssue("cart", "duplicate products", ("thread:t1:c1",)), GroupedIssue("docs", None, ("comment:5:x",)))),
-    IssueResolved("1f2e3d", "cart", "fix-needed", (ReplyDraft("thread:t1:c1", "Fixed!"),)),
-    IssueUnclear("1f2e3d", "docs", "which docs?", (ReplyDraft("comment:5:x", "Could you say which?"),)),
+    PullRequestPolled(
+        TARGET,
+        7,
+        {
+            "pr": {"head": {"sha": "abc1234", "ref": "feature"}},
+            "threads": [],
+            "other": [],
+        },
+    ),
+    FeedbackBatch(
+        "abc1234",
+        True,
+        (
+            {
+                "key": "thread:t1:c1",
+                "kind": "thread",
+                "line": None,
+                "comments": [{"id": "c1"}],
+                "status": "pending",
+            },
+        ),
+    ),
+    FeedbackGrouped(
+        "1f2e3d",
+        "abc1234",
+        (
+            GroupedIssue("cart", "duplicate products", ("thread:t1:c1",)),
+            GroupedIssue("docs", None, ("comment:5:x",)),
+        ),
+    ),
+    IssueResolved(
+        "1f2e3d", "cart", "fix-needed", (ReplyDraft("thread:t1:c1", "Fixed!"),)
+    ),
+    IssueUnclear(
+        "1f2e3d",
+        "docs",
+        "which docs?",
+        (ReplyDraft("comment:5:x", "Could you say which?"),),
+    ),
     FeedbackHandled(("thread:t1:c1", "comment:5:x"), "def5678"),
     ChecksPassed(),
     OriginValidated("owner/repo"),
@@ -91,8 +186,11 @@ def test_an_event_round_trips_through_the_ledger_codec(event: Event) -> None:
 @pytest.mark.parametrize(
     ("event", "sum_type"),
     [
-        (Transient("x"), Diagnosis), (BranchBroken("y"), Diagnosis), (PullRequestClosed("h", merged=False), NextAction),
-        (FeedbackBatch("h", False, ()), NextAction), (ReadinessCheck("h", ready=True), NextAction),
+        (Transient("x"), Diagnosis),
+        (BranchBroken("y"), Diagnosis),
+        (PullRequestClosed("h", merged=False), NextAction),
+        (FeedbackBatch("h", False, ()), NextAction),
+        (ReadinessCheck("h", ready=True), NextAction),
     ],
     ids=lambda value: getattr(value, "__name__", type(value).__name__),
 )
@@ -106,9 +204,16 @@ def test_every_event_class_is_frozen_and_has_a_round_trip_sample() -> None:
     defined = {
         member
         for module in pkgutil.iter_modules(events.__path__)
-        for _, member in inspect.getmembers(importlib.import_module(f"{events.__name__}.{module.name}"), inspect.isclass)
-        if issubclass(member, Event) and member is not Event and member.__module__.startswith(events.__name__)
+        for _, member in inspect.getmembers(
+            importlib.import_module(f"{events.__name__}.{module.name}"), inspect.isclass
+        )
+        if issubclass(member, Event)
+        and member is not Event
+        and member.__module__.startswith(events.__name__)
     }
 
-    assert all(dataclasses.is_dataclass(event) and event.__dataclass_params__.frozen for event in defined)
+    assert all(
+        dataclasses.is_dataclass(event) and event.__dataclass_params__.frozen
+        for event in defined
+    )
     assert defined == {type(sample) for sample in SAMPLES}

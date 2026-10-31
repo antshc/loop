@@ -7,7 +7,18 @@ from dataclasses import dataclass
 from typing import Any
 
 from loop import (
-    AgentProfile, AgentWorkspace, All, Event, History, Item, Message, Selector, Stage, TypedAgent, WorkspaceOpener, copilot,
+    AgentProfile,
+    AgentWorkspace,
+    All,
+    Event,
+    History,
+    Item,
+    Message,
+    Selector,
+    Stage,
+    TypedAgent,
+    WorkspaceOpener,
+    copilot,
 )
 
 
@@ -162,12 +173,16 @@ class Unfrozen:
     routed: Routed
 
 
-def make(id: str, input: type = NoInput, produces: Any = Routed) -> Stage[Any, Any, Any]:
+def make(
+    id: str, input: type = NoInput, produces: Any = Routed
+) -> Stage[Any, Any, Any]:
     """A pure gate-only Stage."""
     return Stage(id, input, produces)
 
 
-def effect(id: str, input: type = NoInput, produces: Any = Routed) -> Stage[Any, Any, Any]:
+def effect(
+    id: str, input: type = NoInput, produces: Any = Routed
+) -> Stage[Any, Any, Any]:
     """An effect Stage with a reconcile."""
     return Stage(id, input, produces).effect(lambda _: None, reconcile=lambda _: None)
 
@@ -177,10 +192,14 @@ class Task(Message):
     """The request the stand-in developer agent receives."""
 
 
-DEVELOPER: TypedAgent[Task, None] = TypedAgent("developer", AgentProfile(copilot), lambda _: "", lambda *_: None)
+DEVELOPER: TypedAgent[Task, None] = TypedAgent(
+    "developer", AgentProfile(copilot), lambda _: "", lambda *_: None
+)
 
 
-def agent(id: str, input: type = NoInput, produces: Any = Routed) -> Stage[Any, Any, Any]:
+def agent(
+    id: str, input: type = NoInput, produces: Any = Routed
+) -> Stage[Any, Any, Any]:
     """An agent Stage."""
     return Stage(id, input, produces).agent(DEVELOPER, lambda *_: None)
 

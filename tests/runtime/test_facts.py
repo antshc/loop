@@ -5,16 +5,43 @@ from __future__ import annotations
 from dataclasses import dataclass, fields
 
 import pytest
-
 from loop import All, DefinitionError, ReadOnly, Stage, handoff, rework
 from loop.runtime.facts import (
-    Fact, FieldKind, closed_sum, event_shape, input_fields, merge, place_plain, producers_of,
+    Fact,
+    FieldKind,
+    closed_sum,
+    event_shape,
+    input_fields,
+    merge,
+    place_plain,
+    producers_of,
 )
 
 from .support import (
-    Alpha, Beta, Gamma, NeedsAllRouted, NeedsChore, NeedsClient, NeedsHistory, NeedsOptionalRouted, NeedsRouted,
-    NeedsSpec, NeedsTicket, NeedsWorkspace, NoInput, NotADataclass, Outcome, PrimitiveInput, Routed, Spec, Ticket, Triple,
-    Unfrozen, agent, effect, make,
+    Alpha,
+    Beta,
+    Gamma,
+    NeedsAllRouted,
+    NeedsChore,
+    NeedsClient,
+    NeedsHistory,
+    NeedsOptionalRouted,
+    NeedsRouted,
+    NeedsSpec,
+    NeedsTicket,
+    NeedsWorkspace,
+    NoInput,
+    NotADataclass,
+    Outcome,
+    PrimitiveInput,
+    Routed,
+    Spec,
+    Ticket,
+    Triple,
+    Unfrozen,
+    agent,
+    effect,
+    make,
 )
 
 
@@ -69,7 +96,9 @@ def test_an_optional_sum_field_reads_every_variant_of_the_sum() -> None:
     assert {event.__name__ for event in classified.shape} == {"Chored", "Discarded"}
 
 
-def test_a_plain_field_resolves_to_the_nearest_loop_item_then_the_context_then_a_service() -> None:
+def test_a_plain_field_resolves_to_the_nearest_loop_item_then_the_context_then_a_service() -> (
+    None
+):
     """Given item, context and service fields, when placed, then each resolves by its type."""
     (ticket,) = input_fields("s", NeedsTicket)
     (spec,) = input_fields("s", NeedsSpec)
@@ -94,15 +123,28 @@ def test_a_plain_field_resolves_to_the_nearest_loop_item_then_the_context_then_a
         (Unfrozen, "must be a frozen dataclass"),
         (Unresolvable, "unresolvable annotation"),
     ],
-    ids=["primitive", "object", "optional-primitive", "bare-marker", "marker-of-primitive", "not-dataclass", "unfrozen", "unresolvable"],
+    ids=[
+        "primitive",
+        "object",
+        "optional-primitive",
+        "bare-marker",
+        "marker-of-primitive",
+        "not-dataclass",
+        "unfrozen",
+        "unresolvable",
+    ],
 )
-def test_an_unusable_input_is_rejected_when_the_stage_is_built(input_type, message) -> None:
+def test_an_unusable_input_is_rejected_when_the_stage_is_built(
+    input_type, message
+) -> None:
     """Given an unusable input type, when a Stage is built over it, then the error names the Stage and the field."""
     with pytest.raises(DefinitionError, match=f"Stage 'bad'.*{message}"):
         Stage("bad", input_type, Routed)
 
 
-@pytest.mark.parametrize("identity", ["Bad", "snake_case", "-lead", "trail-", "double--dash", "", "1st"])
+@pytest.mark.parametrize(
+    "identity", ["Bad", "snake_case", "-lead", "trail-", "double--dash", "", "1st"]
+)
 def test_a_stage_identity_must_be_kebab_case(identity) -> None:
     """Given a non-kebab-case identity, when a Stage is built, then it is rejected."""
     with pytest.raises(DefinitionError, match="identity must be kebab-case"):
@@ -111,7 +153,9 @@ def test_a_stage_identity_must_be_kebab_case(identity) -> None:
 
 def test_a_stage_must_declare_the_event_it_produces() -> None:
     """Given a produced type that is not an Event, when a Stage is built, then it is rejected."""
-    with pytest.raises(DefinitionError, match="produces must be an Event or a closed sum of Events"):
+    with pytest.raises(
+        DefinitionError, match="produces must be an Event or a closed sum of Events"
+    ):
         Stage("bad", NoInput, int)
 
 
@@ -137,19 +181,31 @@ def test_every_modifier_returns_a_modified_copy_and_leaves_the_original() -> Non
     original = effect("push")
     before = {field.name: getattr(original, field.name) for field in fields(original)}
     modified = [
-        original.on_pass(rework(max_attempts=2)), original.on_fail(handoff(effect("hand"))), original.on_hold(rework(max_attempts=1)),
-        original.when(lambda _: True), original.revision(lambda _: "r"), original.limit(2, per=lambda _: "k"),
-        original.once(per=lambda _: "k"), original.named("push-later"), original.reads(Routed, from_="x"),
-        original.attributes(lambda _: {}), original.contract(ReadOnly()), original.gate(lambda *_: None),
+        original.on_pass(rework(max_attempts=2)),
+        original.on_fail(handoff(effect("hand"))),
+        original.on_hold(rework(max_attempts=1)),
+        original.when(lambda _: True),
+        original.revision(lambda _: "r"),
+        original.limit(2, per=lambda _: "k"),
+        original.once(per=lambda _: "k"),
+        original.named("push-later"),
+        original.reads(Routed, from_="x"),
+        original.attributes(lambda _: {}),
+        original.contract(ReadOnly()),
+        original.gate(lambda *_: None),
     ]
 
     assert all(copy is not original and copy != original for copy in modified)
-    assert {field.name: getattr(original, field.name) for field in fields(original)} == before
+    assert {
+        field.name: getattr(original, field.name) for field in fields(original)
+    } == before
 
 
 def test_tuning_applies_to_an_agent_stage_only() -> None:
     """Given a non-agent Stage, when it is tuned, then it is rejected; an agent Stage gets a tuned copy."""
-    with pytest.raises(DefinitionError, match="Stage 'push': tune applies to an agent Stage only"):
+    with pytest.raises(
+        DefinitionError, match="Stage 'push': tune applies to an agent Stage only"
+    ):
         effect("push").tune(timeout_sec=1)
     assert agent("dev").tune(timeout_sec=1).executor.agent.profile.timeout_sec == 1
 
@@ -182,14 +238,19 @@ def test_a_closed_sum_has_at_least_two_variants() -> None:
     assert closed_sum(Triple) == {Alpha, Beta, Gamma}
 
 
-def test_facts_after_paths_meet_are_definite_only_when_every_path_holds_them_definitely() -> None:
+def test_facts_after_paths_meet_are_definite_only_when_every_path_holds_them_definitely() -> (
+    None
+):
     """Given two paths where only one produced an Event, when they merge, then that Event is no longer definite."""
     always = Fact(frozenset({Alpha}), "a", True)
     sometimes = Fact(frozenset({Beta}), "b", True)
 
     merged = merge([(always, sometimes), (always,)])
 
-    assert {(fact.producer, fact.definite) for fact in merged} == {("a", True), ("b", False)}
+    assert {(fact.producer, fact.definite) for fact in merged} == {
+        ("a", True),
+        ("b", False),
+    }
 
 
 def test_a_fact_that_a_path_holds_only_maybe_is_maybe_after_the_merge() -> None:
@@ -202,7 +263,11 @@ def test_a_fact_that_a_path_holds_only_maybe_is_maybe_after_the_merge() -> None:
 
 def test_producers_are_distinct_and_ordered() -> None:
     """Given facts of one Event from two Stages, when producers are read, then each appears once in order."""
-    facts = [Fact(frozenset({Alpha}), "x", True), Fact(frozenset({Alpha, Beta}), "y", False), Fact(frozenset({Alpha}), "x", False)]
+    facts = [
+        Fact(frozenset({Alpha}), "x", True),
+        Fact(frozenset({Alpha, Beta}), "y", False),
+        Fact(frozenset({Alpha}), "x", False),
+    ]
 
     assert producers_of(facts, Alpha) == ("x", "y")
     assert producers_of(facts, Beta) == ("y",)

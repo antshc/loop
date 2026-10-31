@@ -6,16 +6,31 @@ import json
 from pathlib import Path
 
 import pytest
+from loop.shared.github.pull_requests.babysit import (
+    babysit_snapshot,
+    bot_logins,
+    ci_state,
+)
 
-from workflows.software_factory.agents.roles.address import GROUP_FEEDBACK, RESOLVE_ISSUE
+from workflows.software_factory.agents.roles.address import (
+    GROUP_FEEDBACK,
+    RESOLVE_ISSUE,
+)
 from workflows.software_factory.agents.roles.maintainer import DIAGNOSE_CI, FIX_CI
 from workflows.software_factory.events.ci import BranchBroken
 from workflows.software_factory.events.feedback import FeedbackBatch, GroupedIssue
-from workflows.software_factory.events.pull_requests import NextAction, PullRequestPolled
+from workflows.software_factory.events.pull_requests import (
+    NextAction,
+    PullRequestPolled,
+)
 from workflows.software_factory.events.specs import RepositoryTarget
-from loop.shared.github.pull_requests.babysit import babysit_snapshot, bot_logins, ci_state
 from workflows.software_factory.stages import ci, pull_requests
-from workflows.software_factory.stages.address import GroupInput, IssueWork, group_feedback, resolve_issue
+from workflows.software_factory.stages.address import (
+    GroupInput,
+    IssueWork,
+    group_feedback,
+    resolve_issue,
+)
 from workflows.software_factory.workflows.pr_babysit.policy import TRUST, fingerprint
 
 from .golden import CLOSED, GOLDEN, GREEN, OPEN, build_host, pulls_over
@@ -32,7 +47,13 @@ def golden() -> dict:
 def polled_of(number: int) -> PullRequestPolled:
     """The golden pull request as the snapshot Stage reads it, for the acting account `me`."""
     read = pulls_over(build_host()).snapshot(number)
-    return PullRequestPolled(TARGET, number, json.loads(json.dumps(babysit_snapshot(read))), "me", bot_logins(read))
+    return PullRequestPolled(
+        TARGET,
+        number,
+        json.loads(json.dumps(babysit_snapshot(read))),
+        "me",
+        bot_logins(read),
+    )
 
 
 def decided(polled: PullRequestPolled) -> NextAction:
@@ -42,30 +63,46 @@ def decided(polled: PullRequestPolled) -> NextAction:
 
 
 @pytest.mark.parametrize("scenario,number", SCENARIOS)
-def test_the_change_fingerprint_is_the_one_computed_before_the_migration(golden: dict, scenario: str, number: int) -> None:
+def test_the_change_fingerprint_is_the_one_computed_before_the_migration(
+    golden: dict, scenario: str, number: int
+) -> None:
     """Given each golden pull request, when the policy fingerprints it, then the value equals the one captured before the migration."""
     assert fingerprint(polled_of(number)) == golden[scenario]["fingerprint"]
 
 
 @pytest.mark.parametrize("scenario,number", SCENARIOS)
-def test_the_ci_signal_is_the_one_computed_before_the_migration(golden: dict, scenario: str, number: int) -> None:
+def test_the_ci_signal_is_the_one_computed_before_the_migration(
+    golden: dict, scenario: str, number: int
+) -> None:
     """Given each golden pull request, when its CI is read, then the pending, failed and green signals and the failed runs equal the golden."""
     state = ci_state(polled_of(number).snapshot)
 
     expected = golden[scenario]["ci"]
-    assert {**{name: state[name] for name in ("pending", "failed", "green")}, "runs": [run["id"] for run in state["runs"]]} == expected
+    assert {
+        **{name: state[name] for name in ("pending", "failed", "green")},
+        "runs": [run["id"] for run in state["runs"]],
+    } == expected
 
 
 @pytest.mark.parametrize("scenario,number", SCENARIOS)
-def test_the_address_requests_the_definition_makes_are_byte_identical_to_the_goldens(golden: dict, scenario: str, number: int) -> None:
+def test_the_address_requests_the_definition_makes_are_byte_identical_to_the_goldens(
+    golden: dict, scenario: str, number: int
+) -> None:
     """Given each golden pull request, when the definition's decision selects its feedback and the address Stages build their requests, then both renderings equal the goldens."""
     polled = polled_of(number)
     action = decided(polled)
-    batch = action if isinstance(action, FeedbackBatch) else FeedbackBatch(polled.head, False, ())
+    batch = (
+        action
+        if isinstance(action, FeedbackBatch)
+        else FeedbackBatch(polled.head, False, ())
+    )
 
     group = group_feedback().executor.request(GroupInput(batch, ()), Path("/work"))
-    resolve = resolve_issue(message=lambda _: "m", verify=lambda _: None).executor.request(
-        IssueWork(GroupedIssue("all", None, batch.keys), batch, polled, (), ()), Path("/work"),
+    resolve = resolve_issue(
+        message=lambda _: "m", verify=lambda _: None
+    ).executor.request(
+        IssueWork(GroupedIssue("all", None, batch.keys), batch, polled, (), ()),
+        Path("/work"),
     )
 
     assert GROUP_FEEDBACK.encode(group) == golden[scenario]["envelopes"]["group"]
@@ -82,13 +119,18 @@ class FailedLogs:
         return "cart.py: duplicate product"
 
 
-def test_the_maintainer_requests_are_byte_identical_to_the_goldens(golden: dict) -> None:
+def test_the_maintainer_requests_are_byte_identical_to_the_goldens(
+    golden: dict,
+) -> None:
     """Given the golden pull request with failed CI, when the CI Stages build their requests, then the diagnose and fix renderings equal the goldens."""
     polled = polled_of(OPEN)
 
-    diagnose = ci.diagnose().executor.request(ci.DiagnoseInput(polled, FailedLogs()), Path("/work"))
+    diagnose = ci.diagnose().executor.request(
+        ci.DiagnoseInput(polled, FailedLogs()), Path("/work")
+    )
     fix = ci.fix(message=lambda _: "m", verify=lambda _: None).executor.request(
-        ci.FixInput(polled, BranchBroken("CI evidence")), Path("/work"),
+        ci.FixInput(polled, BranchBroken("CI evidence")),
+        Path("/work"),
     )
 
     assert DIAGNOSE_CI.encode(diagnose) == golden["open"]["envelopes"]["diagnose"]

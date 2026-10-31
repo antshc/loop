@@ -6,9 +6,10 @@ from pathlib import Path
 
 from loop import AgentExecution, WorktreeGit
 from loop.runtime.analysis import _stages_in
-from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
 from loop.shared.git import GitClient
 from loop.shared.github.account import GitHub
+
+from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
 from workflows.software_factory.workflows.address_once import policy
 from workflows.software_factory.workflows.address_once.definition import address_once
 from workflows.software_factory.workflows.pr_babysit import policy as babysit_policy
@@ -24,7 +25,11 @@ def test_the_agent_timeout_bounds_every_agent_stage() -> None:
     """Given an agent timeout, when the definition is built, then the grouping and resolving agents run with it."""
     stages = _stages_in(address_once(lambda path: None, agent_timeout=42).nodes)
 
-    agents = {stage.id: stage.executor.agent.profile.timeout_sec for stage in stages if isinstance(stage.executor, AgentExecution)}
+    agents = {
+        stage.id: stage.executor.agent.profile.timeout_sec
+        for stage in stages
+        if isinstance(stage.executor, AgentExecution)
+    }
 
     assert agents == {"group-feedback": 42, "resolve-issue": 42}
 

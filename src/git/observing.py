@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Iterator
 
 from ..observe import RunObserver, WorktreeEvent
 from .options import GitOptions
@@ -15,13 +14,19 @@ logger = logging.getLogger(__name__)
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class ObservingGitService:
     """Decorates a GitService: reports readiness, release attempts, and actual removal or retention."""
 
-    def __init__(self, inner: GitService, observer: RunObserver, *, clock: Callable[[], datetime] = _now) -> None:
+    def __init__(
+        self,
+        inner: GitService,
+        observer: RunObserver,
+        *,
+        clock: Callable[[], datetime] = _now,
+    ) -> None:
         self._inner = inner
         self._observer = observer
         self._clock = clock
@@ -51,6 +56,7 @@ class ObservingGitService:
     def _emit(self, point: str, path: Path, ok: bool | None) -> None:
         try:
             self._observer.worktree(WorktreeEvent(point, path, self._clock(), ok))
-        except Exception as exception:  # An observer is caller code; it must never fail the run.
+        except (
+            Exception
+        ) as exception:  # An observer is caller code; it must never fail the run.
             logger.warning("observer failed on worktree %s: %r", point, exception)
-

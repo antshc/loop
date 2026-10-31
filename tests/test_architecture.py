@@ -17,6 +17,13 @@ def test_every_import_contract_is_kept() -> None:
     """Given the repository's import-linter contracts, when they are checked, then none is broken."""
     environment = {**os.environ, "PYTHONPATH": str(REPO_ROOT)}
 
-    result = subprocess.run([sys.executable, "-c", LINT], cwd=REPO_ROOT, env=environment, capture_output=True, text=True, timeout=300)
+    result = subprocess.run(
+        [sys.executable, "-c", LINT],
+        cwd=REPO_ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
 
     assert result.returncode == 0, result.stdout + result.stderr

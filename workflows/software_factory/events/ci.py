@@ -5,8 +5,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 
-from loop import Json
-from loop import Event
+from loop import Event, Json
 
 
 @dataclass(frozen=True)

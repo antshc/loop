@@ -3,7 +3,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from .roles import Role
-from .values import AgentRunRecord, LogReading, RunObserver, ToolCall, Usage, WorktreeEvent
+from .values import (
+    AgentRunRecord,
+    LogReading,
+    RunObserver,
+    ToolCall,
+    Usage,
+    WorktreeEvent,
+)
 
 if TYPE_CHECKING:
     from .otel import OtlpObserver
@@ -31,7 +38,9 @@ def otlp_observer(
     try:
         from .otel import otlp_observer as build
     except ImportError as exception:
-        raise ImportError("otlp_observer needs the OpenTelemetry extra: pip install 'loop[otel]'") from exception
+        raise ImportError(
+            "otlp_observer needs the OpenTelemetry extra: pip install 'loop[otel]'"
+        ) from exception
     return build(
         endpoint=endpoint,
         service_name=service_name,

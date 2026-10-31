@@ -9,16 +9,26 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from loop import AgentWorkspace
-
-from loop import Declined
-from workflows.software_factory.agents.roles.planner import PLANNER, PlannerReply, PlannerRequest
-from workflows.software_factory.events.specs import SpecHeld, SpecRouted, SpecWork
-from workflows.software_factory.events.tickets import PlannedTicket, PlanProposed, TicketsCreated
-from loop import Fail, Hold, Pass, ReadOnly, Stage, Verdict
+from loop import AgentWorkspace, Declined, Fail, Hold, Pass, ReadOnly, Stage, Verdict
 from loop.shared.github.issues.client import Issues
 from loop.shared.github.issues.graph import SpecGraphSnapshot
-from loop.shared.github.issues.ticketing import SpecTicketingService, TicketDraft, TicketingError
+from loop.shared.github.issues.ticketing import (
+    SpecTicketingService,
+    TicketDraft,
+    TicketingError,
+)
+
+from workflows.software_factory.agents.roles.planner import (
+    PLANNER,
+    PlannerReply,
+    PlannerRequest,
+)
+from workflows.software_factory.events.specs import SpecHeld, SpecRouted, SpecWork
+from workflows.software_factory.events.tickets import (
+    PlannedTicket,
+    PlanProposed,
+    TicketsCreated,
+)
 
 MAX_PLANNED_TICKETS = 15
 
@@ -47,7 +57,9 @@ class _Refused:
     reason: str
 
 
-def plan_spec(*, max_tickets: int = MAX_PLANNED_TICKETS) -> Stage[PlanInput, PlannerReply, PlanProposed]:
+def plan_spec(
+    *, max_tickets: int = MAX_PLANNED_TICKETS
+) -> Stage[PlanInput, PlannerReply, PlanProposed]:
     """Read-only planner on the checkout, skipped unless the target plans and the Spec needs a plan; a decline holds, an invalid plan fails."""
     return (
         Stage("plan-spec", PlanInput, produces=PlanProposed, may_emit=(SpecHeld,))
@@ -58,22 +70,30 @@ def plan_spec(*, max_tickets: int = MAX_PLANNED_TICKETS) -> Stage[PlanInput, Pla
     )
 
 
-def create_tickets(*, source: str = "implement_spec") -> Stage[CreateInput, Any, TicketsCreated]:
+def create_tickets(
+    *, source: str = "implement_spec"
+) -> Stage[CreateInput, Any, TicketsCreated]:
     """Persists the plan as a marker Comment on the Spec, then creates the Tickets and their blocked-by edges; resumes a persisted plan without duplicating."""
     return (
-        Stage("create-tickets", CreateInput, produces=TicketsCreated, may_emit=(SpecHeld,))
+        Stage(
+            "create-tickets", CreateInput, produces=TicketsCreated, may_emit=(SpecHeld,)
+        )
         .effect(lambda i: _created(i) or _create(i, source), reconcile=_created)
         .gate(lambda _, reply, __: _accepted(reply))
         .when(_has_plan)
     )
 
 
-def plan_violation(tickets: Sequence[PlannedTicket], max_tickets: int = MAX_PLANNED_TICKETS) -> str | None:
+def plan_violation(
+    tickets: Sequence[PlannedTicket], max_tickets: int = MAX_PLANNED_TICKETS
+) -> str | None:
     """Why a plan cannot become Tickets, or None when it can."""
     if not tickets:
         return "the planner returned no Tickets"
     if len(tickets) > max_tickets:
-        return f"the planner returned {len(tickets)} Tickets; the limit is {max_tickets}"
+        return (
+            f"the planner returned {len(tickets)} Tickets; the limit is {max_tickets}"
+        )
     for index, ticket in enumerate(tickets):
         if not ticket.title.strip():
             return f"planned Ticket {index} has no title"
@@ -97,7 +117,14 @@ def _request(i: PlanInput, path: Path) -> PlannerRequest:
         "title": spec.title,
         "url": spec.url,
         "body": spec.body,
-        "comments": [{"author": comment.author, "body": comment.body, "created_at": comment.created_at} for comment in spec.comments],
+        "comments": [
+            {
+                "author": comment.author,
+                "body": comment.body,
+                "created_at": comment.created_at,
+            }
+            for comment in spec.comments
+        ],
     }
     return PlannerRequest(path, payload, i.routed.base_branch, i.routed.feature_branch)
 
@@ -105,7 +132,10 @@ def _request(i: PlanInput, path: Path) -> PlannerRequest:
 def _planned(reply: PlannerReply, max_tickets: int) -> Verdict[PlanProposed]:
     if isinstance(reply, Declined):
         return Hold(reply.reason, SpecHeld(reply.reason))
-    tickets = tuple(PlannedTicket(ticket.title, ticket.body, ticket.blocked_by) for ticket in reply.tickets)
+    tickets = tuple(
+        PlannedTicket(ticket.title, ticket.body, ticket.blocked_by)
+        for ticket in reply.tickets
+    )
     violation = plan_violation(tickets, max_tickets)
     if violation is not None:
         return Fail(violation, SpecHeld(violation))
@@ -114,7 +144,10 @@ def _planned(reply: PlannerReply, max_tickets: int) -> Verdict[PlanProposed]:
 
 def _has_plan(i: CreateInput) -> bool:
     """A plan was proposed in this run, or an earlier run left one part-way through its Tickets."""
-    return i.proposed is not None or _unfinished_plan(i.tracker.spec(i.work.number)) is not None
+    return (
+        i.proposed is not None
+        or _unfinished_plan(i.tracker.spec(i.work.number)) is not None
+    )
 
 
 def _accepted(reply: TicketsCreated | _Refused) -> Verdict[TicketsCreated]:
@@ -125,7 +158,12 @@ def _accepted(reply: TicketsCreated | _Refused) -> Verdict[TicketsCreated]:
 
 def _drafts(planned: Sequence[PlannedTicket]) -> tuple[TicketDraft, ...]:
     return tuple(
-        TicketDraft(f"{index}-{_slug(ticket.title)}", ticket.title, ticket.body, ticket.blocked_by)
+        TicketDraft(
+            f"{index}-{_slug(ticket.title)}",
+            ticket.title,
+            ticket.body,
+            ticket.blocked_by,
+        )
         for index, ticket in enumerate(planned)
     )
 
@@ -145,7 +183,12 @@ def _created(i: CreateInput) -> TicketsCreated | None:
     """The creation a crashed attempt completed: the plan is persisted unchanged and every planned Ticket is linked."""
     spec = i.tracker.spec(i.work.number)
     drafts = _plan_of(i, spec)
-    if i.proposed is None or _persisted_plan(spec) != drafts or not spec.complete or spec.sub_issue_total < len(drafts):
+    if (
+        i.proposed is None
+        or _persisted_plan(spec) != drafts
+        or not spec.complete
+        or spec.sub_issue_total < len(drafts)
+    ):
         return None
     return TicketsCreated(tuple(ticket.number for ticket in spec.tickets))
 
@@ -165,11 +208,23 @@ def _create(i: CreateInput, source: str) -> TicketsCreated | _Refused:
 def _plan_comment(source: str, drafts: Sequence[TicketDraft]) -> str:
     """The Comment that keeps a validated plan on the Spec, so a retry creates its Tickets instead of planning again."""
     payload = json.dumps(
-        {"tickets": [{"key": d.key, "title": d.title, "body": d.body, "blocked_by": list(d.blocked_by)} for d in drafts]}
+        {
+            "tickets": [
+                {
+                    "key": d.key,
+                    "title": d.title,
+                    "body": d.body,
+                    "blocked_by": list(d.blocked_by),
+                }
+                for d in drafts
+            ]
+        }
     )
     # Angle brackets are escaped so a Ticket body cannot end the hidden marker early.
     payload = payload.replace("<", "\\u003c").replace(">", "\\u003e")
-    summary = "\n".join(f"{index + 1}. {draft.title}" for index, draft in enumerate(drafts))
+    summary = "\n".join(
+        f"{index + 1}. {draft.title}" for index, draft in enumerate(drafts)
+    )
     return f"{source}: plan\n\n{summary}\n\n<!-- loop:plan {payload} -->"
 
 
@@ -181,10 +236,15 @@ def _persisted_plan(spec: SpecGraphSnapshot) -> tuple[TicketDraft, ...] | None:
             continue
         try:
             return tuple(
-                TicketDraft(ticket["key"], ticket["title"], ticket["body"], tuple(ticket["blocked_by"]))
+                TicketDraft(
+                    ticket["key"],
+                    ticket["title"],
+                    ticket["body"],
+                    tuple(ticket["blocked_by"]),
+                )
                 for ticket in json.loads(match[1])["tickets"]
             )
-        except (ValueError, KeyError, TypeError):
+        except ValueError, KeyError, TypeError:
             return None
     return None
 
@@ -192,4 +252,8 @@ def _persisted_plan(spec: SpecGraphSnapshot) -> tuple[TicketDraft, ...] | None:
 def _unfinished_plan(spec: SpecGraphSnapshot) -> tuple[TicketDraft, ...] | None:
     """The persisted plan when fewer Tickets than it plans are linked to the Spec: an earlier run stopped part-way."""
     drafts = _persisted_plan(spec)
-    return drafts if drafts is not None and spec.complete and spec.sub_issue_total < len(drafts) else None
+    return (
+        drafts
+        if drafts is not None and spec.complete and spec.sub_issue_total < len(drafts)
+        else None
+    )

@@ -49,14 +49,18 @@ print(json.dumps({"name": definition.name, "foreign": foreign}))
 def workflow_names() -> list[str]:
     """The package name of every Workflow definition: each factory package with an entry point."""
     return sorted(
-        info.name for info in pkgutil.iter_modules(definitions.__path__)
-        if info.ispkg and (Path(definitions.__file__).parent / info.name / "__main__.py").exists()
+        info.name
+        for info in pkgutil.iter_modules(definitions.__path__)
+        if info.ispkg
+        and (Path(definitions.__file__).parent / info.name / "__main__.py").exists()
     )
 
 
 def is_type_checking(node: ast.expr) -> bool:
     """Whether an `if` test is `TYPE_CHECKING` or `typing.TYPE_CHECKING`."""
-    return (isinstance(node, ast.Name) and node.id == "TYPE_CHECKING") or (isinstance(node, ast.Attribute) and node.attr == "TYPE_CHECKING")
+    return (isinstance(node, ast.Name) and node.id == "TYPE_CHECKING") or (
+        isinstance(node, ast.Attribute) and node.attr == "TYPE_CHECKING"
+    )
 
 
 def runtime_nodes(node: ast.AST) -> Iterator[ast.AST]:
@@ -86,7 +90,9 @@ def absolute(node: ast.ImportFrom, package: str) -> str | None:
     if not node.level:
         return node.module
     parts = package.split(".")
-    return ".".join([*parts[: len(parts) - node.level + 1], *([node.module] if node.module else [])])
+    return ".".join(
+        [*parts[: len(parts) - node.level + 1], *([node.module] if node.module else [])]
+    )
 
 
 def imports_of(name: str, file: Path) -> Iterator[str]:
@@ -103,7 +109,10 @@ def imports_of(name: str, file: Path) -> Iterator[str]:
 
 def closure_of(package: str) -> dict[str, Path]:
     """Every factory module a Workflow package needs: its own modules, what they import and the packages those live in."""
-    pending = [f"{package}.{info.name}" for info in pkgutil.iter_modules(importlib.import_module(package).__path__)] + [package]
+    pending = [
+        f"{package}.{info.name}"
+        for info in pkgutil.iter_modules(importlib.import_module(package).__path__)
+    ] + [package]
     found: dict[str, Path] = {}
     while pending:
         name = pending.pop()
@@ -111,7 +120,9 @@ def closure_of(package: str) -> dict[str, Path]:
         if file is None or name in found:
             continue
         found[name] = file
-        parents = [".".join(name.split(".")[:size]) for size in range(1, len(name.split(".")))]
+        parents = [
+            ".".join(name.split(".")[:size]) for size in range(1, len(name.split(".")))
+        ]
         pending += [*parents, *imports_of(name, file)]
     return found
 
@@ -120,10 +131,16 @@ def copy_closure(closure: dict[str, Path], target: Path) -> None:
     """Copies each module of the closure and the data files beside it into `target`, keeping their paths."""
     for name, file in closure.items():
         parts = name.split(".")
-        destination = target.joinpath(*parts, "__init__.py") if file.name == "__init__.py" else target.joinpath(*parts[:-1], f"{parts[-1]}.py")
+        destination = (
+            target.joinpath(*parts, "__init__.py")
+            if file.name == "__init__.py"
+            else target.joinpath(*parts[:-1], f"{parts[-1]}.py")
+        )
         destination.parent.mkdir(parents=True, exist_ok=True)
         for sibling in file.parent.iterdir():
-            if sibling.is_file() and (sibling == file or sibling.suffix not in (".py", ".pyc")):
+            if sibling.is_file() and (
+                sibling == file or sibling.suffix not in (".py", ".pyc")
+            ):
                 shutil.copy2(sibling, destination.parent / sibling.name)
     shutil.copy2(SAMPLES, target / "portable_samples.py")
 
@@ -134,12 +151,24 @@ def probe(package: str, target: Path) -> subprocess.CompletedProcess[str]:
     loop_source.mkdir(exist_ok=True)
     if not (loop_source / "loop").exists():
         (loop_source / "loop").symlink_to(Path(loop.__file__).parent)
-    environment = {**os.environ, "PYTHONPATH": os.pathsep.join([str(target), str(loop_source)])}
-    return subprocess.run([sys.executable, "-c", PROBE, package], cwd=target, env=environment, capture_output=True, text=True, timeout=120)
+    environment = {
+        **os.environ,
+        "PYTHONPATH": os.pathsep.join([str(target), str(loop_source)]),
+    }
+    return subprocess.run(
+        [sys.executable, "-c", PROBE, package],
+        cwd=target,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
 
 
 @pytest.mark.parametrize("name", workflow_names())
-def test_each_workflow_runs_from_its_import_closure_alone(name: str, tmp_path: Path) -> None:
+def test_each_workflow_runs_from_its_import_closure_alone(
+    name: str, tmp_path: Path
+) -> None:
     """Given a Workflow copied with only its import closure, when its package and entry point are imported and its definition built, then it validates and imports nothing outside the copy."""
     package = f"{WORKFLOWS}.{name}"
     closure = closure_of(package)
@@ -152,24 +181,34 @@ def test_each_workflow_runs_from_its_import_closure_alone(name: str, tmp_path: P
 
 
 @pytest.mark.parametrize("name", workflow_names())
-def test_a_workflows_import_closure_holds_no_other_workflow_and_no_tests(name: str) -> None:
+def test_a_workflows_import_closure_holds_no_other_workflow_and_no_tests(
+    name: str,
+) -> None:
     """Given the import closure of a Workflow, when its modules are listed, then no other Workflow and no test module is among them."""
     package = f"{WORKFLOWS}.{name}"
     others = [f"{WORKFLOWS}.{other}" for other in workflow_names() if other != name]
 
     unexpected = sorted(
-        module for module in closure_of(package)
+        module
+        for module in closure_of(package)
         if any(module == other or module.startswith(f"{other}.") for other in others)
-        or module.split(".")[0] == "tests" or module.startswith("workflows.tests")
+        or module.split(".")[0] == "tests"
+        or module.startswith("workflows.tests")
     )
 
     assert unexpected == []
 
 
-def test_a_workflow_that_needs_another_workflow_does_not_run_from_its_own_closure(tmp_path: Path) -> None:
+def test_a_workflow_that_needs_another_workflow_does_not_run_from_its_own_closure(
+    tmp_path: Path,
+) -> None:
     """Given a closure missing a module the Workflow imports, when its package is imported in the copy, then the import fails."""
     package = f"{WORKFLOWS}.address_once"
-    closure = {name: file for name, file in closure_of(package).items() if name != f"{FACTORY}.flows.address"}
+    closure = {
+        name: file
+        for name, file in closure_of(package).items()
+        if name != f"{FACTORY}.flows.address"
+    }
     copy_closure(closure, tmp_path)
 
     result = probe(package, tmp_path)

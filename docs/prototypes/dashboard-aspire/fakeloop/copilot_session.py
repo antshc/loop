@@ -82,6 +82,7 @@ class SessionRecord:
 
     Token, cost and premium fields cover the lead agent only; its sub-agents' calls are in `subagents`.
     """
+
     session_id: str
     cli_version: str
     request_model: str | None
@@ -113,14 +114,25 @@ class SessionRecord:
 
 def read_session(events_path: Path) -> SessionRecord:
     """Parses a session's `events.jsonl`; usage comes from per-call records (CLI >= 1.0.95) or the shutdown summary."""
-    events = [json.loads(line) for line in events_path.read_text().splitlines() if line.strip()]
+    events = [
+        json.loads(line)
+        for line in events_path.read_text().splitlines()
+        if line.strip()
+    ]
     by_type: dict[str, list[dict[str, object]]] = {}
     for event in events:
         by_type.setdefault(str(event["type"]), []).append(event)
     # Sub-agent events carry a top-level `agentId`; the lead agent's do not.
-    lead = {kind: [e for e in found if "agentId" not in e] for kind, found in by_type.items()}
+    lead = {
+        kind: [e for e in found if "agentId" not in e]
+        for kind, found in by_type.items()
+    }
     start = by_type["session.start"][0]["data"]
-    usage = _usage(by_type.get("session.usage_record", []), by_type.get("session.shutdown", []), None)
+    usage = _usage(
+        by_type.get("session.usage_record", []),
+        by_type.get("session.shutdown", []),
+        None,
+    )
     shutdown = by_type.get("session.shutdown", [{"data": {}}])[-1]["data"]
     messages = lead.get("assistant.message", [])
     records = lead.get("session.usage_record") or [{"data": {"usage": {}}}]
@@ -130,7 +142,8 @@ def read_session(events_path: Path) -> SessionRecord:
         cli_version=start["copilotVersion"],
         request_model=start.get("selectedModel") or _first_model_change(by_type),
         response_model=messages[-1]["data"].get("model") if messages else None,
-        reasoning_effort=start.get("reasoningEffort") or last_record.get("reasoningEffort"),
+        reasoning_effort=start.get("reasoningEffort")
+        or last_record.get("reasoningEffort"),
         system_instructions=_first_content(by_type.get("system.message", [])),
         input_messages=[m["data"]["content"] for m in by_type.get("user.message", [])],
         output_text=messages[-1]["data"].get("content") if messages else None,
@@ -160,12 +173,23 @@ def _first_content(events: list[dict[str, object]]) -> str | None:
     return events[0]["data"]["content"] if events else None
 
 
-def _usage(records: list[dict[str, object]], shutdowns: list[dict[str, object]],
-           agent_id: str | None) -> dict[str, object]:
+def _usage(
+    records: list[dict[str, object]],
+    shutdowns: list[dict[str, object]],
+    agent_id: str | None,
+) -> dict[str, object]:
     """Totals for the agent `agent_id` (None: the lead); only per-call records tell agents apart."""
     totals: dict[str, object] = {
-        "calls": 0, "input": 0, "output": 0, "reasoning": 0, "cache_read": 0, "cache_write": 0,
-        "nano_aiu": 0.0, "premium": 0.0, "aiu_by_type": {}}
+        "calls": 0,
+        "input": 0,
+        "output": 0,
+        "reasoning": 0,
+        "cache_read": 0,
+        "cache_write": 0,
+        "nano_aiu": 0.0,
+        "premium": 0.0,
+        "aiu_by_type": {},
+    }
     if records:
         for record in records:
             if record.get("agentId") == agent_id:
@@ -208,7 +232,9 @@ def _add_shutdown(totals: dict[str, object], summary: dict[str, object]) -> None
 
 
 def _tools(by_type: dict[str, list[dict[str, object]]]) -> list[ToolRecord]:
-    completed = {e["data"]["toolCallId"]: e for e in by_type.get("tool.execution_complete", [])}
+    completed = {
+        e["data"]["toolCallId"]: e for e in by_type.get("tool.execution_complete", [])
+    }
     records = []
     for start in by_type.get("tool.execution_start", []):
         data = start["data"]
@@ -216,74 +242,120 @@ def _tools(by_type: dict[str, list[dict[str, object]]]) -> list[ToolRecord]:
         if done is None:
             continue
         result = done["data"].get("result") or {}
-        records.append(ToolRecord(
-            call_id=data["toolCallId"], name=data["toolName"], arguments=data.get("arguments", {}),
-            result=result.get("content", ""), ok=bool(done["data"].get("success")),
-            started_at=_when(start), ended_at=_when(done),
-            parent_call_id=data.get("parentToolCallId")))
+        records.append(
+            ToolRecord(
+                call_id=data["toolCallId"],
+                name=data["toolName"],
+                arguments=data.get("arguments", {}),
+                result=result.get("content", ""),
+                ok=bool(done["data"].get("success")),
+                started_at=_when(start),
+                ended_at=_when(done),
+                parent_call_id=data.get("parentToolCallId"),
+            )
+        )
     return records
 
 
-def _subagents(events: list[dict[str, object]],
-               by_type: dict[str, list[dict[str, object]]]) -> list[SubagentRecord]:
-    configured = {e["agentId"]: e["data"] for e in by_type.get("subagent.configured", [])}
-    finished = {e["data"]["toolCallId"]: e for kind in ("subagent.completed", "subagent.failed")
-                for e in by_type.get(kind, [])}
-    task_calls = {e["data"]["toolCallId"]: e["data"] for e in by_type.get("tool.execution_start", [])}
+def _subagents(
+    events: list[dict[str, object]], by_type: dict[str, list[dict[str, object]]]
+) -> list[SubagentRecord]:
+    configured = {
+        e["agentId"]: e["data"] for e in by_type.get("subagent.configured", [])
+    }
+    finished = {
+        e["data"]["toolCallId"]: e
+        for kind in ("subagent.completed", "subagent.failed")
+        for e in by_type.get(kind, [])
+    }
+    task_calls = {
+        e["data"]["toolCallId"]: e["data"]
+        for e in by_type.get("tool.execution_start", [])
+    }
     usage_records = by_type.get("session.usage_record", [])
     records = []
     for start in by_type.get("subagent.started", []):
         data, agent_id = start["data"], start["agentId"]
         done = finished.get(data["toolCallId"])
         outcome = done["data"] if done else {}
-        said = [e["data"]["content"] for e in by_type.get("assistant.message", [])
-                if e.get("agentId") == agent_id and e["data"].get("content")]
+        said = [
+            e["data"]["content"]
+            for e in by_type.get("assistant.message", [])
+            if e.get("agentId") == agent_id and e["data"].get("content")
+        ]
         call = task_calls.get(data["toolCallId"], {})
         ok = done is not None and done["type"] == "subagent.completed"
         # A sub-agent still running when the CLI exited (background mode) has no end event.
-        error = None if ok else str(outcome.get("error") or "no subagent.completed event")
-        records.append(SubagentRecord(
-            tool_call_id=data["toolCallId"], agent_id=agent_id,
-            name=data.get("agentDisplayName") or data["agentName"],
-            agent_type=data.get("agentType") or data["agentName"],
-            description=data.get("agentDescription", ""), model=data.get("model"),
-            reasoning_effort=configured.get(agent_id, {}).get("reasoningEffort"),
-            execution_mode=data.get("executionMode", "sync"),
-            prompt=call.get("arguments", {}).get("prompt"), output_text=said[-1] if said else None,
-            ok=ok, error=error, total_tool_calls=outcome.get("totalToolCalls"),
-            duration_ms=outcome.get("durationMs"), started_at=_when(start),
-            ended_at=_when(done if done else events[-1]),
-            usage=_as_usage(_usage(usage_records, [], agent_id)),
-            parent_call_id=call.get("parentToolCallId")))
+        error = (
+            None if ok else str(outcome.get("error") or "no subagent.completed event")
+        )
+        records.append(
+            SubagentRecord(
+                tool_call_id=data["toolCallId"],
+                agent_id=agent_id,
+                name=data.get("agentDisplayName") or data["agentName"],
+                agent_type=data.get("agentType") or data["agentName"],
+                description=data.get("agentDescription", ""),
+                model=data.get("model"),
+                reasoning_effort=configured.get(agent_id, {}).get("reasoningEffort"),
+                execution_mode=data.get("executionMode", "sync"),
+                prompt=call.get("arguments", {}).get("prompt"),
+                output_text=said[-1] if said else None,
+                ok=ok,
+                error=error,
+                total_tool_calls=outcome.get("totalToolCalls"),
+                duration_ms=outcome.get("durationMs"),
+                started_at=_when(start),
+                ended_at=_when(done if done else events[-1]),
+                usage=_as_usage(_usage(usage_records, [], agent_id)),
+                parent_call_id=call.get("parentToolCallId"),
+            )
+        )
     return records
 
 
 def _as_usage(totals: dict[str, object]) -> Usage:
     return Usage(
-        calls=totals["calls"], input_tokens=totals["input"] - totals["cache_read"] - totals["cache_write"],
-        output_tokens=totals["output"], reasoning_tokens=totals["reasoning"],
-        cache_read_tokens=totals["cache_read"], cache_write_tokens=totals["cache_write"],
-        aiu_by_type=totals["aiu_by_type"], total_aiu=totals["nano_aiu"] / _NANO)
+        calls=totals["calls"],
+        input_tokens=totals["input"] - totals["cache_read"] - totals["cache_write"],
+        output_tokens=totals["output"],
+        reasoning_tokens=totals["reasoning"],
+        cache_read_tokens=totals["cache_read"],
+        cache_write_tokens=totals["cache_write"],
+        aiu_by_type=totals["aiu_by_type"],
+        total_aiu=totals["nano_aiu"] / _NANO,
+    )
 
 
 def _when(event: dict[str, object]) -> datetime:
     # Python 3.10's fromisoformat needs exactly 3 or 6 fractional digits; the CLI sometimes writes 2.
-    stamp = re.sub(r"\.(\d+)", lambda m: "." + m[1].ljust(6, "0")[:6], str(event["timestamp"]))
+    stamp = re.sub(
+        r"\.(\d+)", lambda m: "." + m[1].ljust(6, "0")[:6], str(event["timestamp"])
+    )
     return datetime.fromisoformat(stamp.replace("Z", "+00:00"))
 
 
 def main(argv: list[str]) -> int:
     """Prints the record of the session log named by `argv[0]` as JSON."""
     if len(argv) != 1:
-        print("usage: python -m fakeloop.copilot_session <events.jsonl>", file=sys.stderr)
+        print(
+            "usage: python -m fakeloop.copilot_session <events.jsonl>", file=sys.stderr
+        )
         return 2
     record = asdict(read_session(Path(argv[0])))
     for key in ("system_instructions", "output_text"):
         record[key] = (record[key] or "")[:120]
     record["input_messages"] = [message[:120] for message in record["input_messages"]]
-    record["tools"] = [{"name": tool["name"], "ok": tool["ok"], "result": tool["result"][:80],
-                        "arguments": str(tool["arguments"])[:80],
-                        "parent_call_id": tool["parent_call_id"]} for tool in record["tools"]]
+    record["tools"] = [
+        {
+            "name": tool["name"],
+            "ok": tool["ok"],
+            "result": tool["result"][:80],
+            "arguments": str(tool["arguments"])[:80],
+            "parent_call_id": tool["parent_call_id"],
+        }
+        for tool in record["tools"]
+    ]
     for subagent in record["subagents"]:
         subagent["prompt"] = (subagent["prompt"] or "")[:120]
         subagent["output_text"] = (subagent["output_text"] or "")[:120]

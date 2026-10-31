@@ -7,7 +7,6 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from ...builder import AgentWorkspace
-
 from ..definition import Workflow
 from ..event import Event
 from ..ledger import OpenScope, RunOpening, ScopeLog, WorkItemLog, WorkKey
@@ -48,9 +47,19 @@ class Scope:
     """One scope of a run: the run itself, a loop item, a workspace scope or a switch case."""
 
     def __init__(
-        self, run: Run, parent: Scope | None, *, name: str, path: tuple[str, ...], revision: str, ledger: ScopeLog,
-        attributes: Attributes, items: tuple[tuple[type, Any], ...] = (), workspace: AgentWorkspace | None = None,
-        handle: SpanHandle | None = None, resumed: OpenScope | None = None,
+        self,
+        run: Run,
+        parent: Scope | None,
+        *,
+        name: str,
+        path: tuple[str, ...],
+        revision: str,
+        ledger: ScopeLog,
+        attributes: Attributes,
+        items: tuple[tuple[type, Any], ...] = (),
+        workspace: AgentWorkspace | None = None,
+        handle: SpanHandle | None = None,
+        resumed: OpenScope | None = None,
     ) -> None:
         self.run = run
         self.parent = parent
@@ -74,41 +83,95 @@ class Scope:
     def root(cls, run: Run, revision: str, handle: SpanHandle) -> Scope:
         """The run's own scope; its span is the run span."""
         return cls(
-            run, None, name=run.workflow.name, path=(), revision=revision, ledger=run.log.root_scope(revision),
-            attributes={}, handle=handle,
+            run,
+            None,
+            name=run.workflow.name,
+            path=(),
+            revision=revision,
+            ledger=run.log.root_scope(revision),
+            attributes={},
+            handle=handle,
         )
 
     # ---- children ----------------------------------------------------------------------------------------
 
-    def child_item[T](self, body: Flow, select: Selector[Any, T], item: Item[T]) -> Scope:
+    def child_item[T](
+        self, body: Flow, select: Selector[Any, T], item: Item[T]
+    ) -> Scope:
         """The scope of one loop item."""
-        attributes = {"factory.scope": body.name, "factory.item": item.id, "factory.revision": item.revision}
+        attributes = {
+            "factory.scope": body.name,
+            "factory.item": item.id,
+            "factory.revision": item.revision,
+        }
         return self._child(
-            f"{body.name} {item.id}", (body.name, item.id), attributes, item.revision, item.value,
+            f"{body.name} {item.id}",
+            (body.name, item.id),
+            attributes,
+            item.revision,
+            item.value,
             items=(*self.items, (select.item, item.value)),
         )
 
-    def child_within(self, opener: WorkspaceOpener[Any], workspace: AgentWorkspace) -> Scope:
+    def child_within(
+        self, opener: WorkspaceOpener[Any], workspace: AgentWorkspace
+    ) -> Scope:
         """The scope of one opened workspace."""
-        return self._child(opener.id, (opener.id,), {"factory.scope": opener.id}, self.revision, None, workspace=workspace)
+        return self._child(
+            opener.id,
+            (opener.id,),
+            {"factory.scope": opener.id},
+            self.revision,
+            None,
+            workspace=workspace,
+        )
 
-    def child_case(self, body: Flow, variant: type[Event], event: Event | None) -> Scope:
+    def child_case(
+        self, body: Flow, variant: type[Event], event: Event | None
+    ) -> Scope:
         """The scope of one switch case; it keeps the Event that selected it so a later run resumes the same case."""
         attributes = {"factory.scope": body.name, "factory.item": variant.__name__}
-        return self._child(f"{body.name} {variant.__name__}", (body.name, variant.__name__), attributes, self.revision, event)
+        return self._child(
+            f"{body.name} {variant.__name__}",
+            (body.name, variant.__name__),
+            attributes,
+            self.revision,
+            event,
+        )
 
     def _child(
-        self, name: str, path_part: tuple[str, ...], attributes: dict[str, str | int | bool], revision: str, item: Any,
-        *, items: tuple[tuple[type, Any], ...] | None = None, workspace: AgentWorkspace | None = None,
+        self,
+        name: str,
+        path_part: tuple[str, ...],
+        attributes: dict[str, str | int | bool],
+        revision: str,
+        item: Any,
+        *,
+        items: tuple[tuple[type, Any], ...] | None = None,
+        workspace: AgentWorkspace | None = None,
     ) -> Scope:
         workspace = workspace or self.workspace
         path = (*self.path, *path_part)
         resumed = self.run.opening.scopes.pop(path, None)
         revision = resumed.revision if resumed is not None else revision
         return Scope(
-            self.run, self, name=name, path=path, revision=revision, attributes=attributes,
-            items=self.items if items is None else items, workspace=workspace, resumed=resumed,
-            ledger=self.run.log.scope(self.ledger, path, item, revision, lambda: _head_of(self.run, workspace), resumed),
+            self.run,
+            self,
+            name=name,
+            path=path,
+            revision=revision,
+            attributes=attributes,
+            items=self.items if items is None else items,
+            workspace=workspace,
+            resumed=resumed,
+            ledger=self.run.log.scope(
+                self.ledger,
+                path,
+                item,
+                revision,
+                lambda: _head_of(self.run, workspace),
+                resumed,
+            ),
         )
 
     def unfinished(self, path_part: tuple[str, ...]) -> OpenScope | None:
@@ -119,7 +182,11 @@ class Scope:
         """The unfinished loop-item scope of `body` directly below this scope."""
         prefix = (*self.path, body.name)
         return next(
-            (scope for path, scope in self.run.opening.scopes.items() if len(path) == len(prefix) + 1 and path[:-1] == prefix),
+            (
+                scope
+                for path, scope in self.run.opening.scopes.items()
+                if len(path) == len(prefix) + 1 and path[:-1] == prefix
+            ),
             None,
         )
 
@@ -128,7 +195,11 @@ class Scope:
         owner = None
         scope: Scope | None = self
         while scope is not None:
-            if scope.resumed is not None and scope.workspace is not None and not scope.resume_checked:
+            if (
+                scope.resumed is not None
+                and scope.workspace is not None
+                and not scope.resume_checked
+            ):
                 owner = scope
             scope = scope.parent
         return owner
@@ -152,7 +223,11 @@ class Scope:
         key = (self.path, stage_id)
         number = self.run.pure_runs.get(key, 0)
         self.run.pure_runs[key] = number + 1
-        recorded = [record for record in self.run.opening.pure.get(key, ()) if record.get("revision") == revision]
+        recorded = [
+            record
+            for record in self.run.opening.pure.get(key, ())
+            if record.get("revision") == revision
+        ]
         return recorded[number] if number < len(recorded) else None
 
     # ---- Events ------------------------------------------------------------------------------------------
@@ -166,16 +241,25 @@ class Scope:
         """Makes the Events a finished child scope recorded visible here."""
         self.events.extend(child.events)
 
-    def latest(self, shape: frozenset[type[Event]], producer: str | None = None) -> Event | None:
+    def latest(
+        self, shape: frozenset[type[Event]], producer: str | None = None
+    ) -> Event | None:
         """The newest Event of this run in `shape`, optionally from one producer."""
         for recorded in reversed(self.visible()):
-            if isinstance(recorded.event, tuple(shape)) and producer in (None, recorded.producer):
+            if isinstance(recorded.event, tuple(shape)) and producer in (
+                None,
+                recorded.producer,
+            ):
                 return recorded.event
         return None
 
     def every(self, shape: frozenset[type[Event]]) -> tuple[Event, ...]:
         """Every Event of this run in `shape`, in order."""
-        return tuple(recorded.event for recorded in self.visible() if isinstance(recorded.event, tuple(shape)))
+        return tuple(
+            recorded.event
+            for recorded in self.visible()
+            if isinstance(recorded.event, tuple(shape))
+        )
 
     def visible(self) -> list[Recorded]:
         """The Events this scope sees, oldest first: the enclosing scopes' then its own."""
@@ -199,20 +283,40 @@ class Scope:
     def key(self, stage_id: str, revision: str | None) -> WorkKey:
         """The work key of a Stage placed in this scope."""
         revision = self.revision if revision is None else f"{self.revision}+{revision}"
-        return WorkKey.placed(self.run.workflow.name, self.run.item, self.path, stage_id, revision, self.run.epoch)
+        return WorkKey.placed(
+            self.run.workflow.name,
+            self.run.item,
+            self.path,
+            stage_id,
+            revision,
+            self.run.epoch,
+        )
 
     @property
     def errors(self) -> tuple[type[BaseException], ...]:
         """Every exception type the Workflow turns into a route."""
-        return tuple(error for route in self.run.workflow.error_routes for error in route.errors)
+        return tuple(
+            error for route in self.run.workflow.error_routes for error in route.errors
+        )
 
     def error_route(self, exception: BaseException) -> ErrorRoute:
         """The declared route for an exception that `errors` caught."""
-        return next(route for route in self.run.workflow.error_routes if isinstance(exception, route.errors))
+        return next(
+            route
+            for route in self.run.workflow.error_routes
+            if isinstance(exception, route.errors)
+        )
 
     def error_route_named(self, name: str) -> ErrorRoute | None:
         """The declared route for the exception type recorded under `name`, for replaying a recorded failure."""
-        return next((route for route in self.run.workflow.error_routes if any(error.__name__ == name for error in route.errors)), None)
+        return next(
+            (
+                route
+                for route in self.run.workflow.error_routes
+                if any(error.__name__ == name for error in route.errors)
+            ),
+            None,
+        )
 
     def count_pure(self, stage_id: str) -> int:
         """Counts one more run of a check Stage and returns how many have run here."""
@@ -227,7 +331,9 @@ class Scope:
             return
         if self.parent is not None:
             self.parent.open()
-        self._handle = self._stack.enter_context(self.run.spans.open(self._name, self._attributes, role="code"))
+        self._handle = self._stack.enter_context(
+            self.run.spans.open(self._name, self._attributes, role="code")
+        )
         for name, attributes in self._pending:
             self._handle.event(name, **attributes)
         self._pending.clear()
@@ -242,7 +348,9 @@ class Scope:
             self.open()
         self._handle.event(name, **values)
 
-    def attempt_span(self, name: str, attributes: Attributes, *, role: str) -> AbstractContextManager[SpanHandle]:
+    def attempt_span(
+        self, name: str, attributes: Attributes, *, role: str
+    ) -> AbstractContextManager[SpanHandle]:
         """Opens a Stage attempt's span under this scope, opening the scope if it is not yet."""
         self.open()
         return self.run.spans.open(name, attributes, role=role)

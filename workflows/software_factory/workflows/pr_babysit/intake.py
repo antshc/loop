@@ -10,19 +10,31 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from workflows.software_factory.events.pull_requests import PullRequestWork
-from workflows.software_factory.events.specs import RepositoryTarget
 from loop import Ledger, LedgerCorrupted, RunStatus, StopSignal, WorkItemLocked
 from loop.shared.github.account import GitHub
 from loop.shared.github.pull_requests.model import PullRequest
+
+from workflows.software_factory.events.pull_requests import PullRequestWork
+from workflows.software_factory.events.specs import RepositoryTarget
 from workflows.software_factory.infrastructure.pacing import Pacer
-from workflows.software_factory.infrastructure.state import JsonFile, StateError, process_lock
+from workflows.software_factory.infrastructure.state import (
+    JsonFile,
+    StateError,
+    process_lock,
+)
 from workflows.software_factory.stages import pull_requests
 from workflows.software_factory.stages.ci import DiagnoseInput, signal
 
 from .definition import NAME
 from .legacy import adopt_v1, read_status, state_path
-from .policy import ADOPTED, Blocked, fingerprint, has_changed, is_blocked, released_for_change
+from .policy import (
+    ADOPTED,
+    Blocked,
+    fingerprint,
+    has_changed,
+    is_blocked,
+    released_for_change,
+)
 from .settings import Settings
 
 logger = logging.getLogger("workflow.pr_babysit")
@@ -65,12 +77,24 @@ class ChildLauncher(Protocol):
 
 def child_command(config: Path, url: str) -> list[str]:
     """An independent babysit process without a scheduler trace parent."""
-    return [sys.executable, "-m", "workflows.software_factory.workflows.pr_babysit", "--config", str(config), "--pr", url]
+    return [
+        sys.executable,
+        "-m",
+        "workflows.software_factory.workflows.pr_babysit",
+        "--config",
+        str(config),
+        "--pr",
+        url,
+    ]
 
 
 def child_environment() -> dict[str, str]:
     """Keeps exporter configuration but discards inherited distributed trace context."""
-    return {key: value for key, value in os.environ.items() if key.lower() not in {"traceparent", "tracestate", "baggage"}}
+    return {
+        key: value
+        for key, value in os.environ.items()
+        if key.lower() not in {"traceparent", "tracestate", "baggage"}
+    }
 
 
 class ProcessLauncher:
@@ -84,15 +108,27 @@ class ProcessLauncher:
 def work_of(settings: Settings, slug: str, number: int) -> PullRequestWork:
     """The work item of one configured repository's pull request; its recovery worktrees live under the configured worktrees folder."""
     repository = settings.repository(slug)
-    return PullRequestWork(RepositoryTarget(slug, repository.path, settings.worktrees_root), number, REVISION)
+    return PullRequestWork(
+        RepositoryTarget(slug, repository.path, settings.worktrees_root),
+        number,
+        REVISION,
+    )
 
 
-def adopt_state(settings: Settings, ledger: Ledger, github: GitHub, work: PullRequestWork) -> bool:
+def adopt_state(
+    settings: Settings, ledger: Ledger, github: GitHub, work: PullRequestWork
+) -> bool:
     """Adopts the earlier version's state of the pull request into the ledger when it has not been; True when it was adopted now."""
+
     def ci_signal() -> str:
         return signal(DiagnoseInput(pull_requests.read(work, github), github))
 
-    adopted = adopt_v1(state_path(settings.state_dir, work.target.slug, work.number), ledger, work, ci_signal=ci_signal)
+    adopted = adopt_v1(
+        state_path(settings.state_dir, work.target.slug, work.number),
+        ledger,
+        work,
+        ci_signal=ci_signal,
+    )
     if adopted:
         logger.info("%s: adopted the per-PR state of the earlier version", work.id)
     return adopted
@@ -101,7 +137,9 @@ def adopt_state(settings: Settings, ledger: Ledger, github: GitHub, work: PullRe
 def release_if_changed(ledger: Ledger, github: GitHub, work: PullRequestWork) -> bool:
     """Releases blocked work whose pull request changed since it was blocked, so its next run starts afresh; True when released."""
     status = ledger.status(NAME, work.id)
-    if not is_blocked(status) or not released_for_change(status, fingerprint(pull_requests.read(work, github))):
+    if not is_blocked(status) or not released_for_change(
+        status, fingerprint(pull_requests.read(work, github))
+    ):
         return False
     ledger.release(NAME, work.id, "the pull request changed since it was blocked")
     return True
@@ -114,11 +152,24 @@ class Registry:
         self.root, self.author, self.repositories = root, author, sorted(repositories)
         self.path = root / "scheduler.json"
         self._file = JsonFile(self.path)
-        self._data = self._read({"version": 1, "initialized": False, "prs": {}, "author": author, "repositories": self.repositories})
+        self._data = self._read(
+            {
+                "version": 1,
+                "initialized": False,
+                "prs": {},
+                "author": author,
+                "repositories": self.repositories,
+            }
+        )
         if not isinstance(self._data.get("prs"), dict):
             raise Blocked(f"Invalid scheduler registry: {self.path}")
-        if self._data.get("author") != author or self._data.get("repositories") != self.repositories:
-            raise Blocked("Discovery configuration changed; choose a new state_dir or migrate its baseline")
+        if (
+            self._data.get("author") != author
+            or self._data.get("repositories") != self.repositories
+        ):
+            raise Blocked(
+                "Discovery configuration changed; choose a new state_dir or migrate its baseline"
+            )
         self._adopt_ignored()
 
     @property
@@ -126,13 +177,20 @@ class Registry:
         """The enrolled pull requests by `owner/repo#number`."""
         return self._data["prs"]
 
-    def enroll(self, prs: list[tuple[str, PullRequest]], include_existing: bool) -> None:
+    def enroll(
+        self, prs: list[tuple[str, PullRequest]], include_existing: bool
+    ) -> None:
         """Commits a complete baseline, then durably enrolls future discoveries."""
         for repo, pr in prs:
             key = f"{repo}#{pr.number}"
             if key not in self.prs:
                 ignored = not (self._data["initialized"] or include_existing)
-                self.prs[key] = {"repo": repo, "number": pr.number, "url": pr.url, "ignored": ignored}
+                self.prs[key] = {
+                    "repo": repo,
+                    "number": pr.number,
+                    "url": pr.url,
+                    "ignored": ignored,
+                }
         self._data["initialized"] = True
         self._file.write(self._data)
 
@@ -145,7 +203,10 @@ class Registry:
         """A pull request the earlier version's baseline ignored stays ignored."""
         unmarked = [record for record in self.prs.values() if "ignored" not in record]
         for record in unmarked:
-            record["ignored"] = read_status(state_path(self.root, record["repo"], record["number"])) == "ignored"
+            record["ignored"] = (
+                read_status(state_path(self.root, record["repo"], record["number"]))
+                == "ignored"
+            )
         if unmarked:
             self._file.write(self._data)
 
@@ -160,8 +221,14 @@ class Scheduler:
     """Scans continuously while child processes own independent babysit runs, one per pull request."""
 
     def __init__(
-        self, settings: Settings, request: DiscoveryRequest, github: GitHub, ledger: Ledger, children: ChildLauncher,
-        pacer: Pacer, stop: StopSignal,
+        self,
+        settings: Settings,
+        request: DiscoveryRequest,
+        github: GitHub,
+        ledger: Ledger,
+        children: ChildLauncher,
+        pacer: Pacer,
+        stop: StopSignal,
     ) -> None:
         self._settings = settings
         self._request = request
@@ -174,7 +241,8 @@ class Scheduler:
     def discover(self, author: str) -> list[tuple[str, PullRequest]]:
         """A complete discovery scan, taken before the startup baseline advances."""
         return [
-            (repository.name, pr) for repository in self._settings.repositories
+            (repository.name, pr)
+            for repository in self._settings.repositories
             for pr in self._github.pull_requests(repository.name).open_by(author)
         ]
 
@@ -186,7 +254,11 @@ class Scheduler:
         children: dict[str, Child] = {}
         try:
             with process_lock(settings.state_dir / "scheduler.lock"):
-                registry = Registry(settings.state_dir, author, [repository.name for repository in settings.repositories])
+                registry = Registry(
+                    settings.state_dir,
+                    author,
+                    [repository.name for repository in settings.repositories],
+                )
                 try:
                     while not self._stop.requested():
                         self._reap(children, registry)
@@ -206,15 +278,27 @@ class Scheduler:
             del children[key]
             record = registry.prs[key]
             try:
-                status = self._ledger.status(NAME, f"{record['repo']}#{record['number']}")
+                status = self._ledger.status(
+                    NAME, f"{record['repo']}#{record['number']}"
+                )
             except LedgerCorrupted as exception:
                 self._quarantine(key, registry, exception)
                 continue
             if status is None or status.status not in _CLOSED:
-                logger.warning("%s: worker exited %s without closing its run; explicit retry required", key, child.returncode)
+                logger.warning(
+                    "%s: worker exited %s without closing its run; explicit retry required",
+                    key,
+                    child.returncode,
+                )
                 registry.mark(key, crashed=True)
 
-    def _scan(self, author: str, registry: Registry, children: dict[str, Child], retry: str | None) -> str | None:
+    def _scan(
+        self,
+        author: str,
+        registry: Registry,
+        children: dict[str, Child],
+        retry: str | None,
+    ) -> str | None:
         """One pass: enrol what is new, start a child for each pull request that may run; returns the retry still to apply."""
         try:
             prs = self.discover(author)
@@ -232,13 +316,22 @@ class Scheduler:
                 if not starts or len(children) >= self._settings.concurrency:
                     continue
                 logger.info("Starting babysit for %s", key)
-                children[key] = self._launcher.start(self._request.config, record["url"])
+                children[key] = self._launcher.start(
+                    self._request.config, record["url"]
+                )
                 retry = None if explicit else retry
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError, ValueError) as exception:
+        except (
+            subprocess.CalledProcessError,
+            subprocess.TimeoutExpired,
+            OSError,
+            ValueError,
+        ) as exception:
             logger.warning("PR discovery unavailable: %s", exception)
         return retry
 
-    def _starts(self, key: str, record: dict, registry: Registry, explicit: bool) -> bool:
+    def _starts(
+        self, key: str, record: dict, registry: Registry, explicit: bool
+    ) -> bool:
         """Whether the pull request's worker should start now: not held for a person unless retried or changed, and not still owned by a surviving worker."""
         work = work_of(self._settings, record["repo"], record["number"])
         try:
@@ -257,7 +350,9 @@ class Scheduler:
             return False
         return self._free(work)
 
-    def _unblocked(self, work: PullRequestWork, status: RunStatus, explicit: bool) -> bool:
+    def _unblocked(
+        self, work: PullRequestWork, status: RunStatus, explicit: bool
+    ) -> bool:
         """Whether blocked work runs again: a retry releases it, a pull request that changed since is released unless it resumes work adopted from the earlier version."""
         if explicit:
             self._ledger.release(NAME, work.id, "retry requested")
@@ -265,10 +360,14 @@ class Scheduler:
         if not has_changed(status, fingerprint(pull_requests.read(work, self._github))):
             return False
         if not status.attributes.get(ADOPTED):
-            self._ledger.release(NAME, work.id, "the pull request changed since it was blocked")
+            self._ledger.release(
+                NAME, work.id, "the pull request changed since it was blocked"
+            )
         return True
 
-    def _quarantine(self, key: str, registry: Registry, exception: LedgerCorrupted) -> None:
+    def _quarantine(
+        self, key: str, registry: Registry, exception: LedgerCorrupted
+    ) -> None:
         """Marks one pull request crashed for a damaged log, so it needs a person and the others go on."""
         logger.error("%s: %s; repair or move the log, then retry", key, exception)
         registry.mark(key, crashed=True)

@@ -44,7 +44,9 @@ class SpecTicketingService:
     def __init__(self, issues: Issues) -> None:
         self._issues = issues
 
-    def create(self, spec: SpecGraphSnapshot, drafts: Sequence[TicketDraft]) -> TicketedSpec:
+    def create(
+        self, spec: SpecGraphSnapshot, drafts: Sequence[TicketDraft]
+    ) -> TicketedSpec:
         """Finds or creates each draft's Ticket, adds its blocked-by edges, then links it; a retry repeats none of that."""
         tickets: list[Ticket] = []
         edges: list[BlockedByRelation] = []
@@ -53,7 +55,9 @@ class SpecTicketingService:
             existing = self._issues.find_tickets(spec)
             linked = self._issues.sub_issue_numbers(spec)
             for draft in drafts:
-                ticket = existing.get(draft.key) or self._issues.create_ticket(spec, draft.key, draft.title, draft.body)
+                ticket = existing.get(draft.key) or self._issues.create_ticket(
+                    spec, draft.key, draft.title, draft.body
+                )
                 for index in draft.blocked_by:
                     self._issues.add_blocked_by(ticket, tickets[index])
                     edges.append(BlockedByRelation(ticket.ref, tickets[index].ref))
@@ -62,5 +66,8 @@ class SpecTicketingService:
                 tickets.append(ticket)
         except (CommandError, IssueError) as exception:
             made = ", ".join(f"#{ticket.number}" for ticket in tickets) or "none"
-            raise TicketingError(f"creating Tickets failed after creating {made}: {exception}", tuple(tickets)) from exception
+            raise TicketingError(
+                f"creating Tickets failed after creating {made}: {exception}",
+                tuple(tickets),
+            ) from exception
         return TicketedSpec(tuple(tickets), tuple(edges))

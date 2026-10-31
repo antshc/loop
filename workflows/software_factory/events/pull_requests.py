@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from loop import Json
+from loop import Event, Json
+
 from workflows.software_factory.events.feedback import FeedbackBatch
 from workflows.software_factory.events.specs import RepositoryTarget
-from loop import Event
 
 
 @dataclass(frozen=True)
@@ -119,7 +119,14 @@ class ReadinessCheck(Event):
     ready: bool
 
 
-type NextAction = PullRequestClosed | Unsupported | FeedbackBatch | CiFailing | CopilotDue | ReadinessCheck
+type NextAction = (
+    PullRequestClosed
+    | Unsupported
+    | FeedbackBatch
+    | CiFailing
+    | CopilotDue
+    | ReadinessCheck
+)
 
 
 @dataclass(frozen=True)

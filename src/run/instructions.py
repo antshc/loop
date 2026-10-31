@@ -29,8 +29,15 @@ class Instructions:
             raise ValueError("instruction file path must be absolute")
         if self.url is not None:
             parts = urlsplit(self.url)
-            if parts.scheme not in ("http", "https") or not parts.hostname or parts.username or parts.password:
-                raise ValueError("instructions require a public HTTP(S) URL without credentials")
+            if (
+                parts.scheme not in ("http", "https")
+                or not parts.hostname
+                or parts.username
+                or parts.password
+            ):
+                raise ValueError(
+                    "instructions require a public HTTP(S) URL without credentials"
+                )
 
     @classmethod
     def from_file(cls, path: Path) -> Instructions:
@@ -43,7 +50,9 @@ class Instructions:
         return cls(url=url)
 
 
-def resolve_instructions(source: str | Instructions | None, *, dry_run: bool = False) -> str | None:
+def resolve_instructions(
+    source: str | Instructions | None, *, dry_run: bool = False
+) -> str | None:
     """Snapshot instructions once, with no source I/O in dry-run mode."""
     if source is None:
         return None
@@ -58,7 +67,9 @@ def resolve_instructions(source: str | Instructions | None, *, dry_run: bool = F
         else:
             with urlopen(source.url, timeout=10) as stream:
                 if "text/html" in stream.headers.get("Content-Type", "").lower():
-                    raise InstructionsError("instruction URL must return raw text, not HTML")
+                    raise InstructionsError(
+                        "instruction URL must return raw text, not HTML"
+                    )
                 content = stream.read(_MAX_BYTES + 1)
         if len(content) > _MAX_BYTES:
             raise InstructionsError("instructions exceed the 1 MiB limit")

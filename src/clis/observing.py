@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Sequence
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Protocol
 
 from ..observe import AgentRunRecord, LogReading, RunObserver
@@ -30,7 +30,7 @@ class SessionLogReader(Protocol):
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class ObservingCliRunner:
@@ -49,19 +49,38 @@ class ObservingCliRunner:
         self._readers = {reader.cli: reader for reader in readers}
         self._clock = clock
 
-    def run(self, profile: AgentProfile, request: AgentRequest, turn: Turn, context: RunContext) -> CliOutcome:
+    def run(
+        self,
+        profile: AgentProfile,
+        request: AgentRequest,
+        turn: Turn,
+        context: RunContext,
+    ) -> CliOutcome:
         reader = self._readers.get(profile.cli.name)
         started_at = self._clock()
         try:
-            outcome = self._inner.run(self._pinned(profile, reader, turn), request, turn, context)
+            outcome = self._inner.run(
+                self._pinned(profile, reader, turn), request, turn, context
+            )
         except Exception as exception:
-            self._report(profile, request, turn, context, started_at, reader, None, repr(exception))
+            self._report(
+                profile,
+                request,
+                turn,
+                context,
+                started_at,
+                reader,
+                None,
+                repr(exception),
+            )
             raise
         self._report(profile, request, turn, context, started_at, reader, outcome, None)
         return outcome
 
     @staticmethod
-    def _pinned(profile: AgentProfile, reader: SessionLogReader | None, turn: Turn) -> AgentProfile:
+    def _pinned(
+        profile: AgentProfile, reader: SessionLogReader | None, turn: Turn
+    ) -> AgentProfile:
         extra = reader.start_args(turn) if reader is not None else ()
         return replace(profile, args=(*profile.args, *extra)) if extra else profile
 
@@ -87,7 +106,8 @@ class ObservingCliRunner:
             exit_code=outcome.exit_code if outcome else None,
             error=error,
             model=(reading.model if reading else None) or profile.model,
-            reasoning_effort=(reading.reasoning_effort if reading else None) or profile.reasoning_effort,
+            reasoning_effort=(reading.reasoning_effort if reading else None)
+            or profile.reasoning_effort,
             usage=reading.usage if reading else None,
             tools=reading.tools if reading else (),
             prompt=request.prompt,
@@ -96,7 +116,9 @@ class ObservingCliRunner:
         )
         try:
             self._observer.agent_run(record)
-        except Exception as exception:  # An observer is caller code; it must never fail the run.
+        except (
+            Exception
+        ) as exception:  # An observer is caller code; it must never fail the run.
             logger.warning("observer failed on agent run: %r", exception)
 
     @staticmethod

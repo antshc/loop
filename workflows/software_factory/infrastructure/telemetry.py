@@ -15,7 +15,11 @@ class TracingObserver(RunObserver, Protocol):
     """A RunObserver that also opens Workflow-owned spans on its own trace provider."""
 
     def span(
-        self, name: str, attributes: Mapping[str, str | int | bool] | None = None, *, role: str | None = None
+        self,
+        name: str,
+        attributes: Mapping[str, str | int | bool] | None = None,
+        *,
+        role: str | None = None,
     ) -> AbstractContextManager[object]: ...
 
 
@@ -42,7 +46,11 @@ class OtlpObserverFactory:
 
     def __call__(self, endpoint: str) -> TracingObserver:
         if self._resource_per_agent:
-            return otlp_observer(endpoint=endpoint, service_name=self._service_name, resource_per_agent=True)
+            return otlp_observer(
+                endpoint=endpoint,
+                service_name=self._service_name,
+                resource_per_agent=True,
+            )
         return otlp_observer(endpoint=endpoint, service_name=self._service_name)
 
 
@@ -59,7 +67,9 @@ class FactorySpan(Protocol):
 class FactorySpans(Protocol):
     """Opens factory spans; satisfied structurally by the runtime's `Spans`, which shared code never imports."""
 
-    def open(self, name: str, attributes: Attributes, *, role: str) -> AbstractContextManager[FactorySpan]: ...
+    def open(
+        self, name: str, attributes: Attributes, *, role: str
+    ) -> AbstractContextManager[FactorySpan]: ...
 
 
 class _OtelSpan:
@@ -117,7 +127,9 @@ class _Isolated:
 
 
 def _report(action: str, exception: Exception) -> None:
-    LOGGER.warning("telemetry: could not %s: %s: %s", action, type(exception).__name__, exception)
+    LOGGER.warning(
+        "telemetry: could not %s: %s: %s", action, type(exception).__name__, exception
+    )
 
 
 @contextmanager
@@ -142,7 +154,9 @@ def _isolated[S](
     _close(manager, None)
 
 
-def _close(manager: AbstractContextManager[Any] | None, error: BaseException | None) -> None:
+def _close(
+    manager: AbstractContextManager[Any] | None, error: BaseException | None
+) -> None:
     if manager is None:
         return
     try:
@@ -163,9 +177,13 @@ class OtelSpans:
     def __init__(self, observer: TracingObserver) -> None:
         self._observer = observer
 
-    def open(self, name: str, attributes: Attributes, *, role: str) -> AbstractContextManager[FactorySpan]:
+    def open(
+        self, name: str, attributes: Attributes, *, role: str
+    ) -> AbstractContextManager[FactorySpan]:
         """Opens a span as resource `role`; a failing observer yields a detached span instead of raising."""
-        return _isolated(lambda: self._observer.span(name, attributes, role=role), _OtelSpan)
+        return _isolated(
+            lambda: self._observer.span(name, attributes, role=role), _OtelSpan
+        )
 
 
 class _TeeSpan:
@@ -192,11 +210,18 @@ class Tee:
         self._spans = spans
 
     @contextmanager
-    def open(self, name: str, attributes: Attributes, *, role: str) -> Iterator[FactorySpan]:
+    def open(
+        self, name: str, attributes: Attributes, *, role: str
+    ) -> Iterator[FactorySpan]:
         """Opens the span on every implementation; one that fails is skipped."""
         with ExitStack() as stack:
             handles = [
-                stack.enter_context(_isolated(lambda spans=spans: spans.open(name, attributes, role=role), _identity))
+                stack.enter_context(
+                    _isolated(
+                        lambda spans=spans: spans.open(name, attributes, role=role),
+                        _identity,
+                    )
+                )
                 for spans in self._spans
             ]
             yield _TeeSpan(handles)

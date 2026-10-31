@@ -25,7 +25,9 @@ class LoopHook:
 
     def __post_init__(self) -> None:
         if not hasattr(type(self), "point"):
-            raise TypeError(f"{type(self).__name__} fixes no hook point; use a point subclass")
+            raise TypeError(
+                f"{type(self).__name__} fixes no hook point; use a point subclass"
+            )
         if not self.command:
             raise ValueError("Loop hook command must not be empty")
         if self.timeout_sec <= 0:

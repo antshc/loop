@@ -19,8 +19,14 @@ class Permissions:
             raise ValueError("tools must be 'allow-all' or a tuple of tool patterns")
         if isinstance(self.deny_tools, str):
             raise ValueError("deny_tools must be a tuple of tool patterns")
-        patterns = self.deny_tools if isinstance(self.tools, str) else (*self.tools, *self.deny_tools)
-        if any(not isinstance(pattern, str) or not pattern.strip() for pattern in patterns):
+        patterns = (
+            self.deny_tools
+            if isinstance(self.tools, str)
+            else (*self.tools, *self.deny_tools)
+        )
+        if any(
+            not isinstance(pattern, str) or not pattern.strip() for pattern in patterns
+        ):
             raise ValueError("tool permission patterns must be nonempty strings")
         if not isinstance(self.tools, str):
             object.__setattr__(self, "tools", tuple(self.tools))
@@ -29,5 +35,11 @@ class Permissions:
 
 def has_permission_args(args: tuple[str, ...]) -> bool:
     """Recognize native tool-policy arguments that conflict with a typed policy."""
-    flags = {"--allow-all", "--yolo", "--allow-all-tools", "--allow-tool", "--deny-tool"}
+    flags = {
+        "--allow-all",
+        "--yolo",
+        "--allow-all-tools",
+        "--allow-tool",
+        "--deny-tool",
+    }
     return any(arg.split("=", 1)[0] in flags for arg in args)

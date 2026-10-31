@@ -11,7 +11,9 @@ from .client import AgentClient
 class AgentWrapper:
     """Composes an AgentClient and delegates common lifecycle operations."""
 
-    def __init__(self, inner: AgentClient, defaults: AgentContext | None = None) -> None:
+    def __init__(
+        self, inner: AgentClient, defaults: AgentContext | None = None
+    ) -> None:
         self._inner = inner
         self._defaults = defaults or AgentContext()
 
@@ -31,7 +33,9 @@ class GitAgent(AgentWrapper):
         self._git = git
         self._options = options or GitOptions()
 
-    def run(self, request: AgentRequest, context: AgentContext | None = None) -> AgentResult:
+    def run(
+        self, request: AgentRequest, context: AgentContext | None = None
+    ) -> AgentResult:
         original = context or self._defaults
         # The strategy's git lifecycle surrounds the entire delegated execution.
         with self._git.open(original.cwd, self._options) as workdir:
@@ -49,6 +53,8 @@ class DockerAgent(AgentWrapper):
         super().__init__(inner, defaults)
         self._docker = docker
 
-    def run(self, request: AgentRequest, context: AgentContext | None = None) -> AgentResult:
+    def run(
+        self, request: AgentRequest, context: AgentContext | None = None
+    ) -> AgentResult:
         configured = self._docker.configure(context or self._defaults)
         return self._inner.run(request, configured)

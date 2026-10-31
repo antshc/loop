@@ -3,11 +3,11 @@ from __future__ import annotations
 import json
 
 import pytest
-
 from loop.shared.github.account import GitHub
-from loop.shared.github.repo import GitHubRepo, denied
 from loop.shared.github.pull_requests import PullRequests
+from loop.shared.github.repo import GitHubRepo, denied
 from loop.shared.process import CommandError
+
 from tests.shared.fakes import FakeGhCli, FakePullRequestHost, ScriptedGh
 
 
@@ -16,8 +16,12 @@ def _pulls(gh: ScriptedGh) -> PullRequests:
 
 
 def test_a_draft_pull_request_is_reused_for_its_head_branch() -> None:
-    existing = [{"number": 5, "title": "t", "url": "u", "headRefName": "feat", "body": "old"}]
-    gh = ScriptedGh(lambda args: json.dumps(existing) if args[:2] == ("pr", "list") else "")
+    existing = [
+        {"number": 5, "title": "t", "url": "u", "headRefName": "feat", "body": "old"}
+    ]
+    gh = ScriptedGh(
+        lambda args: json.dumps(existing) if args[:2] == ("pr", "list") else ""
+    )
 
     pr = _pulls(gh).create_draft_pull_request("feat", "main", "t", "new")
 
@@ -26,16 +30,26 @@ def test_a_draft_pull_request_is_reused_for_its_head_branch() -> None:
 
 
 def test_a_missing_draft_pull_request_is_created_as_a_draft() -> None:
-    gh = ScriptedGh(lambda args: "[]" if args[:2] == ("pr", "list") else "https://github.com/a/b/pull/7\n")
+    gh = ScriptedGh(
+        lambda args: (
+            "[]" if args[:2] == ("pr", "list") else "https://github.com/a/b/pull/7\n"
+        )
+    )
 
     pr = _pulls(gh).create_draft_pull_request("feat", "main", "Title")
 
-    assert (pr.number, pr.url, pr.branch) == (7, "https://github.com/a/b/pull/7", "feat")
+    assert (pr.number, pr.url, pr.branch) == (
+        7,
+        "https://github.com/a/b/pull/7",
+        "feat",
+    )
     assert gh.calls[-1][-1] == "--draft" and ("--repo", "a/b") == gh.calls[-1][2:4]
 
 
 def test_every_reader_rejects_a_page_that_is_not_a_list_the_same_way() -> None:
-    repo = GitHubRepo("a", "b", gh=ScriptedGh(lambda args: json.dumps([{"unexpected": 1}])))
+    repo = GitHubRepo(
+        "a", "b", gh=ScriptedGh(lambda args: json.dumps([{"unexpected": 1}]))
+    )
 
     with pytest.raises(ValueError, match="expected a list of pages"):
         repo.pages("repos/a/b/pulls")
@@ -49,11 +63,19 @@ def test_pages_collects_the_named_list_of_each_object_page() -> None:
     pages = [{"check_runs": [{"id": 1}]}, {"check_runs": [{"id": 2}]}]
     repo = GitHubRepo("a", "b", gh=ScriptedGh(lambda args: json.dumps(pages)))
 
-    assert repo.pages("repos/a/b/commits/x/check-runs", items="check_runs") == [{"id": 1}, {"id": 2}]
+    assert repo.pages("repos/a/b/commits/x/check-runs", items="check_runs") == [
+        {"id": 1},
+        {"id": 2},
+    ]
 
 
-@pytest.mark.parametrize(("output", "expected"), [("HTTP 403", True), ("gh: Not Found (HTTP 404)", True), ("HTTP 500", False)])
-def test_gh_refusing_a_request_is_told_from_the_request_failing(output: str, expected: bool) -> None:
+@pytest.mark.parametrize(
+    ("output", "expected"),
+    [("HTTP 403", True), ("gh: Not Found (HTTP 404)", True), ("HTTP 500", False)],
+)
+def test_gh_refusing_a_request_is_told_from_the_request_failing(
+    output: str, expected: bool
+) -> None:
     assert denied(CommandError("gh api x", 1, output)) is expected
 
 
@@ -81,7 +103,10 @@ def test_a_repository_is_read_from_a_slug_or_a_remote_url_and_nothing_else() -> 
     gh = ScriptedGh(lambda args: "")
 
     assert GitHubRepo.from_slug("acme/harness", gh).slug == "acme/harness"
-    assert GitHubRepo.from_slug("git@github.com:acme/harness.git", gh).slug == "acme/harness"
+    assert (
+        GitHubRepo.from_slug("git@github.com:acme/harness.git", gh).slug
+        == "acme/harness"
+    )
     with pytest.raises(ValueError, match="unsupported"):
         GitHubRepo.from_slug("https://example.com/owner/repo.git", gh)
 

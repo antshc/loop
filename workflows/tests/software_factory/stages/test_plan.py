@@ -8,9 +8,17 @@ from pathlib import Path
 import pytest
 
 from workflows.software_factory.events.specs import SpecHeld
-from workflows.software_factory.events.tickets import PlannedTicket, PlanProposed, TicketsCreated
+from workflows.software_factory.events.tickets import (
+    PlannedTicket,
+    PlanProposed,
+    TicketsCreated,
+)
 from workflows.software_factory.stages import plan
-from workflows.tests.software_factory.stages.support import DeveloperScript, StageRig, answers
+from workflows.tests.software_factory.stages.support import (
+    DeveloperScript,
+    StageRig,
+    answers,
+)
 
 FORM = {"title": "Add login form", "body": "Build the form", "blocked_by": []}
 TESTS = {"title": "Add login tests", "body": "Cover the form", "blocked_by": [0]}
@@ -19,7 +27,9 @@ NO_TICKETS = [{"tickets": []}, "the planner returned no Tickets"]
 
 def planning(rig: StageRig, script: DeveloperScript, *stages):
     """The routing Stage, then the planning Stages on the checkout."""
-    return rig.in_worktree(script, *(stages or (plan.plan_spec(), plan.create_tickets())))
+    return rig.in_worktree(
+        script, *(stages or (plan.plan_spec(), plan.create_tickets()))
+    )
 
 
 def unplanned(tmp_path: Path) -> StageRig:
@@ -27,7 +37,9 @@ def unplanned(tmp_path: Path) -> StageRig:
     return StageRig(tmp_path, tickets=[])
 
 
-def test_a_spec_that_already_has_sub_issues_skips_planning_and_produces_no_event(tmp_path: Path) -> None:
+def test_a_spec_that_already_has_sub_issues_skips_planning_and_produces_no_event(
+    tmp_path: Path,
+) -> None:
     """Given a Spec with a Ticket, when the plan Stages run, then both are skipped, the planner is never asked and nothing is written."""
     rig = StageRig(tmp_path)
     script = DeveloperScript(rig.repo, [answers("completed", tickets=[FORM])])
@@ -40,7 +52,9 @@ def test_a_spec_that_already_has_sub_issues_skips_planning_and_produces_no_event
     assert rig.history(PlanProposed) == () and rig.history(TicketsCreated) == ()
 
 
-def test_a_spec_whose_sub_issues_are_all_closed_is_not_replanned(tmp_path: Path) -> None:
+def test_a_spec_whose_sub_issues_are_all_closed_is_not_replanned(
+    tmp_path: Path,
+) -> None:
     """Given a Spec whose only Ticket is closed, when the plan Stage runs, then it is skipped: closed work prevents replanning."""
     rig = StageRig(tmp_path)
     rig.gh.close_issue(10)
@@ -65,7 +79,9 @@ def test_a_target_that_does_not_plan_skips_planning(tmp_path: Path) -> None:
     assert rig.gh.writes() == []
 
 
-def test_a_valid_plan_passes_with_the_proposed_tickets_and_leaves_the_repository_and_tracker_unchanged(tmp_path: Path) -> None:
+def test_a_valid_plan_passes_with_the_proposed_tickets_and_leaves_the_repository_and_tracker_unchanged(
+    tmp_path: Path,
+) -> None:
     """Given a Spec with no sub-issues and a planner that proposes two Tickets, when the plan Stage runs, then it passes with them and writes nothing."""
     rig = unplanned(tmp_path)
     base = rig.repo.head()
@@ -75,7 +91,12 @@ def test_a_valid_plan_passes_with_the_proposed_tickets_and_leaves_the_repository
 
     assert result.status == "completed"
     assert rig.history(PlanProposed) == (
-        PlanProposed((PlannedTicket("Add login form", "Build the form"), PlannedTicket("Add login tests", "Cover the form", (0,)))),
+        PlanProposed(
+            (
+                PlannedTicket("Add login form", "Build the form"),
+                PlannedTicket("Add login tests", "Cover the form", (0,)),
+            )
+        ),
     )
     assert rig.repo.head() == base and rig.repo.status() == ""
     assert rig.gh.writes() == []
@@ -85,7 +106,9 @@ def test_a_valid_plan_passes_with_the_proposed_tickets_and_leaves_the_repository
 def test_a_declining_planner_holds_the_spec_with_its_reason(tmp_path: Path) -> None:
     """Given a planner that declines, when the plan Stage runs, then it holds with the planner's reason and creates nothing."""
     rig = unplanned(tmp_path)
-    script = DeveloperScript(rig.repo, [answers("failed", reason="the Spec contradicts itself")])
+    script = DeveloperScript(
+        rig.repo, [answers("failed", reason="the Spec contradicts itself")]
+    )
 
     result = rig.run(planning(rig, script))
 
@@ -98,13 +121,24 @@ def test_a_declining_planner_holds_the_spec_with_its_reason(tmp_path: Path) -> N
     ("tickets", "complaint"),
     [
         ([], "the planner returned no Tickets"),
-        ([{**FORM, "blocked_by": [0]}], "is blocked by a Ticket that does not come before it"),
-        ([FORM, {**TESTS, "blocked_by": [2]}], "is blocked by a Ticket that does not come before it"),
-        ([{**FORM, "title": f"Ticket {number}"} for number in range(16)], "the limit is 15"),
+        (
+            [{**FORM, "blocked_by": [0]}],
+            "is blocked by a Ticket that does not come before it",
+        ),
+        (
+            [FORM, {**TESTS, "blocked_by": [2]}],
+            "is blocked by a Ticket that does not come before it",
+        ),
+        (
+            [{**FORM, "title": f"Ticket {number}"} for number in range(16)],
+            "the limit is 15",
+        ),
     ],
     ids=["no-tickets", "self-blocked", "forward-blocked", "too-many"],
 )
-def test_a_plan_that_breaks_the_plan_rules_fails_the_stage_and_creates_nothing(tmp_path: Path, tickets: list, complaint: str) -> None:
+def test_a_plan_that_breaks_the_plan_rules_fails_the_stage_and_creates_nothing(
+    tmp_path: Path, tickets: list, complaint: str
+) -> None:
     """Given a planner whose plan breaks a plan rule, when the plan Stages run, then the Stage fails with the rule as evidence and no Ticket exists."""
     rig = unplanned(tmp_path)
     script = DeveloperScript(rig.repo, [answers("completed", tickets=tickets)])
@@ -117,7 +151,9 @@ def test_a_plan_that_breaks_the_plan_rules_fails_the_stage_and_creates_nothing(t
     assert rig.gh.writes() == [] and rig.skipped() == []
 
 
-def test_a_planner_that_changes_the_working_tree_fails_the_stage_and_the_checkout_is_restored(tmp_path: Path) -> None:
+def test_a_planner_that_changes_the_working_tree_fails_the_stage_and_the_checkout_is_restored(
+    tmp_path: Path,
+) -> None:
     """Given a planner that leaves a file behind, when the plan Stage runs, then the read-only contract fails it and the checkout is clean."""
     rig = unplanned(tmp_path)
 
@@ -130,11 +166,16 @@ def test_a_planner_that_changes_the_working_tree_fails_the_stage_and_the_checkou
     result = rig.run(planning(rig, script))
 
     assert result.status == "failed"
-    assert "read-only attempt changed the working tree" in rig.spans.attempts("plan-spec")[0].attributes["factory.stage.reason"]
+    assert (
+        "read-only attempt changed the working tree"
+        in rig.spans.attempts("plan-spec")[0].attributes["factory.stage.reason"]
+    )
     assert rig.repo.status() == "" and rig.gh.writes() == []
 
 
-def test_create_tickets_persists_the_plan_comment_then_creates_each_ticket_once_with_its_blocked_by_edges(tmp_path: Path) -> None:
+def test_create_tickets_persists_the_plan_comment_then_creates_each_ticket_once_with_its_blocked_by_edges(
+    tmp_path: Path,
+) -> None:
     """Given a proposed plan, when the Tickets are created, then the plan marker Comment, both Tickets and the native edge exist."""
     rig = unplanned(tmp_path)
     script = DeveloperScript(rig.repo, [answers("completed", tickets=[FORM, TESTS])])
@@ -142,14 +183,24 @@ def test_create_tickets_persists_the_plan_comment_then_creates_each_ticket_once_
     result = rig.run(planning(rig, script))
 
     assert result.status == "completed"
-    assert [title for title, _ in rig.gh.created_issues()] == ["Add login form", "Add login tests"]
+    assert [title for title, _ in rig.gh.created_issues()] == [
+        "Add login form",
+        "Add login tests",
+    ]
     assert rig.gh.blockers_of(102) == [101] and rig.gh.blockers_of(101) == []
     (plan_comment,) = [body for number, body in rig.gh.posted_comments() if number == 1]
-    assert plan_comment.startswith("implement_spec: plan\n\n1. Add login form\n2. Add login tests") and "<!-- loop:plan " in plan_comment
+    assert (
+        plan_comment.startswith(
+            "implement_spec: plan\n\n1. Add login form\n2. Add login tests"
+        )
+        and "<!-- loop:plan " in plan_comment
+    )
     assert rig.history(TicketsCreated) == (TicketsCreated((101, 102)),)
 
 
-def test_rerunning_after_the_tickets_exist_creates_no_second_ticket_comment_or_edge(tmp_path: Path) -> None:
+def test_rerunning_after_the_tickets_exist_creates_no_second_ticket_comment_or_edge(
+    tmp_path: Path,
+) -> None:
     """Given a finished plan, when the Workflow runs again, then the Spec has sub-issues so nothing is planned or created again."""
     rig = unplanned(tmp_path)
     script = DeveloperScript(rig.repo, [answers("completed", tickets=[FORM, TESTS])])
@@ -164,7 +215,9 @@ def test_rerunning_after_the_tickets_exist_creates_no_second_ticket_comment_or_e
     assert len(rig.gh.created_issues()) == 2 and rig.gh.blockers_of(102) == [101]
 
 
-def test_a_run_after_a_crash_part_way_through_the_tickets_resumes_the_persisted_plan_without_duplicates(tmp_path: Path) -> None:
+def test_a_run_after_a_crash_part_way_through_the_tickets_resumes_the_persisted_plan_without_duplicates(
+    tmp_path: Path,
+) -> None:
     """Given a run that stopped after the first Ticket, when the Workflow runs again, then the second Ticket is created and nothing is replanned or duplicated."""
     rig = unplanned(tmp_path)
     script = DeveloperScript(rig.repo, [answers("completed", tickets=[FORM, TESTS])])
@@ -176,13 +229,29 @@ def test_a_run_after_a_crash_part_way_through_the_tickets_resumes_the_persisted_
 
     assert crashed.status == "failed" and resumed.status == "completed"
     assert len(script.requests) == 1
-    assert [ticket.title for ticket in rig.issues.spec(1).tickets] == ["Add login form", "Add login tests"]
+    assert [ticket.title for ticket in rig.issues.spec(1).tickets] == [
+        "Add login form",
+        "Add login tests",
+    ]
     assert rig.gh.blockers_of(102) == [101]
-    assert len([body for number, body in rig.gh.posted_comments() if number == 1 and "<!-- loop:plan" in body]) == 1
-    assert rig.skipped() == ["plan-spec"] and rig.history(TicketsCreated) == (TicketsCreated((101, 102)),)
+    assert (
+        len(
+            [
+                body
+                for number, body in rig.gh.posted_comments()
+                if number == 1 and "<!-- loop:plan" in body
+            ]
+        )
+        == 1
+    )
+    assert rig.skipped() == ["plan-spec"] and rig.history(TicketsCreated) == (
+        TicketsCreated((101, 102)),
+    )
 
 
-def test_a_run_after_a_crash_before_the_first_ticket_resumes_from_the_persisted_plan_comment(tmp_path: Path) -> None:
+def test_a_run_after_a_crash_before_the_first_ticket_resumes_from_the_persisted_plan_comment(
+    tmp_path: Path,
+) -> None:
     """Given a plan Comment on a Spec with no Tickets, when the Workflow runs again, then the planner is not asked and the Tickets are created."""
     rig = unplanned(tmp_path)
     script = DeveloperScript(rig.repo, [answers("completed", tickets=[FORM, TESTS])])
@@ -194,12 +263,18 @@ def test_a_run_after_a_crash_before_the_first_ticket_resumes_from_the_persisted_
 
     assert crashed.status == "failed" and resumed.status == "completed"
     assert len(script.requests) == 1
-    assert [ticket.title for ticket in rig.issues.spec(1).tickets] == ["Add login form", "Add login tests"]
+    assert [ticket.title for ticket in rig.issues.spec(1).tickets] == [
+        "Add login form",
+        "Add login tests",
+    ]
     assert rig.gh.blockers_of(102) == [101]
     assert rig.history(TicketsCreated) == (TicketsCreated((101, 102)),)
 
 
 def test_plan_violation_rejects_a_blank_title(tmp_path: Path) -> None:
     """Given a planned Ticket without a title, when the plan is checked, then it is rejected."""
-    assert plan.plan_violation([PlannedTicket("  ", "body")]) == "planned Ticket 0 has no title"
+    assert (
+        plan.plan_violation([PlannedTicket("  ", "body")])
+        == "planned Ticket 0 has no title"
+    )
     assert plan.plan_violation([PlannedTicket("Title", "body")]) is None

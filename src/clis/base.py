@@ -26,7 +26,9 @@ class AgentCli(Protocol):
     hook_points: frozenset[AgentCliHookPoint]
     transport: Transport
 
-    def hook_wiring(self, hooks: tuple[AgentCliHook, ...], turn: Turn, workdir: Path) -> AgentCliHookWiring:
+    def hook_wiring(
+        self, hooks: tuple[AgentCliHook, ...], turn: Turn, workdir: Path
+    ) -> AgentCliHookWiring:
         """Pure translation of `hooks` into this CLI's native wiring; does no I/O."""
         ...
 
@@ -39,7 +41,11 @@ class AgentCli(Protocol):
         ...
 
     def command(
-        self, request: AgentRequest, profile: AgentProfile, turn: Turn, context: RunContext
+        self,
+        request: AgentRequest,
+        profile: AgentProfile,
+        turn: Turn,
+        context: RunContext,
     ) -> list[str]: ...
 
     def parse(self, stdout: str, turn: Turn, exit_code: int) -> CliOutcome:
@@ -75,7 +81,9 @@ class AgentProfile:
                 raise ValueError("profile add_dirs must be absolute")
             object.__setattr__(self, "add_dirs", tuple(self.add_dirs))
 
-    def apply_context(self, defaults: AgentContext, *, workspace: bool = False) -> AgentContext:
+    def apply_context(
+        self, defaults: AgentContext, *, workspace: bool = False
+    ) -> AgentContext:
         """Overlay configured execution defaults, preserving an already opened workspace."""
         values = {}
         for key in ("add_dirs", "env", "timeout_sec"):
@@ -94,5 +102,7 @@ class AgentProfile:
             raise ValueError("permission arguments conflict with profile permissions")
         translate = getattr(self.cli, "permission_args", None)
         if translate is None:
-            raise UnsupportedPermissions(f"{self.cli.name} does not support tool permissions")
+            raise UnsupportedPermissions(
+                f"{self.cli.name} does not support tool permissions"
+            )
         translate(self.permissions)

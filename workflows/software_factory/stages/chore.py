@@ -9,15 +9,30 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from loop import AgentWorkspace
-
-from loop import AgentError, Declined, TypedAgent
-from workflows.software_factory.agents.roles.chore import CHORE, ChoreReply, ChoreRequest
-from workflows.software_factory.events.chore import ChoreDiscarded, ChoreRefined
-from workflows.software_factory.events.specs import SpecRouted, SpecWork
-from loop import Evidence, Fail, HarnessCommits, Pass, Restore, Stage, Verdict, Verify
+from loop import (
+    AgentError,
+    AgentWorkspace,
+    Declined,
+    Evidence,
+    Fail,
+    HarnessCommits,
+    Pass,
+    Restore,
+    Stage,
+    TypedAgent,
+    Verdict,
+    Verify,
+)
 from loop.shared.git import Commit, GitClient
 from loop.shared.github.account import GitHub
+
+from workflows.software_factory.agents.roles.chore import (
+    CHORE,
+    ChoreReply,
+    ChoreRequest,
+)
+from workflows.software_factory.events.chore import ChoreDiscarded, ChoreRefined
+from workflows.software_factory.events.specs import SpecRouted, SpecWork
 
 DIFF_DIR = Path("bin") / "review_diff"
 MANIFEST_NAME = "_manifest.tsv"
@@ -42,7 +57,13 @@ class ChoreInput:
 class _ChoreAgent(TypedAgent[ChoreRequest, ChoreReply]):
     """The chore agent as a best-effort step: any agent failure is a decline, and the captured diff never outlives the run."""
 
-    def run(self, workspace: AgentWorkspace, request: ChoreRequest, *, session: str | None = None) -> ChoreReply:
+    def run(
+        self,
+        workspace: AgentWorkspace,
+        request: ChoreRequest,
+        *,
+        session: str | None = None,
+    ) -> ChoreReply:
         try:
             return super().run(workspace, request, session=session)
         except AgentError as exception:
@@ -64,14 +85,27 @@ def chore_subject(initiative: str, proposed: str) -> str:
 
 
 def refine(
-    *, subject: Callable[[str, str], str] = chore_subject, verify: Verify | None = None,
+    *,
+    subject: Callable[[str, str], str] = chore_subject,
+    verify: Verify | None = None,
 ) -> Stage[ChoreInput, ChoreReply, ChoreRefined]:
     """Best-effort chore agent on the feature worktree, skipped unless the target enables it; the runtime commits after `verify` with `subject(initiative, proposed message)`, and any failure restores the worktree and records the chore as discarded."""
     return (
-        Stage("refine-chore", ChoreInput, produces=ChoreRefined, may_emit=(ChoreDiscarded,))
+        Stage(
+            "refine-chore",
+            ChoreInput,
+            produces=ChoreRefined,
+            may_emit=(ChoreDiscarded,),
+        )
         .agent(_AGENT, request=_request)
         .gate(_refined)
-        .contract(HarnessCommits(message=lambda i, event: _message(subject, i, event), verify=_discarding(verify), on_fail=Restore()))
+        .contract(
+            HarnessCommits(
+                message=lambda i, event: _message(subject, i, event),
+                verify=_discarding(verify),
+                on_fail=Restore(),
+            )
+        )
         .when(_enabled)
     )
 
@@ -92,26 +126,54 @@ def capture_pull_request_diff(diff: str, worktree: Path) -> Path:
 
 def _enabled(i: ChoreInput) -> bool:
     """The target enables the chore and the feature branch has a pull request to refine."""
-    return i.routed.target.chore and i.github.open_pull_request(i.routed.target.slug, i.routed.feature_branch) is not None
+    return (
+        i.routed.target.chore
+        and i.github.open_pull_request(i.routed.target.slug, i.routed.feature_branch)
+        is not None
+    )
 
 
 def _request(i: ChoreInput, path: Path) -> ChoreRequest:
-    url = i.github.require_open_pull_request(i.routed.target.slug, i.routed.feature_branch).url
+    url = i.github.require_open_pull_request(
+        i.routed.target.slug, i.routed.feature_branch
+    ).url
     diff = i.github.pull_requests(i.routed.target.slug).diff(url)
-    commits = tuple(_describe(commit) for commit in i.git.branch_commits(path, i.routed.base_branch))
-    return ChoreRequest(url, path, i.routed.base_branch, i.routed.feature_branch, capture_pull_request_diff(diff, path), commits)
+    commits = tuple(
+        _describe(commit) for commit in i.git.branch_commits(path, i.routed.base_branch)
+    )
+    return ChoreRequest(
+        url,
+        path,
+        i.routed.base_branch,
+        i.routed.feature_branch,
+        capture_pull_request_diff(diff, path),
+        commits,
+    )
 
 
-def _refined(i: ChoreInput, reply: ChoreReply, evidence: Evidence) -> Verdict[ChoreRefined]:
+def _refined(
+    i: ChoreInput, reply: ChoreReply, evidence: Evidence
+) -> Verdict[ChoreRefined]:
     if isinstance(reply, Declined):
-        return Fail(f"the chore agent failed: {reply.reason}", ChoreDiscarded(reply.reason))
+        return Fail(
+            f"the chore agent failed: {reply.reason}", ChoreDiscarded(reply.reason)
+        )
     if evidence.head != evidence.base:
         reason = f"the agent committed ({evidence.head}); only the runtime commits"
         return Fail(reason, ChoreDiscarded(reason, reply.out_of_scope))
-    return Pass(ChoreRefined(reply.summary, reply.out_of_scope, reply.commit_message, committed=evidence.changed))
+    return Pass(
+        ChoreRefined(
+            reply.summary,
+            reply.out_of_scope,
+            reply.commit_message,
+            committed=evidence.changed,
+        )
+    )
 
 
-def _message(subject: Callable[[str, str], str], i: ChoreInput, event: ChoreRefined) -> str:
+def _message(
+    subject: Callable[[str, str], str], i: ChoreInput, event: ChoreRefined
+) -> str:
     title = subject(i.routed.initiative, event.commit_message)
     return f"{title}\n\n{event.summary}" if event.summary else title
 
@@ -123,7 +185,11 @@ def _discarding(verify: Verify | None) -> Verify | None:
 
     def check(path: Path) -> Fail[ChoreDiscarded] | None:
         failed = verify(path)
-        return None if failed is None else Fail(failed.reason, ChoreDiscarded(failed.reason))
+        return (
+            None
+            if failed is None
+            else Fail(failed.reason, ChoreDiscarded(failed.reason))
+        )
 
     return check
 
