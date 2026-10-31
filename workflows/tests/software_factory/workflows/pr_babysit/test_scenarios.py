@@ -9,8 +9,8 @@ import pytest
 from loop import AgentRequest, FakeReply, RunContext
 
 from tests.runtime.harness import StopAfter, command
-from workflows.software_factory.events.feedback import FeedbackHandled
-from workflows.software_factory.events.pull_requests import (
+from workflows.software_factory.shared.events.feedback import FeedbackHandled
+from workflows.software_factory.shared.events.pull_requests import (
     CopilotRequested,
     ReadinessReported,
 )

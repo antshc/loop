@@ -29,23 +29,30 @@ from loop import (
 from loop.shared.git import GitClient
 from loop.shared.process import CommandRunner, git_command
 
-from workflows.software_factory.events.specs import RepositoryTarget
-from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
-from workflows.software_factory.infrastructure.github.account import GitHub
-from workflows.software_factory.infrastructure.github.issues.client import Issues
-from workflows.software_factory.infrastructure.github.issues.errors import IssueError
-from workflows.software_factory.infrastructure.github.issues.graph import (
+from workflows.software_factory.shared.events.specs import RepositoryTarget
+from workflows.software_factory.shared.infrastructure.agents.launcher import (
+    AgentLauncher,
+)
+from workflows.software_factory.shared.infrastructure.github.account import GitHub
+from workflows.software_factory.shared.infrastructure.github.issues.client import Issues
+from workflows.software_factory.shared.infrastructure.github.issues.errors import (
+    IssueError,
+)
+from workflows.software_factory.shared.infrastructure.github.issues.graph import (
     SpecGraphSnapshot,
 )
-from workflows.software_factory.infrastructure.github.repo import GhCli, GitHubRepo
-from workflows.software_factory.infrastructure.ledger import Ledger
-from workflows.software_factory.infrastructure.telemetry import (
+from workflows.software_factory.shared.infrastructure.github.repo import (
+    GhCli,
+    GitHubRepo,
+)
+from workflows.software_factory.shared.infrastructure.ledger import Ledger
+from workflows.software_factory.shared.infrastructure.telemetry import (
     OtelSpans,
     OtlpObserverFactory,
     Tee,
     TracingObserver,
 )
-from workflows.software_factory.stages.specs import post_failure_comment
+from workflows.software_factory.shared.stages.specs import post_failure_comment
 
 from .definition import FAILURE_ERRORS, NAME, implement_spec
 from .dry import SEAMS, Fakes

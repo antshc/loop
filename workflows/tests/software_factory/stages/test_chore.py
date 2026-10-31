@@ -9,8 +9,8 @@ import pytest
 from loop import Fail
 
 from tests.runtime.harness import Repo, command
-from workflows.software_factory.events.chore import ChoreDiscarded, ChoreRefined
-from workflows.software_factory.stages import chore
+from workflows.software_factory.shared.events.chore import ChoreDiscarded, ChoreRefined
+from workflows.software_factory.shared.stages import chore
 from workflows.tests.software_factory.infrastructure.github.fakes import PR_DIFF
 from workflows.tests.software_factory.stages.support import (
     DeveloperScript,

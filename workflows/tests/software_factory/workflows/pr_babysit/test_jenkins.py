@@ -6,11 +6,14 @@ import json
 from pathlib import Path
 
 import pytest
-
 from loop import AgentRequest, FakeReply, RunContext
-from workflows.software_factory.events.jenkins import JenkinsRestarted
-from workflows.software_factory.events.pull_requests import ReadinessReported
-from workflows.software_factory.infrastructure.jenkins import Jenkins, JenkinsSettings
+
+from workflows.software_factory.shared.events.jenkins import JenkinsRestarted
+from workflows.software_factory.shared.events.pull_requests import ReadinessReported
+from workflows.software_factory.shared.infrastructure.jenkins import (
+    Jenkins,
+    JenkinsSettings,
+)
 from workflows.software_factory.workflows.pr_babysit.__main__ import (
     StopRequest,
     build_services,

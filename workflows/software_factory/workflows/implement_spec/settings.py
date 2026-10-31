@@ -7,7 +7,7 @@ from pathlib import Path
 
 from loop import LoopHook
 
-from workflows.software_factory.events.specs import RepositoryTarget
+from workflows.software_factory.shared.events.specs import RepositoryTarget
 
 
 @dataclass(frozen=True)

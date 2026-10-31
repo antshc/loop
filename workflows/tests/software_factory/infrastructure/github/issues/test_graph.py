@@ -4,17 +4,17 @@ from dataclasses import FrozenInstanceError, replace
 
 import pytest
 
-from workflows.software_factory.infrastructure.github.issues.graph import (
+from workflows.software_factory.shared.infrastructure.github.issues.graph import (
     IssueRelation,
     SpecGraphSnapshot,
 )
-from workflows.software_factory.infrastructure.github.issues.issue import (
+from workflows.software_factory.shared.infrastructure.github.issues.issue import (
     CloseReason,
     GapState,
     IssueState,
     ReadGap,
 )
-from workflows.software_factory.infrastructure.github.issues.readiness import (
+from workflows.software_factory.shared.infrastructure.github.issues.readiness import (
     TicketReadiness,
 )
 from workflows.tests.software_factory.infrastructure.github.builders import (

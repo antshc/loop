@@ -12,15 +12,15 @@ from loop import Evidence, Fail, Flow, Nothing, Pass, Stage, handoff, stop
 
 from tests.runtime.harness import command
 from tests.runtime.support import NoInput
-from workflows.software_factory.events.ci import CiFixed
-from workflows.software_factory.events.feedback import (
+from workflows.software_factory.shared.events.ci import CiFixed
+from workflows.software_factory.shared.events.feedback import (
     FeedbackBatch,
     FeedbackHandled,
     IssueResolved,
     IssueUnclear,
     ReplyDraft,
 )
-from workflows.software_factory.events.pull_requests import (
+from workflows.software_factory.shared.events.pull_requests import (
     CiFailing,
     CopilotDue,
     CopilotRequested,
@@ -33,8 +33,8 @@ from workflows.software_factory.events.pull_requests import (
     ReadinessCheck,
     Unsupported,
 )
-from workflows.software_factory.stages import pull_requests
-from workflows.software_factory.stages.pull_requests import (
+from workflows.software_factory.shared.stages import pull_requests
+from workflows.software_factory.shared.stages.pull_requests import (
     DecideInput,
     PublishInput,
     publish_batch,

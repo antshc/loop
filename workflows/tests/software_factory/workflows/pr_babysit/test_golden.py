@@ -7,25 +7,31 @@ from pathlib import Path
 
 import pytest
 
-from workflows.software_factory.agents.roles.address import (
+from workflows.software_factory.shared.agents.roles.address import (
     GROUP_FEEDBACK,
     RESOLVE_ISSUE,
 )
-from workflows.software_factory.agents.roles.maintainer import DIAGNOSE_CI, FIX_CI
-from workflows.software_factory.events.ci import BranchBroken
-from workflows.software_factory.events.feedback import FeedbackBatch, GroupedIssue
-from workflows.software_factory.events.pull_requests import (
+from workflows.software_factory.shared.agents.roles.maintainer import (
+    DIAGNOSE_CI,
+    FIX_CI,
+)
+from workflows.software_factory.shared.events.ci import BranchBroken
+from workflows.software_factory.shared.events.feedback import (
+    FeedbackBatch,
+    GroupedIssue,
+)
+from workflows.software_factory.shared.events.pull_requests import (
     NextAction,
     PullRequestPolled,
 )
-from workflows.software_factory.events.specs import RepositoryTarget
-from workflows.software_factory.infrastructure.github.pull_requests.babysit import (
+from workflows.software_factory.shared.events.specs import RepositoryTarget
+from workflows.software_factory.shared.infrastructure.github.pull_requests.babysit import (
     babysit_snapshot,
     bot_logins,
     ci_state,
 )
-from workflows.software_factory.stages import ci, pull_requests
-from workflows.software_factory.stages.address import (
+from workflows.software_factory.shared.stages import ci, pull_requests
+from workflows.software_factory.shared.stages.address import (
     GroupInput,
     IssueWork,
     group_feedback,

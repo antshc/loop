@@ -9,19 +9,19 @@ import pytest
 from loop import Event
 
 from tests.runtime.harness import command
-from workflows.software_factory.events.chore import ChoreDiscarded, ChoreRefined
-from workflows.software_factory.events.pull_requests import (
+from workflows.software_factory.shared.events.chore import ChoreDiscarded, ChoreRefined
+from workflows.software_factory.shared.events.pull_requests import (
     DraftPullRequestPublished,
     Finalized,
 )
-from workflows.software_factory.events.review import (
+from workflows.software_factory.shared.events.review import (
     PullRequestReviewed,
     ReviewAxis,
     ReviewFailed,
     ReviewFinding,
 )
-from workflows.software_factory.events.tickets import Delivery
-from workflows.software_factory.stages import finalize
+from workflows.software_factory.shared.events.tickets import Delivery
+from workflows.software_factory.shared.stages import finalize
 from workflows.tests.software_factory.infrastructure.github.fakes import issue
 from workflows.tests.software_factory.stages.support import (
     BRANCH,

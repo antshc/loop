@@ -12,13 +12,13 @@ from loop import Flow, Item, Ledger, Nothing, Pass, Stage, Workflow, WorkItemLog
 from loop.runtime._engine.scope import Scope
 
 from tests.runtime.harness import StopAfter
-from workflows.software_factory.events.pull_requests import (
+from workflows.software_factory.shared.events.pull_requests import (
     PollStarted,
     PullRequestPolled,
 )
-from workflows.software_factory.events.specs import RepositoryTarget
-from workflows.software_factory.infrastructure.pacing import Pacer
-from workflows.software_factory.stages import pacing, pull_requests
+from workflows.software_factory.shared.events.specs import RepositoryTarget
+from workflows.software_factory.shared.infrastructure.pacing import Pacer
+from workflows.software_factory.shared.stages import pacing, pull_requests
 from workflows.tests.software_factory.stages.pr_support import SLUG
 from workflows.tests.software_factory.stages.watch_support import (
     WORKFLOW,
@@ -119,7 +119,7 @@ def test_a_resumed_poll_after_quiet_polls_is_followed_by_a_new_poll_not_the_end_
                 "kind": "scope-opened",
                 "path": ["poll", "poll-1"],
                 "item": {
-                    "type": "workflows.software_factory.stages.pacing.Poll",
+                    "type": "workflows.software_factory.shared.stages.pacing.Poll",
                     "fields": {"number": 1},
                 },
                 "revision": "poll-1",
@@ -132,7 +132,7 @@ def test_a_resumed_poll_after_quiet_polls_is_followed_by_a_new_poll_not_the_end_
                 "revision": "poll-1",
                 "outcome": "pass",
                 "event": {
-                    "type": "workflows.software_factory.events.pull_requests.PollStarted",
+                    "type": "workflows.software_factory.shared.events.pull_requests.PollStarted",
                     "fields": {"number": 1},
                 },
                 "reason": None,
@@ -143,7 +143,7 @@ def test_a_resumed_poll_after_quiet_polls_is_followed_by_a_new_poll_not_the_end_
                 "kind": "scope-opened",
                 "path": ["poll", "poll-6"],
                 "item": {
-                    "type": "workflows.software_factory.stages.pacing.Poll",
+                    "type": "workflows.software_factory.shared.stages.pacing.Poll",
                     "fields": {"number": 6},
                 },
                 "revision": "poll-6",
@@ -156,7 +156,7 @@ def test_a_resumed_poll_after_quiet_polls_is_followed_by_a_new_poll_not_the_end_
                 "revision": "poll-6",
                 "outcome": "pass",
                 "event": {
-                    "type": "workflows.software_factory.events.pull_requests.PollStarted",
+                    "type": "workflows.software_factory.shared.events.pull_requests.PollStarted",
                     "fields": {"number": 6},
                 },
                 "reason": None,

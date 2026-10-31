@@ -10,13 +10,13 @@ import pytest
 from loop import Flow, Item, Selector, Stage, handoff, next_, rework
 
 from tests.runtime.support import NoInput
-from workflows.software_factory.events.tickets import (
+from workflows.software_factory.shared.events.tickets import (
     Delivery,
     TicketImplemented,
     TicketRejected,
 )
-from workflows.software_factory.infrastructure.github.issues.spec import Ticket
-from workflows.software_factory.stages import specs, tickets
+from workflows.software_factory.shared.infrastructure.github.issues.spec import Ticket
+from workflows.software_factory.shared.stages import specs, tickets
 from workflows.tests.software_factory.infrastructure.github.fakes import issue
 from workflows.tests.software_factory.stages.support import (
     HITL,

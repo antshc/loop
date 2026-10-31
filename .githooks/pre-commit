@@ -1,0 +1,3 @@
+#!/bin/sh
+set -eu
+python scripts/sync_babysit_skill.py --staged --stage-output

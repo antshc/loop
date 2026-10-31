@@ -6,10 +6,14 @@ from subprocess import CalledProcessError
 
 from loop import Flow, LoopHookError, Workflow, handoff, next_, rework, stop
 
-from workflows.software_factory.events.pull_requests import DraftPullRequestPublished
-from workflows.software_factory.events.tickets import Delivery
-from workflows.software_factory.infrastructure.github.issues.errors import IssueError
-from workflows.software_factory.stages import (
+from workflows.software_factory.shared.events.pull_requests import (
+    DraftPullRequestPublished,
+)
+from workflows.software_factory.shared.events.tickets import Delivery
+from workflows.software_factory.shared.infrastructure.github.issues.errors import (
+    IssueError,
+)
+from workflows.software_factory.shared.stages import (
     chore,
     finalize,
     plan,

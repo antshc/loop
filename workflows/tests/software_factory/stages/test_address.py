@@ -7,14 +7,14 @@ from pathlib import Path
 import pytest
 from loop import Evidence, Fail, Hold, Item, Pass
 
-from workflows.software_factory.agents.roles.address import (
+from workflows.software_factory.shared.agents.roles.address import (
     FeedbackIssue,
     FeedbackReply,
     Grouped,
     Resolved,
     ResolveRequest,
 )
-from workflows.software_factory.events.feedback import (
+from workflows.software_factory.shared.events.feedback import (
     FeedbackBatch,
     FeedbackGrouped,
     GroupedIssue,
@@ -22,9 +22,9 @@ from workflows.software_factory.events.feedback import (
     IssueUnclear,
     ReplyDraft,
 )
-from workflows.software_factory.events.pull_requests import PullRequestPolled
-from workflows.software_factory.events.specs import RepositoryTarget
-from workflows.software_factory.stages.address import (
+from workflows.software_factory.shared.events.pull_requests import PullRequestPolled
+from workflows.software_factory.shared.events.specs import RepositoryTarget
+from workflows.software_factory.shared.stages.address import (
     CLARIFICATION_REQUESTED,
     GroupInput,
     IssueWork,

@@ -6,16 +6,17 @@ from dataclasses import replace
 from subprocess import CalledProcessError, TimeoutExpired
 
 from loop import Flow, Verify, Workflow, WorktreeError, handoff, reroute, stop
-from workflows.software_factory.events.ci import CiFixed
-from workflows.software_factory.events.feedback import FeedbackBatch
-from workflows.software_factory.events.jenkins import (
+
+from workflows.software_factory.shared.events.ci import CiFixed
+from workflows.software_factory.shared.events.feedback import FeedbackBatch
+from workflows.software_factory.shared.events.jenkins import (
     JenkinsFailed,
     JenkinsObservation,
     JenkinsReadiness,
     JenkinsWaiting,
     OtherCi,
 )
-from workflows.software_factory.events.pull_requests import (
+from workflows.software_factory.shared.events.pull_requests import (
     CiFailing,
     CopilotDue,
     MergeConflict,
@@ -25,8 +26,8 @@ from workflows.software_factory.events.pull_requests import (
     ReadinessCheck,
     Unsupported,
 )
-from workflows.software_factory.flows import address
-from workflows.software_factory.stages import (
+from workflows.software_factory.shared.flows import address
+from workflows.software_factory.shared.stages import (
     ci,
     conflicts,
     copilot,

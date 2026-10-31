@@ -9,15 +9,15 @@ from loop import Flow, Workflow, WorktreeError, handoff, reroute
 from loop.runtime.nodes import StageNode, WithinNode
 
 from tests.runtime.harness import command
-from workflows.software_factory.events.feedback import (
+from workflows.software_factory.shared.events.feedback import (
     FeedbackBatch,
     FeedbackHandled,
     IssueResolved,
     IssueUnclear,
 )
-from workflows.software_factory.flows.address import address_feedback
-from workflows.software_factory.stages import feedback
-from workflows.software_factory.stages.address import IssueWork
+from workflows.software_factory.shared.flows.address import address_feedback
+from workflows.software_factory.shared.stages import feedback
+from workflows.software_factory.shared.stages.address import IssueWork
 from workflows.tests.software_factory.infrastructure.github.fakes import (
     check_run,
     issue_comment,

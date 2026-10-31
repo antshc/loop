@@ -46,3 +46,8 @@ Consult these before searching the code:
 
 - Author all docs (`GLOSSARY.md`, `ARCHITECTURE.md`, ADRs, Crosscutting Concepts) at the reporoot.
 - Keep `GLOSSARY.md` and `ARCHITECTURE.md` high-level — no implementation details, specs, or scratch notes.
+
+## 7. Generated skill scripts
+
+- MUST treat `skills/**/scripts/**/*.py` as generated, read-only code. Edit the canonical source under `scripts/babysit/` or `workflows/software_factory/`, then run `python scripts/sync_babysit_skill.py`; never hand-edit the skill copy, even if faster or simpler.
+- MUST NOT bypass the skill synchronization pre-commit hook or its CI drift check.

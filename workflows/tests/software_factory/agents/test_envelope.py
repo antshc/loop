@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import unittest
 
-from workflows.software_factory.agents._kit import ContentDecodeError, LastJsonObject
+from workflows.software_factory.shared.agents._kit import (
+    ContentDecodeError,
+    LastJsonObject,
+)
 
 
 class LastJsonObjectTests(unittest.TestCase):

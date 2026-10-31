@@ -57,7 +57,7 @@ Replace the PR babysitter's one-subprocess-per-PR execution with a single Python
 5. **Telemetry lifecycle.**
    - Do not clear tracing environment variables process-wide. Give each worker an independent trace root/context.
    - Close and flush each owned per-PR observer in `finally`, including failure paths. Repeated PR runs must not accumulate exporter threads or providers until process exit.
-   - If the current observer API cannot release owned providers, add the smallest lifecycle hook in `src/observe/otel.py` and expose it through `workflows/software_factory/infrastructure/telemetry.py`. Cover base trace/metric providers and lazily created role providers; do not shut down externally supplied providers.
+   - If the current observer API cannot release owned providers, add the smallest lifecycle hook in `src/observe/otel.py` and expose it through `workflows/software_factory/shared/infrastructure/telemetry.py`. Cover base trace/metric providers and lazily created role providers; do not shut down externally supplied providers.
    - Preserve the original workflow exception if telemetry cleanup fails. No generic telemetry redesign.
 
 6. **Documentation and cleanup.**
@@ -74,7 +74,7 @@ Replace the PR babysitter's one-subprocess-per-PR execution with a single Python
 | `workflows/software_factory/workflows/pr_babysit/README.md` | Thread execution, failures, shutdown limitations. |
 | `docs/plans/pr-babysit-single-process-threads.md` | Plan and review corrections. |
 | `src/observe/otel.py` | Minimal owned-provider cleanup hook if needed by the existing API. |
-| `workflows/software_factory/infrastructure/telemetry.py` | Expose the observer lifecycle hook if needed. |
+| `workflows/software_factory/shared/infrastructure/telemetry.py` | Expose the observer lifecycle hook if needed. |
 
 The execution change stays in two Python files plus the README. Telemetry lifecycle is the only planned supporting source change; no runtime, ledger, definition, Stage, agent, settings, or persistence changes. No new source module is required. Keep the existing mechanisms even if a broader redesign seems faster or simpler.
 

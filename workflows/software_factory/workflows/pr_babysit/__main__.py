@@ -15,9 +15,6 @@ from subprocess import CalledProcessError, TimeoutExpired
 from types import FrameType
 from typing import Any
 
-from loop.shared.git import GitClient
-from loop.shared.process import CommandRunner, git_command
-
 from loop import (
     Agent,
     DefinitionError,
@@ -31,22 +28,27 @@ from loop import (
     WorktreeGit,
     run,
 )
-from workflows.software_factory.events.pull_requests import PullRequestWork
-from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
-from workflows.software_factory.infrastructure.github.account import GitHub
-from workflows.software_factory.infrastructure.github.repo import GhCli
-from workflows.software_factory.infrastructure.jenkins import Jenkins
-from workflows.software_factory.infrastructure.ledger import Ledger
-from workflows.software_factory.infrastructure.pacing import Pacer
-from workflows.software_factory.infrastructure.telemetry import (
+from loop.shared.git import GitClient
+from loop.shared.process import CommandRunner, git_command
+
+from workflows.software_factory.shared.events.pull_requests import PullRequestWork
+from workflows.software_factory.shared.infrastructure.agents.launcher import (
+    AgentLauncher,
+)
+from workflows.software_factory.shared.infrastructure.github.account import GitHub
+from workflows.software_factory.shared.infrastructure.github.repo import GhCli
+from workflows.software_factory.shared.infrastructure.jenkins import Jenkins
+from workflows.software_factory.shared.infrastructure.ledger import Ledger
+from workflows.software_factory.shared.infrastructure.pacing import Pacer
+from workflows.software_factory.shared.infrastructure.telemetry import (
     OtelSpans,
     OtlpObserverFactory,
     Tee,
     TracingObserver,
     closing_observer,
 )
-from workflows.software_factory.stages import pull_requests
-from workflows.software_factory.stages.checks import as_verify
+from workflows.software_factory.shared.stages import pull_requests
+from workflows.software_factory.shared.stages.checks import as_verify
 
 from .definition import HANDED_OFF_ERRORS, NAME, pr_babysit
 from .intake import (

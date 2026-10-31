@@ -4,8 +4,12 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from workflows.software_factory.infrastructure.github.issues.issue import IssueState
-from workflows.software_factory.infrastructure.github.issues.spec import SpecMetadata
+from workflows.software_factory.shared.infrastructure.github.issues.issue import (
+    IssueState,
+)
+from workflows.software_factory.shared.infrastructure.github.issues.spec import (
+    SpecMetadata,
+)
 from workflows.tests.software_factory.infrastructure.github.builders import (
     build_spec,
     build_ticket,

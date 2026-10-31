@@ -10,14 +10,14 @@ from typing import Any
 
 from loop import Event, Ledger, Nothing, WorkItemLocked, WorkKey, encode
 
-from workflows.software_factory.events.checks import ChecksPassed
-from workflows.software_factory.events.ci import (
+from workflows.software_factory.shared.events.checks import ChecksPassed
+from workflows.software_factory.shared.events.ci import (
     BranchBroken,
     CiFixed,
     CiRerun,
     Transient,
 )
-from workflows.software_factory.events.feedback import (
+from workflows.software_factory.shared.events.feedback import (
     FeedbackBatch,
     FeedbackGrouped,
     FeedbackHandled,
@@ -26,12 +26,12 @@ from workflows.software_factory.events.feedback import (
     IssueUnclear,
     ReplyDraft,
 )
-from workflows.software_factory.events.pull_requests import (
+from workflows.software_factory.shared.events.pull_requests import (
     CiFailing,
     CopilotRequested,
     PullRequestWork,
 )
-from workflows.software_factory.stages.pacing import Poll
+from workflows.software_factory.shared.stages.pacing import Poll
 
 from .definition import NAME
 from .policy import ADOPTED, FINGERPRINT, REASON

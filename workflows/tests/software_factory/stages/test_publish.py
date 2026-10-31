@@ -5,9 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from tests.runtime.harness import command
-from workflows.software_factory.events.pull_requests import DraftPullRequestPublished
-from workflows.software_factory.events.tickets import TicketClosed
-from workflows.software_factory.stages import publish
+from workflows.software_factory.shared.events.pull_requests import (
+    DraftPullRequestPublished,
+)
+from workflows.software_factory.shared.events.tickets import TicketClosed
+from workflows.software_factory.shared.stages import publish
 from workflows.tests.software_factory.infrastructure.github.fakes import issue
 from workflows.tests.software_factory.stages.support import (
     BRANCH,

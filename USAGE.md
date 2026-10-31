@@ -215,7 +215,7 @@ case-insensitively; duplicate configurations fail the run.
 
 The developer Stage handles Ticket iteration, refreshed Initiative history, rework, rollback and Ticket closure: a
 declined reply or an invalid commit fails the attempt, and each retry starts a fresh agent session. Per-repository agent
-behavior is no longer a Python delegate; adjust the role agents under `workflows/software_factory/agents/roles/`.
+behavior is no longer a Python delegate; adjust the role agents under `workflows/software_factory/shared/agents/roles/`.
 
 After the developer finishes, the runtime requires exactly one new,
 correctly tagged commit, a clean worktree, and a reported SHA equal to HEAD.
@@ -227,9 +227,9 @@ repository; Ticket updates remain on the harness.
 
 All `implement_spec`-owned code and tests live in [`workflows/software_factory/workflows/implement_spec/`](workflows/software_factory/workflows/implement_spec/) and
 [`workflows/tests/software_factory/workflows/implement_spec/`](workflows/tests/software_factory/workflows/implement_spec/). The definition places Stages from
-[`workflows/software_factory/stages/`](workflows/software_factory/stages/) run by Loop's Workflow runtime ([`src/runtime/`](src/runtime/)),
+[`workflows/software_factory/shared/stages/`](workflows/software_factory/shared/stages/) run by Loop's Workflow runtime ([`src/runtime/`](src/runtime/)),
 depends on the public `loop` package (including the Git, GitHub and process helpers in [`src/shared/`](src/shared/)) and on
-[`workflows/software_factory/infrastructure/`](workflows/software_factory/infrastructure/) (checks, state, pacing, telemetry), never on a sibling Workflow, and uses no container. The independent
+[`workflows/software_factory/shared/infrastructure/`](workflows/software_factory/shared/infrastructure/) (checks, state, pacing, telemetry), never on a sibling Workflow, and uses no container. The independent
 [`plan_implement.py`](workflows/loop/plan_implement.py) is a small definition on the same runtime with its own Stages.
 
 - [`definition.py`](workflows/software_factory/workflows/implement_spec/definition.py): `implement_spec(settings, targets)`, the definition.
@@ -237,7 +237,7 @@ depends on the public `loop` package (including the Git, GitHub and process help
 - [`intake.py`](workflows/software_factory/workflows/implement_spec/intake.py): selects the open, complete Specs not awaiting a person and writes a release when `hitl` was removed.
 - [`__main__.py`](workflows/software_factory/workflows/implement_spec/__main__.py): `main(argv, *, services=None)`, flags, logging, the real services and the interrupt signal.
 - [`dry.py`](workflows/software_factory/workflows/implement_spec/dry.py): the `--fake`/`--dry` seams.
-- [`workflows/software_factory/agents/roles/`](workflows/software_factory/agents/roles/): the role agents and their prompt templates (`prompt.md`), read relative to the package, not the current directory.
+- [`workflows/software_factory/shared/agents/roles/`](workflows/software_factory/shared/agents/roles/): the role agents and their prompt templates (`prompt.md`), read relative to the package, not the current directory.
 - [`workflows/tests/software_factory/workflows/implement_spec/`](workflows/tests/software_factory/workflows/implement_spec/): scenarios and harness under the factory test tree; run `pytest workflows/tests/software_factory/workflows/implement_spec`.
 
 To change a prompt, edit the role's `prompt.md`; a missing template raises an error rather
@@ -401,7 +401,7 @@ Agent(AgentOptions(start_mode=AgentStartMode.HARNESS, harness_dir=Path("/path/to
 See [`workflows/software_factory/workflows/implement_spec/`](workflows/software_factory/workflows/implement_spec/) for a complete Workflow,
 [`workflows/loop/plan_implement.py`](workflows/loop/plan_implement.py) for two runs with
 different models on one worktree, and
-[`workflows/software_factory/agents/roles/developer/prompt.md`](workflows/software_factory/agents/roles/developer/prompt.md) for
+[`workflows/software_factory/shared/agents/roles/developer/prompt.md`](workflows/software_factory/shared/agents/roles/developer/prompt.md) for
 the default `implement_spec` prompt template.
 
 

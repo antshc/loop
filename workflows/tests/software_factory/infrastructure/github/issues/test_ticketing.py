@@ -2,16 +2,16 @@ from __future__ import annotations
 
 import pytest
 
-from workflows.software_factory.infrastructure.github.issues.client import Issues
-from workflows.software_factory.infrastructure.github.issues.readiness import (
+from workflows.software_factory.shared.infrastructure.github.issues.client import Issues
+from workflows.software_factory.shared.infrastructure.github.issues.readiness import (
     TicketReadiness,
 )
-from workflows.software_factory.infrastructure.github.issues.ticketing import (
+from workflows.software_factory.shared.infrastructure.github.issues.ticketing import (
     SpecTicketingService,
     TicketDraft,
     TicketingError,
 )
-from workflows.software_factory.infrastructure.github.repo import GitHubRepo
+from workflows.software_factory.shared.infrastructure.github.repo import GitHubRepo
 from workflows.tests.software_factory.infrastructure.github.fakes import (
     FakeGhCli,
     issue,

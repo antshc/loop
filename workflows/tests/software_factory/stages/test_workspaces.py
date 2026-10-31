@@ -29,8 +29,10 @@ from loop import (
 )
 
 from tests.runtime.harness import command
-from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
-from workflows.software_factory.stages import specs, workspaces
+from workflows.software_factory.shared.infrastructure.agents.launcher import (
+    AgentLauncher,
+)
+from workflows.software_factory.shared.stages import specs, workspaces
 from workflows.tests.software_factory.stages.pr_support import (
     AddressAgent,
     PrRig,

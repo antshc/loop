@@ -13,20 +13,20 @@ from typing import Protocol
 
 from loop import Ledger, LedgerCorrupted, RunStatus, StopSignal, WorkItemLocked
 
-from workflows.software_factory.events.pull_requests import PullRequestWork
-from workflows.software_factory.events.specs import RepositoryTarget
-from workflows.software_factory.infrastructure.github.account import GitHub
-from workflows.software_factory.infrastructure.github.pull_requests.model import (
+from workflows.software_factory.shared.events.pull_requests import PullRequestWork
+from workflows.software_factory.shared.events.specs import RepositoryTarget
+from workflows.software_factory.shared.infrastructure.github.account import GitHub
+from workflows.software_factory.shared.infrastructure.github.pull_requests.model import (
     PullRequest,
 )
-from workflows.software_factory.infrastructure.pacing import Pacer
-from workflows.software_factory.infrastructure.state import (
+from workflows.software_factory.shared.infrastructure.pacing import Pacer
+from workflows.software_factory.shared.infrastructure.state import (
     JsonFile,
     StateError,
     process_lock,
 )
-from workflows.software_factory.stages import pull_requests
-from workflows.software_factory.stages.ci import DiagnoseInput, signal
+from workflows.software_factory.shared.stages import pull_requests
+from workflows.software_factory.shared.stages.ci import DiagnoseInput, signal
 
 from .definition import NAME
 from .legacy import adopt_v1, read_status, state_path

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from workflows.software_factory.infrastructure.github.pull_requests.model import (
+from workflows.software_factory.shared.infrastructure.github.pull_requests.model import (
     CheckKind,
     CheckOutcome,
     CheckResult,

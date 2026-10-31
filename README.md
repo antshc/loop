@@ -152,7 +152,7 @@ implements and then reviews. Repositories must already be cloned under
 ```python
 from pathlib import Path
 
-from workflows.software_factory.events.specs import RepositoryTarget
+from workflows.software_factory.shared.events.specs import RepositoryTarget
 from workflows.software_factory.workflows.implement_spec.__main__ import build_services, main
 from workflows.software_factory.workflows.implement_spec.dry import Fakes
 from workflows.software_factory.workflows.implement_spec.settings import Targets
@@ -178,6 +178,8 @@ has the delivery rules.
 | `tests/` | Library tests, grouped by capability. |
 | `workflows/loop/` | The standalone `plan_implement` example on the public `loop` API. |
 | [`workflows/software_factory/`](workflows/software_factory/README.md) | Software factory built on `loop`: reusable Stages, Flow fragments, role agents, and Workflow definitions such as `implement_spec` and `pr_babysit`. Imports only the public `loop` package and runs from the repository clone. |
+| [`skills/babysit/`](skills/babysit/SKILL.md) | A PR-URL skill that launches a detached babysit supervisor from a generated factory snapshot. |
+| `scripts/babysit/` | Canonical skill launcher and supervisor, copied into the skill at commit time. |
 | `workflows/tests/` | Workflow tests for `loop/` and `software_factory/`. |
 
 ## Documentation
@@ -199,6 +201,31 @@ python -m pytest
 ```
 
 The strict editable mode keeps `import loop` resolving to the repository-root `src/` folder.
+
+Install the repository's skill synchronization hook in each checkout:
+
+```sh
+git config core.hooksPath .githooks
+python scripts/sync_babysit_skill.py --check
+```
+
+The pre-commit hook copies the staged factory `shared/`, the `pr_babysit` workflow, and canonical launcher code into `skills/babysit/scripts/`. Edit only their canonical sources; CI rejects stale generated copies. To generate a copy before committing, run `python scripts/sync_babysit_skill.py`.
+
+To babysit one PR in the background, configure its checkout, build and test commands in `.loop/pr-babysit.json` (see the [example settings](workflows/software_factory/workflows/pr_babysit/settings.example.json)), then run:
+
+```sh
+python skills/babysit/scripts/start.py https://github.com/owner/repo/pull/123
+```
+
+The launcher prints the PID and log path after startup. The process monitors one PR through blocks and clarification, then exits when GitHub reports it closed or merged. Use `--config /absolute/path/to/config.json` for another settings file. Install the compatible Loop package and authenticate `gh` and the agent CLI before starting.
+
+The root `skills/` folder is the source for `gh skill` installation, not an automatically loaded Copilot project-skill directory. After publishing this branch, install the babysit skill into your preferred agent host:
+
+```sh
+gh skill install antshc/loop skills/babysit --agent github-copilot --scope user
+```
+
+The installed skill can be invoked as `/babysit`; direct Python launcher use remains available. The install command discovers the canonical `skills/babysit/SKILL.md` and copies its generated scripts into the host-specific skill directory.
 The test suite includes library tests, example Workflow tests, and import-linter
 architecture checks. See the [test strategy](docs/concepts/ops-test-strategy.md)
 for testing boundaries.

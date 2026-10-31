@@ -207,10 +207,10 @@ def test_a_workflow_that_needs_another_workflow_does_not_run_from_its_own_closur
     closure = {
         name: file
         for name, file in closure_of(package).items()
-        if name != f"{FACTORY}.flows.address"
+        if name != f"{FACTORY}.shared.flows.address"
     }
     copy_closure(closure, tmp_path)
 
     result = probe(package, tmp_path)
 
-    assert result.returncode != 0 and f"{FACTORY}.flows" in result.stderr
+    assert result.returncode != 0 and f"{FACTORY}.shared.flows" in result.stderr

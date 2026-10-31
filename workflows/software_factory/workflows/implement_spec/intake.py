@@ -7,8 +7,8 @@ from dataclasses import dataclass
 
 from loop import Ledger
 
-from workflows.software_factory.infrastructure.github.issues.client import Issues
-from workflows.software_factory.infrastructure.github.issues.graph import (
+from workflows.software_factory.shared.infrastructure.github.issues.client import Issues
+from workflows.software_factory.shared.infrastructure.github.issues.graph import (
     SpecGraphSnapshot,
 )
 

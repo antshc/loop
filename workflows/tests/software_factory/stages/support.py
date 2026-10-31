@@ -34,12 +34,12 @@ from loop.shared.process import CommandRunner
 
 from tests.runtime.harness import GIT, Repo, command
 from tests.runtime.support import NoInput
-from workflows.software_factory.events.specs import RepositoryTarget, SpecWork
-from workflows.software_factory.events.tickets import TicketClosed
-from workflows.software_factory.infrastructure.github.account import GitHub
-from workflows.software_factory.infrastructure.github.issues.client import Issues
-from workflows.software_factory.infrastructure.github.repo import GitHubRepo
-from workflows.software_factory.stages import specs
+from workflows.software_factory.shared.events.specs import RepositoryTarget, SpecWork
+from workflows.software_factory.shared.events.tickets import TicketClosed
+from workflows.software_factory.shared.infrastructure.github.account import GitHub
+from workflows.software_factory.shared.infrastructure.github.issues.client import Issues
+from workflows.software_factory.shared.infrastructure.github.repo import GitHubRepo
+from workflows.software_factory.shared.stages import specs
 from workflows.tests.software_factory.infrastructure.github.fakes import (
     FakeGhCli,
     issue,

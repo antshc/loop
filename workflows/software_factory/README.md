@@ -4,7 +4,7 @@ The software factory is a library of reusable Stages and a small definition lang
 
 ```python
 from loop import Workflow, Flow, rework, handoff, stop, next_
-from workflows.software_factory.stages.tickets import next_ready_ticket, implement_ticket, close_ticket, escalate_ticket
+from workflows.software_factory.shared.stages.tickets import next_ready_ticket, implement_ticket, close_ticket, escalate_ticket
 
 deliver = (
     Flow("ticket")
@@ -54,7 +54,7 @@ python -m workflows.software_factory.workflows.address_once --config address_onc
 
 Workflow commands now use `python -m workflows.software_factory.workflows.<workflow>`.
 Import each definition from `workflows.software_factory.workflows.<workflow>.definition`;
-factory-only infrastructure lives under `workflows.software_factory.infrastructure`.
+factory-only infrastructure lives under `workflows.software_factory.shared.infrastructure`.
 
 
 ```text
@@ -69,11 +69,12 @@ workflows/software_factory/
 │   │   └── dry.py
 │   ├── pr_babysit/
 │   └── address_once/
-├── flows/           # Flow fragments composed from several Stage modules; no Stage logic
-├── stages/          # every Stage, Selector and workspace opener; independent flat modules
-├── events/          # shared Event vocabulary; frozen dataclasses only
-├── agents/          # private kit and one package per role, with messages and prompts
-└── infrastructure/  # repository checks, pacing, state, telemetry and the agent launcher
+└── shared/          # reusable building blocks, not separate runnable workflows
+    ├── flows/       # Flow fragments composed from Stage modules; no Stage logic
+    ├── stages/      # every Stage, Selector and workspace opener
+    ├── events/      # shared Event vocabulary; frozen dataclasses only
+    ├── agents/      # private kit and one package per role
+    └── infrastructure/ # checks, pacing, state, telemetry, agent launcher
 workflows/tests/software_factory/  # Stage, fragment, Workflow scenario and architecture tests
 ```
 

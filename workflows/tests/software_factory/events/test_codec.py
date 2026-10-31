@@ -9,20 +9,20 @@ import pkgutil
 from pathlib import Path
 
 import pytest
+from loop import Event
 from loop.runtime._engine.codec import decode, encode
 
-import workflows.software_factory.events as events
-from loop import Event
-from workflows.software_factory.events.checks import ChecksPassed
-from workflows.software_factory.events.chore import ChoreDiscarded, ChoreRefined
-from workflows.software_factory.events.ci import (
+import workflows.software_factory.shared.events as events
+from workflows.software_factory.shared.events.checks import ChecksPassed
+from workflows.software_factory.shared.events.chore import ChoreDiscarded, ChoreRefined
+from workflows.software_factory.shared.events.ci import (
     BranchBroken,
     CiFixed,
     CiRerun,
     Diagnosis,
     Transient,
 )
-from workflows.software_factory.events.feedback import (
+from workflows.software_factory.shared.events.feedback import (
     FeedbackBatch,
     FeedbackGrouped,
     FeedbackHandled,
@@ -31,7 +31,7 @@ from workflows.software_factory.events.feedback import (
     IssueUnclear,
     ReplyDraft,
 )
-from workflows.software_factory.events.jenkins import (
+from workflows.software_factory.shared.events.jenkins import (
     JenkinsCapacity,
     JenkinsFailed,
     JenkinsObservation,
@@ -39,7 +39,7 @@ from workflows.software_factory.events.jenkins import (
     JenkinsWaiting,
     OtherCi,
 )
-from workflows.software_factory.events.pull_requests import (
+from workflows.software_factory.shared.events.pull_requests import (
     CiFailing,
     CopilotDue,
     CopilotRequested,
@@ -60,13 +60,13 @@ from workflows.software_factory.events.pull_requests import (
     ReadinessReported,
     Unsupported,
 )
-from workflows.software_factory.events.review import (
+from workflows.software_factory.shared.events.review import (
     PullRequestReviewed,
     ReviewAxis,
     ReviewFailed,
     ReviewFinding,
 )
-from workflows.software_factory.events.specs import (
+from workflows.software_factory.shared.events.specs import (
     CheckoutPrepared,
     DeliveryAnnounced,
     RepositoryTarget,
@@ -77,7 +77,7 @@ from workflows.software_factory.events.specs import (
     SpecRouted,
     WorkFound,
 )
-from workflows.software_factory.events.tickets import (
+from workflows.software_factory.shared.events.tickets import (
     Delivery,
     PlannedTicket,
     PlanProposed,

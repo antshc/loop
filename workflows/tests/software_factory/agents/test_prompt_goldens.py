@@ -6,19 +6,25 @@ from pathlib import Path
 
 import pytest
 
-from workflows.software_factory.agents.roles.chore import CHORE, ChoreRequest
-from workflows.software_factory.agents.roles.developer import (
+from workflows.software_factory.shared.agents.roles.chore import CHORE, ChoreRequest
+from workflows.software_factory.shared.agents.roles.developer import (
     DEVELOPER,
     DeveloperRequest,
 )
-from workflows.software_factory.agents.roles.planner import PLANNER, PlannerRequest
-from workflows.software_factory.agents.roles.reviewer import REVIEWER, ReviewerRequest
-from workflows.software_factory.infrastructure.github.issues.graph import (
+from workflows.software_factory.shared.agents.roles.planner import (
+    PLANNER,
+    PlannerRequest,
+)
+from workflows.software_factory.shared.agents.roles.reviewer import (
+    REVIEWER,
+    ReviewerRequest,
+)
+from workflows.software_factory.shared.infrastructure.github.issues.graph import (
     SpecGraphSnapshot,
 )
-from workflows.software_factory.infrastructure.github.issues.spec import Spec
-from workflows.software_factory.stages.specs import feature_branch
-from workflows.software_factory.stages.tickets import _ticket_payload
+from workflows.software_factory.shared.infrastructure.github.issues.spec import Spec
+from workflows.software_factory.shared.stages.specs import feature_branch
+from workflows.software_factory.shared.stages.tickets import _ticket_payload
 from workflows.tests.software_factory.infrastructure.github.builders import (
     build_issue,
     build_ticket,

@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from workflows.software_factory.infrastructure.jenkins import JenkinsSettings
+from workflows.software_factory.shared.infrastructure.jenkins import JenkinsSettings
 
 
 @dataclass(frozen=True)

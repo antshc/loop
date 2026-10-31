@@ -7,9 +7,11 @@ from pathlib import Path
 from loop import WorktreeGit
 from loop.shared.git import GitClient
 
-from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
-from workflows.software_factory.infrastructure.github.account import GitHub
-from workflows.software_factory.infrastructure.github.issues.client import Issues
+from workflows.software_factory.shared.infrastructure.agents.launcher import (
+    AgentLauncher,
+)
+from workflows.software_factory.shared.infrastructure.github.account import GitHub
+from workflows.software_factory.shared.infrastructure.github.issues.client import Issues
 from workflows.software_factory.workflows.implement_spec.definition import (
     ImplementSpecSettings,
     Targets,

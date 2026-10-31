@@ -10,10 +10,10 @@ from loop import Event, Pass, Services, Stage, Workflow, encode, run
 
 from tests.runtime.harness import WorkCtx
 from tests.runtime.support import NoInput
-from workflows.software_factory.infrastructure.github.issues.graph import (
+from workflows.software_factory.shared.infrastructure.github.issues.graph import (
     SpecGraphSnapshot,
 )
-from workflows.software_factory.infrastructure.ledger import Ledger
+from workflows.software_factory.shared.infrastructure.ledger import Ledger
 from workflows.tests.software_factory.infrastructure.github.builders import (
     build_graph,
     build_ticket,
@@ -29,7 +29,13 @@ class SnapshotRead(Event):
     graph: SpecGraphSnapshot
 
 
-def test_old_github_reply_resumes_without_repeating_the_effect(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "historical_prefix",
+    ["loop.shared.github.", "workflows.software_factory.infrastructure.github."],
+)
+def test_old_github_reply_resumes_without_repeating_the_effect(
+    tmp_path: Path, historical_prefix: str
+) -> None:
     """Given a legacy executed GitHub reply, when resumed, then its nested models decode and the effect is not repeated."""
     graph = build_graph(tickets=(build_ticket(2),))
     effects = []
@@ -57,9 +63,9 @@ def test_old_github_reply_resumes_without_repeating_the_effect(tmp_path: Path) -
         run(workflow, work, services=Services(), ledger=ledger)
     path = ledger.item("test", work.id).path
     legacy = path.read_text().replace(
-        "workflows.software_factory.infrastructure.github.", "loop.shared.github."
+        "workflows.software_factory.shared.infrastructure.github.", historical_prefix
     )
-    assert "loop.shared.github.issues.graph.SpecGraphSnapshot" in legacy
+    assert f"{historical_prefix}issues.graph.SpecGraphSnapshot" in legacy
     path.write_text(legacy)
 
     result = run(workflow, work, services=Services(), ledger=Ledger(tmp_path))
@@ -95,3 +101,31 @@ def test_relocation_preserves_text_and_torn_tail_recovery(tmp_path: Path) -> Non
 
     assert log.path.read_bytes().startswith(original)
     assert len(Ledger(tmp_path).item("test", "item").records()) == 2
+
+
+@pytest.mark.parametrize(
+    "package", ["agents", "events", "flows", "infrastructure", "stages"]
+)
+def test_factory_type_tags_relocate_without_changing_user_text(
+    tmp_path: Path, package: str
+) -> None:
+    """Only structured type tags migrate; persisted user text stays unchanged."""
+    historical = f"workflows.software_factory.{package}.thing.Value"
+    log = Ledger(tmp_path).item("test", package)
+    log.seed(
+        [
+            {
+                "kind": "note",
+                "text": historical,
+                "item": {"type": historical, "fields": {}},
+            }
+        ]
+    )
+
+    record = Ledger(tmp_path).item("test", package).records()[0]
+    assert record["text"] == historical
+    assert (
+        record["item"]["type"]
+        == f"workflows.software_factory.shared.{package}.thing.Value"
+    )
+    assert historical in log.path.read_text()

@@ -7,13 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from workflows.software_factory.events.specs import SpecHeld
-from workflows.software_factory.events.tickets import (
+from workflows.software_factory.shared.events.specs import SpecHeld
+from workflows.software_factory.shared.events.tickets import (
     PlannedTicket,
     PlanProposed,
     TicketsCreated,
 )
-from workflows.software_factory.stages import plan
+from workflows.software_factory.shared.stages import plan
 from workflows.tests.software_factory.stages.support import (
     DeveloperScript,
     StageRig,

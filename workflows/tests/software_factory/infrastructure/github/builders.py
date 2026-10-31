@@ -2,22 +2,25 @@
 
 from __future__ import annotations
 
-from workflows.software_factory.infrastructure.github.identity import (
+from workflows.software_factory.shared.infrastructure.github.identity import (
     IssueIdentity,
     IssueRef,
     RepositoryId,
 )
-from workflows.software_factory.infrastructure.github.issues.graph import (
+from workflows.software_factory.shared.infrastructure.github.issues.graph import (
     BlockedByRelation,
     SpecGraphSnapshot,
 )
-from workflows.software_factory.infrastructure.github.issues.issue import (
+from workflows.software_factory.shared.infrastructure.github.issues.issue import (
     CloseReason,
     Issue,
     IssueState,
 )
-from workflows.software_factory.infrastructure.github.issues.spec import Spec, Ticket
-from workflows.software_factory.infrastructure.github.pull_requests.model import (
+from workflows.software_factory.shared.infrastructure.github.issues.spec import (
+    Spec,
+    Ticket,
+)
+from workflows.software_factory.shared.infrastructure.github.pull_requests.model import (
     CheckKind,
     CheckOutcome,
     CheckResult,

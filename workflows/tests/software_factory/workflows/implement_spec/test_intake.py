@@ -5,10 +5,13 @@ from __future__ import annotations
 import pytest
 from loop import RunStatus
 
-from workflows.software_factory.events.specs import SpecBlocked, SpecHandedToHuman
-from workflows.software_factory.events.tickets import TicketEscalated
-from workflows.software_factory.infrastructure.github.issues.client import Issues
-from workflows.software_factory.infrastructure.github.repo import GitHubRepo
+from workflows.software_factory.shared.events.specs import (
+    SpecBlocked,
+    SpecHandedToHuman,
+)
+from workflows.software_factory.shared.events.tickets import TicketEscalated
+from workflows.software_factory.shared.infrastructure.github.issues.client import Issues
+from workflows.software_factory.shared.infrastructure.github.repo import GitHubRepo
 from workflows.software_factory.workflows.implement_spec.intake import (
     select_specs,
     work_of,

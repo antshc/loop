@@ -12,12 +12,15 @@ from unittest.mock import patch
 import pytest
 from loop import Ledger, RecordingSpans, Services
 
-from workflows.software_factory.events.pull_requests import PullRequestWork
-from workflows.software_factory.events.specs import RepositoryTarget
-from workflows.software_factory.infrastructure.github.account import GitHub
-from workflows.software_factory.infrastructure.pacing import Pacer
-from workflows.software_factory.infrastructure.state import StateError, process_lock
-from workflows.software_factory.stages import pull_requests
+from workflows.software_factory.shared.events.pull_requests import PullRequestWork
+from workflows.software_factory.shared.events.specs import RepositoryTarget
+from workflows.software_factory.shared.infrastructure.github.account import GitHub
+from workflows.software_factory.shared.infrastructure.pacing import Pacer
+from workflows.software_factory.shared.infrastructure.state import (
+    StateError,
+    process_lock,
+)
+from workflows.software_factory.shared.stages import pull_requests
 from workflows.software_factory.workflows.pr_babysit.__main__ import (
     Runtime,
     StopRequest,

@@ -24,10 +24,12 @@ from loop import (
 from loop.shared.git import GitClient
 from loop.shared.process import CommandRunner
 
-from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
-from workflows.software_factory.infrastructure.github.account import GitHub
-from workflows.software_factory.infrastructure.pacing import Pacer
-from workflows.software_factory.infrastructure.telemetry import Tee
+from workflows.software_factory.shared.infrastructure.agents.launcher import (
+    AgentLauncher,
+)
+from workflows.software_factory.shared.infrastructure.github.account import GitHub
+from workflows.software_factory.shared.infrastructure.pacing import Pacer
+from workflows.software_factory.shared.infrastructure.telemetry import Tee
 from workflows.software_factory.workflows.pr_babysit import __main__ as entry
 from workflows.software_factory.workflows.pr_babysit.__main__ import StopRequest, main
 from workflows.software_factory.workflows.pr_babysit.policy import (

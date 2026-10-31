@@ -13,15 +13,6 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
-from loop.runtime._engine.codec import decode, encode
-from loop.runtime.nodes import DispatchNode, EachNode, StageNode, WithinNode
-
-import workflows.software_factory as factory
-import workflows.software_factory.agents as agents
-import workflows.software_factory.events as events
-import workflows.software_factory.flows as flows
-import workflows.software_factory.stages as stages
-import workflows.software_factory.workflows as workflows
 from loop import (
     Declined,
     Event,
@@ -35,8 +26,17 @@ from loop import (
     Workflow,
     WorkspaceOpener,
 )
-from workflows.software_factory.infrastructure.jenkins import JenkinsSettings
-from workflows.software_factory.stages import pull_requests
+from loop.runtime._engine.codec import decode, encode
+from loop.runtime.nodes import DispatchNode, EachNode, StageNode, WithinNode
+
+import workflows.software_factory as factory
+import workflows.software_factory.shared.agents as agents
+import workflows.software_factory.shared.events as events
+import workflows.software_factory.shared.flows as flows
+import workflows.software_factory.shared.stages as stages
+import workflows.software_factory.workflows as workflows
+from workflows.software_factory.shared.infrastructure.jenkins import JenkinsSettings
+from workflows.software_factory.shared.stages import pull_requests
 from workflows.software_factory.workflows.pr_babysit.settings import (
     Settings as BabysitSettings,
 )
@@ -54,10 +54,10 @@ CLIENTS = (
     "loop.runtime._engine",
     "loop.shared.process",
     "loop.shared.git",
-    "workflows.software_factory.infrastructure.github.repo",
-    "workflows.software_factory.infrastructure.github.account",
-    "workflows.software_factory.infrastructure.github.issues.client",
-    "workflows.software_factory.infrastructure.github.pull_requests.client",
+    "workflows.software_factory.shared.infrastructure.github.repo",
+    "workflows.software_factory.shared.infrastructure.github.account",
+    "workflows.software_factory.shared.infrastructure.github.issues.client",
+    "workflows.software_factory.shared.infrastructure.github.pull_requests.client",
 )
 
 type Part = Stage | Selector | WorkspaceOpener
@@ -396,7 +396,7 @@ def test_a_policy_module_with_a_behaviour_class_or_a_client_import_is_reported_b
     """Given a policy source with a class that has methods and imports of a client, when it is checked, then each is named."""
     source = (
         "import subprocess\n"
-        "from workflows.software_factory.infrastructure.github.account import GitHub\n"
+        "from workflows.software_factory.shared.infrastructure.github.account import GitHub\n"
         "from dataclasses import dataclass\n\n"
         "class Fingerprinter:\n    def digest(self): ...\n\n"
         "@dataclass(frozen=True)\nclass Value:\n    def doubled(self): ...\n\n"
@@ -406,8 +406,8 @@ def test_a_policy_module_with_a_behaviour_class_or_a_client_import_is_reported_b
     assert policy_violations("demo.policy", source) == [
         "demo.policy: class Fingerprinter has methods",
         "demo.policy: imports subprocess",
-        "demo.policy: imports workflows.software_factory.infrastructure.github.account",
-        "demo.policy: imports workflows.software_factory.infrastructure.github.account.GitHub",
+        "demo.policy: imports workflows.software_factory.shared.infrastructure.github.account",
+        "demo.policy: imports workflows.software_factory.shared.infrastructure.github.account.GitHub",
     ]
 
 

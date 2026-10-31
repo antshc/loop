@@ -7,17 +7,19 @@ from collections.abc import Mapping
 
 from loop import RunStatus
 
-from workflows.software_factory.events.specs import (
+from workflows.software_factory.shared.events.specs import (
     SpecBlocked,
     SpecHandedToHuman,
     SpecWork,
 )
-from workflows.software_factory.events.tickets import TicketEscalated
-from workflows.software_factory.infrastructure.github.issues.graph import (
+from workflows.software_factory.shared.events.tickets import TicketEscalated
+from workflows.software_factory.shared.infrastructure.github.issues.graph import (
     SpecGraphSnapshot,
 )
-from workflows.software_factory.infrastructure.github.issues.spec import HITL_LABEL
-from workflows.software_factory.stages.chore import chore_subject
+from workflows.software_factory.shared.infrastructure.github.issues.spec import (
+    HITL_LABEL,
+)
+from workflows.software_factory.shared.stages.chore import chore_subject
 
 __all__ = [
     "HELD_SPEC",

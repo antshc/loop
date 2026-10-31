@@ -15,8 +15,8 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
-from workflows.software_factory.infrastructure import jenkins as boundary
-from workflows.software_factory.infrastructure.jenkins import (
+from workflows.software_factory.shared.infrastructure import jenkins as boundary
+from workflows.software_factory.shared.infrastructure.jenkins import (
     Jenkins,
     JenkinsBusy,
     JenkinsError,

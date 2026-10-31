@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from workflows.software_factory.infrastructure.github.issues.issue_classifier import (
+from workflows.software_factory.shared.infrastructure.github.issues.issue_classifier import (
     Classification,
     IssueClassifier,
     IssueKind,

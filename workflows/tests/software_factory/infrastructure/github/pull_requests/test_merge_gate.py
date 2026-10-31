@@ -2,21 +2,21 @@ from __future__ import annotations
 
 import pytest
 
-from workflows.software_factory.infrastructure.github.pull_requests import (
+from workflows.software_factory.shared.infrastructure.github.pull_requests import (
     MergeGateEvaluator,
     MergePolicySnapshot,
     MergeReadiness,
     ReadinessStatus,
     ReasonCode,
 )
-from workflows.software_factory.infrastructure.github.pull_requests.merge_gate import (
+from workflows.software_factory.shared.infrastructure.github.pull_requests.merge_gate import (
     STATUS_OF_REASON,
     MergeReason,
 )
-from workflows.software_factory.infrastructure.github.pull_requests.merge_policy import (
+from workflows.software_factory.shared.infrastructure.github.pull_requests.merge_policy import (
     PolicySource,
 )
-from workflows.software_factory.infrastructure.github.pull_requests.model import (
+from workflows.software_factory.shared.infrastructure.github.pull_requests.model import (
     CheckKind,
     CheckOutcome,
     Mergeability,

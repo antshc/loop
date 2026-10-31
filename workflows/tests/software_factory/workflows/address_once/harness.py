@@ -20,8 +20,10 @@ from loop import (
 from loop.shared.git import GitClient
 
 from tests.runtime.harness import GIT, command
-from workflows.software_factory.events.pull_requests import PullRequestWork
-from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
+from workflows.software_factory.shared.events.pull_requests import PullRequestWork
+from workflows.software_factory.shared.infrastructure.agents.launcher import (
+    AgentLauncher,
+)
 from workflows.software_factory.workflows.address_once.__main__ import Runtime, main
 from workflows.software_factory.workflows.address_once.definition import NAME
 from workflows.tests.software_factory.stages.pr_support import (

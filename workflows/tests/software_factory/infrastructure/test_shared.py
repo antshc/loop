@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 from loop.shared.process import CommandError, git_command
 
-from workflows.software_factory.infrastructure.state import (
+from workflows.software_factory.shared.infrastructure.state import (
     JsonFile,
     StateError,
     process_lock,
@@ -18,7 +18,7 @@ def test_atomic_failure_preserves_previous_state(tmp_path) -> None:
     state = JsonFile(tmp_path / "state.json")
     state.write({"version": 1, "value": "before"})
     with patch(
-        "workflows.software_factory.infrastructure.state.os.replace",
+        "workflows.software_factory.shared.infrastructure.state.os.replace",
         side_effect=OSError("interrupted"),
     ):
         with pytest.raises(OSError):
