@@ -3,11 +3,25 @@ from __future__ import annotations
 from dataclasses import FrozenInstanceError, replace
 
 import pytest
-from loop.shared.github.issues.graph import IssueRelation, SpecGraphSnapshot
-from loop.shared.github.issues.issue import CloseReason, GapState, IssueState, ReadGap
-from loop.shared.github.issues.readiness import TicketReadiness
 
-from tests.shared.builders import build_blocker, build_graph, build_ticket
+from workflows.software_factory.infrastructure.github.issues.graph import (
+    IssueRelation,
+    SpecGraphSnapshot,
+)
+from workflows.software_factory.infrastructure.github.issues.issue import (
+    CloseReason,
+    GapState,
+    IssueState,
+    ReadGap,
+)
+from workflows.software_factory.infrastructure.github.issues.readiness import (
+    TicketReadiness,
+)
+from workflows.tests.software_factory.infrastructure.github.builders import (
+    build_blocker,
+    build_graph,
+    build_ticket,
+)
 
 
 def test_a_graph_without_gaps_is_complete() -> None:

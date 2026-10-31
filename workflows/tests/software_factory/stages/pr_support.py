@@ -35,18 +35,28 @@ from loop import (
     run,
 )
 from loop.shared.git import GitClient
-from loop.shared.github.account import GitHub
-from loop.shared.github.pull_requests.babysit import babysit_snapshot, bot_logins
-from loop.shared.github.pull_requests.model import PullRequestSnapshot
 
 from tests.runtime.harness import GIT, Repo, command
 from tests.runtime.support import NoInput
-from tests.shared.fakes import FakeGhCli, FakePullRequestHost, comment_node, thread_node
 from workflows.software_factory.events.feedback import FeedbackBatch, TrustPolicy
 from workflows.software_factory.events.pull_requests import PullRequestPolled
 from workflows.software_factory.events.specs import RepositoryTarget
 from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
+from workflows.software_factory.infrastructure.github.account import GitHub
+from workflows.software_factory.infrastructure.github.pull_requests.babysit import (
+    babysit_snapshot,
+    bot_logins,
+)
+from workflows.software_factory.infrastructure.github.pull_requests.model import (
+    PullRequestSnapshot,
+)
 from workflows.software_factory.stages import feedback
+from workflows.tests.software_factory.infrastructure.github.fakes import (
+    FakeGhCli,
+    FakePullRequestHost,
+    comment_node,
+    thread_node,
+)
 from workflows.tests.software_factory.stages.support import RecordingRunner
 
 SLUG = "owner/repo"

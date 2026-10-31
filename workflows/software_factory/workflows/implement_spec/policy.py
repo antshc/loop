@@ -6,8 +6,6 @@ import hashlib
 from collections.abc import Mapping
 
 from loop import RunStatus
-from loop.shared.github.issues.graph import SpecGraphSnapshot
-from loop.shared.github.issues.spec import HITL_LABEL
 
 from workflows.software_factory.events.specs import (
     SpecBlocked,
@@ -15,6 +13,10 @@ from workflows.software_factory.events.specs import (
     SpecWork,
 )
 from workflows.software_factory.events.tickets import TicketEscalated
+from workflows.software_factory.infrastructure.github.issues.graph import (
+    SpecGraphSnapshot,
+)
+from workflows.software_factory.infrastructure.github.issues.spec import HITL_LABEL
 from workflows.software_factory.stages.chore import chore_subject
 
 __all__ = [

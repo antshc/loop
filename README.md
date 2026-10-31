@@ -174,7 +174,7 @@ has the delivery rules.
 
 | Path | Contents |
 |---|---|
-| `src/` | The installable `loop` library, including the Workflow runtime and the shared Git, process and GitHub helpers. The only installed code. |
+| `src/` | The installable `loop` library, including the Workflow runtime and the shared Git and process helpers. The only installed code. |
 | `tests/` | Library tests, grouped by capability. |
 | `workflows/loop/` | The standalone `plan_implement` example on the public `loop` API. |
 | [`workflows/software_factory/`](workflows/software_factory/README.md) | Software factory built on `loop`: reusable Stages, Flow fragments, role agents, and Workflow definitions such as `implement_spec` and `pr_babysit`. Imports only the public `loop` package and runs from the repository clone. |

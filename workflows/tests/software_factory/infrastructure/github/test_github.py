@@ -3,12 +3,16 @@ from __future__ import annotations
 import json
 
 import pytest
-from loop.shared.github.account import GitHub
-from loop.shared.github.pull_requests import PullRequests
-from loop.shared.github.repo import GitHubRepo, denied
 from loop.shared.process import CommandError
 
-from tests.shared.fakes import FakeGhCli, FakePullRequestHost, ScriptedGh
+from workflows.software_factory.infrastructure.github.account import GitHub
+from workflows.software_factory.infrastructure.github.pull_requests import PullRequests
+from workflows.software_factory.infrastructure.github.repo import GitHubRepo, denied
+from workflows.tests.software_factory.infrastructure.github.fakes import (
+    FakeGhCli,
+    FakePullRequestHost,
+    ScriptedGh,
+)
 
 
 def _pulls(gh: ScriptedGh) -> PullRequests:

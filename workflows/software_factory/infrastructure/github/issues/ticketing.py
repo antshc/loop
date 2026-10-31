@@ -5,7 +5,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from ...process import CommandError
+from loop.shared.process import CommandError
+
 from .client import Issues
 from .errors import IssueError
 from .graph import BlockedByRelation, SpecGraphSnapshot

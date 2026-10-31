@@ -8,9 +8,9 @@ from pathlib import Path
 from loop import AgentExecution, WorktreeGit
 from loop.runtime.analysis import _stages_in
 from loop.shared.git import GitClient
-from loop.shared.github.account import GitHub
 
 from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
+from workflows.software_factory.infrastructure.github.account import GitHub
 from workflows.software_factory.infrastructure.pacing import Pacer
 from workflows.software_factory.workflows.pr_babysit.definition import pr_babysit
 from workflows.software_factory.workflows.pr_babysit.settings import (

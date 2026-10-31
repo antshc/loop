@@ -26,10 +26,6 @@ from loop import (
     rework,
 )
 from loop.shared.git import GitClient
-from loop.shared.github.issues.client import Issues
-from loop.shared.github.issues.graph import SpecGraphSnapshot
-from loop.shared.github.issues.issue import IssueState
-from loop.shared.github.issues.spec import Ticket
 
 from workflows.software_factory.agents.roles.developer import (
     DEVELOPER,
@@ -44,6 +40,12 @@ from workflows.software_factory.events.tickets import (
     TicketImplemented,
     TicketRejected,
 )
+from workflows.software_factory.infrastructure.github.issues.client import Issues
+from workflows.software_factory.infrastructure.github.issues.graph import (
+    SpecGraphSnapshot,
+)
+from workflows.software_factory.infrastructure.github.issues.issue import IssueState
+from workflows.software_factory.infrastructure.github.issues.spec import Ticket
 
 DEFAULT_REWORK = 2
 

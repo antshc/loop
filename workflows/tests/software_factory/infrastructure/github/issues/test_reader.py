@@ -1,21 +1,32 @@
 from __future__ import annotations
 
 import pytest
-from loop.shared.github.identity import (
+from loop.shared.process import CommandError
+
+from workflows.software_factory.infrastructure.github.identity import (
     CommentRef,
     IssueIdentity,
     IssueRef,
     RepositoryId,
 )
-from loop.shared.github.issues.client import Issues
-from loop.shared.github.issues.errors import IssueError
-from loop.shared.github.issues.issue import CloseReason, GapState, IssueState
-from loop.shared.github.issues.issue_classifier import LabelTypeDisagreement
-from loop.shared.github.issues.readiness import TicketReadiness
-from loop.shared.github.repo import GhRunner, GitHubRepo
-from loop.shared.process import CommandError
-
-from tests.shared.fakes import FakeGhCli, issue
+from workflows.software_factory.infrastructure.github.issues.client import Issues
+from workflows.software_factory.infrastructure.github.issues.errors import IssueError
+from workflows.software_factory.infrastructure.github.issues.issue import (
+    CloseReason,
+    GapState,
+    IssueState,
+)
+from workflows.software_factory.infrastructure.github.issues.issue_classifier import (
+    LabelTypeDisagreement,
+)
+from workflows.software_factory.infrastructure.github.issues.readiness import (
+    TicketReadiness,
+)
+from workflows.software_factory.infrastructure.github.repo import GhRunner, GitHubRepo
+from workflows.tests.software_factory.infrastructure.github.fakes import (
+    FakeGhCli,
+    issue,
+)
 
 _ROUTING = ("spec", "repo:target:o/r", "repo:base:main")
 _PAGE = "?per_page=100"

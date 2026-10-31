@@ -9,18 +9,6 @@ from typing import Any
 
 from loop import AgentWorkspace, Evidence, Fail, History, Hold, Pass, Stage, Verdict
 from loop.shared.git import GitClient
-from loop.shared.github.account import GitHub
-from loop.shared.github.pull_requests import PullRequests
-from loop.shared.github.pull_requests.babysit import (
-    babysit_snapshot,
-    bot_logins,
-    ci_failed,
-    ci_state,
-    is_copilot,
-    unhandled_items,
-)
-from loop.shared.github.pull_requests.model import PullRequestSnapshot
-from loop.shared.github.repo import CommandError
 
 from workflows.software_factory.events.ci import CiFixed
 from workflows.software_factory.events.feedback import (
@@ -43,6 +31,20 @@ from workflows.software_factory.events.pull_requests import (
     ReadinessCheck,
     Unsupported,
 )
+from workflows.software_factory.infrastructure.github.account import GitHub
+from workflows.software_factory.infrastructure.github.pull_requests import PullRequests
+from workflows.software_factory.infrastructure.github.pull_requests.babysit import (
+    babysit_snapshot,
+    bot_logins,
+    ci_failed,
+    ci_state,
+    is_copilot,
+    unhandled_items,
+)
+from workflows.software_factory.infrastructure.github.pull_requests.model import (
+    PullRequestSnapshot,
+)
+from workflows.software_factory.infrastructure.github.repo import CommandError
 
 _POSTED, _MISSING, _SUPERSEDED = "posted", "missing", "superseded"
 _UNSUPPORTED = "PR author changed or fork head is not supported by this checkout"

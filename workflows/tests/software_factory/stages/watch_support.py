@@ -27,13 +27,16 @@ from loop import (
 
 from tests.runtime.harness import GIT
 from tests.runtime.support import NoInput
-from tests.shared.fakes import check_run, workflow_run
 from workflows.software_factory.events.pull_requests import (
     PullRequestPolled,
     PullRequestWork,
 )
 from workflows.software_factory.infrastructure.pacing import Pacer
 from workflows.software_factory.stages import pull_requests
+from workflows.tests.software_factory.infrastructure.github.fakes import (
+    check_run,
+    workflow_run,
+)
 from workflows.tests.software_factory.stages.pr_support import (
     BRANCH,
     NUMBER,

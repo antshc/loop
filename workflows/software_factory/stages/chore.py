@@ -24,7 +24,6 @@ from loop import (
     Verify,
 )
 from loop.shared.git import Commit, GitClient
-from loop.shared.github.account import GitHub
 
 from workflows.software_factory.agents.roles.chore import (
     CHORE,
@@ -33,6 +32,7 @@ from workflows.software_factory.agents.roles.chore import (
 )
 from workflows.software_factory.events.chore import ChoreDiscarded, ChoreRefined
 from workflows.software_factory.events.specs import SpecRouted, SpecWork
+from workflows.software_factory.infrastructure.github.account import GitHub
 
 DIFF_DIR = Path("bin") / "review_diff"
 MANIFEST_NAME = "_manifest.tsv"

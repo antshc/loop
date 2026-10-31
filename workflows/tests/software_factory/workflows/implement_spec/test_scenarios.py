@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.shared.fakes import issue
+from workflows.tests.software_factory.infrastructure.github.fakes import issue
 from workflows.tests.software_factory.stages.support import BRANCH, LABELS
 
 from .harness import TWO_TICKETS, ImplementSpecHarness

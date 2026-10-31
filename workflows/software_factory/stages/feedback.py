@@ -5,8 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from loop import Evidence, History, Hold, Pass, Stage, Verdict
-from loop.shared.github.account import GitHub
-from loop.shared.github.pull_requests.babysit import ci_failed, unhandled_items
 
 from workflows.software_factory.events.feedback import (
     FeedbackBatch,
@@ -14,6 +12,11 @@ from workflows.software_factory.events.feedback import (
     TrustPolicy,
 )
 from workflows.software_factory.events.pull_requests import PullRequestPolled
+from workflows.software_factory.infrastructure.github.account import GitHub
+from workflows.software_factory.infrastructure.github.pull_requests.babysit import (
+    ci_failed,
+    unhandled_items,
+)
 
 
 @dataclass(frozen=True)

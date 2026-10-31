@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import pytest
-from loop.shared.github.issues.issue_classifier import (
+
+from workflows.software_factory.infrastructure.github.issues.issue_classifier import (
     Classification,
     IssueClassifier,
     IssueKind,
     LabelTypeDisagreement,
 )
-
-from tests.shared.builders import build_issue
+from workflows.tests.software_factory.infrastructure.github.builders import build_issue
 
 
 @pytest.mark.parametrize(

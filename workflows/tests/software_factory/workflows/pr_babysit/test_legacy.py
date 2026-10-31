@@ -7,9 +7,11 @@ import threading
 from pathlib import Path
 
 from loop import Ledger, WorkItemLog
-from loop.shared.github.pull_requests.babysit import digest
 
 from tests.runtime.harness import command
+from workflows.software_factory.infrastructure.github.pull_requests.babysit import (
+    digest,
+)
 from workflows.software_factory.workflows.pr_babysit.legacy import adopt_v1, state_path
 from workflows.software_factory.workflows.pr_babysit.policy import ADOPTED, FINGERPRINT
 from workflows.tests.software_factory.stages.pr_support import (

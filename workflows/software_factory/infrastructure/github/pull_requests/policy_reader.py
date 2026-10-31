@@ -5,7 +5,8 @@ from __future__ import annotations
 import logging
 from urllib.parse import quote
 
-from ...process import CommandError
+from loop.shared.process import CommandError
+
 from ..repo import GitHubRepo, denied
 from .merge_policy import (
     MergePolicySnapshot,

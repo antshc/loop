@@ -10,13 +10,6 @@ from pathlib import Path
 from typing import Any
 
 from loop import AgentWorkspace, Declined, Fail, Hold, Pass, ReadOnly, Stage, Verdict
-from loop.shared.github.issues.client import Issues
-from loop.shared.github.issues.graph import SpecGraphSnapshot
-from loop.shared.github.issues.ticketing import (
-    SpecTicketingService,
-    TicketDraft,
-    TicketingError,
-)
 
 from workflows.software_factory.agents.roles.planner import (
     PLANNER,
@@ -28,6 +21,15 @@ from workflows.software_factory.events.tickets import (
     PlannedTicket,
     PlanProposed,
     TicketsCreated,
+)
+from workflows.software_factory.infrastructure.github.issues.client import Issues
+from workflows.software_factory.infrastructure.github.issues.graph import (
+    SpecGraphSnapshot,
+)
+from workflows.software_factory.infrastructure.github.issues.ticketing import (
+    SpecTicketingService,
+    TicketDraft,
+    TicketingError,
 )
 
 MAX_PLANNED_TICKETS = 15

@@ -5,13 +5,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from loop import Evidence, History, Pass, Stage, Verdict
-from loop.shared.github.account import GitHub
-from loop.shared.github.pull_requests.babysit import is_copilot
 
 from workflows.software_factory.events.pull_requests import (
     CopilotDue,
     CopilotRequested,
     PullRequestPolled,
+)
+from workflows.software_factory.infrastructure.github.account import GitHub
+from workflows.software_factory.infrastructure.github.pull_requests.babysit import (
+    is_copilot,
 )
 
 

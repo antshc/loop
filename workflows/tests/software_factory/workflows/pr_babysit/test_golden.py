@@ -6,11 +6,6 @@ import json
 from pathlib import Path
 
 import pytest
-from loop.shared.github.pull_requests.babysit import (
-    babysit_snapshot,
-    bot_logins,
-    ci_state,
-)
 
 from workflows.software_factory.agents.roles.address import (
     GROUP_FEEDBACK,
@@ -24,6 +19,11 @@ from workflows.software_factory.events.pull_requests import (
     PullRequestPolled,
 )
 from workflows.software_factory.events.specs import RepositoryTarget
+from workflows.software_factory.infrastructure.github.pull_requests.babysit import (
+    babysit_snapshot,
+    bot_logins,
+    ci_state,
+)
 from workflows.software_factory.stages import ci, pull_requests
 from workflows.software_factory.stages.address import (
     GroupInput,

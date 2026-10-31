@@ -5,10 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from loop.shared.github.issues.graph import SpecGraphSnapshot
-from loop.shared.github.issues.spec import Spec
 
-from tests.shared.builders import build_issue, build_ticket
 from workflows.software_factory.agents.roles.chore import CHORE, ChoreRequest
 from workflows.software_factory.agents.roles.developer import (
     DEVELOPER,
@@ -16,8 +13,16 @@ from workflows.software_factory.agents.roles.developer import (
 )
 from workflows.software_factory.agents.roles.planner import PLANNER, PlannerRequest
 from workflows.software_factory.agents.roles.reviewer import REVIEWER, ReviewerRequest
+from workflows.software_factory.infrastructure.github.issues.graph import (
+    SpecGraphSnapshot,
+)
+from workflows.software_factory.infrastructure.github.issues.spec import Spec
 from workflows.software_factory.stages.specs import feature_branch
 from workflows.software_factory.stages.tickets import _ticket_payload
+from workflows.tests.software_factory.infrastructure.github.builders import (
+    build_issue,
+    build_ticket,
+)
 
 GOLDENS = Path(__file__).with_name("goldens") / "prompts"
 

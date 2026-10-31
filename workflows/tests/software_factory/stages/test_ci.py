@@ -8,10 +8,8 @@ from typing import Any
 
 import pytest
 from loop import Evidence, Fail, Flow, Hold, Pass, Workflow, WorktreeError, handoff
-from loop.shared.github.repo import CommandError
 
 from tests.runtime.harness import command
-from tests.shared.fakes import check_run
 from workflows.software_factory.agents.roles.maintainer import (
     DIAGNOSE_CI,
     FIX_CI,
@@ -31,7 +29,9 @@ from workflows.software_factory.events.pull_requests import (
     Unsupported,
 )
 from workflows.software_factory.events.specs import RepositoryTarget
+from workflows.software_factory.infrastructure.github.repo import CommandError
 from workflows.software_factory.stages import ci, pull_requests, workspaces
+from workflows.tests.software_factory.infrastructure.github.fakes import check_run
 from workflows.tests.software_factory.stages.pr_support import (
     BRANCH,
     Verifier,

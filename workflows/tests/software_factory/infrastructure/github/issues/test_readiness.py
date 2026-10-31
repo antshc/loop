@@ -1,12 +1,25 @@
 from __future__ import annotations
 
 import pytest
-from loop.shared.github.issues.graph import SpecGraphSnapshot
-from loop.shared.github.issues.issue import CloseReason, IssueState
-from loop.shared.github.issues.readiness import TicketReadiness, TicketReadinessPolicy
-from loop.shared.github.issues.spec import Ticket
 
-from tests.shared.builders import build_blocker, build_graph, build_issue, build_ticket
+from workflows.software_factory.infrastructure.github.issues.graph import (
+    SpecGraphSnapshot,
+)
+from workflows.software_factory.infrastructure.github.issues.issue import (
+    CloseReason,
+    IssueState,
+)
+from workflows.software_factory.infrastructure.github.issues.readiness import (
+    TicketReadiness,
+    TicketReadinessPolicy,
+)
+from workflows.software_factory.infrastructure.github.issues.spec import Ticket
+from workflows.tests.software_factory.infrastructure.github.builders import (
+    build_blocker,
+    build_graph,
+    build_issue,
+    build_ticket,
+)
 
 READY, BLOCKED, UNKNOWN = (
     TicketReadiness.READY,

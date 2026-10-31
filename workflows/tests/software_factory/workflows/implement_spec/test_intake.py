@@ -4,13 +4,11 @@ from __future__ import annotations
 
 import pytest
 from loop import RunStatus
-from loop.shared.github.issues.client import Issues
-from loop.shared.github.repo import GitHubRepo
 
-from tests.shared.builders import build_graph, build_ticket
-from tests.shared.fakes import FakeGhCli, issue
 from workflows.software_factory.events.specs import SpecBlocked, SpecHandedToHuman
 from workflows.software_factory.events.tickets import TicketEscalated
+from workflows.software_factory.infrastructure.github.issues.client import Issues
+from workflows.software_factory.infrastructure.github.repo import GitHubRepo
 from workflows.software_factory.workflows.implement_spec.intake import (
     select_specs,
     work_of,
@@ -24,6 +22,14 @@ from workflows.software_factory.workflows.implement_spec.policy import (
     held_by_ticket,
     release_reason,
     spec_revision,
+)
+from workflows.tests.software_factory.infrastructure.github.builders import (
+    build_graph,
+    build_ticket,
+)
+from workflows.tests.software_factory.infrastructure.github.fakes import (
+    FakeGhCli,
+    issue,
 )
 
 LABELS = ("spec", "repo:target:owner/repo", "repo:base:main")
