@@ -10,10 +10,8 @@ from pathlib import Path
 from types import UnionType
 from typing import Any, TypeAliasType
 
-from ..builder import AgentWorkspace
-
 from ..agents.contract import Message, TypedAgent
-
+from ..builder import AgentWorkspace
 from .event import DefinitionError, Event
 from .facts import event_shape, input_fields, is_event_class
 from .routes import Route, Routes, is_route
@@ -130,7 +128,9 @@ class HarnessCommits[I, P]:
     on_fail: Restore | Retain = field(default_factory=Restore)
 
 
-type WorkContract = NoRepository | ReadOnly | AgentCommits[Any, Any] | HarnessCommits[Any, Any]
+type WorkContract = (
+    NoRepository | ReadOnly | AgentCommits[Any, Any] | HarnessCommits[Any, Any]
+)
 
 
 @dataclass(frozen=True)
@@ -182,7 +182,9 @@ class WorkspaceOpener[I]:
 def _require_kebab(owner: str, identity: str) -> None:
     """Raises DefinitionError unless `identity` is a kebab-case identity."""
     if not KEBAB_CASE.fullmatch(identity):
-        raise DefinitionError(f"{owner}: identity must be kebab-case, such as 'implement-ticket'")
+        raise DefinitionError(
+            f"{owner}: identity must be kebab-case, such as 'implement-ticket'"
+        )
 
 
 @dataclass(frozen=True)
@@ -202,7 +204,9 @@ class Stage[I, R, P: Event]:
     limit_: Limit | None = None
     once_: Callable[[I], str] | None = None
     reads_: tuple[tuple[type[Event], str], ...] = ()
-    run_records_: Callable[[Any, str | None], Mapping[str, str | int | bool]] | None = None
+    run_records_: Callable[[Any, str | None], Mapping[str, str | int | bool]] | None = (
+        None
+    )
     describe: Callable[[I], Mapping[str, str | int | bool]] = lambda _: {}
 
     def __post_init__(self) -> None:
@@ -211,7 +215,9 @@ class Stage[I, R, P: Event]:
         _require_kebab(owner, self.id)
         input_fields(owner, self.input)
         if event_shape(self.produces) is None:
-            raise DefinitionError(f"{owner}: produces must be an Event or a closed sum of Events, not {self.produces!r}")
+            raise DefinitionError(
+                f"{owner}: produces must be an Event or a closed sum of Events, not {self.produces!r}"
+            )
         for event in self.may_emit:
             if not is_event_class(event):
                 raise DefinitionError(f"{owner}: may_emit lists Events, not {event!r}")
@@ -220,7 +226,11 @@ class Stage[I, R, P: Event]:
                 raise DefinitionError(f"{owner}: {route!r} is not a route")
 
     def agent[Q: Message, R2](
-        self, agent: TypedAgent[Q, R2], request: Callable[[I, Path], Q], *, session: Callable[[I], str | None] = lambda _: None,
+        self,
+        agent: TypedAgent[Q, R2],
+        request: Callable[[I, Path], Q],
+        *,
+        session: Callable[[I], str | None] = lambda _: None,
     ) -> Stage[I, R2, P]:
         """Runs a role agent in the enclosing workspace."""
         return self._with_executor(AgentExecution(agent, request, session))
@@ -229,14 +239,18 @@ class Stage[I, R, P: Event]:
         """Runs a deterministic Workflow Action with no external effect."""
         return self._with_executor(Action(run))
 
-    def effect[R2](self, run: Callable[[I], R2], *, reconcile: Callable[[I], R2 | None]) -> Stage[I, R2, P]:
+    def effect[R2](
+        self, run: Callable[[I], R2], *, reconcile: Callable[[I], R2 | None]
+    ) -> Stage[I, R2, P]:
         """Runs a Workflow Action with an external effect and the reconcile that recognizes a crashed attempt's effect."""
         return self._with_executor(Effect(run, reconcile))
 
     def _with_executor(self, executor: Any) -> Any:
         """A copy with `executor`; a Stage has at most one."""
         if self.executor is not None:
-            raise DefinitionError(f"Stage '{self.id}': already has an executor; a Stage runs at most one")
+            raise DefinitionError(
+                f"Stage '{self.id}': already has an executor; a Stage runs at most one"
+            )
         return replace(self, executor=executor)
 
     def gate[P2: Event](self, gate: Gate[I, R, P2]) -> Stage[I, R, P2]:
@@ -283,17 +297,25 @@ class Stage[I, R, P: Event]:
         """Names the producer of an Event that two or more Stages produce."""
         return replace(self, reads_=(*self.reads_, (event, from_)))
 
-    def records_run(self, attributes: Callable[[P, str | None], Mapping[str, str | int | bool]]) -> Stage[I, R, P]:
+    def records_run(
+        self, attributes: Callable[[P, str | None], Mapping[str, str | int | bool]]
+    ) -> Stage[I, R, P]:
         """Sets the run attributes a hand-off through this Stage records from its Event and the reason the route gave; a run's reader, such as an intake, finds them on the closed run."""
         return replace(self, run_records_=attributes)
 
     def tune(self, **profile_fields: Any) -> Stage[I, R, P]:
         """Tunes the agent's profile; applies to an agent Stage only."""
         if not isinstance(self.executor, AgentExecution):
-            raise DefinitionError(f"Stage '{self.id}': tune applies to an agent Stage only")
-        tuned = replace(self.executor, agent=self.executor.agent.tuned(**profile_fields))
+            raise DefinitionError(
+                f"Stage '{self.id}': tune applies to an agent Stage only"
+            )
+        tuned = replace(
+            self.executor, agent=self.executor.agent.tuned(**profile_fields)
+        )
         return replace(self, executor=tuned)
 
-    def attributes(self, describe: Callable[[I], Mapping[str, str | int | bool]]) -> Stage[I, R, P]:
+    def attributes(
+        self, describe: Callable[[I], Mapping[str, str | int | bool]]
+    ) -> Stage[I, R, P]:
         """Sets the span attributes derived from the input."""
         return replace(self, describe=describe)

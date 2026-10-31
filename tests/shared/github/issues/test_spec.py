@@ -3,13 +3,15 @@ from __future__ import annotations
 from dataclasses import FrozenInstanceError
 
 import pytest
-
 from loop.shared.github.issues.issue import IssueState
 from loop.shared.github.issues.spec import SpecMetadata
+
 from tests.shared.builders import build_spec, build_ticket
 
 
-def _metadata(title: str = "Add login page", labels: tuple[str, ...] = (), number: int = 7) -> SpecMetadata:
+def _metadata(
+    title: str = "Add login page", labels: tuple[str, ...] = (), number: int = 7
+) -> SpecMetadata:
     return SpecMetadata.of(number, title, labels)
 
 
@@ -41,7 +43,9 @@ def test_target_reads_the_single_repo_target_value() -> None:
         ("repo:target:github.com/owner/name",),
     ],
 )
-def test_target_is_none_when_missing_malformed_or_duplicated(labels: tuple[str, ...]) -> None:
+def test_target_is_none_when_missing_malformed_or_duplicated(
+    labels: tuple[str, ...],
+) -> None:
     metadata = _metadata(labels=labels)
 
     assert metadata.target is None and metadata.target_label is None
@@ -51,15 +55,25 @@ def test_base_branch_reads_the_single_repo_base_value() -> None:
     assert _metadata(labels=("repo:base:main",)).base_branch == "main"
 
 
-@pytest.mark.parametrize("labels", [(), ("repo:base:",), ("repo:base:a", "repo:base:b")])
-def test_base_branch_is_none_when_missing_empty_or_duplicated(labels: tuple[str, ...]) -> None:
+@pytest.mark.parametrize(
+    "labels", [(), ("repo:base:",), ("repo:base:a", "repo:base:b")]
+)
+def test_base_branch_is_none_when_missing_empty_or_duplicated(
+    labels: tuple[str, ...],
+) -> None:
     assert _metadata(labels=labels).base_branch is None
 
 
 def test_a_spec_exposes_its_metadata_from_its_title_and_routing_labels() -> None:
-    spec = build_spec(7, "Checkout: Add login page", ("spec", "repo:target:o/r", "repo:base:release/2.4"))
+    spec = build_spec(
+        7,
+        "Checkout: Add login page",
+        ("spec", "repo:target:o/r", "repo:base:release/2.4"),
+    )
 
-    assert spec.metadata == SpecMetadata("Checkout", "Add login page", "o/r", "release/2.4")
+    assert spec.metadata == SpecMetadata(
+        "Checkout", "Add login page", "o/r", "release/2.4"
+    )
 
 
 @pytest.mark.parametrize(
@@ -94,5 +108,9 @@ def test_changing_a_snapshot_returns_a_new_one_of_the_same_kind() -> None:
 
     labeled, closed = ticket.with_label("hitl"), ticket.closed()
 
-    assert ("hitl" in labeled.labels, ticket.labels, type(labeled)) == (True, (), type(ticket))
+    assert ("hitl" in labeled.labels, ticket.labels, type(labeled)) == (
+        True,
+        (),
+        type(ticket),
+    )
     assert closed.state == IssueState.CLOSED and ticket.state == IssueState.OPEN

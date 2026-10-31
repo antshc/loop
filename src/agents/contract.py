@@ -11,7 +11,6 @@ from ..clis import AgentProfile
 from ..run import AgentRequest
 from .client import AgentClient
 
-
 type Json = None | bool | int | float | str | list[Json] | dict[str, Json]
 
 
@@ -62,13 +61,21 @@ class TypedAgent[Q: Message, R]:
     encode: Callable[[Q], str]
     decode: Callable[[Q, str], R]
 
-    def run(self, workspace: AgentSource, request: Q, *, session: str | None = None) -> R:
+    def run(
+        self, workspace: AgentSource, request: Q, *, session: str | None = None
+    ) -> R:
         """Runs the agent once in `workspace`; raises only AgentRunError or AgentReplyError."""
         prompt = self.encode(request)
         try:
             result = workspace.agent(self.profile).run(AgentRequest(prompt, session))
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exception:
-            raise AgentRunError(self.role, f"process failed: {exception}") from exception
+        except (
+            subprocess.CalledProcessError,
+            subprocess.TimeoutExpired,
+            OSError,
+        ) as exception:
+            raise AgentRunError(
+                self.role, f"process failed: {exception}"
+            ) from exception
         if result.exit_code:
             raise AgentRunError(self.role, f"exited with code {result.exit_code}")
         try:

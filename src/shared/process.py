@@ -18,13 +18,21 @@ class CommandError(subprocess.CalledProcessError):
         self.exit_code = returncode
 
     def __str__(self) -> str:
-        return f"command failed ({self.exit_code}): {self.command}\n{self.output}".rstrip()
+        return (
+            f"command failed ({self.exit_code}): {self.command}\n{self.output}".rstrip()
+        )
 
 
 class Runner(Protocol):
     """Runs one process and returns its stdout; raises `CommandError` on failure."""
 
-    def __call__(self, args: Sequence[str], *, cwd: Path | None = None, timeout_s: float | None = None) -> str: ...
+    def __call__(
+        self,
+        args: Sequence[str],
+        *,
+        cwd: Path | None = None,
+        timeout_s: float | None = None,
+    ) -> str: ...
 
 
 class CommandRunner:
@@ -33,17 +41,34 @@ class CommandRunner:
     def __init__(self, *, timeout_s: float | None = None) -> None:
         self._timeout_s = timeout_s
 
-    def __call__(self, args: Sequence[str], *, cwd: Path | None = None, timeout_s: float | None = None) -> str:
+    def __call__(
+        self,
+        args: Sequence[str],
+        *,
+        cwd: Path | None = None,
+        timeout_s: float | None = None,
+    ) -> str:
         label = " ".join(args)
         timeout = timeout_s if timeout_s is not None else self._timeout_s
         try:
-            completed = subprocess.run(list(args), cwd=cwd, capture_output=True, text=True, timeout=timeout, check=False)
+            completed = subprocess.run(
+                list(args),
+                cwd=cwd,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                check=False,
+            )
         except subprocess.TimeoutExpired as exception:
-            raise CommandError(label, None, f"timed out after {timeout}s") from exception
+            raise CommandError(
+                label, None, f"timed out after {timeout}s"
+            ) from exception
         except FileNotFoundError as exception:
             raise CommandError(label, None, str(exception)) from exception
         if completed.returncode != 0:
-            raise CommandError(label, completed.returncode, completed.stdout + completed.stderr)
+            raise CommandError(
+                label, completed.returncode, completed.stdout + completed.stderr
+            )
         return completed.stdout
 
 
@@ -52,19 +77,31 @@ GIT_TIMEOUT_S = 900.0
 
 
 def git_command(
-    args: Sequence[str], path: Path, *, env: Mapping[str, str] | None = None, timeout_s: float = GIT_TIMEOUT_S,
+    args: Sequence[str],
+    path: Path,
+    *,
+    env: Mapping[str, str] | None = None,
+    timeout_s: float = GIT_TIMEOUT_S,
 ) -> str:
     """Runs `git <args>` in `path` with `env` added to the environment and returns stdout, failing after `timeout_s`; the runtime's Git command."""
     label = f"git {' '.join(args)}"
     environment = {**os.environ, **env} if env else None
     try:
         completed = subprocess.run(
-            ["git", *args], cwd=path, capture_output=True, text=True, check=False, env=environment, timeout=timeout_s,
+            ["git", *args],
+            cwd=path,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=environment,
+            timeout=timeout_s,
         )
     except subprocess.TimeoutExpired as exception:
         raise CommandError(label, None, f"timed out after {timeout_s}s") from exception
     except FileNotFoundError as exception:
         raise CommandError(label, None, str(exception)) from exception
     if completed.returncode != 0:
-        raise CommandError(label, completed.returncode, completed.stdout + completed.stderr)
+        raise CommandError(
+            label, completed.returncode, completed.stdout + completed.stderr
+        )
     return completed.stdout

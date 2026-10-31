@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 
 from .issue import CloseReason, IssueState
 
-
 if TYPE_CHECKING:
     from .graph import BlockedByRelation, SpecGraphSnapshot
 
@@ -26,7 +25,10 @@ _UNSATISFYING_REASONS = frozenset({CloseReason.NOT_PLANNED, CloseReason.DUPLICAT
 
 def satisfied(relation: BlockedByRelation) -> bool:
     """The blocker was delivered: it is closed, and not as abandoned."""
-    return relation.state is IssueState.CLOSED and relation.close_reason not in _UNSATISFYING_REASONS
+    return (
+        relation.state is IssueState.CLOSED
+        and relation.close_reason not in _UNSATISFYING_REASONS
+    )
 
 
 class TicketReadinessPolicy:
@@ -34,11 +36,22 @@ class TicketReadinessPolicy:
 
     def evaluate(self, graph: SpecGraphSnapshot) -> dict[int, TicketReadiness]:
         """The readiness of every Ticket of `graph`, by Ticket number; whether a Ticket is actionable is a separate question."""
-        return {ticket.number: self._readiness(graph, ticket.number) for ticket in graph.tickets}
+        return {
+            ticket.number: self._readiness(graph, ticket.number)
+            for ticket in graph.tickets
+        }
 
     @staticmethod
     def _readiness(graph: SpecGraphSnapshot, number: int) -> TicketReadiness:
         if number in graph.unread_dependencies:
             return TicketReadiness.UNKNOWN
-        blockers = [relation for relation in graph.blocked_by if relation.ticket.number == number]
-        return TicketReadiness.READY if all(satisfied(relation) for relation in blockers) else TicketReadiness.BLOCKED
+        blockers = [
+            relation
+            for relation in graph.blocked_by
+            if relation.ticket.number == number
+        ]
+        return (
+            TicketReadiness.READY
+            if all(satisfied(relation) for relation in blockers)
+            else TicketReadiness.BLOCKED
+        )

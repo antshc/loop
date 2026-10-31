@@ -11,7 +11,6 @@ from enum import StrEnum
 from typing import Any
 
 from ..builder import AgentWorkspace
-
 from .event import All, DefinitionError, Event, History
 
 
@@ -75,24 +74,37 @@ def closed_sum(annotation: Any) -> frozenset[type[Event]] | None:
 def input_fields(owner: str, input_type: type) -> tuple[InputField, ...]:
     """The classified fields of a frozen dataclass input; raises DefinitionError naming `owner` for an unusable input or field."""
     if not (isinstance(input_type, type) and dataclasses.is_dataclass(input_type)):
-        raise DefinitionError(f"{owner}: input {input_type!r} must be a frozen dataclass")
+        raise DefinitionError(
+            f"{owner}: input {input_type!r} must be a frozen dataclass"
+        )
     if not input_type.__dataclass_params__.frozen:  # type: ignore[attr-defined]
-        raise DefinitionError(f"{owner}: input {input_type.__name__} must be a frozen dataclass")
+        raise DefinitionError(
+            f"{owner}: input {input_type.__name__} must be a frozen dataclass"
+        )
     try:
         hints = typing.get_type_hints(input_type)
     except NameError as exception:
-        raise DefinitionError(f"{owner}: input {input_type.__name__} has an unresolvable annotation ({exception})") from exception
-    return tuple(_classify(owner, field.name, hints[field.name]) for field in dataclasses.fields(input_type))
+        raise DefinitionError(
+            f"{owner}: input {input_type.__name__} has an unresolvable annotation ({exception})"
+        ) from exception
+    return tuple(
+        _classify(owner, field.name, hints[field.name])
+        for field in dataclasses.fields(input_type)
+    )
 
 
 def _classify(owner: str, name: str, annotation: Any) -> InputField:
     """The field kind for one annotation."""
     origin = typing.get_origin(annotation)
     if annotation in (All, History):
-        raise DefinitionError(f"{owner} field '{name}': {annotation.__name__} needs an Event type argument")
+        raise DefinitionError(
+            f"{owner} field '{name}': {annotation.__name__} needs an Event type argument"
+        )
     if origin in (All, History):
         return _marker_field(owner, name, annotation)
-    if origin in (typing.Union, types.UnionType) and type(None) in typing.get_args(annotation):
+    if origin in (typing.Union, types.UnionType) and type(None) in typing.get_args(
+        annotation
+    ):
         return _optional_field(owner, name, annotation)
     shape = event_shape(annotation)
     if shape is not None:
@@ -111,21 +123,31 @@ def _marker_field(owner: str, name: str, annotation: Any) -> InputField:
     """An `All[T]` or `History[T]` field."""
     (argument,) = typing.get_args(annotation)
     if not is_event_class(argument):
-        raise DefinitionError(f"{owner} field '{name}': {typing.get_origin(annotation).__name__} reads Events, not {argument!r}")
+        raise DefinitionError(
+            f"{owner} field '{name}': {typing.get_origin(annotation).__name__} reads Events, not {argument!r}"
+        )
     kind = FieldKind.ALL if typing.get_origin(annotation) is All else FieldKind.HISTORY
     return InputField(name, kind, frozenset({argument}), annotation)
 
 
 def _optional_field(owner: str, name: str, annotation: Any) -> InputField:
     """A `T | None` field."""
-    rest = [argument for argument in typing.get_args(annotation) if argument is not type(None)]
+    rest = [
+        argument
+        for argument in typing.get_args(annotation)
+        if argument is not type(None)
+    ]
     shapes = [event_shape(argument) for argument in rest]
     if not shapes or any(shape is None for shape in shapes):
-        raise DefinitionError(f"{owner} field '{name}': only an Event can be optional, not {annotation!r}")
+        raise DefinitionError(
+            f"{owner} field '{name}': only an Event can be optional, not {annotation!r}"
+        )
     return InputField(name, FieldKind.OPTIONAL, frozenset().union(*shapes), annotation)
 
 
-def place_plain(field: InputField, context: type | None, items: Sequence[type]) -> FieldKind:
+def place_plain(
+    field: InputField, context: type | None, items: Sequence[type]
+) -> FieldKind:
     """Where a plain field resolves: the nearest enclosing loop item, else the Workflow context, else a service."""
     for item in reversed(items):
         if _is_same_or_base(field.type_, item):
@@ -153,6 +175,13 @@ def merge(paths: Sequence[Sequence[Fact]]) -> tuple[Fact, ...]:
             merged.setdefault((fact.shape, fact.producer), True)
     for (shape, producer), _ in list(merged.items()):
         merged[shape, producer] = all(
-            any(fact.shape == shape and fact.producer == producer and fact.definite for fact in path) for path in paths
+            any(
+                fact.shape == shape and fact.producer == producer and fact.definite
+                for fact in path
+            )
+            for path in paths
         )
-    return tuple(Fact(shape, producer, definite) for (shape, producer), definite in merged.items())
+    return tuple(
+        Fact(shape, producer, definite)
+        for (shape, producer), definite in merged.items()
+    )

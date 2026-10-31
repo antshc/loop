@@ -56,7 +56,13 @@ class Comment:
 def comment_from_rest(issue: IssueRef, node: Mapping[str, Any]) -> Comment:
     """The Comment a REST `issues/{n}/comments` payload describes, kept as its `payload`; a deleted author and a null body are tolerated."""
     author = (node.get("user") or {}).get("login", "ghost")
-    return Comment(CommentRef(issue, node["id"]), author, node.get("body") or "", node["created_at"], node)
+    return Comment(
+        CommentRef(issue, node["id"]),
+        author,
+        node.get("body") or "",
+        node["created_at"],
+        node,
+    )
 
 
 @dataclass(frozen=True)
@@ -88,7 +94,11 @@ class Issue:
 
     def with_label(self, label: str) -> Issue:
         """This snapshot carrying `label`."""
-        return self if label in self.labels else replace(self, labels=(*self.labels, label))
+        return (
+            self
+            if label in self.labels
+            else replace(self, labels=(*self.labels, label))
+        )
 
     def closed(self, reason: CloseReason | None = None) -> Issue:
         """This snapshot closed."""

@@ -21,7 +21,6 @@ from loop.shared.github.pull_requests.model import (
     ReviewVerdict,
 )
 
-
 REPOSITORY = RepositoryId("owner", "repo")
 
 
@@ -47,12 +46,19 @@ def build_issue(
     )
 
 
-def build_spec(number: int = 1, title: str = "Add login page", labels: tuple[str, ...] = ("spec",)) -> Spec:
+def build_spec(
+    number: int = 1, title: str = "Add login page", labels: tuple[str, ...] = ("spec",)
+) -> Spec:
     """A Spec carrying `labels`."""
     return Spec.of(build_issue(number, title, labels=labels))
 
 
-def build_ticket(number: int = 10, title: str = "Add login form", labels: tuple[str, ...] = (), state: IssueState = IssueState.OPEN) -> Ticket:
+def build_ticket(
+    number: int = 10,
+    title: str = "Add login form",
+    labels: tuple[str, ...] = (),
+    state: IssueState = IssueState.OPEN,
+) -> Ticket:
     """A Ticket in `state` carrying `labels`."""
     return Ticket.of(build_issue(number, title, labels=labels, state=state))
 
@@ -64,7 +70,9 @@ def build_blocker(
     close_reason: CloseReason | None = None,
 ) -> BlockedByRelation:
     """The edge saying Ticket `ticket` waits for issue `blocker`, which is in `state`."""
-    return BlockedByRelation(IssueRef(REPOSITORY, ticket), IssueRef(REPOSITORY, blocker), state, close_reason)
+    return BlockedByRelation(
+        IssueRef(REPOSITORY, ticket), IssueRef(REPOSITORY, blocker), state, close_reason
+    )
 
 
 def build_graph(
@@ -117,10 +125,14 @@ def build_pull_request_snapshot(
         mergeability=mergeability,
         merge_state=merge_state,
     )
-    return PullRequestSnapshot(pull, threads, reviews, (), checks, ReviewDecision(review_decision))
+    return PullRequestSnapshot(
+        pull, threads, reviews, (), checks, ReviewDecision(review_decision)
+    )
 
 
-def build_review(id: int, reviewer: str, verdict: ReviewVerdict, *, commit: str = "head") -> PullRequestReview:
+def build_review(
+    id: int, reviewer: str, verdict: ReviewVerdict, *, commit: str = "head"
+) -> PullRequestReview:
     """A review of the pull request."""
     return PullRequestReview(id, reviewer, verdict, commit, "", "2026-03-01T12:00:00Z")
 

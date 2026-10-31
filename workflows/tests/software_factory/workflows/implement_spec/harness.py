@@ -8,18 +8,34 @@ import re
 from pathlib import Path
 from typing import Any
 
-from loop import AgentRequest, FakeCliRunner, FakeReply, GitCli, GitRuntime, RunContext, fake_agent
+from loop import (
+    AgentRequest,
+    FakeCliRunner,
+    FakeReply,
+    GitCli,
+    GitRuntime,
+    RecordingSpans,
+    RunContext,
+    Services,
+    fake_agent,
+)
 
-from loop import RecordingSpans, Services
-from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
 from tests.runtime.harness import GIT, command
 from tests.shared.fakes import issue
-from workflows.tests.software_factory.stages.support import BRANCH, LABELS, StageRig, envelope
+from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
 from workflows.software_factory.workflows.implement_spec.__main__ import Runtime, main
 from workflows.software_factory.workflows.implement_spec.dry import commit_in_worktree
 from workflows.software_factory.workflows.implement_spec.settings import Targets
+from workflows.tests.software_factory.stages.support import (
+    BRANCH,
+    LABELS,
+    StageRig,
+    envelope,
+)
 
-TICKET_PROMPT = re.compile(r"subject `ccode\((?P<identifier>[^)|]+\|(?P<number>\d+))\): ")
+TICKET_PROMPT = re.compile(
+    r"subject `ccode\((?P<identifier>[^)|]+\|(?P<number>\d+))\): "
+)
 
 REVIEW_AXES = ("bugs", "quality", "smells", "initiative")
 
@@ -49,28 +65,48 @@ class Agents:
         self.stop = stop
         self.actions: dict[int, list[str]] = {}
         self.planned: list[dict[str, Any]] | None = None
-        self.prompts: dict[str, list[str]] = {"developer": [], "planner": [], "chore": [], "reviewer": []}
+        self.prompts: dict[str, list[str]] = {
+            "developer": [],
+            "planner": [],
+            "chore": [],
+            "reviewer": [],
+        }
         self.attempts: dict[int, int] = {}
         self.chore_edit: str | None = None
 
     def developer_runs(self, ticket: int | None = None) -> int:
         """How many developer runs there were, in total or for one Ticket."""
-        return len(self.prompts["developer"]) if ticket is None else self.attempts.get(ticket, 0)
+        return (
+            len(self.prompts["developer"])
+            if ticket is None
+            else self.attempts.get(ticket, 0)
+        )
 
     def __call__(self, request: AgentRequest, context: RunContext) -> FakeReply:
         match = TICKET_PROMPT.search(request.prompt)
         if match is not None:
             self.prompts["developer"].append(request.prompt)
-            return self._developer(match["identifier"], int(match["number"]), context.agent.cwd)
+            return self._developer(
+                match["identifier"], int(match["number"]), context.agent.cwd
+            )
         if request.prompt.startswith("# Plan"):
             self.prompts["planner"].append(request.prompt)
-            return _reply("failed", reason="needs a product decision") if self.planned is None else _reply("completed", tickets=self.planned)
+            return (
+                _reply("failed", reason="needs a product decision")
+                if self.planned is None
+                else _reply("completed", tickets=self.planned)
+            )
         if request.prompt.startswith("# TASK"):
             self.prompts["chore"].append(request.prompt)
             if self.chore_edit is None:
                 return _reply("completed", summary="No cleanup needed", out_of_scope=[])
             (context.agent.cwd / "chore.txt").write_text(self.chore_edit)
-            return _reply("completed", summary="Tidied", out_of_scope=[], commit_message="Tidy the change set")
+            return _reply(
+                "completed",
+                summary="Tidied",
+                out_of_scope=[],
+                commit_message="Tidy the change set",
+            )
         self.prompts["reviewer"].append(request.prompt)
         head = re.search(r"head is commit\s+`([^`]+)`", request.prompt)
         axes = [{"name": name, "outcome": "completed"} for name in REVIEW_AXES]
@@ -84,16 +120,28 @@ class Agents:
         if action == "die":
             raise Died(f"died while implementing #{ticket}")
         if action == "fail":
-            return FakeReply(envelope("failed", identifier, reason=f"tests for #{ticket} failed"))
+            return FakeReply(
+                envelope("failed", identifier, reason=f"tests for #{ticket} failed")
+            )
         if action == "nothing":
             sha = command(("rev-parse", "HEAD"), cwd).strip()
         else:
             sha = commit_in_worktree(cwd, f"ccode({identifier}): Ticket {ticket}")
-        return FakeReply(envelope("completed", identifier, commit=sha, summary=f"Did #{ticket}.", verification="pytest passed"))
+        return FakeReply(
+            envelope(
+                "completed",
+                identifier,
+                commit=sha,
+                summary=f"Did #{ticket}.",
+                verification="pytest passed",
+            )
+        )
 
 
 def _reply(status: str, **result: Any) -> FakeReply:
-    return FakeReply(f"working...\n{json.dumps({'status': status, 'result': result})}\n")
+    return FakeReply(
+        f"working...\n{json.dumps({'status': status, 'result': result})}\n"
+    )
 
 
 class ImplementSpecHarness:
@@ -107,27 +155,41 @@ class ImplementSpecHarness:
         tickets: list[dict] | None = None,
         blocked_by: dict[int, list[int]] | None = None,
     ) -> None:
-        self.rig = StageRig(tmp_path, labels=labels, tickets=tickets, blocked_by=blocked_by)
+        self.rig = StageRig(
+            tmp_path, labels=labels, tickets=tickets, blocked_by=blocked_by
+        )
         self.log_dir = tmp_path / "logs"
         self.agents = Agents(StopAfter())
         runner = FakeCliRunner(self.agents, speed=0.0)
-        launcher = AgentLauncher(lambda: fake_agent(runner, GitRuntime(GitCli())), None, (runner,))
+        launcher = AgentLauncher(
+            lambda: fake_agent(runner, GitRuntime(GitCli())), None, (runner,)
+        )
         self.spans = RecordingSpans()
         self.services = Services(
-            self.rig.issues, self.rig.git, self.rig.github, GIT, launcher, Targets((self.rig.target,)),
+            self.rig.issues,
+            self.rig.git,
+            self.rig.github,
+            GIT,
+            launcher,
+            Targets((self.rig.target,)),
             Runtime(self.rig.ledger, self.spans, self.agents.stop),
         )
 
     def run(self, *argv: str) -> int:
         """Runs the entry point over the rig, as a person would, and returns its exit code; the process runs in the rig's checkout, never in this repository's."""
         with contextlib.chdir(self.rig.repo.path):
-            return main(["--log-dir", str(self.log_dir), "--no-otel", *argv], services=self.services)
+            return main(
+                ["--log-dir", str(self.log_dir), "--no-otel", *argv],
+                services=self.services,
+            )
 
     def restart(self) -> None:
         """Starts the next process: a fresh interrupt signal and fresh spans over the same ledger and tracker."""
         self.agents.stop = StopAfter()
         self.spans = RecordingSpans()
-        self.services = self.services.replace(Runtime(self.rig.ledger, self.spans, self.agents.stop))
+        self.services = self.services.replace(
+            Runtime(self.rig.ledger, self.spans, self.agents.stop)
+        )
 
     def labels(self, number: int) -> set[str]:
         """The labels the tracker holds on an issue."""
@@ -143,7 +205,10 @@ class ImplementSpecHarness:
 
     def outcomes(self, stage_id: str) -> list[str]:
         """The pass, fail or hold of every attempt of a Stage in the last run, in order."""
-        return [str(span.attributes["factory.stage.outcome"]) for span in self.spans.attempts(stage_id)]
+        return [
+            str(span.attributes["factory.stage.outcome"])
+            for span in self.spans.attempts(stage_id)
+        ]
 
     def opened_worktree(self) -> bool:
         """Whether a worktree was ever created under the target's worktrees folder."""
@@ -155,4 +220,6 @@ class ImplementSpecHarness:
 
     def branch_subjects(self) -> list[str]:
         """The subjects of the feature branch's commits since main, oldest first."""
-        return command(("log", "--reverse", "--format=%s", f"main..{BRANCH}"), self.rig.repo.path).splitlines()
+        return command(
+            ("log", "--reverse", "--format=%s", f"main..{BRANCH}"), self.rig.repo.path
+        ).splitlines()

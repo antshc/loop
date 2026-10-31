@@ -38,6 +38,7 @@ Consult these before searching the code:
 
 - Runtime: Python 3.14+ for the library and example Workflows; preserve the minimum declared in `pyproject.toml`.
 - Install: `python -m pip install -e ".[dev]" --config-settings editable_mode=strict` from the reporoot.
+- Style: run `python -m ruff check .` and `python -m ruff format --check .` from the reporoot before completing Python changes; both also run in the pull request gate.
 - Test: `python -m pytest` from the reporoot (configured in `pyproject.toml`, `testpaths = ["tests", "workflows/tests"]`); it includes the import-linter architecture checks (`tests/test_architecture.py`).
 - For compatibility changes, follow [Test Strategy: Python compatibility](../docs/concepts/ops-test-strategy.md#python-compatibility); a newer local interpreter alone does not verify the minimum.
 

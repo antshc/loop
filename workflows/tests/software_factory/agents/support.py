@@ -7,9 +7,7 @@ import subprocess
 from dataclasses import dataclass, field
 from typing import Any
 
-from loop import AgentProfile, AgentRequest, fake_agent
-
-from loop import TypedAgent
+from loop import AgentProfile, AgentRequest, TypedAgent, fake_agent
 
 
 @dataclass
@@ -30,13 +28,21 @@ class ScriptedRunner:
         return profile.cli.parse(self.output, turn, self.exit_code)
 
 
-def run_agent(agent: TypedAgent, request: Any, runner: ScriptedRunner, *, session: str | None = None) -> Any:
+def run_agent(
+    agent: TypedAgent,
+    request: Any,
+    runner: ScriptedRunner,
+    *,
+    session: str | None = None,
+) -> Any:
     """Runs `agent` once against `runner` in a fake workspace."""
     with fake_agent(runner).open() as workspace:
         return agent.run(workspace, request, session=session)
 
 
-def envelope(status: str = "completed", identifier: str | None = None, **result: Any) -> str:
+def envelope(
+    status: str = "completed", identifier: str | None = None, **result: Any
+) -> str:
     """Agent output ending in a status envelope."""
     body: dict[str, Any] = {"status": status, "result": result}
     if identifier is not None:

@@ -7,11 +7,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from loop import AgentWorkspace
+from loop import AgentWorkspace, Evidence, Fail, Hold, Pass, Stage, Verdict, Verify
 
 from workflows.software_factory.events.checks import ChecksPassed
 from workflows.software_factory.events.feedback import FeedbackBatch
-from loop import Evidence, Fail, Hold, Pass, Stage, Verdict, Verify
 from workflows.software_factory.infrastructure.checks import CheckCommand, CheckRunner
 
 
@@ -21,7 +20,12 @@ class ChecksInput:
     batch: FeedbackBatch
 
 
-def as_verify(command: Sequence[str], *, timeout_s: float | None = None, run: CheckRunner | None = None) -> Verify:
+def as_verify(
+    command: Sequence[str],
+    *,
+    timeout_s: float | None = None,
+    run: CheckRunner | None = None,
+) -> Verify:
     """The check `command` as a Verify callable: it runs in the given worktree, and a failure carries its output."""
     check = CheckCommand(command, run=run, timeout_s=timeout_s)
 
@@ -41,7 +45,9 @@ def run_checks(*, verify: Verify) -> Stage[ChecksInput, Fail[Any] | None, Checks
     )
 
 
-def _checked(i: ChecksInput, failed: Fail[Any] | None, _: Evidence) -> Verdict[ChecksPassed]:
+def _checked(
+    i: ChecksInput, failed: Fail[Any] | None, _: Evidence
+) -> Verdict[ChecksPassed]:
     if failed is None:
         return Pass(ChecksPassed())
     if i.batch.ci_failing:

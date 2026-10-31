@@ -17,7 +17,9 @@ def freeze_env(env: Mapping[str, str] | None) -> Mapping[str, str] | None:
         return None
     for key, value in env.items():
         if not isinstance(key, str) or not key or "=" in key or "\0" in key:
-            raise ValueError("environment keys must be nonempty strings without '=' or NUL")
+            raise ValueError(
+                "environment keys must be nonempty strings without '=' or NUL"
+            )
         if not isinstance(value, str) or "\0" in value:
             raise ValueError("environment values must be strings without NUL")
     return MappingProxyType(dict(env))

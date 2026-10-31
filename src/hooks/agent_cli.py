@@ -35,7 +35,9 @@ class AgentCliHook:
 
     def __post_init__(self) -> None:
         if not hasattr(type(self), "point"):
-            raise TypeError(f"{type(self).__name__} fixes no hook point; use a point subclass")
+            raise TypeError(
+                f"{type(self).__name__} fixes no hook point; use a point subclass"
+            )
         if not self.command:
             raise ValueError("hook command must not be empty")
         if self.timeout_sec <= 0:
@@ -95,13 +97,33 @@ class AgentCliHookWiring:
 _SHIM = Path(__file__).with_name("shim.py").resolve()
 
 
-def ordered(hooks: tuple[AgentCliHook, ...]) -> list[tuple[AgentCliHookPoint, AgentCliHook]]:
+def ordered(
+    hooks: tuple[AgentCliHook, ...],
+) -> list[tuple[AgentCliHookPoint, AgentCliHook]]:
     """(point, hook) pairs in point-enum order, then declaration order."""
-    return [(point, hook) for point in AgentCliHookPoint for hook in hooks if hook.point is point]
+    return [
+        (point, hook)
+        for point in AgentCliHookPoint
+        for hook in hooks
+        if hook.point is point
+    ]
 
 
-def shim_command(cli: str, point: AgentCliHookPoint, turn: Turn, hook: AgentCliHook) -> str:
+def shim_command(
+    cli: str, point: AgentCliHookPoint, turn: Turn, hook: AgentCliHook
+) -> str:
     """Shell command that runs the shim, which in turn runs the user's `hook.command`."""
     return shlex.join(
-        [sys.executable, str(_SHIM), "--cli", cli, "--point", point.value, "--session", turn.name.value, "--", hook.command]
+        [
+            sys.executable,
+            str(_SHIM),
+            "--cli",
+            cli,
+            "--point",
+            point.value,
+            "--session",
+            turn.name.value,
+            "--",
+            hook.command,
+        ]
     )

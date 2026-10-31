@@ -6,9 +6,16 @@ from typing import Protocol
 
 from ..clis import AgentProfile, CliRunner
 from ..run import AgentContext, AgentRequest, AgentResult, RunContext
-from ..run.launch import apply_start_mode
 from ..run.instructions import resolve_instructions
-from ..sessions import Resume, SessionCliMismatch, SessionName, SessionStore, Start, Turn
+from ..run.launch import apply_start_mode
+from ..sessions import (
+    Resume,
+    SessionCliMismatch,
+    SessionName,
+    SessionStore,
+    Start,
+    Turn,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +23,9 @@ logger = logging.getLogger(__name__)
 class AgentClient(Protocol):
     """Stable public interface, regardless of enabled wrappers."""
 
-    def run(self, request: AgentRequest, context: AgentContext | None = None) -> AgentResult: ...
+    def run(
+        self, request: AgentRequest, context: AgentContext | None = None
+    ) -> AgentResult: ...
 
     def close(self) -> None: ...
 
@@ -42,19 +51,32 @@ class CliAgentClient:
         self._runner = runner
         self._profile = profile
         defaults = defaults or RunContext()
-        self._defaults = replace(defaults, agent=profile.apply_context(defaults.agent, workspace=workspace))
+        self._defaults = replace(
+            defaults, agent=profile.apply_context(defaults.agent, workspace=workspace)
+        )
         self._store = store
         self._session = session or (SessionName.new() if store is not None else None)
 
-    def run(self, request: AgentRequest, context: AgentContext | None = None) -> AgentResult:
+    def run(
+        self, request: AgentRequest, context: AgentContext | None = None
+    ) -> AgentResult:
         if request.name is not None and self._store is not None:
             raise ValueError("request name requires a stateless client")
-        run_context = self._defaults if context is None else replace(self._defaults, agent=context)
+        run_context = (
+            self._defaults
+            if context is None
+            else replace(self._defaults, agent=context)
+        )
         if self._instructions is not None:
-            request = replace(request, prompt=f"## Agent instructions\n{self._instructions}\n\n## Task\n{request.prompt}")
+            request = replace(
+                request,
+                prompt=f"## Agent instructions\n{self._instructions}\n\n## Task\n{request.prompt}",
+            )
         agent, request = apply_start_mode(run_context.agent, request)
         if agent is not run_context.agent:
-            logger.info("harness start: cwd=%s worktree=%s", agent.cwd, run_context.agent.cwd)
+            logger.info(
+                "harness start: cwd=%s worktree=%s", agent.cwd, run_context.agent.cwd
+            )
             run_context = replace(run_context, agent=agent)
         turn = self._turn()
         outcome = self._runner.run(self._profile, request, turn, run_context)
@@ -69,7 +91,9 @@ class CliAgentClient:
         handle = self._store.get(self._session, cli.name)
         if handle is not None:
             if handle.cli != cli.name:
-                raise SessionCliMismatch(f"handle for {handle.cli} found under {cli.name}")
+                raise SessionCliMismatch(
+                    f"handle for {handle.cli} found under {cli.name}"
+                )
             logger.info("resuming session %s on %s", self._session.value, cli.name)
             logger.debug("native handle: %s", handle)
             return Resume(self._session, handle)

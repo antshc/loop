@@ -11,11 +11,26 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from loop import DEFAULT, AgentContext, AgentRequest, AgentResult, AgentWorkspace, RunContext, SessionName
-
-from loop import Declined, Message, TypedAgent
 from loop import (
-    Ledger, RecordingSpans, RunResult, Services, StopSignal, Workflow, WorkspaceOpener, WorktreeGit, run,
+    DEFAULT,
+    AgentContext,
+    AgentRequest,
+    AgentResult,
+    AgentWorkspace,
+    Declined,
+    Ledger,
+    Message,
+    RecordingSpans,
+    RunContext,
+    RunResult,
+    Services,
+    SessionName,
+    StopSignal,
+    TypedAgent,
+    Workflow,
+    WorkspaceOpener,
+    WorktreeGit,
+    run,
 )
 
 from .support import NoInput
@@ -44,16 +59,31 @@ class WorkCtx:
 
 
 def _decode(request: Ask, output: str) -> Done | Declined:
-    return Declined(output.removeprefix("decline:").strip()) if output.startswith("decline:") else Done(output.strip())
+    return (
+        Declined(output.removeprefix("decline:").strip())
+        if output.startswith("decline:")
+        else Done(output.strip())
+    )
 
 
-TESTER: TypedAgent[Ask, Done | Declined] = TypedAgent("tester", DEFAULT, lambda request: request.text, _decode)
+TESTER: TypedAgent[Ask, Done | Declined] = TypedAgent(
+    "tester", DEFAULT, lambda request: request.text, _decode
+)
 
 
-def command(args: Sequence[str], path: Path, *, env: Mapping[str, str] | None = None) -> str:
+def command(
+    args: Sequence[str], path: Path, *, env: Mapping[str, str] | None = None
+) -> str:
     """Runs `git <args>` in `path` and returns stdout."""
     environment = {**os.environ, **env} if env else None
-    return subprocess.run(["git", *args], cwd=path, check=True, capture_output=True, text=True, env=environment).stdout
+    return subprocess.run(
+        ["git", *args],
+        cwd=path,
+        check=True,
+        capture_output=True,
+        text=True,
+        env=environment,
+    ).stdout
 
 
 GIT = WorktreeGit(command)
@@ -66,7 +96,11 @@ class Repo:
         self.path = path
         path.mkdir(parents=True)
         command(("init", "-q", "-b", "main"), path)
-        for key, value in (("user.name", "Tester"), ("user.email", "tester@example.com"), ("commit.gpgsign", "false")):
+        for key, value in (
+            ("user.name", "Tester"),
+            ("user.email", "tester@example.com"),
+            ("commit.gpgsign", "false"),
+        ):
             command(("config", key, value), path)
         self.write("README.md", "start\n")
         self.commit("initial")
@@ -118,18 +152,22 @@ class _Client:
 
 def committing(subject: str, name: str = "work.txt") -> Callable[[Repo], str]:
     """An agent action that writes a file and commits it with `subject`."""
+
     def act(repo: Repo) -> str:
         repo.write(name, f"{subject}\n")
         repo.commit(subject)
         return "done"
+
     return act
 
 
 def editing(name: str = "work.txt") -> Callable[[Repo], str]:
     """An agent action that edits the working tree and leaves it uncommitted."""
+
     def act(repo: Repo) -> str:
         repo.write(name, "edited\n")
         return "done"
+
     return act
 
 
@@ -140,9 +178,11 @@ def idle() -> Callable[[Repo], str]:
 
 def declining(reason: str = "cannot") -> Callable[[Repo], str]:
     """An agent action that edits the working tree and then declines."""
+
     def act(repo: Repo) -> str:
         repo.write("work.txt", "half\n")
         return f"decline: {reason}"
+
     return act
 
 
@@ -162,16 +202,29 @@ class Rig:
 
     def checkout(self) -> WorkspaceOpener[Any]:
         """A workspace opener over the repository, with the scripted agent in it."""
-        workspace = AgentWorkspace(self.repo.path, lambda *_: _Client(self.script), RunContext(AgentContext()), None)
+        workspace = AgentWorkspace(
+            self.repo.path,
+            lambda *_: _Client(self.script),
+            RunContext(AgentContext()),
+            None,
+        )
         return WorkspaceOpener("checkout", NoInput, lambda _: nullcontext(workspace))
 
     def run(
-        self, workflow: Workflow[Any], *services: object, stop: StopSignal | None = None, context: WorkCtx | None = None,
+        self,
+        workflow: Workflow[Any],
+        *services: object,
+        stop: StopSignal | None = None,
+        context: WorkCtx | None = None,
         git: WorktreeGit = GIT,
     ) -> RunResult:
         """Runs the Workflow with Git and the given services."""
         return run(
-            workflow, context or WorkCtx(), services=Services(git, *services), ledger=self.ledger, spans=self.spans,
+            workflow,
+            context or WorkCtx(),
+            services=Services(git, *services),
+            ledger=self.ledger,
+            spans=self.spans,
             stop=stop,
         )
 

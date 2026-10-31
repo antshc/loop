@@ -46,7 +46,9 @@ class FakeGhCli:
         self.pulls = pulls
         self._created: dict[int, dict] = {}
         # Native blocked-by edges: issue number to the numbers of the issues that block it.
-        self._blocked_by: dict[int, list[int]] = copy.deepcopy(blocked_by) if blocked_by is not None else {}
+        self._blocked_by: dict[int, list[int]] = (
+            copy.deepcopy(blocked_by) if blocked_by is not None else {}
+        )
         self._failures: list[list] = []
         # Writes mutate the stored issues, so a caller's shared fixtures must not be aliased.
         self._tickets = (
@@ -71,13 +73,17 @@ class FakeGhCli:
         )
         self._prs = prs if prs is not None else [_pr(10, "feature/login")]
 
-    def fail_on(self, *prefix: str, after: int = 0, output: str = "scheduled failure") -> None:
+    def fail_on(
+        self, *prefix: str, after: int = 0, output: str = "scheduled failure"
+    ) -> None:
         """Makes the call after `after` earlier matches of `prefix` exit non-zero with `output`; it is recorded, not applied."""
         self._failures.append([prefix, after, output])
 
     def deny_on(self, *prefix: str) -> None:
         """Makes the next call starting with `prefix` fail the way GitHub refuses a read it may not make."""
-        self.fail_on(*prefix, output="gh: Resource not accessible by integration (HTTP 403)")
+        self.fail_on(
+            *prefix, output="gh: Resource not accessible by integration (HTTP 403)"
+        )
 
     def blockers_of(self, number: int) -> list[int]:
         """The numbers of the issues that block `number`, in the order the edges were added."""
@@ -98,13 +104,25 @@ class FakeGhCli:
 
     def posted_comments(self) -> list[tuple[int, str]]:
         """The issue number and body of every Comment posted, in order."""
-        posts = [call for call in self.calls if call[:3] == ("api", "--method", "POST") and call[3].endswith("/comments")]
-        return [(int(call[3].split("/")[-2]), str(_field(call, "body"))) for call in posts]
+        posts = [
+            call
+            for call in self.calls
+            if call[:3] == ("api", "--method", "POST") and call[3].endswith("/comments")
+        ]
+        return [
+            (int(call[3].split("/")[-2]), str(_field(call, "body"))) for call in posts
+        ]
 
     def created_issues(self) -> list[tuple[str, str]]:
         """The title and body of every issue created, in order."""
-        posts = [call for call in self.calls if call[:3] == ("api", "--method", "POST") and call[3].endswith("/issues")]
-        return [(str(_field(call, "title")), str(_field(call, "body"))) for call in posts]
+        posts = [
+            call
+            for call in self.calls
+            if call[:3] == ("api", "--method", "POST") and call[3].endswith("/issues")
+        ]
+        return [
+            (str(_field(call, "title")), str(_field(call, "body"))) for call in posts
+        ]
 
     def __call__(self, args: tuple[str, ...]) -> str:
         self.calls.append(args)
@@ -115,7 +133,12 @@ class FakeGhCli:
         if args[:2] == ("pr", "list"):
             return self._pr_list(args)
         if args[:2] == ("pr", "create"):
-            self._prs.append({**_pr(99, args[args.index("--head") + 1]), "body": args[args.index("--body") + 1]})
+            self._prs.append(
+                {
+                    **_pr(99, args[args.index("--head") + 1]),
+                    "body": args[args.index("--body") + 1],
+                }
+            )
             return "https://github.com/owner/repo/pull/99\n"
         if args[:2] == ("pr", "ready"):
             self._mark_ready(args[2])
@@ -133,7 +156,9 @@ class FakeGhCli:
         if args and args[0] == "issue":
             return ""
         if args and args[0] == "api":
-            match = next((_ISSUES.match(arg) for arg in args[1:] if _ISSUES.match(arg)), None)
+            match = next(
+                (_ISSUES.match(arg) for arg in args[1:] if _ISSUES.match(arg)), None
+            )
             if match is not None:
                 return self._issues_api(args, match["rest"])
         return "{}"
@@ -158,31 +183,48 @@ class FakeGhCli:
 
     def _collection(self, path: str, query: dict[str, list[str]]) -> list[dict]:
         if not path:
-            states, labels = query.get("state", ["open"])[0], query.get("labels", [""])[0]
+            states, labels = (
+                query.get("state", ["open"])[0],
+                query.get("labels", [""])[0],
+            )
             return [
                 self._payload(node)
                 for node in self._issues()
-                if states in ("all", node["state"]) and (not labels or labels in _label_names(node))
+                if states in ("all", node["state"])
+                and (not labels or labels in _label_names(node))
             ]
         number, _, kind = path.lstrip("/").partition("/")
         node = self._node(int(number))
         if kind == "sub_issues":
-            return [self._payload(child) for child in self._tickets.get(node["number"], [])]
+            return [
+                self._payload(child) for child in self._tickets.get(node["number"], [])
+            ]
         if kind == "labels":
             return list(node["labels"])
         if kind == "dependencies/blocked_by":
-            return [self._payload(self._node(blocker)) for blocker in self._blocked_by.get(node["number"], [])]
+            return [
+                self._payload(self._node(blocker))
+                for blocker in self._blocked_by.get(node["number"], [])
+            ]
         return list(node["comment_list"])
 
     def _payload(self, node: dict) -> dict:
         """The REST payload of a stored issue, with the dependency counts GitHub reports beside it."""
-        edges = [self._node(number) for number in self._blocked_by.get(node["number"], [])]
-        summary = {"blocked_by": sum(edge["state"] == "open" for edge in edges), "total_blocked_by": len(edges)}
+        edges = [
+            self._node(number) for number in self._blocked_by.get(node["number"], [])
+        ]
+        summary = {
+            "blocked_by": sum(edge["state"] == "open" for edge in edges),
+            "total_blocked_by": len(edges),
+        }
         return {**_rest(node), "issue_dependencies_summary": summary}
 
     def _paged(self, items: list[dict]) -> str:
         size = self.page_size
-        return json.dumps([items[start : start + size] for start in range(0, len(items), size)] or [[]])
+        return json.dumps(
+            [items[start : start + size] for start in range(0, len(items), size)]
+            or [[]]
+        )
 
     def _post(self, args: tuple[str, ...], path: str) -> str:
         if not path:
@@ -192,7 +234,9 @@ class FakeGhCli:
         if kind == "comments":
             return json.dumps(self._add_comment(node, _field(args, "body"), "loop"))
         if kind == "dependencies/blocked_by":
-            return self._add_blocker(node, int(_field(args, "issue_id", flag="-F")) - 1000)
+            return self._add_blocker(
+                node, int(_field(args, "issue_id", flag="-F")) - 1000
+            )
         child = int(_field(args, "sub_issue_id", flag="-F")) - 1000
         self._tickets.setdefault(node["number"], []).append(self._node(child))
         return "{}"
@@ -201,7 +245,11 @@ class FakeGhCli:
         self._node(blocker)
         blockers = self._blocked_by.setdefault(node["number"], [])
         if blocker in blockers:
-            raise CommandError("gh api dependencies/blocked_by", 1, "gh: Issue is already blocked by that issue (HTTP 422)")
+            raise CommandError(
+                "gh api dependencies/blocked_by",
+                1,
+                "gh: Issue is already blocked by that issue (HTTP 422)",
+            )
         blockers.append(blocker)
         return "{}"
 
@@ -225,14 +273,20 @@ class FakeGhCli:
         return comment
 
     def _issues(self) -> list[dict]:
-        nodes = [*self._specs, *(node for tickets in self._tickets.values() for node in tickets), *self._created.values()]
+        nodes = [
+            *self._specs,
+            *(node for tickets in self._tickets.values() for node in tickets),
+            *self._created.values(),
+        ]
         return list({node["number"]: node for node in nodes}.values())
 
     def _node(self, number: int) -> dict:
         for node in self._issues():
             if node["number"] == number:
                 return node
-        raise CommandError(f"gh api repos/owner/repo/issues/{number}", 1, "gh: Not Found (HTTP 404)")
+        raise CommandError(
+            f"gh api repos/owner/repo/issues/{number}", 1, "gh: Not Found (HTTP 404)"
+        )
 
     def _apply_issue_write(self, args: tuple[str, ...]) -> None:
         node = self._node(int(args[2]))
@@ -242,7 +296,9 @@ class FakeGhCli:
             node["labels"].append({"name": args[args.index("--add-label") + 1]})
         else:
             removed = args[args.index("--remove-label") + 1]
-            node["labels"] = [label for label in node["labels"] if label["name"] != removed]
+            node["labels"] = [
+                label for label in node["labels"] if label["name"] != removed
+            ]
 
     def _mark_ready(self, reference: str) -> None:
         for pr in self._prs:
@@ -257,14 +313,26 @@ class FakeGhCli:
 
 
 _WRITES = (
-    ("issue", "edit"), ("issue", "close"), ("api", "--method"), ("pr", "create"), ("pr", "edit"), ("pr", "ready"), ("pr", "close"),
+    ("issue", "edit"),
+    ("issue", "close"),
+    ("api", "--method"),
+    ("pr", "create"),
+    ("pr", "edit"),
+    ("pr", "ready"),
+    ("pr", "close"),
     ("pr", "reopen"),
 )
 
 
-def _field(args: tuple[str, ...], name: str, *, flag: str = "-f", all_values: bool = False) -> str | list[str]:
+def _field(
+    args: tuple[str, ...], name: str, *, flag: str = "-f", all_values: bool = False
+) -> str | list[str]:
     prefix = f"{name}="
-    values = [args[index + 1][len(prefix) :] for index, arg in enumerate(args) if arg == flag and args[index + 1].startswith(prefix)]
+    values = [
+        args[index + 1][len(prefix) :]
+        for index, arg in enumerate(args)
+        if arg == flag and args[index + 1].startswith(prefix)
+    ]
     return values if all_values else values[0]
 
 
@@ -274,15 +342,27 @@ def _label_names(node: dict) -> list[str]:
 
 def _rest(node: dict) -> dict:
     """The REST payload of a stored issue: Comments and sub-issues are reported as counts."""
-    shown = {key: value for key, value in node.items() if key not in ("comment_list", "comment_count", "sub_issue_total")}
+    shown = {
+        key: value
+        for key, value in node.items()
+        if key not in ("comment_list", "comment_count", "sub_issue_total")
+    }
     shown["comments"] = node.get("comment_count", len(node["comment_list"]))
     if "sub_issue_total" in node:
         shown["sub_issues_summary"] = {"total": node["sub_issue_total"]}
     return shown
 
 
-def _ticket(number: int, title: str, *, state: str = "OPEN", labels: list[str] | None = None) -> dict:
-    return issue(number, title, state=state, labels=tuple(labels or ()), comments=(f"Comment on #{number}",))
+def _ticket(
+    number: int, title: str, *, state: str = "OPEN", labels: list[str] | None = None
+) -> dict:
+    return issue(
+        number,
+        title,
+        state=state,
+        labels=tuple(labels or ()),
+        comments=(f"Comment on #{number}",),
+    )
 
 
 def _pr(number: int, branch: str, title: str = "Add login page (PR)") -> dict:
@@ -336,7 +416,9 @@ def issue(
         ],
     }
     if pull_request:
-        node["pull_request"] = {"url": f"https://api.github.com/repos/owner/repo/pulls/{number}"}
+        node["pull_request"] = {
+            "url": f"https://api.github.com/repos/owner/repo/pulls/{number}"
+        }
     if comment_count is not None:
         node["comment_count"] = comment_count
     if sub_issue_total is not None:

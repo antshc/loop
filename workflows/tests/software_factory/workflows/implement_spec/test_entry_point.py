@@ -18,18 +18,29 @@ from .harness import ImplementSpecHarness
 
 SCENARIO = Path(__file__).with_name("fake_run_tracker_writes.json")
 
-FAKE_ARGUMENTS = ["--no-otel", "--fake-speed", "0", *(argument for seam in dry.SEAMS for argument in ("--fake", seam))]
+FAKE_ARGUMENTS = [
+    "--no-otel",
+    "--fake-speed",
+    "0",
+    *(argument for seam in dry.SEAMS for argument in ("--fake", seam)),
+]
 
 _NOT_WRITES = (("pr", "diff"), ("pr", "list"))
 
 
-def record_tracker_writes(monkeypatch: pytest.MonkeyPatch, log_dir: Path) -> tuple[int, list[list[str]]]:
+def record_tracker_writes(
+    monkeypatch: pytest.MonkeyPatch, log_dir: Path
+) -> tuple[int, list[list[str]]]:
     """Runs the command with the agent, Git, GitHub and store faked; returns the exit code and every tracker write in order."""
     writes: list[list[str]] = []
 
     class RecordingGh(dry.DryGh):
         def __call__(self, args: tuple[str, ...]) -> str:
-            if args[0] in ("issue", "pr") and args[:2] not in _NOT_WRITES or args[:2] == ("api", "--method"):
+            if (
+                args[0] in ("issue", "pr")
+                and args[:2] not in _NOT_WRITES
+                or args[:2] == ("api", "--method")
+            ):
                 writes.append(list(args))
             return super().__call__(args)
 
@@ -37,14 +48,20 @@ def record_tracker_writes(monkeypatch: pytest.MonkeyPatch, log_dir: Path) -> tup
     return main(["--log-dir", str(log_dir), *FAKE_ARGUMENTS]), writes
 
 
-def test_the_help_exits_0_and_lists_no_visualize_option(capsys: pytest.CaptureFixture[str]) -> None:
+def test_the_help_exits_0_and_lists_no_visualize_option(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     """Given the --help option, when the command starts, then it exits 0 and lists no --visualize option."""
     with pytest.raises(SystemExit) as exit_info:
         main(["--help"])
 
     help_text = capsys.readouterr().out
     assert exit_info.value.code == 0
-    assert "--spec" in help_text and "--fake-speed" in help_text and "--visualize" not in help_text
+    assert (
+        "--spec" in help_text
+        and "--fake-speed" in help_text
+        and "--visualize" not in help_text
+    )
 
 
 def test_a_faked_git_without_a_faked_agent_is_refused() -> None:
@@ -55,7 +72,9 @@ def test_a_faked_git_without_a_faked_agent_is_refused() -> None:
     assert exit_info.value.code == 2
 
 
-def test_the_recorded_fake_run_writes_to_the_tracker_exactly_as_the_golden(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_recorded_fake_run_writes_to_the_tracker_exactly_as_the_golden(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Given the fake agent, Git, GitHub and store, when the command runs, then its tracker writes equal the golden."""
     code, writes = record_tracker_writes(monkeypatch, tmp_path)
 
@@ -63,12 +82,19 @@ def test_the_recorded_fake_run_writes_to_the_tracker_exactly_as_the_golden(tmp_p
     assert (json.dumps(writes, indent=2) + "\n").encode() == SCENARIO.read_bytes()
 
 
-def test_a_dry_run_with_telemetry_off_delivers_the_scripted_spec_and_exits_0(tmp_path: Path) -> None:
+def test_a_dry_run_with_telemetry_off_delivers_the_scripted_spec_and_exits_0(
+    tmp_path: Path,
+) -> None:
     """Given --dry, when the command runs with telemetry off, then the scripted Spec is delivered, including the Ticket whose first attempt fails."""
-    assert main(["--log-dir", str(tmp_path), "--dry", "--no-otel", "--fake-speed", "0"]) == 0
+    assert (
+        main(["--log-dir", str(tmp_path), "--dry", "--no-otel", "--fake-speed", "0"])
+        == 0
+    )
 
 
-def test_a_fake_agent_that_never_fails_a_first_attempt_runs_without_rework(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_a_fake_agent_that_never_fails_a_first_attempt_runs_without_rework(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """Given --no-rework, when the fake run completes, then it exits 0 and no attempt failed."""
     code = main(["--log-dir", str(tmp_path), "--no-rework", *FAKE_ARGUMENTS])
 
@@ -84,12 +110,16 @@ def test_the_log_dir_holds_the_log_file_at_debug_level(tmp_path: Path) -> None:
     assert code == 0 and (custom / "implement_spec.log").is_file()
 
 
-def test_the_console_shows_one_line_per_finished_span(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_the_console_shows_one_line_per_finished_span(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """Given a fake run, when it completes, then the console carries the span lines, such as the Ticket whose first attempt failed."""
     main(["--log-dir", str(tmp_path), *FAKE_ARGUMENTS])
 
     lines = capsys.readouterr().err.splitlines()
-    assert any("ticket #11 · implement-ticket attempt 1 · fail" in line for line in lines)
+    assert any(
+        "ticket #11 · implement-ticket attempt 1 · fail" in line for line in lines
+    )
     assert any(line.endswith("implement_spec · completed") for line in lines)
 
 
@@ -111,11 +141,16 @@ def test_a_worktree_that_cannot_be_closed_clean_fails_the_spec_not_the_command(
 
 @pytest.mark.parametrize(
     "error",
-    [LoopHookError(LoopHookPoint.WORKTREE_READY, "make setup", "failed"), CalledProcessError(128, ["git", "worktree", "add"])],
+    [
+        LoopHookError(LoopHookPoint.WORKTREE_READY, "make setup", "failed"),
+        CalledProcessError(128, ["git", "worktree", "add"]),
+    ],
     ids=["a worktree hook that fails", "a worktree that cannot be added"],
 )
 def test_a_declared_error_opening_the_feature_worktree_fails_that_spec_with_a_comment_and_the_intake_goes_on(
-    error: Exception, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    error: Exception,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Given two runnable Specs and a first run that raises a declared error outside any Stage, when the intake runs, then the first Spec gets the failure Comment, the second still runs and the command exits 1."""
     harness = ImplementSpecHarness(tmp_path)
@@ -124,7 +159,9 @@ def test_a_declared_error_opening_the_feature_worktree_fails_that_spec_with_a_co
 
     def twice(*args: object, **kwargs: object) -> entry.Selection:
         selection = real_select(*args, **kwargs)  # type: ignore[arg-type]
-        return entry.Selection(selection.runnable * 2, selection.unreadable, selection.awaiting_human)
+        return entry.Selection(
+            selection.runnable * 2, selection.unreadable, selection.awaiting_human
+        )
 
     def first_fails(*args: object, **kwargs: object) -> object:
         calls.append(1)
@@ -159,7 +196,9 @@ def test_an_unexpected_error_is_logged_and_the_command_exits_non_zero(
     assert code == 1 and "RuntimeError" in logged and "boom" not in logged
 
 
-def test_a_keyboard_interrupt_exits_130(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_keyboard_interrupt_exits_130(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Given an interrupt that reaches the command mid-run, when it is caught, then the command exits 130."""
     harness = ImplementSpecHarness(tmp_path)
 
@@ -171,7 +210,9 @@ def test_a_keyboard_interrupt_exits_130(tmp_path: Path, monkeypatch: pytest.Monk
     assert harness.run() == 130
 
 
-def test_a_tracker_error_hands_the_spec_off_with_a_failure_comment(tmp_path: Path) -> None:
+def test_a_tracker_error_hands_the_spec_off_with_a_failure_comment(
+    tmp_path: Path,
+) -> None:
     """Given a tracker that refuses to close a Ticket, when the Spec runs, then the failure is commented on the Spec and the run exits 1."""
     harness = ImplementSpecHarness(tmp_path)
     harness.rig.gh.fail_on("issue", "close")
@@ -183,7 +224,9 @@ def test_a_tracker_error_hands_the_spec_off_with_a_failure_comment(tmp_path: Pat
     assert "hitl" not in harness.labels(1)
 
 
-def test_a_signal_asks_the_run_to_stop_and_gives_the_signals_back_to_their_default_action() -> None:
+def test_a_signal_asks_the_run_to_stop_and_gives_the_signals_back_to_their_default_action() -> (
+    None
+):
     """Given an interrupt request, when SIGINT arrives, then the run is asked to stop and a second SIGINT takes the default action."""
     saved = {name: signal.getsignal(name) for name in (signal.SIGINT, signal.SIGTERM)}
     request = entry.InterruptRequest()
@@ -193,13 +236,18 @@ def test_a_signal_asks_the_run_to_stop_and_gives_the_signals_back_to_their_defau
         request.request(signal.SIGINT, None)
 
         assert request.requested()
-        assert signal.getsignal(signal.SIGINT) is signal.SIG_DFL and signal.getsignal(signal.SIGTERM) is signal.SIG_DFL
+        assert (
+            signal.getsignal(signal.SIGINT) is signal.SIG_DFL
+            and signal.getsignal(signal.SIGTERM) is signal.SIG_DFL
+        )
     finally:
         for name, handler in saved.items():
             signal.signal(name, handler)
 
 
-def test_the_real_entry_point_installs_the_signal_handlers_only_while_it_runs(tmp_path: Path) -> None:
+def test_the_real_entry_point_installs_the_signal_handlers_only_while_it_runs(
+    tmp_path: Path,
+) -> None:
     """Given the command run with its own services, when it ends, then SIGINT and SIGTERM have the handlers they had before."""
     before = {name: signal.getsignal(name) for name in (signal.SIGINT, signal.SIGTERM)}
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+
 from ..repo import GitHubRepo
 from .errors import IncompleteReadError, IssueError
 from .graph import SpecGraphSnapshot
@@ -41,56 +42,120 @@ class IssueCommands:
             if marker in existing.body:
                 return existing
         if not issue.complete:
-            raise IncompleteReadError(f"cannot tell whether {issue.ref} already has the {purpose!r} Comment: {issue.gaps}")
+            raise IncompleteReadError(
+                f"cannot tell whether {issue.ref} already has the {purpose!r} Comment: {issue.gaps}"
+            )
         node = self._repo.json(
-            "api", "--method", "POST", f"repos/{self._repo.slug}/issues/{number}/comments", "-f", f"body={body}\n\n{marker}",
+            "api",
+            "--method",
+            "POST",
+            f"repos/{self._repo.slug}/issues/{number}/comments",
+            "-f",
+            f"body={body}\n\n{marker}",
         )
         return self._reader.posted(issue.ref, node)
 
     def add_label(self, number: int, label: str) -> None:
         """Adds `label` to the issue, unless it already carries it."""
         if label not in self._reader.summary(number).labels:
-            self._repo.run(("issue", "edit", str(number), "--repo", self._repo.slug, "--add-label", label))
+            self._repo.run(
+                (
+                    "issue",
+                    "edit",
+                    str(number),
+                    "--repo",
+                    self._repo.slug,
+                    "--add-label",
+                    label,
+                )
+            )
 
     def remove_label(self, number: int, label: str) -> None:
         """Removes `label` from the issue, unless it does not carry it."""
         issue = self._reader.issue(number)
         # A label that is absent from a partly read issue may still be there.
         if label in issue.labels or any(gap.part == "labels" for gap in issue.gaps):
-            self._repo.run(("issue", "edit", str(number), "--repo", self._repo.slug, "--remove-label", label))
+            self._repo.run(
+                (
+                    "issue",
+                    "edit",
+                    str(number),
+                    "--repo",
+                    self._repo.slug,
+                    "--remove-label",
+                    label,
+                )
+            )
 
     def close(self, number: int, comment: str) -> None:
         """Closes the issue with `comment`, unless it is already closed."""
         if self._reader.summary(number).state == IssueState.OPEN:
-            self._repo.run(("issue", "close", str(number), "--repo", self._repo.slug, "--comment", comment))
+            self._repo.run(
+                (
+                    "issue",
+                    "close",
+                    str(number),
+                    "--repo",
+                    self._repo.slug,
+                    "--comment",
+                    comment,
+                )
+            )
 
     def find_tickets(self, spec: SpecGraphSnapshot) -> dict[str, Ticket]:
         """The open issues already created for `spec`, by planned-Ticket key, whether or not they are linked."""
         found: dict[str, Ticket] = {}
         for issue in self._reader.open_issues(self._routing_label(spec)):
             marker = _TICKET_MARKER.search(issue.body)
-            if marker is not None and int(marker["spec"]) == spec.number and issue.number != spec.number:
+            if (
+                marker is not None
+                and int(marker["spec"]) == spec.number
+                and issue.number != spec.number
+            ):
                 found.setdefault(marker["key"], Ticket.of(issue))
         return found
 
-    def create_ticket(self, spec: SpecGraphSnapshot, key: str, title: str, body: str) -> Ticket:
+    def create_ticket(
+        self, spec: SpecGraphSnapshot, key: str, title: str, body: str
+    ) -> Ticket:
         """Creates an open issue for `key` of `spec`, marked so a retry finds it; it is not yet linked to `spec`."""
         label = self._routing_label(spec)
         marked = f"{body.rstrip()}\n\n{_ticket_marker(spec, key)}"
         node = self._repo.json(
-            "api", "--method", "POST", f"repos/{self._repo.slug}/issues",
-            "-f", f"title={title}", "-f", f"body={marked}", "-f", f"labels[]={label}",
+            "api",
+            "--method",
+            "POST",
+            f"repos/{self._repo.slug}/issues",
+            "-f",
+            f"title={title}",
+            "-f",
+            f"body={marked}",
+            "-f",
+            f"labels[]={label}",
         )
         return Ticket.of(self._reader.created(node))
 
-    def link_ticket(self, spec: SpecGraphSnapshot, ticket: Ticket, linked: frozenset[int] | None = None) -> None:
+    def link_ticket(
+        self,
+        spec: SpecGraphSnapshot,
+        ticket: Ticket,
+        linked: frozenset[int] | None = None,
+    ) -> None:
         """Makes `ticket` a sub-issue of `spec`, unless it already is one; `linked` is the sub-issue numbers the caller already read."""
-        if ticket.number in (self.sub_issue_numbers(spec) if linked is None else linked):
+        if ticket.number in (
+            self.sub_issue_numbers(spec) if linked is None else linked
+        ):
             return
-        self._repo.run((
-            "api", "--method", "POST", f"repos/{self._repo.slug}/issues/{spec.number}/sub_issues",
-            "-F", f"sub_issue_id={ticket.identity.id}",
-        ))
+        self._repo.run(
+            (
+                "api",
+                "--method",
+                "POST",
+                f"repos/{self._repo.slug}/issues/{spec.number}/sub_issues",
+                "-F",
+                f"sub_issue_id={ticket.identity.id}",
+            )
+        )
 
     def sub_issue_numbers(self, spec: SpecGraphSnapshot) -> frozenset[int]:
         """The numbers of every sub-issue of `spec`, open or closed."""
@@ -100,10 +165,16 @@ class IssueCommands:
         """Makes `ticket` wait for `blocker` as a native blocked-by dependency, unless it already does."""
         if blocker.ref in self._reader.blocker_refs(ticket.number):
             return
-        self._repo.run((
-            "api", "--method", "POST", f"repos/{self._repo.slug}/issues/{ticket.number}/dependencies/blocked_by",
-            "-F", f"issue_id={blocker.identity.id}",
-        ))
+        self._repo.run(
+            (
+                "api",
+                "--method",
+                "POST",
+                f"repos/{self._repo.slug}/issues/{ticket.number}/dependencies/blocked_by",
+                "-F",
+                f"issue_id={blocker.identity.id}",
+            )
+        )
 
     @staticmethod
     def _routing_label(spec: SpecGraphSnapshot) -> str:

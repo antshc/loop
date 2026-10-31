@@ -6,7 +6,15 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..event import Event
-from ..stage import AgentCommits, Evidence, HarnessCommits, NoRepository, ReadOnly, Retain, WorkContract
+from ..stage import (
+    AgentCommits,
+    Evidence,
+    HarnessCommits,
+    NoRepository,
+    ReadOnly,
+    Retain,
+    WorkContract,
+)
 from ..worktree import WorktreeGit
 
 
@@ -20,10 +28,20 @@ class Worktree:
     def evidence(self, base: str, status_before: str) -> Evidence:
         """What the attempt left behind: the head now and whether the head or the working tree moved."""
         head = self.git.head(self.path)
-        return Evidence(base, head, changed=head != base or self.git.status(self.path) != status_before)
+        return Evidence(
+            base,
+            head,
+            changed=head != base or self.git.status(self.path) != status_before,
+        )
 
 
-def violation[I](work: WorkContract, stage_input: I, event: Event, evidence: Evidence, worktree: Worktree) -> str | None:
+def violation[I](
+    work: WorkContract,
+    stage_input: I,
+    event: Event,
+    evidence: Evidence,
+    worktree: Worktree,
+) -> str | None:
     """Why an accepted attempt breaks its repository contract; None when it keeps it."""
     match work:
         case ReadOnly():
@@ -54,7 +72,11 @@ def _read_only_violation(evidence: Evidence) -> str | None:
 
 
 def _agent_commit_violation[I](
-    work: AgentCommits[I, Event], stage_input: I, event: Event, evidence: Evidence, worktree: Worktree,
+    work: AgentCommits[I, Event],
+    stage_input: I,
+    event: Event,
+    evidence: Evidence,
+    worktree: Worktree,
 ) -> str | None:
     commits = worktree.git.commits_since(worktree.path, evidence.base)
     if len(commits) != 1:

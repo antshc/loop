@@ -28,7 +28,10 @@ def encode(value: Any) -> Json:
     if isinstance(value, Path):
         return str(value)
     if dataclasses.is_dataclass(value) and not isinstance(value, type):
-        fields = {field.name: encode(getattr(value, field.name)) for field in dataclasses.fields(value)}
+        fields = {
+            field.name: encode(getattr(value, field.name))
+            for field in dataclasses.fields(value)
+        }
         return {"type": type_name(type(value)), "fields": fields}
     if isinstance(value, (list, tuple, set, frozenset)):
         return [encode(item) for item in value]
@@ -39,7 +42,11 @@ def encode(value: Any) -> Json:
 
 def is_tagged(value: Json, type_: type) -> bool:
     """Whether `value` is a stored dataclass of exactly `type_`."""
-    return isinstance(value, dict) and value.get("type") == type_name(type_) and isinstance(value.get("fields"), dict)
+    return (
+        isinstance(value, dict)
+        and value.get("type") == type_name(type_)
+        and isinstance(value.get("fields"), dict)
+    )
 
 
 def decode(value: Json, type_: Any) -> Any:
@@ -62,7 +69,11 @@ def decode_stored(value: Json) -> Any:
     """Rebuilds a stored value whose type is known only by its tag; raises LookupError when a tagged class is not loaded."""
     if isinstance(value, list):
         return [decode_stored(item) for item in value]
-    if isinstance(value, dict) and isinstance(value.get("fields"), dict) and isinstance(value.get("type"), str):
+    if (
+        isinstance(value, dict)
+        and isinstance(value.get("fields"), dict)
+        and isinstance(value.get("type"), str)
+    ):
         return decode(value, _tagged_class(value["type"]))
     if isinstance(value, dict) and "repr" in value:
         raise LookupError(f"stored value {value['repr']} has no type tag")
@@ -89,7 +100,11 @@ def _decode_union(value: Json, arguments: tuple[Any, ...]) -> Any:
     for argument in arguments:
         if argument is type(None):
             continue
-        if isinstance(argument, type) and dataclasses.is_dataclass(argument) and not is_tagged(value, argument):
+        if (
+            isinstance(argument, type)
+            and dataclasses.is_dataclass(argument)
+            and not is_tagged(value, argument)
+        ):
             continue
         return decode(value, argument)
     return value
@@ -124,4 +139,10 @@ def _decode_dataclass(value: Json, type_: type) -> Any:
         raise ValueError(f"stored value is not a {type_.__name__}")
     stored = value["fields"]  # type: ignore[index]
     hints = typing.get_type_hints(type_)
-    return type_(**{field.name: decode(stored[field.name], hints[field.name]) for field in dataclasses.fields(type_) if field.name in stored})
+    return type_(
+        **{
+            field.name: decode(stored[field.name], hints[field.name])
+            for field in dataclasses.fields(type_)
+            if field.name in stored
+        }
+    )

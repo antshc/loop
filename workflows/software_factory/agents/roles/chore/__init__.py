@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from loop import DEFAULT
+from loop import DEFAULT, Declined, TypedAgent
 
 from ... import _kit
-from loop import Declined, TypedAgent
 from .messages import ChoreReply, ChoreRequest, Refined
 
 NO_COMMITS = "No commits exist on the feature branch yet."
@@ -18,7 +17,9 @@ def _decode(request: ChoreRequest, output: str) -> ChoreReply:
     if envelope.failed:
         return envelope.declined()
     return Refined(
-        envelope.text("commit_message"), envelope.text("summary"), tuple(str(item) for item in envelope.items("out_of_scope")),
+        envelope.text("commit_message"),
+        envelope.text("summary"),
+        tuple(str(item) for item in envelope.items("out_of_scope")),
     )
 
 
@@ -32,7 +33,9 @@ CHORE: TypedAgent[ChoreRequest, ChoreReply] = _kit.template_agent(
         "TARGET_BRANCH": lambda request: request.base_branch,
         "FEATURE_BRANCH": lambda request: request.feature_branch,
         "DIFF_DIR": lambda request: str(request.diff_dir),
-        "BRANCH_COMMITS": lambda request: "\n\n".join(request.branch_commits) or NO_COMMITS,
+        "BRANCH_COMMITS": lambda request: (
+            "\n\n".join(request.branch_commits) or NO_COMMITS
+        ),
     },
     decode=_decode,
 )

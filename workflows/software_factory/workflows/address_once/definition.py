@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from loop import Verify, Workflow
+
 from workflows.software_factory.events.pull_requests import PullRequestWork
 from workflows.software_factory.flows import address
-from loop import Verify, Workflow
 from workflows.software_factory.stages import feedback, pull_requests
 
 from .policy import TRUST, address_subject
@@ -14,12 +15,19 @@ NAME = "address_once"
 __all__ = ["NAME", "address_once"]
 
 
-def address_once(verify: Verify, *, agent_timeout: float | None = None) -> Workflow[PullRequestWork]:
+def address_once(
+    verify: Verify, *, agent_timeout: float | None = None
+) -> Workflow[PullRequestWork]:
     """One pull request: validate its origin, snapshot it, select the trusted feedback, then address, publish and reply once; no feedback holds; `agent_timeout` bounds each agent run in seconds."""
     return (
-        Workflow(NAME).context(PullRequestWork)
+        Workflow(NAME)
+        .context(PullRequestWork)
         .stage(pull_requests.validate_origin())
         .stage(pull_requests.snapshot())
         .stage(feedback.select(trust=TRUST))
-        .then(address.address_feedback(message=address_subject, verify=verify, agent_timeout=agent_timeout))
+        .then(
+            address.address_feedback(
+                message=address_subject, verify=verify, agent_timeout=agent_timeout
+            )
+        )
     )

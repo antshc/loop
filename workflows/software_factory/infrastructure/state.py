@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Any, Iterator
+from typing import Any
 
 
 class StateError(RuntimeError):
@@ -30,7 +31,9 @@ class JsonFile:
         try:
             return json.loads(self.path.read_text(encoding="utf-8"))
         except (ValueError, OSError) as exception:
-            raise StateError(f"Cannot read state {self.path}: {exception}") from exception
+            raise StateError(
+                f"Cannot read state {self.path}: {exception}"
+            ) from exception
 
     def read_versioned(self, default: dict) -> dict:
         """Like `read`, but the document must be an object with `version: 1`."""
@@ -44,7 +47,9 @@ class JsonFile:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temporary = None
         try:
-            with NamedTemporaryFile(mode="w", encoding="utf-8", dir=self.path.parent, delete=False) as stream:
+            with NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=self.path.parent, delete=False
+            ) as stream:
                 temporary = Path(stream.name)
                 json.dump(value, stream, indent=2, sort_keys=sort_keys)
                 stream.write("\n")
@@ -64,6 +69,7 @@ def process_lock(path: Path) -> Iterator[None]:
         try:
             if os.name == "nt":
                 import msvcrt
+
                 stream.seek(0)
                 stream.write(b"0")
                 stream.flush()
@@ -71,6 +77,7 @@ def process_lock(path: Path) -> Iterator[None]:
                 msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
             else:
                 import fcntl
+
                 fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError as exception:
             raise StateError(f"Another process owns {path}") from exception

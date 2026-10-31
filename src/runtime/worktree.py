@@ -11,7 +11,9 @@ from typing import Protocol
 class GitCommand(Protocol):
     """Runs `git <args>` in a path, with `env` added to the environment, and returns stdout."""
 
-    def __call__(self, args: Sequence[str], path: Path, *, env: Mapping[str, str] | None = None) -> str: ...
+    def __call__(
+        self, args: Sequence[str], path: Path, *, env: Mapping[str, str] | None = None
+    ) -> str: ...
 
 
 @dataclass(frozen=True)
@@ -42,7 +44,11 @@ class WorktreeGit:
 
     def parents(self, path: Path) -> tuple[str, ...]:
         """The parent commits of HEAD."""
-        return tuple(self._command(("rev-list", "--parents", "-n", "1", "HEAD"), path).split()[1:])
+        return tuple(
+            self._command(("rev-list", "--parents", "-n", "1", "HEAD"), path).split()[
+                1:
+            ]
+        )
 
     def is_ancestor(self, path: Path, sha: str) -> bool:
         """Whether `sha` is reachable from HEAD."""
@@ -62,9 +68,14 @@ class WorktreeGit:
 
     def commits_since(self, path: Path, sha: str) -> tuple[WorktreeCommit, ...]:
         """Commits after `sha` up to HEAD, oldest first."""
-        output = self._command(("log", "--reverse", "--format=%H%x1f%s", f"{sha}..HEAD"), path)
+        output = self._command(
+            ("log", "--reverse", "--format=%H%x1f%s", f"{sha}..HEAD"), path
+        )
         pairs = (line.split("\x1f", 1) for line in output.splitlines() if line.strip())
-        return tuple(WorktreeCommit(sha=pair[0], subject=pair[1] if len(pair) > 1 else "") for pair in pairs)
+        return tuple(
+            WorktreeCommit(sha=pair[0], subject=pair[1] if len(pair) > 1 else "")
+            for pair in pairs
+        )
 
     def commit(self, path: Path, message: str) -> str:
         """Stages every change, commits it with `message` and returns the new HEAD."""

@@ -4,7 +4,13 @@ import hashlib
 import json
 from pathlib import Path
 
-from ..hooks import AgentCliHook, AgentCliHookPoint, AgentCliHookWiring, ordered, shim_command
+from ..hooks import (
+    AgentCliHook,
+    AgentCliHookPoint,
+    AgentCliHookWiring,
+    ordered,
+    shim_command,
+)
 from ..run import AgentRequest, RunContext
 from ..sessions import CliOutcome, NativeHandle, Resume, SessionName, Start, Turn
 from .base import AgentProfile
@@ -33,11 +39,17 @@ class CopilotCli:
     def native_point(self, point: AgentCliHookPoint) -> str:
         return self._EVENTS[point]
 
-    def hook_wiring(self, hooks: tuple[AgentCliHook, ...], turn: Turn, workdir: Path) -> AgentCliHookWiring:
+    def hook_wiring(
+        self, hooks: tuple[AgentCliHook, ...], turn: Turn, workdir: Path
+    ) -> AgentCliHookWiring:
         events: dict[str, list[dict[str, object]]] = {}
         for point, hook in ordered(hooks):
             events.setdefault(self._EVENTS[point], []).append(
-                {"type": "command", "bash": shim_command(self.name, point, turn, hook), "timeoutSec": hook.timeout_sec}
+                {
+                    "type": "command",
+                    "bash": shim_command(self.name, point, turn, hook),
+                    "timeoutSec": hook.timeout_sec,
+                }
             )
         digest = hashlib.sha1(turn.name.value.encode()).hexdigest()[:8]
         content = json.dumps({"version": 1, "hooks": events}, indent=2)
@@ -52,14 +64,46 @@ class CopilotCli:
         return NativeHandle(self.name, name.value)
 
     def command(
-        self, request: AgentRequest, profile: AgentProfile, turn: Turn, context: RunContext
+        self,
+        request: AgentRequest,
+        profile: AgentProfile,
+        turn: Turn,
+        context: RunContext,
     ) -> list[str]:
-        dirs = [part for directory in context.agent.add_dirs for part in ("--add-dir", str(directory))]
-        settings = {"--model": profile.model, "--reasoning-effort": profile.reasoning_effort, "--context": profile.context}
-        run_args = [part for flag, value in settings.items() if value is not None for part in (flag, value)]
-        session_args = ["--name", turn.name.value] if isinstance(turn, Start) else [f"--resume={turn.handle.value}"]
-        return ["copilot", "-p", request.prompt, *session_args, *self._args, *run_args, *profile.args, *dirs]
+        dirs = [
+            part
+            for directory in context.agent.add_dirs
+            for part in ("--add-dir", str(directory))
+        ]
+        settings = {
+            "--model": profile.model,
+            "--reasoning-effort": profile.reasoning_effort,
+            "--context": profile.context,
+        }
+        run_args = [
+            part
+            for flag, value in settings.items()
+            if value is not None
+            for part in (flag, value)
+        ]
+        session_args = (
+            ["--name", turn.name.value]
+            if isinstance(turn, Start)
+            else [f"--resume={turn.handle.value}"]
+        )
+        return [
+            "copilot",
+            "-p",
+            request.prompt,
+            *session_args,
+            *self._args,
+            *run_args,
+            *profile.args,
+            *dirs,
+        ]
 
     def parse(self, stdout: str, turn: Turn, exit_code: int) -> CliOutcome:
-        handle = turn.handle if isinstance(turn, Resume) else self.handle_for_new(turn.name)
+        handle = (
+            turn.handle if isinstance(turn, Resume) else self.handle_for_new(turn.name)
+        )
         return CliOutcome(stdout, handle, exit_code)

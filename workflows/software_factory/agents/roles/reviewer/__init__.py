@@ -4,11 +4,16 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from loop import DEFAULT, Role
+from loop import DEFAULT, Declined, Role, TypedAgent
 
 from ... import _kit
-from loop import Declined, TypedAgent
-from .messages import Reviewed, ReviewedAxis, ReviewedFinding, ReviewerReply, ReviewerRequest
+from .messages import (
+    Reviewed,
+    ReviewedAxis,
+    ReviewedFinding,
+    ReviewerReply,
+    ReviewerRequest,
+)
 
 
 def _decode(request: ReviewerRequest, output: str) -> ReviewerReply:
@@ -17,14 +22,27 @@ def _decode(request: ReviewerRequest, output: str) -> ReviewerReply:
         return envelope.declined()
     result = envelope.result
     axes = tuple(
-        ReviewedAxis(_kit.text(item, "name", required=True), _kit.text(item, "outcome", required=True).lower(), _kit.text(item, "note"))
+        ReviewedAxis(
+            _kit.text(item, "name", required=True),
+            _kit.text(item, "outcome", required=True).lower(),
+            _kit.text(item, "note"),
+        )
         for item in _kit.objects(result, "axes", "axis")
     )
     findings = tuple(
-        ReviewedFinding(_kit.text(item, "kind", required=True).lower(), _kit.text(item, "summary", required=True), _kit.text(item, "axis"))
+        ReviewedFinding(
+            _kit.text(item, "kind", required=True).lower(),
+            _kit.text(item, "summary", required=True),
+            _kit.text(item, "axis"),
+        )
         for item in _kit.objects(result, "findings", "finding")
     )
-    return Reviewed(axes, findings, tuple(str(item) for item in envelope.items("posted")), envelope.text("head"))
+    return Reviewed(
+        axes,
+        findings,
+        tuple(str(item) for item in envelope.items("posted")),
+        envelope.text("head"),
+    )
 
 
 REVIEWER: TypedAgent[ReviewerRequest, ReviewerReply] = _kit.template_agent(
@@ -40,4 +58,12 @@ REVIEWER: TypedAgent[ReviewerRequest, ReviewerReply] = _kit.template_agent(
     decode=_decode,
 )
 
-__all__ = ["REVIEWER", "Declined", "Reviewed", "ReviewedAxis", "ReviewedFinding", "ReviewerReply", "ReviewerRequest"]
+__all__ = [
+    "REVIEWER",
+    "Declined",
+    "Reviewed",
+    "ReviewedAxis",
+    "ReviewedFinding",
+    "ReviewerReply",
+    "ReviewerRequest",
+]

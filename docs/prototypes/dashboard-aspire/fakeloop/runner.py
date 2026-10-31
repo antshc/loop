@@ -7,10 +7,9 @@ from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from typing import Protocol
 
+from loop import Prompt
 from opentelemetry import trace
 from opentelemetry.trace import Span, Status, StatusCode
-
-from loop import Prompt
 
 from .model import AgentConfig, Attempt, Phase, PhaseParams
 from .telemetry import Telemetry, trace_hex
@@ -19,8 +18,14 @@ from .telemetry import Telemetry, trace_hex
 class PhaseAgent(Protocol):
     """What a phase needs from an agent, fake or real."""
 
-    def call(self, ph: PhaseHandle, prompt: Prompt, output_type: str, gate: str,
-             attempts: Sequence[Attempt]) -> dict[str, object]:
+    def call(
+        self,
+        ph: PhaseHandle,
+        prompt: Prompt,
+        output_type: str,
+        gate: str,
+        attempts: Sequence[Attempt],
+    ) -> dict[str, object]:
         """Runs the agent for the phase and returns its envelope."""
         ...
 
@@ -51,14 +56,24 @@ class PhaseHandle:
 class Run:
     """One session: a root span whose trace id is the session id, and the phases entered so far."""
 
-    def __init__(self, telemetry: Telemetry, engineer: str, adw_name: str, speed: float = 1.0,
-                 *, agents: AgentFactory) -> None:
+    def __init__(
+        self,
+        telemetry: Telemetry,
+        engineer: str,
+        adw_name: str,
+        speed: float = 1.0,
+        *,
+        agents: AgentFactory,
+    ) -> None:
         self.telemetry = telemetry
         self._agents = agents
         self.speed = speed
         self.phases: list[Phase] = []
         self._seq = 0
-        attributes = {"loop.session.adw_name": adw_name, "loop.session.engineer": engineer}
+        attributes = {
+            "loop.session.adw_name": adw_name,
+            "loop.session.engineer": engineer,
+        }
         self._root = telemetry.tracer.start_span(adw_name, attributes=attributes)
         self._parent = self._root
         self._ticket_id: int | None = None
@@ -88,11 +103,16 @@ class Run:
     @contextmanager
     def ticket(self, ticket_id: int, title: str) -> Iterator[None]:
         """Groups the phases entered inside it under one ticket span."""
-        attributes = {"loop.ticket.id": ticket_id, "loop.ticket.title": title,
-                      **self._spec_attributes()}
+        attributes = {
+            "loop.ticket.id": ticket_id,
+            "loop.ticket.title": title,
+            **self._spec_attributes(),
+        }
         span = self.telemetry.tracer.start_span(
-            f"#{ticket_id} {title}", context=trace.set_span_in_context(self._root),
-            attributes=attributes)
+            f"#{ticket_id} {title}",
+            context=trace.set_span_in_context(self._root),
+            attributes=attributes,
+        )
         self.telemetry.started(span, "loop.ticket.start", attributes, parent=self._root)
         self._parent, self._ticket_id, self._ticket_title = span, ticket_id, title
         try:
@@ -113,26 +133,36 @@ class Run:
         self._seq += 1
         phase = Phase(params=params)
         self.phases.append(phase)
-        attributes = {"loop.phase.seq": self._seq, "loop.phase.name": params.name,
-                      "loop.phase.kind": params.kind, "loop.phase.owner": params.owner,
-                      "loop.phase.role": params.role,
-                      "loop.phase.description": params.description,
-                      "loop.phase.retries": params.retries}
+        attributes = {
+            "loop.phase.seq": self._seq,
+            "loop.phase.name": params.name,
+            "loop.phase.kind": params.kind,
+            "loop.phase.owner": params.owner,
+            "loop.phase.role": params.role,
+            "loop.phase.description": params.description,
+            "loop.phase.retries": params.retries,
+        }
         attributes.update(self._spec_attributes())
         if self._ticket_id is not None:
             attributes["loop.ticket.id"] = self._ticket_id
             attributes["loop.ticket.title"] = self._ticket_title
         span = self.telemetry.tracer_for(params.role).start_span(
-            params.name, context=trace.set_span_in_context(self._parent),
-            attributes=attributes)
-        self.telemetry.started(span, "loop.phase.start", attributes, parent=self._parent)
+            params.name,
+            context=trace.set_span_in_context(self._parent),
+            attributes=attributes,
+        )
+        self.telemetry.started(
+            span, "loop.phase.start", attributes, parent=self._parent
+        )
         started_at = time.perf_counter()
         try:
             with trace.use_span(span, end_on_exit=False):
                 yield PhaseHandle(self, phase, span)
         except BaseException as exception:
             phase.status = "fail"
-            self._end(span, phase, Status(StatusCode.ERROR, str(exception)[:1000]), exception)
+            self._end(
+                span, phase, Status(StatusCode.ERROR, str(exception)[:1000]), exception
+            )
             self._root.set_status(Status(StatusCode.ERROR, f"{params.name} failed"))
             self._record_duration(params.name, phase.status, started_at)
             raise
@@ -145,19 +175,24 @@ class Run:
 
     def _record_duration(self, name: str, status: str, started_at: float) -> None:
         self.telemetry.phase_duration.record(
-            time.perf_counter() - started_at, {"loop.phase.name": name, "loop.phase.status": status})
+            time.perf_counter() - started_at,
+            {"loop.phase.name": name, "loop.phase.status": status},
+        )
 
     def finish(self) -> int:
         """Settles and ends the session span from its phases and returns the exit code."""
-        ok = bool(self.phases) and all(phase.status == "success" for phase in self.phases)
+        ok = bool(self.phases) and all(
+            phase.status == "success" for phase in self.phases
+        )
         if ok:
             self._root.set_status(Status(StatusCode.OK))
         self._root.end()
         return 0 if ok else 1
 
     @staticmethod
-    def _end(span: Span, phase: Phase, status: Status,
-             exception: BaseException | None) -> None:
+    def _end(
+        span: Span, phase: Phase, status: Status, exception: BaseException | None
+    ) -> None:
         span.set_attribute("loop.phase.attempt", phase.attempt)
         if exception is not None:
             span.record_exception(exception)

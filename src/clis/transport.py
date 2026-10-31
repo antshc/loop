@@ -25,8 +25,7 @@ class Transport(Protocol):
         """Unreadable lines are skipped."""
         ...
 
-    def encode(self, text: str, handle_value: str | None) -> str:
-        ...
+    def encode(self, text: str, handle_value: str | None) -> str: ...
 
 
 class CopilotText:
@@ -65,7 +64,10 @@ class CopilotJson:
         return Transcript("".join(parts), session_id, exit_code)
 
     def encode(self, text: str, handle_value: str | None) -> str:
-        delta = {"type": "assistant.message_delta", "data": {"messageId": "dry-run", "deltaContent": text}}
+        delta = {
+            "type": "assistant.message_delta",
+            "data": {"messageId": "dry-run", "deltaContent": text},
+        }
         result = {"type": "result", "sessionId": handle_value, "exitCode": 0}
         return "\n".join(json.dumps(event) for event in (delta, result))
 
@@ -87,11 +89,17 @@ class CodexJson:
                 continue
             if event.get("type") == "thread.started":
                 thread_id = event.get("thread_id")
-            elif event.get("type") == "item.completed" and event.get("item", {}).get("type") == "agent_message":
+            elif (
+                event.get("type") == "item.completed"
+                and event.get("item", {}).get("type") == "agent_message"
+            ):
                 message = event["item"].get("text", "")
         return Transcript(message, thread_id, None)
 
     def encode(self, text: str, handle_value: str | None) -> str:
         started = {"type": "thread.started", "thread_id": handle_value}
-        completed = {"type": "item.completed", "item": {"type": "agent_message", "text": text}}
+        completed = {
+            "type": "item.completed",
+            "item": {"type": "agent_message", "text": text},
+        }
         return "\n".join(json.dumps(event) for event in (started, completed))

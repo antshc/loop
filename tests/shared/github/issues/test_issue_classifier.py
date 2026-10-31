@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import pytest
-
 from loop.shared.github.issues.issue_classifier import (
     Classification,
     IssueClassifier,
     IssueKind,
     LabelTypeDisagreement,
 )
+
 from tests.shared.builders import build_issue
 
 
@@ -20,8 +20,16 @@ from tests.shared.builders import build_issue
         (("bug",), None, Classification(IssueKind.ISSUE)),
         (("spec",), "Spec", Classification(IssueKind.SPEC)),
         ((), "Feature", Classification(IssueKind.ISSUE)),
-        (("spec",), "Task", Classification(IssueKind.SPEC, LabelTypeDisagreement(True, "Task"))),
-        ((), "Spec", Classification(IssueKind.ISSUE, LabelTypeDisagreement(False, "Spec"))),
+        (
+            ("spec",),
+            "Task",
+            Classification(IssueKind.SPEC, LabelTypeDisagreement(True, "Task")),
+        ),
+        (
+            (),
+            "Spec",
+            Classification(IssueKind.ISSUE, LabelTypeDisagreement(False, "Spec")),
+        ),
     ],
     ids=[
         "label alone",
@@ -37,7 +45,10 @@ from tests.shared.builders import build_issue
 def test_the_spec_label_decides_and_a_disagreeing_native_type_is_reported(
     labels: tuple[str, ...], issue_type: str | None, expected: Classification
 ) -> None:
-    assert IssueClassifier().classify(build_issue(labels=labels, issue_type=issue_type)) == expected
+    assert (
+        IssueClassifier().classify(build_issue(labels=labels, issue_type=issue_type))
+        == expected
+    )
 
 
 def test_a_disagreement_names_both_sides() -> None:

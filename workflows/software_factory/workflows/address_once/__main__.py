@@ -10,16 +10,25 @@ from dataclasses import dataclass
 from pathlib import Path
 from subprocess import CalledProcessError, TimeoutExpired
 
-from loop import Agent, WorktreeError
-
-from workflows.software_factory.events.pull_requests import PullRequestWork
-from workflows.software_factory.events.specs import RepositoryTarget
-from loop import Ledger, LogSpans, RunResult, Services, Spans, WorktreeGit, run
-from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
+from loop import (
+    Agent,
+    Ledger,
+    LogSpans,
+    RunResult,
+    Services,
+    Spans,
+    WorktreeError,
+    WorktreeGit,
+    run,
+)
 from loop.shared.git import GitClient
 from loop.shared.github.account import GitHub
 from loop.shared.github.repo import GhCli
 from loop.shared.process import CommandRunner, git_command
+
+from workflows.software_factory.events.pull_requests import PullRequestWork
+from workflows.software_factory.events.specs import RepositoryTarget
+from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
 from workflows.software_factory.stages.checks import as_verify
 
 from .definition import NAME, address_once
@@ -46,19 +55,23 @@ class Runtime:
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="address_once", description="Address the trusted review feedback of one PR once")
+    parser = argparse.ArgumentParser(
+        prog="address_once",
+        description="Address the trusted review feedback of one PR once",
+    )
     parser.add_argument("--config", type=Path, required=True)
-    parser.add_argument("--pr", required=True, help="https://github.com/owner/repo/pull/123")
+    parser.add_argument(
+        "--pr", required=True, help="https://github.com/owner/repo/pull/123"
+    )
     return parser
 
 
 def build_services() -> Services:
     """The services of the definition, all real."""
     run_process = CommandRunner(timeout_s=_GIT_TIMEOUT_S)
-    return (
-        Services(GitClient(run_process), GitHub(GhCli(run_process)), AgentLauncher(Agent, None))
-        .bind(WorktreeGit, WorktreeGit(git_command))
-    )
+    return Services(
+        GitClient(run_process), GitHub(GhCli(run_process)), AgentLauncher(Agent, None)
+    ).bind(WorktreeGit, WorktreeGit(git_command))
 
 
 def main(argv: Sequence[str] | None = None, *, services: Services | None = None) -> int:
@@ -70,8 +83,19 @@ def main(argv: Sequence[str] | None = None, *, services: Services | None = None)
         parser.error("--pr must be a GitHub PR URL")
     logging.basicConfig(level=logging.INFO)
     try:
-        return _address(Settings.load(args.config), services or build_services(), match[1], int(match[2]))
-    except (WorktreeError, CalledProcessError, TimeoutExpired, OSError, ValueError) as exception:
+        return _address(
+            Settings.load(args.config),
+            services or build_services(),
+            match[1],
+            int(match[2]),
+        )
+    except (
+        WorktreeError,
+        CalledProcessError,
+        TimeoutExpired,
+        OSError,
+        ValueError,
+    ) as exception:
         logger.error("address_once stopped: %s", exception)
         return 1
     except KeyboardInterrupt:
@@ -81,11 +105,28 @@ def main(argv: Sequence[str] | None = None, *, services: Services | None = None)
 
 def _address(settings: Settings, services: Services, slug: str, number: int) -> int:
     repository = settings.repository(slug)
-    runtime = services.get(Runtime) if Runtime in services.types() else Runtime(Ledger(settings.ledger_root), LogSpans())
-    work = PullRequestWork(RepositoryTarget(slug, repository.path, settings.state_dir / "worktrees"), number, _REVISION)
-    definition = address_once(as_verify(repository.test, timeout_s=settings.timeout, run=CommandRunner()), agent_timeout=settings.timeout)
+    runtime = (
+        services.get(Runtime)
+        if Runtime in services.types()
+        else Runtime(Ledger(settings.ledger_root), LogSpans())
+    )
+    work = PullRequestWork(
+        RepositoryTarget(slug, repository.path, settings.state_dir / "worktrees"),
+        number,
+        _REVISION,
+    )
+    definition = address_once(
+        as_verify(repository.test, timeout_s=settings.timeout, run=CommandRunner()),
+        agent_timeout=settings.timeout,
+    )
     try:
-        result = run(definition, work, services=services, ledger=runtime.ledger, spans=runtime.spans)
+        result = run(
+            definition,
+            work,
+            services=services,
+            ledger=runtime.ledger,
+            spans=runtime.spans,
+        )
     except WorktreeError as exception:
         return _hand_off_unclosed(runtime.ledger, work, str(exception))
     _report(work, result)
@@ -102,7 +143,9 @@ def _hand_off_unclosed(ledger: Ledger, work: PullRequestWork, reason: str) -> in
 
 
 def _report(work: PullRequestWork, result: RunResult) -> None:
-    logger.info("%s %s%s", work.id, result.status, f": {result.reason}" if result.reason else "")
+    logger.info(
+        "%s %s%s", work.id, result.status, f": {result.reason}" if result.reason else ""
+    )
 
 
 if __name__ == "__main__":

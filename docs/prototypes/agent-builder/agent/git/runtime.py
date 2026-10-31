@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from contextlib import AbstractContextManager, contextmanager
 from pathlib import Path
-from typing import Iterator, Protocol
+from typing import Protocol
 
 from ..hooks import LoopHookPoint
 from .git_cli import GitCli

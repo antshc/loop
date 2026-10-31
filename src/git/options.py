@@ -25,4 +25,3 @@ class GitOptions:
 
     def hooks_at(self, point: LoopHookPoint) -> tuple[LoopHook, ...]:
         return tuple(hook for hook in self.loop_hooks if hook.point is point)
-

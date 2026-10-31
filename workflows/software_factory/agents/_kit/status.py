@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from loop import Declined, ReplyMismatch
-from .envelope import ContentDecodeError, LastJsonObject
 
+from .envelope import ContentDecodeError, LastJsonObject
 
 _STATUSES = ("completed", "failed")
 
@@ -27,7 +27,9 @@ class StatusEnvelope:
         """The reply of a `failed` envelope; its reason is required."""
         reason = self.result.get("reason")
         if not isinstance(reason, str):
-            raise ReplyMismatch(f"failed response is missing result.reason: {self.result!r}")
+            raise ReplyMismatch(
+                f"failed response is missing result.reason: {self.result!r}"
+            )
         return Declined(reason)
 
     def text(self, key: str, *, required: bool = False) -> str:
@@ -44,8 +46,12 @@ def read_status(output: str, *, identifier: str | None = None) -> StatusEnvelope
     except ContentDecodeError as exception:
         raise ReplyMismatch("no response object in agent output") from exception
     if identifier is not None and envelope.get("identifier", identifier) != identifier:
-        raise ReplyMismatch(f"response identifier {envelope['identifier']!r} does not match task {identifier!r}")
-    if envelope["status"] not in _STATUSES or not isinstance(envelope.get("result"), dict):
+        raise ReplyMismatch(
+            f"response identifier {envelope['identifier']!r} does not match task {identifier!r}"
+        )
+    if envelope["status"] not in _STATUSES or not isinstance(
+        envelope.get("result"), dict
+    ):
         raise ReplyMismatch(f"malformed response envelope: {envelope!r}")
     return StatusEnvelope(envelope["status"], envelope["result"])
 

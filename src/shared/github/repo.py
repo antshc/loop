@@ -11,7 +11,6 @@ from ..git import github_slug
 from ..process import CommandError, Runner
 from .identity import RepositoryId
 
-
 GhRunner = Callable[[tuple[str, ...]], str]
 
 
@@ -83,13 +82,24 @@ class GitHubRepo:
             raise ValueError(f"expected a list of pages from {endpoint}")
         found: list[dict] = []
         for page in pages:
-            part = page.get(items) if items is not None and isinstance(page, dict) else page
+            part = (
+                page.get(items)
+                if items is not None and isinstance(page, dict)
+                else page
+            )
             if not isinstance(part, list):
                 raise ValueError(f"expected a list of pages from {endpoint}")
             found.extend(part)
         return found
 
-    def graphql(self, query: str, *, paginate: bool = False, scoped: bool = True, **variables: str | int) -> str:
+    def graphql(
+        self,
+        query: str,
+        *,
+        paginate: bool = False,
+        scoped: bool = True,
+        **variables: str | int,
+    ) -> str:
         """Runs a GraphQL query; `scoped` also passes the `$owner`/`$repo` variables."""
         args = ["api", "graphql"]
         if paginate:

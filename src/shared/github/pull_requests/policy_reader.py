@@ -15,7 +15,6 @@ from .merge_policy import (
     unavailable_policy,
 )
 
-
 logger = logging.getLogger("workflow.pull_requests")
 
 
@@ -35,24 +34,40 @@ class MergePolicyReader:
 
     def _rulesets(self, base_ref: str) -> MergePolicySnapshot:
         try:
-            return policy_from_rules(base_ref, self._repo.pages(self._endpoint("rules/branches", base_ref)))
+            return policy_from_rules(
+                base_ref, self._repo.pages(self._endpoint("rules/branches", base_ref))
+            )
         except CommandError as exception:
             return self._denied(base_ref, PolicySource.RULESETS, exception)
 
     def _protection(self, base_ref: str) -> MergePolicySnapshot:
         try:
-            return policy_from_protection(base_ref, self._repo.json("api", self._endpoint("branches", base_ref, "protection")))
+            return policy_from_protection(
+                base_ref,
+                self._repo.json(
+                    "api", self._endpoint("branches", base_ref, "protection")
+                ),
+            )
         except CommandError as exception:
             if _UNPROTECTED in exception.output:
                 return MergePolicySnapshot(base_ref)
             return self._denied(base_ref, PolicySource.BRANCH_PROTECTION, exception)
 
     @staticmethod
-    def _denied(base_ref: str, source: PolicySource, exception: CommandError) -> MergePolicySnapshot:
+    def _denied(
+        base_ref: str, source: PolicySource, exception: CommandError
+    ) -> MergePolicySnapshot:
         if not denied(exception):
             raise exception
-        logger.warning("merge policy of %s unavailable from %s: %s", base_ref, source, exception.output.strip())
+        logger.warning(
+            "merge policy of %s unavailable from %s: %s",
+            base_ref,
+            source,
+            exception.output.strip(),
+        )
         return unavailable_policy(base_ref, source)
 
     def _endpoint(self, collection: str, base_ref: str, *rest: str) -> str:
-        return "/".join((self._repo.endpoint(collection), quote(base_ref, safe="/"), *rest))
+        return "/".join(
+            (self._repo.endpoint(collection), quote(base_ref, safe="/"), *rest)
+        )

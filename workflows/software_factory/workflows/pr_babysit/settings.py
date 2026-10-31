@@ -54,27 +54,57 @@ class Settings:
             if not re.fullmatch(r"[\w.-]+/[\w.-]+", item["name"]):
                 raise ValueError("repository name must be owner/repo")
             commands = [item.get("build"), item.get("test")]
-            if any(not isinstance(command, list) or not command or
-                   any(not isinstance(part, str) or not part for part in command) for command in commands):
-                raise ValueError("each repository requires build and test argument arrays")
-            repositories.append(Repository(item["name"], (path.parent / item["path"]).resolve(),
-                                           tuple(commands[0]), tuple(commands[1])))
-        settings = cls(tuple(repositories), (path.parent / value.get("state_dir", ".loop/pr-babysit")).resolve(),
-                       value.get("author", ""), float(value.get("interval", 60)),
-                       int(value.get("concurrency", 2)), int(value.get("retries", 3)),
-                       bool(value.get("copilot_review", False)), value.get("otel_endpoint"),
-                       float(value.get("timeout", 1800)),
-                       (path.parent / value["worktrees_dir"]).resolve() if value.get("worktrees_dir") else None)
-        if not repositories or len({repo.name for repo in repositories}) != len(repositories):
+            if any(
+                not isinstance(command, list)
+                or not command
+                or any(not isinstance(part, str) or not part for part in command)
+                for command in commands
+            ):
+                raise ValueError(
+                    "each repository requires build and test argument arrays"
+                )
+            repositories.append(
+                Repository(
+                    item["name"],
+                    (path.parent / item["path"]).resolve(),
+                    tuple(commands[0]),
+                    tuple(commands[1]),
+                )
+            )
+        settings = cls(
+            tuple(repositories),
+            (path.parent / value.get("state_dir", ".loop/pr-babysit")).resolve(),
+            value.get("author", ""),
+            float(value.get("interval", 60)),
+            int(value.get("concurrency", 2)),
+            int(value.get("retries", 3)),
+            bool(value.get("copilot_review", False)),
+            value.get("otel_endpoint"),
+            float(value.get("timeout", 1800)),
+            (path.parent / value["worktrees_dir"]).resolve()
+            if value.get("worktrees_dir")
+            else None,
+        )
+        if not repositories or len({repo.name for repo in repositories}) != len(
+            repositories
+        ):
             raise ValueError("configure at least one repository, without duplicates")
-        if (not math.isfinite(settings.interval) or not math.isfinite(settings.timeout)
-                or settings.interval <= 0 or settings.concurrency < 1 or settings.retries < 0 or settings.timeout <= 0):
+        if (
+            not math.isfinite(settings.interval)
+            or not math.isfinite(settings.timeout)
+            or settings.interval <= 0
+            or settings.concurrency < 1
+            or settings.retries < 0
+            or settings.timeout <= 0
+        ):
             raise ValueError("invalid interval, concurrency, retries, or timeout")
         return settings
 
     def repository(self, name: str) -> Repository:
         """Reject unconfigured repositories before any Git operation."""
-        return next((repo for repo in self.repositories if repo.name == name), None) or self._missing(name)
+        return next(
+            (repo for repo in self.repositories if repo.name == name), None
+        ) or self._missing(name)
 
     def _missing(self, name: str) -> Repository:
         raise ValueError(f"Repository not configured: {name}")

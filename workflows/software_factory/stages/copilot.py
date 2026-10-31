@@ -4,10 +4,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from workflows.software_factory.events.pull_requests import CopilotDue, CopilotRequested, PullRequestPolled
 from loop import Evidence, History, Pass, Stage, Verdict
 from loop.shared.github.account import GitHub
 from loop.shared.github.pull_requests.babysit import is_copilot
+
+from workflows.software_factory.events.pull_requests import (
+    CopilotDue,
+    CopilotRequested,
+    PullRequestPolled,
+)
 
 
 @dataclass(frozen=True)
@@ -33,7 +38,9 @@ def request_review() -> Stage[RequestInput, CopilotRequested, CopilotRequested]:
     )
 
 
-def _recorded(_: RequestInput, requested: CopilotRequested, __: Evidence) -> Verdict[CopilotRequested]:
+def _recorded(
+    _: RequestInput, requested: CopilotRequested, __: Evidence
+) -> Verdict[CopilotRequested]:
     return Pass(requested)
 
 
@@ -43,9 +50,15 @@ def _requested(i: RequestInput) -> CopilotRequested | None:
     if earlier is not None:
         return earlier
     pull = i.github.pull_requests(i.polled.target.slug).pull_request(i.polled.number)
-    return CopilotRequested(i.head, "requested") if any(is_copilot(login) for login in pull.requested_reviewers) else None
+    return (
+        CopilotRequested(i.head, "requested")
+        if any(is_copilot(login) for login in pull.requested_reviewers)
+        else None
+    )
 
 
 def _request(i: RequestInput) -> CopilotRequested:
-    accepted = i.github.pull_requests(i.polled.target.slug).try_request_copilot(i.polled.number)
+    accepted = i.github.pull_requests(i.polled.target.slug).try_request_copilot(
+        i.polled.number
+    )
     return CopilotRequested(i.head, "requested" if accepted else "unavailable")

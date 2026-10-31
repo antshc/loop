@@ -24,16 +24,22 @@ class Observer:
         self.provider.add_span_processor(SimpleSpanProcessor(self.exporter))
 
     def span(self, name, attributes=None, *, role=None):
-        return self.provider.get_tracer("test").start_as_current_span(name, attributes=attributes)
+        return self.provider.get_tracer("test").start_as_current_span(
+            name, attributes=attributes
+        )
 
 
-def test_babysit_roots_are_independent_traces_and_quiet_polls_are_not_exported(tmp_path: Path) -> None:
+def test_babysit_roots_are_independent_traces_and_quiet_polls_are_not_exported(
+    tmp_path: Path,
+) -> None:
     """Given two runs over a green pull request polled five times each, when they are exported, then each run is its own root trace and no quiet poll is among the spans."""
     observer = Observer()
     for name in ("first", "second"):
         rig = Babysit(tmp_path / name)
         rig.close_after(5)
-        rig.services = rig.services.replace(Runtime(rig.ledger, OtelSpans(observer), rig.stop))
+        rig.services = rig.services.replace(
+            Runtime(rig.ledger, OtelSpans(observer), rig.stop)
+        )
         assert rig.babysit() == 0
 
     spans = observer.exporter.get_finished_spans()

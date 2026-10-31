@@ -9,16 +9,37 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from loop import AgentRequest, FakeReply, RunContext
+from loop import (
+    AgentRequest,
+    Event,
+    Fail,
+    FakeReply,
+    Nothing,
+    Pass,
+    RunContext,
+    RunResult,
+    Services,
+    Stage,
+    StopSignal,
+    Workflow,
+    run,
+)
 
-from workflows.software_factory.events.pull_requests import PullRequestPolled, PullRequestWork
-from loop import Event, Fail, Nothing, Pass, RunResult, Services, Stage, StopSignal, Workflow, run
-from workflows.software_factory.infrastructure.pacing import Pacer
-from workflows.software_factory.stages import pull_requests
 from tests.runtime.harness import GIT
 from tests.runtime.support import NoInput
 from tests.shared.fakes import check_run, workflow_run
-from workflows.tests.software_factory.stages.pr_support import BRANCH, NUMBER, SLUG, PrRig
+from workflows.software_factory.events.pull_requests import (
+    PullRequestPolled,
+    PullRequestWork,
+)
+from workflows.software_factory.infrastructure.pacing import Pacer
+from workflows.software_factory.stages import pull_requests
+from workflows.tests.software_factory.stages.pr_support import (
+    BRANCH,
+    NUMBER,
+    SLUG,
+    PrRig,
+)
 
 WORKFLOW = "watch"
 
@@ -39,7 +60,11 @@ def failing(reason: str) -> Stage[Any, Any, Nothing]:
 def produces(event: Event) -> Stage[Any, Any, Any]:
     """A Stage that produces `event` but is always skipped, so a History of it has a producer and nothing is recorded."""
     name = re.sub(r"(?<!^)(?=[A-Z])", "-", type(event).__name__).lower()
-    return Stage(f"produce-{name}", NoInput, produces=type(event)).gate(lambda *_: Pass(event)).when(lambda _: False)
+    return (
+        Stage(f"produce-{name}", NoInput, produces=type(event))
+        .gate(lambda *_: Pass(event))
+        .when(lambda _: False)
+    )
 
 
 def fingerprint_of(polled: PullRequestPolled) -> str:
@@ -66,7 +91,11 @@ class MaintainerAgent:
         payload = json.loads(request.prompt.rsplit("\n", 1)[-1])
         self.requests.append(payload)
         if payload["mode"] == "diagnose":
-            return FakeReply(json.dumps({"classification": self.classification, "reason": self.reason}))
+            return FakeReply(
+                json.dumps(
+                    {"classification": self.classification, "reason": self.reason}
+                )
+            )
         return FakeReply(json.dumps(self.fix(context.agent.cwd)))
 
     def modes(self) -> list[str]:
@@ -86,22 +115,52 @@ class WatchRig(PrRig):
 
     def fail_ci(self, *, runs: tuple[int, ...] = (10,), attempt: int = 1) -> None:
         """Makes the head's CI fail with the given workflow runs."""
-        self.pull.workflow_runs = lambda: [workflow_run(run, self.head_now(), conclusion="failure", workflow_id=run, attempt=attempt) for run in runs]
+        self.pull.workflow_runs = lambda: [
+            workflow_run(
+                run,
+                self.head_now(),
+                conclusion="failure",
+                workflow_id=run,
+                attempt=attempt,
+            )
+            for run in runs
+        ]
 
     def pend_ci(self) -> None:
         """Makes the head's CI still running."""
-        self.pull.check_runs = lambda: [check_run(1, "test", status="in_progress", conclusion=None, commit=self.head_now())]
+        self.pull.check_runs = lambda: [
+            check_run(
+                1, "test", status="in_progress", conclusion=None, commit=self.head_now()
+            )
+        ]
 
     def head_now(self) -> str:
         """The pull request's head commit on the remote."""
         return self.remote_head(BRANCH)
 
     def run_watch(
-        self, workflow: Workflow[PullRequestWork], agent: MaintainerAgent | None = None, *, stop: StopSignal | None = None,
+        self,
+        workflow: Workflow[PullRequestWork],
+        agent: MaintainerAgent | None = None,
+        *,
+        stop: StopSignal | None = None,
     ) -> RunResult:
         """Runs the Workflow for the watched pull request with the maintainer, the pacer and the rig's services."""
-        services = Services(self.git, self.github, GIT, self.launcher(agent or MaintainerAgent()), self.pacer)
-        return run(workflow, self.watched, services=services, ledger=self.ledger, spans=self.spans, stop=stop)
+        services = Services(
+            self.git,
+            self.github,
+            GIT,
+            self.launcher(agent or MaintainerAgent()),
+            self.pacer,
+        )
+        return run(
+            workflow,
+            self.watched,
+            services=services,
+            ledger=self.ledger,
+            spans=self.spans,
+            stop=stop,
+        )
 
     def recorded[T: Event](self, event: type[T]) -> tuple[T, ...]:
         """Every `event` the watched pull request's runs recorded."""
@@ -110,8 +169,14 @@ class WatchRig(PrRig):
     def closed_run_attributes(self) -> dict[str, Any]:
         """The attributes of the last closed run of the watched pull request."""
         records = self.ledger.item(WORKFLOW, self.watched.id).records()
-        return next(record["attributes"] for record in reversed(records) if record["kind"] == "run-closed")
+        return next(
+            record["attributes"]
+            for record in reversed(records)
+            if record["kind"] == "run-closed"
+        )
 
     def polled(self) -> PullRequestPolled:
         """The pull request read the way the snapshot Stage reads it."""
-        return pull_requests.snapshot().executor.run(pull_requests.SnapshotInput(self.watched, self.github))
+        return pull_requests.snapshot().executor.run(
+            pull_requests.SnapshotInput(self.watched, self.github)
+        )

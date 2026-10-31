@@ -193,13 +193,17 @@ def _decode(_: Prompt, output: str) -> Response:
 class LoggingAgent[Q: Message, R](TypedAgent[Q, R]):
     """A typed agent that logs a failed agent command with its stderr before reporting the failure."""
 
-    def run(self, workspace: AgentWorkspace, request: Q, *, session: str | None = None) -> R:
+    def run(
+        self, workspace: AgentWorkspace, request: Q, *, session: str | None = None
+    ) -> R:
         try:
             return super().run(workspace, request, session=session)
         except AgentRunError as exception:
             cause = exception.__cause__
             if isinstance(cause, subprocess.CalledProcessError):
-                logger.error("agent command failed: %s; stderr: %s", cause, cause.stderr)
+                logger.error(
+                    "agent command failed: %s; stderr: %s", cause, cause.stderr
+                )
             raise
 
 
@@ -216,14 +220,18 @@ def _usable(response: Response) -> Verdict[Planned]:
     return Pass(Planned(response.body))
 
 
-def _require_plan(planned: RequirePlanInput, _: Nothing, __: object) -> Verdict[Nothing]:
+def _require_plan(
+    planned: RequirePlanInput, _: Nothing, __: object
+) -> Verdict[Nothing]:
     if planned.planned is None:
         logger.error("planning run failed: no usable plan")
         return Fail("no usable plan")
     return Pass(Nothing())
 
 
-def _implemented(_: ImplementInput, response: Response, __: object) -> Verdict[Implemented]:
+def _implemented(
+    _: ImplementInput, response: Response, __: object
+) -> Verdict[Implemented]:
     if response.error is not None:
         logger.error("%s", response.error)
         return Fail(response.error)
@@ -231,7 +239,10 @@ def _implemented(_: ImplementInput, response: Response, __: object) -> Verdict[I
 
 
 def _report(report: ReportInput) -> str:
-    commits = report.git.read(report.workspace.path, ["log", "--reverse", "--format=%H", f"{report.head.sha}..HEAD"])
+    commits = report.git.read(
+        report.workspace.path,
+        ["log", "--reverse", "--format=%H", f"{report.head.sha}..HEAD"],
+    )
     logger.info("commits: %s", ", ".join(commits.splitlines()) or "none")
     return commits
 
@@ -246,13 +257,19 @@ def _reported(report: ReportInput, _: str, __: object) -> Verdict[Nothing]:
 def plan_implement(planner: AgentProfile, implementer: AgentProfile) -> Workflow[Task]:
     """The definition: one worktree scope that plans, then implements, then reports the commits."""
     return (
-        Workflow("plan_implement").context(Task)
+        Workflow("plan_implement")
+        .context(Task)
         .within(
-            WorkspaceOpener("worktree", OpenInput, lambda opened: opened.worktrees.open()),
+            WorkspaceOpener(
+                "worktree", OpenInput, lambda opened: opened.worktrees.open()
+            ),
             Flow("plan-and-implement")
             .stage(
                 Stage("plan", PlanInput, Planned)
-                .agent(_agent(Role.PLANNER, planner), lambda i, _: Prompt(f"{i.task.text}\n\n{PLAN_INSTRUCTIONS}"))
+                .agent(
+                    _agent(Role.PLANNER, planner),
+                    lambda i, _: Prompt(f"{i.task.text}\n\n{PLAN_INSTRUCTIONS}"),
+                )
                 .gate(lambda _, response, __: _usable(response))
                 .on_fail(next_())
             )
@@ -268,14 +285,22 @@ def plan_implement(planner: AgentProfile, implementer: AgentProfile) -> Workflow
                 .gate(_implemented)
                 .on_fail(next_())
             )
-            .stage(Stage("report-commits", ReportInput, Nothing).action(_report).gate(_reported)),
+            .stage(
+                Stage("report-commits", ReportInput, Nothing)
+                .action(_report)
+                .gate(_reported)
+            ),
         )
     )
 
 
 def _git_output(path: Path, args: list[str]) -> str:
     return subprocess.run(
-        ["git", "--no-pager", *args], cwd=path, check=True, capture_output=True, text=True,
+        ["git", "--no-pager", *args],
+        cwd=path,
+        check=True,
+        capture_output=True,
+        text=True,
     ).stdout.strip()
 
 
@@ -294,7 +319,9 @@ def main(
     parser.add_argument("task")
     args = parser.parse_args(argv)
     planner = AgentProfile(copilot, plan_model, plan_effort, name=Role.PLANNER)
-    implementer = AgentProfile(copilot, implement_model, implement_effort, name=Role.DEVELOPER)
+    implementer = AgentProfile(
+        copilot, implement_model, implement_effort, name=Role.DEVELOPER
+    )
     branch = f"loop/run-{uuid.uuid4().hex[:8]}"
     logger.info("branch %s", branch)
     options = GitOptions(
@@ -307,8 +334,10 @@ def main(
     with tempfile.TemporaryDirectory(prefix="plan_implement-") as ledger_root:
         try:
             result = run(
-                plan_implement(planner, implementer), Task(args.task, branch, branch),
-                services=services, ledger=Ledger(Path(ledger_root)),
+                plan_implement(planner, implementer),
+                Task(args.task, branch, branch),
+                services=services,
+                ledger=Ledger(Path(ledger_root)),
             )
         except KeyboardInterrupt:
             logger.warning("interrupted")

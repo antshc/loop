@@ -28,7 +28,15 @@ Failure:
 
 def run_copilot(cwd: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["copilot", "-p", PROMPT, "--no-ask-user", "--allow-all-tools", "--no-color", "--output-format=json"],
+        [
+            "copilot",
+            "-p",
+            PROMPT,
+            "--no-ask-user",
+            "--allow-all-tools",
+            "--no-color",
+            "--output-format=json",
+        ],
         cwd=cwd,
         capture_output=True,
         text=True,
@@ -51,10 +59,16 @@ def parse_events(stdout: str) -> list[dict]:
 
 def final_text(events: list[dict]) -> str:
     """Last non-ephemeral `assistant.message` content; falls back to concatenated deltas."""
-    messages = [e["data"]["content"] for e in events if e.get("type") == "assistant.message"]
+    messages = [
+        e["data"]["content"] for e in events if e.get("type") == "assistant.message"
+    ]
     if messages:
         return messages[-1]
-    return "".join(e["data"]["deltaContent"] for e in events if e.get("type") == "assistant.message_delta")
+    return "".join(
+        e["data"]["deltaContent"]
+        for e in events
+        if e.get("type") == "assistant.message_delta"
+    )
 
 
 def parse_result(text: str) -> dict:
@@ -69,10 +83,18 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="cop-resp-") as scratch:
         cwd = Path(scratch)
         subprocess.run(["git", "init", "-q"], cwd=cwd, check=True)
-        subprocess.run(["git", "config", "user.email", "exp@example.com"], cwd=cwd, check=True)
+        subprocess.run(
+            ["git", "config", "user.email", "exp@example.com"], cwd=cwd, check=True
+        )
         subprocess.run(["git", "config", "user.name", "exp"], cwd=cwd, check=True)
         process = run_copilot(cwd)
-        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=cwd, capture_output=True, text=True, check=False)
+        head = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
 
     (OUTPUT / "stdout.jsonl").write_text(process.stdout)
     (OUTPUT / "stderr.txt").write_text(process.stderr)
@@ -81,7 +103,10 @@ def main() -> int:
     events = parse_events(process.stdout)
     types = [e.get("type") for e in events]
     print(f"{len(events)} events; last type={types[-1] if types else None}")
-    print("result event:", next((e for e in reversed(events) if e.get("type") == "result"), None))
+    print(
+        "result event:",
+        next((e for e in reversed(events) if e.get("type") == "result"), None),
+    )
 
     text = final_text(events)
     print(f"final text: {text!r}")

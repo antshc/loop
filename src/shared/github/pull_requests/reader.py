@@ -23,7 +23,6 @@ from .model import (
     ReviewVerdict,
 )
 
-
 _THREADS = """query($owner:String!,$name:String!,$number:Int!,$cursor:String){
 repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100,after:$cursor){
 pageInfo{hasNextPage endCursor} nodes{id isResolved isOutdated path line originalLine
@@ -53,7 +52,9 @@ class PullRequestReader:
 
     def pull_request(self, number: int) -> PullRequest:
         """The pull request itself, with GitHub's current mergeability."""
-        return self._pull(self._repo.json("api", self._repo.endpoint(f"pulls/{number}")))
+        return self._pull(
+            self._repo.json("api", self._repo.endpoint(f"pulls/{number}"))
+        )
 
     def open_by(self, author: str) -> tuple[PullRequest, ...]:
         """Every open pull request authored by `author`, drafts included; a listing reports no mergeability, so it is unknown."""
@@ -66,9 +67,21 @@ class PullRequestReader:
         result, cursor = [], ""
         while True:
             connection = self._repo.json(
-                "api", "graphql", "-f", f"query={_THREADS}", "-f", f"owner={self._repo.owner}",
-                "-f", f"name={self._repo.name}", "-F", f"number={number}", *(["-f", f"cursor={cursor}"] if cursor else []))
-            connection = connection["data"]["repository"]["pullRequest"]["reviewThreads"]
+                "api",
+                "graphql",
+                "-f",
+                f"query={_THREADS}",
+                "-f",
+                f"owner={self._repo.owner}",
+                "-f",
+                f"name={self._repo.name}",
+                "-F",
+                f"number={number}",
+                *(["-f", f"cursor={cursor}"] if cursor else []),
+            )
+            connection = connection["data"]["repository"]["pullRequest"][
+                "reviewThreads"
+            ]
             result.extend(self._thread(node) for node in connection["nodes"])
             if not connection["pageInfo"]["hasNextPage"]:
                 return tuple(result)
@@ -79,20 +92,35 @@ class PullRequestReader:
         pull = self.pull_request(number)
         if not pull.is_open:
             return PullRequestSnapshot(pull)
-        summary = self._repo.json("pr", "view", str(number), "-R", self._repo.slug, "--json", "reviewDecision,mergeStateStatus")
+        summary = self._repo.json(
+            "pr",
+            "view",
+            str(number),
+            "-R",
+            self._repo.slug,
+            "--json",
+            "reviewDecision,mergeStateStatus",
+        )
         threads = self.threads(number)
         comments = self._comments(pull.ref)
         reviews = self._reviews(number)
         sha = pull.head_sha
         previous = self._previous_head(number, sha)
         # Results on the commit before the head are the only way a check that has not re-run on the head shows as stale instead of missing.
-        earlier = [*self._check_runs(previous), *self._statuses(previous)] if previous else []
+        earlier = (
+            [*self._check_runs(previous), *self._statuses(previous)] if previous else []
+        )
         return PullRequestSnapshot(
             pull_request=pull,
             threads=threads,
             reviews=reviews,
             comments=comments,
-            checks=(*self._check_runs(sha), *self._statuses(sha), *self._workflow_runs(sha), *earlier),
+            checks=(
+                *self._check_runs(sha),
+                *self._statuses(sha),
+                *self._workflow_runs(sha),
+                *earlier,
+            ),
             review_decision=ReviewDecision(summary.get("reviewDecision") or ""),
             merge_state_status=MergeState(summary.get("mergeStateStatus") or ""),
         )
@@ -117,7 +145,9 @@ class PullRequestReader:
             author=_login(node.get("user")),
             mergeability=Mergeability.of(node.get("mergeable")),
             merge_state=MergeState(node.get("mergeable_state", "unknown")),
-            requested_reviewers=tuple(reviewer["login"] for reviewer in node.get("requested_reviewers", ())),
+            requested_reviewers=tuple(
+                reviewer["login"] for reviewer in node.get("requested_reviewers", ())
+            ),
             payload=node,
         )
 
@@ -125,8 +155,16 @@ class PullRequestReader:
         comments = node["comments"]
         nodes = list(comments["nodes"])
         while comments["pageInfo"]["hasNextPage"]:
-            response = self._repo.json("api", "graphql", "-f", f"query={_COMMENTS}", "-f", f"id={node['id']}",
-                                       "-f", f"cursor={comments['pageInfo']['endCursor']}")
+            response = self._repo.json(
+                "api",
+                "graphql",
+                "-f",
+                f"query={_COMMENTS}",
+                "-f",
+                f"id={node['id']}",
+                "-f",
+                f"cursor={comments['pageInfo']['endCursor']}",
+            )
             comments = response["data"]["node"]["comments"]
             nodes.extend(comments["nodes"])
         submitted = (_review_comment(comment) for comment in nodes)
@@ -138,15 +176,23 @@ class PullRequestReader:
             line=node["line"],
             original_line=node["originalLine"],
             # A comment of a review its author has not submitted is private to them.
-            comments=tuple(comment for comment in submitted if comment.review_state is not ReviewVerdict.PENDING),
+            comments=tuple(
+                comment
+                for comment in submitted
+                if comment.review_state is not ReviewVerdict.PENDING
+            ),
         )
 
     def _comments(self, pull: IssueRef) -> tuple[Comment, ...]:
-        nodes = self._repo.pages(self._repo.endpoint(f"issues/{pull.number}/comments?{_PER_PAGE}"))
+        nodes = self._repo.pages(
+            self._repo.endpoint(f"issues/{pull.number}/comments?{_PER_PAGE}")
+        )
         return tuple(comment_from_rest(pull, node) for node in nodes)
 
     def _reviews(self, number: int) -> tuple[PullRequestReview, ...]:
-        nodes = self._repo.pages(self._repo.endpoint(f"pulls/{number}/reviews?{_PER_PAGE}"))
+        nodes = self._repo.pages(
+            self._repo.endpoint(f"pulls/{number}/reviews?{_PER_PAGE}")
+        )
         return tuple(
             PullRequestReview(
                 id=node["id"],
@@ -162,30 +208,61 @@ class PullRequestReader:
 
     def _previous_head(self, number: int, head_sha: str) -> str | None:
         """The commit of the pull request just before its head, or None when the head is its first commit or is not in the listing."""
-        shas = [node["sha"] for node in self._repo.pages(self._repo.endpoint(f"pulls/{number}/commits?{_PER_PAGE}"))]
+        shas = [
+            node["sha"]
+            for node in self._repo.pages(
+                self._repo.endpoint(f"pulls/{number}/commits?{_PER_PAGE}")
+            )
+        ]
         return shas[shas.index(head_sha) - 1] if head_sha in shas[1:] else None
 
     def _check_runs(self, sha: str) -> list[CheckResult]:
-        nodes = self._repo.pages(self._repo.endpoint(f"commits/{sha}/check-runs?{_PER_PAGE}"), items="check_runs")
+        nodes = self._repo.pages(
+            self._repo.endpoint(f"commits/{sha}/check-runs?{_PER_PAGE}"),
+            items="check_runs",
+        )
         return [
-            CheckResult(CheckKind.CHECK_RUN, node["id"], node["name"], node.get("head_sha", sha),
-                        _outcome(node["status"], node.get("conclusion")), payload=node)
+            CheckResult(
+                CheckKind.CHECK_RUN,
+                node["id"],
+                node["name"],
+                node.get("head_sha", sha),
+                _outcome(node["status"], node.get("conclusion")),
+                payload=node,
+            )
             for node in nodes
         ]
 
     def _statuses(self, sha: str) -> list[CheckResult]:
-        nodes = self._repo.pages(self._repo.endpoint(f"commits/{sha}/statuses?{_PER_PAGE}"))
+        nodes = self._repo.pages(
+            self._repo.endpoint(f"commits/{sha}/statuses?{_PER_PAGE}")
+        )
         return [
-            CheckResult(CheckKind.STATUS, node["id"], node["context"], sha,
-                        _STATUS_OUTCOMES.get(node["state"], CheckOutcome.FAILED), payload=node)
+            CheckResult(
+                CheckKind.STATUS,
+                node["id"],
+                node["context"],
+                sha,
+                _STATUS_OUTCOMES.get(node["state"], CheckOutcome.FAILED),
+                payload=node,
+            )
             for node in nodes
         ]
 
     def _workflow_runs(self, sha: str) -> list[CheckResult]:
-        nodes = self._repo.pages(self._repo.endpoint(f"actions/runs?head_sha={sha}&{_PER_PAGE}"), items="workflow_runs")
+        nodes = self._repo.pages(
+            self._repo.endpoint(f"actions/runs?head_sha={sha}&{_PER_PAGE}"),
+            items="workflow_runs",
+        )
         return [
-            CheckResult(CheckKind.WORKFLOW_RUN, node["id"], node.get("name", ""), node["head_sha"],
-                        _outcome(node["status"], node.get("conclusion")), payload=node)
+            CheckResult(
+                CheckKind.WORKFLOW_RUN,
+                node["id"],
+                node.get("name", ""),
+                node["head_sha"],
+                _outcome(node["status"], node.get("conclusion")),
+                payload=node,
+            )
             for node in nodes
         ]
 

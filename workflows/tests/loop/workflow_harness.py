@@ -8,10 +8,16 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from loop import (
-    AgentBuilder, AgentContext, AgentProfile, AgentRequest, CliOutcome, DockerRuntime,
-    GitOptions, NativeHandle, RunContext,
+    AgentBuilder,
+    AgentContext,
+    AgentProfile,
+    AgentRequest,
+    CliOutcome,
+    DockerRuntime,
+    GitOptions,
+    NativeHandle,
+    RunContext,
 )
-
 
 Handler = Callable[[str], str]
 
@@ -24,11 +30,19 @@ class FakeRunner:
         self.prompts: list[str] = []
         self.profiles: list[AgentProfile] = []
 
-    def run(self, profile: AgentProfile, request: AgentRequest, turn: object, context: RunContext) -> CliOutcome:
+    def run(
+        self,
+        profile: AgentProfile,
+        request: AgentRequest,
+        turn: object,
+        context: RunContext,
+    ) -> CliOutcome:
         self.prompts.append(request.prompt)
         self.profiles.append(profile)
         output = self.handler(request.prompt)
-        return CliOutcome(output, NativeHandle(profile.cli.name, f"session{len(self.prompts)}"), 0)
+        return CliOutcome(
+            output, NativeHandle(profile.cli.name, f"session{len(self.prompts)}"), 0
+        )
 
 
 class FakeGitService:
@@ -54,8 +68,12 @@ class FakeGitService:
             self.closed += 1
 
 
-def new_agent_for(runner: FakeRunner, git_service: FakeGitService, cwd: Path) -> Callable[[], AgentBuilder]:
-    return lambda: AgentBuilder(runner, git_service, DockerRuntime(), AgentContext(cwd=cwd))
+def new_agent_for(
+    runner: FakeRunner, git_service: FakeGitService, cwd: Path
+) -> Callable[[], AgentBuilder]:
+    return lambda: AgentBuilder(
+        runner, git_service, DockerRuntime(), AgentContext(cwd=cwd)
+    )
 
 
 def crash(output: str = "") -> Handler:
@@ -65,7 +83,9 @@ def crash(output: str = "") -> Handler:
     return handler
 
 
-def plan_envelope(status: str = "completed", plan: str = "do the work", reason: str = "stuck") -> str:
+def plan_envelope(
+    status: str = "completed", plan: str = "do the work", reason: str = "stuck"
+) -> str:
     tag = "Success" if status == "completed" else f"Failure: {reason}"
     body = plan if status == "completed" else ""
     return f"{body}\n<completed>{tag}</completed>"

@@ -8,20 +8,42 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from loop import AgentWorkspace
-
-from loop import Declined, Json
-from workflows.software_factory.agents.roles.developer import DEVELOPER, DeveloperReply, DeveloperRequest
-from workflows.software_factory.events.specs import SpecRouted, SpecWork
-from workflows.software_factory.events.tickets import Delivery, TicketClosed, TicketEscalated, TicketImplemented, TicketRejected
 from loop import (
-    AgentCommits, All, Evidence, Fail, Hold, History, Item, Pass, Selector, Stage, Verdict, rework,
+    AgentCommits,
+    AgentWorkspace,
+    All,
+    Declined,
+    Evidence,
+    Fail,
+    History,
+    Hold,
+    Item,
+    Json,
+    Pass,
+    Selector,
+    Stage,
+    Verdict,
+    rework,
 )
 from loop.shared.git import GitClient
 from loop.shared.github.issues.client import Issues
 from loop.shared.github.issues.graph import SpecGraphSnapshot
 from loop.shared.github.issues.issue import IssueState
 from loop.shared.github.issues.spec import Ticket
+
+from workflows.software_factory.agents.roles.developer import (
+    DEVELOPER,
+    DeveloperReply,
+    DeveloperRequest,
+)
+from workflows.software_factory.events.specs import SpecRouted, SpecWork
+from workflows.software_factory.events.tickets import (
+    Delivery,
+    TicketClosed,
+    TicketEscalated,
+    TicketImplemented,
+    TicketRejected,
+)
 
 DEFAULT_REWORK = 2
 
@@ -73,10 +95,20 @@ def next_ready_ticket() -> Selector[SpecInput, Ticket]:
 def implement_ticket() -> Stage[TicketInput, DeveloperReply, TicketImplemented]:
     """Fresh developer session per attempt; a decline fails; the agent commits exactly one validated commit; rework twice, then stop failed."""
     return (
-        Stage("implement-ticket", TicketInput, produces=TicketImplemented, may_emit=(TicketRejected,))
+        Stage(
+            "implement-ticket",
+            TicketInput,
+            produces=TicketImplemented,
+            may_emit=(TicketRejected,),
+        )
         .agent(DEVELOPER, request=_request)
         .gate(_implemented)
-        .contract(AgentCommits(subject=lambda i: i.routed.subject_prefix(i.ticket.number), reported=lambda e: e.commit))
+        .contract(
+            AgentCommits(
+                subject=lambda i: i.routed.subject_prefix(i.ticket.number),
+                reported=lambda e: e.commit,
+            )
+        )
         .on_fail(rework(max_attempts=DEFAULT_REWORK))
         .attributes(lambda i: {"ticket": i.ticket.number})
     )
@@ -84,16 +116,28 @@ def implement_ticket() -> Stage[TicketInput, DeveloperReply, TicketImplemented]:
 
 def close_ticket() -> Stage[CloseInput, TicketClosed, TicketClosed]:
     """Closes the Ticket with the delivery comment; a Ticket that is already closed is adopted without a second comment."""
-    return Stage("close-ticket", CloseInput, produces=TicketClosed).effect(
-        lambda i: _closed(i) or _close(i), reconcile=_closed,
-    ).attributes(lambda i: {"ticket": i.ticket.number})
+    return (
+        Stage("close-ticket", CloseInput, produces=TicketClosed)
+        .effect(
+            lambda i: _closed(i) or _close(i),
+            reconcile=_closed,
+        )
+        .attributes(lambda i: {"ticket": i.ticket.number})
+    )
 
 
-def escalate_ticket(*, label: str, source: str = "implement_spec") -> Stage[EscalateInput, TicketEscalated, TicketEscalated]:
+def escalate_ticket(
+    *, label: str, source: str = "implement_spec"
+) -> Stage[EscalateInput, TicketEscalated, TicketEscalated]:
     """Labels the Ticket and its Spec `label` and comments why; the labels are written last, so both labels mean it was done."""
-    return Stage("escalate-ticket", EscalateInput, produces=TicketEscalated).effect(
-        lambda i: _escalated(label)(i) or _escalate(label, source)(i), reconcile=_escalated(label),
-    ).attributes(lambda i: {"ticket": i.ticket.number})
+    return (
+        Stage("escalate-ticket", EscalateInput, produces=TicketEscalated)
+        .effect(
+            lambda i: _escalated(label)(i) or _escalate(label, source)(i),
+            reconcile=_escalated(label),
+        )
+        .attributes(lambda i: {"ticket": i.ticket.number})
+    )
 
 
 def require_delivered() -> Stage[DeliveredInput, SpecGraphSnapshot, Delivery]:
@@ -108,7 +152,11 @@ def require_delivered() -> Stage[DeliveredInput, SpecGraphSnapshot, Delivery]:
 def _ready(i: SpecInput) -> Sequence[Item[Ticket]]:
     spec = i.tracker.spec(i.work.number)
     return [
-        Item(ticket, f"#{ticket.number}", hashlib.sha256(ticket.body.encode()).hexdigest())
+        Item(
+            ticket,
+            f"#{ticket.number}",
+            hashlib.sha256(ticket.body.encode()).hexdigest(),
+        )
         for ticket in spec.deliverable_tickets
         if ticket.actionable
     ]
@@ -119,9 +167,13 @@ def _request(i: TicketInput, path: Path) -> DeveloperRequest:
     initiative_prefix = f"ccode({i.routed.initiative}|"
     commits = i.git.initiative_commits(path, i.routed.base_branch, initiative_prefix)
     return DeveloperRequest(
-        f"{i.routed.initiative}|{i.ticket.number}", _ticket_payload(i.ticket),
+        f"{i.routed.initiative}|{i.ticket.number}",
+        _ticket_payload(i.ticket),
         tuple(f"{commit.sha[:7]} {commit.subject}" for commit in commits),
-        prefix, path, i.routed.base_branch, i.routed.feature_branch,
+        prefix,
+        path,
+        i.routed.base_branch,
+        i.routed.feature_branch,
     )
 
 
@@ -135,15 +187,26 @@ def _ticket_payload(ticket: Ticket) -> dict[str, Json]:
         "url": ticket.url,
         "body": ticket.body,
         "comments": [
-            {"author": comment.author, "body": comment.body, "created_at": comment.created_at} for comment in ticket.comments
+            {
+                "author": comment.author,
+                "body": comment.body,
+                "created_at": comment.created_at,
+            }
+            for comment in ticket.comments
         ],
     }
 
 
-def _implemented(i: TicketInput, reply: DeveloperReply, _: Evidence) -> Verdict[TicketImplemented]:
+def _implemented(
+    i: TicketInput, reply: DeveloperReply, _: Evidence
+) -> Verdict[TicketImplemented]:
     if isinstance(reply, Declined):
         return Fail(reply.reason, TicketRejected(i.ticket.number, reply.reason))
-    return Pass(TicketImplemented(i.ticket.number, reply.commit, reply.summary, reply.verification))
+    return Pass(
+        TicketImplemented(
+            i.ticket.number, reply.commit, reply.summary, reply.verification
+        )
+    )
 
 
 def _closed(i: CloseInput) -> TicketClosed | None:
@@ -161,14 +224,26 @@ def _close(i: CloseInput) -> TicketClosed:
 
 
 def _escalation_reason(i: EscalateInput) -> str:
-    rejected = (event.reason for event in reversed(i.rejected) if event.ticket == i.ticket.number)
+    rejected = (
+        event.reason
+        for event in reversed(i.rejected)
+        if event.ticket == i.ticket.number
+    )
     return next(rejected, "the Ticket was rejected after repeated attempts")
 
 
 def _escalated(label: str) -> Any:
     def reconcile(i: EscalateInput) -> TicketEscalated | None:
-        labelled = label in i.tracker.issue(i.ticket.number).labels and label in i.tracker.issue(i.work.number).labels
-        return TicketEscalated(i.ticket.number, label, _escalation_reason(i)) if labelled else None
+        labelled = (
+            label in i.tracker.issue(i.ticket.number).labels
+            and label in i.tracker.issue(i.work.number).labels
+        )
+        return (
+            TicketEscalated(i.ticket.number, label, _escalation_reason(i))
+            if labelled
+            else None
+        )
+
     return reconcile
 
 
@@ -181,20 +256,30 @@ def _escalate(label: str, source: str) -> Any:
         i.tracker.add_label(i.ticket.number, label)
         i.tracker.add_label(i.work.number, label)
         return TicketEscalated(i.ticket.number, label, reason)
+
     return run
 
 
-def _delivered(i: DeliveredInput, spec: SpecGraphSnapshot, _: Evidence) -> Verdict[Delivery]:
+def _delivered(
+    i: DeliveredInput, spec: SpecGraphSnapshot, _: Evidence
+) -> Verdict[Delivery]:
     if i.escalated:
         numbers = ", ".join(f"#{event.ticket}" for event in i.escalated)
         return Fail(f"Tickets were escalated to a person in this run: {numbers}")
     if spec.held_tickets:
         numbers = ", ".join(f"#{number}" for number in spec.held_tickets)
         return Hold(f"Tickets remain held: {numbers}")
-    undelivered = [ticket.number for ticket in spec.deliverable_tickets if ticket.actionable]
+    undelivered = [
+        ticket.number for ticket in spec.deliverable_tickets if ticket.actionable
+    ]
     if undelivered:
         numbers = ", ".join(f"#{number}" for number in undelivered)
-        return Fail(f"Tickets remain undelivered although the delivery loop ended: {numbers}")
+        return Fail(
+            f"Tickets remain undelivered although the delivery loop ended: {numbers}"
+        )
     path = i.worktree.path
-    commits = tuple(f"{commit.sha[:7]} {commit.subject}" for commit in i.git.branch_commits(path, i.routed.base_branch))
+    commits = tuple(
+        f"{commit.sha[:7]} {commit.subject}"
+        for commit in i.git.branch_commits(path, i.routed.base_branch)
+    )
     return Pass(Delivery(i.git.head(path).sha, commits))

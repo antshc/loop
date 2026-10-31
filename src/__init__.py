@@ -35,8 +35,8 @@ from .clis import (
     CopilotJson,
     CopilotLogReader,
     CopilotText,
-    ProcessCliRunner,
     Permissions,
+    ProcessCliRunner,
     SessionLogReader,
     Transcript,
     Transport,
@@ -62,9 +62,9 @@ from .git import (
     GitRuntime,
     GitService,
     GitStrategy,
-    WorktreeError,
     HeadStrategy,
     MergeToHeadStrategy,
+    WorktreeError,
 )
 from .hooks import (
     AgentCliHook,
@@ -88,7 +88,16 @@ from .hooks import (
     WorktreeRemovingLoopHook,
 )
 from .log import configure_logging
-from .observe import AgentRunRecord, LogReading, Role, RunObserver, ToolCall, Usage, WorktreeEvent, otlp_observer
+from .observe import (
+    AgentRunRecord,
+    LogReading,
+    Role,
+    RunObserver,
+    ToolCall,
+    Usage,
+    WorktreeEvent,
+    otlp_observer,
+)
 from .run import (
     AgentContext,
     AgentOptions,
@@ -108,7 +117,6 @@ from .runtime import (
     All,
     DefinitionError,
     Effect,
-    encode,
     Event,
     Evidence,
     Fail,
@@ -116,7 +124,6 @@ from .runtime import (
     Gate,
     GitCommand,
     Handoff,
-    handoff,
     HarnessCommits,
     History,
     Hold,
@@ -126,8 +133,6 @@ from .runtime import (
     Limit,
     LogSpans,
     Next,
-    next_,
-    next_item,
     NextItem,
     NoRepository,
     Nothing,
@@ -138,14 +143,11 @@ from .runtime import (
     RecordedSpan,
     RecordingSpans,
     Reroute,
-    reroute,
     Restore,
     Retain,
     Rework,
-    rework,
     Route,
     Routes,
-    run,
     RunResult,
     RunStatus,
     Selector,
@@ -154,7 +156,6 @@ from .runtime import (
     Spans,
     Stage,
     Stop,
-    stop,
     StopSignal,
     Verdict,
     Verify,
@@ -167,16 +168,14 @@ from .runtime import (
     WorkspaceOpener,
     WorktreeCommit,
     WorktreeGit,
-)
-from .shared import (
-    CommandError,
-    CommandRunner,
-    Commit,
-    git_command,
-    GIT_TIMEOUT_S,
-    GitClient,
-    github_slug,
-    Runner,
+    encode,
+    handoff,
+    next_,
+    next_item,
+    reroute,
+    rework,
+    run,
+    stop,
 )
 from .sessions import (
     CliOutcome,
@@ -189,6 +188,16 @@ from .sessions import (
     SessionStore,
     Start,
     Turn,
+)
+from .shared import (
+    GIT_TIMEOUT_S,
+    CommandError,
+    CommandRunner,
+    Commit,
+    GitClient,
+    Runner,
+    git_command,
+    github_slug,
 )
 
 # Silent until the host calls configure_logging() or sets up its own handlers.
@@ -372,4 +381,3 @@ __all__ = [
     "git_command",
     "github_slug",
 ]
-

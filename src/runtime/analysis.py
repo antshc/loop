@@ -8,11 +8,28 @@ from typing import Any
 
 from .event import DefinitionError, Event
 from .facts import (
-    Fact, FieldKind, InputField, closed_sum, event_shape, input_fields, merge, place_plain, producers_of,
+    Fact,
+    FieldKind,
+    InputField,
+    closed_sum,
+    event_shape,
+    input_fields,
+    merge,
+    place_plain,
+    producers_of,
 )
 from .nodes import DispatchNode, EachNode, ErrorRoute, Node, StageNode, WithinNode
 from .routes import Handoff, Next, NextItem, Reroute, Rework, Route, Stop
-from .stage import AgentExecution, Action, HarnessCommits, NoRepository, Retain, Selector, Stage, WorkspaceOpener
+from .stage import (
+    Action,
+    AgentExecution,
+    HarnessCommits,
+    NoRepository,
+    Retain,
+    Selector,
+    Stage,
+    WorkspaceOpener,
+)
 from .worktree import WorktreeGit
 
 
@@ -37,8 +54,14 @@ class Analysis:
         """The wiring table as text: one row per input field, naming the upstream Stage that feeds it."""
         header = WiringRow("stage", "field", FieldKind.PLAIN, "source")
         rows = [header, *self.rows]
-        widths = (max(len(row.owner) for row in rows), max(len(row.field) for row in rows))
-        lines = [f"{row.owner:<{widths[0]}}  {row.field:<{widths[1]}}  {row.source}".rstrip() for row in rows]
+        widths = (
+            max(len(row.owner) for row in rows),
+            max(len(row.field) for row in rows),
+        )
+        lines = [
+            f"{row.owner:<{widths[0]}}  {row.field:<{widths[1]}}  {row.source}".rstrip()
+            for row in rows
+        ]
         return "\n".join(lines) + "\n"
 
 
@@ -105,7 +128,9 @@ class _Walker:
 
     # ---- Stage -------------------------------------------------------------------------------------------
 
-    def stage(self, stage: Stage[Any, Any, Any], facts: tuple[Fact, ...], env: _Env) -> _Exit:
+    def stage(
+        self, stage: Stage[Any, Any, Any], facts: tuple[Fact, ...], env: _Env
+    ) -> _Exit:
         """Checks one placed Stage and returns the facts after it."""
         owner = f"Stage '{stage.id}'"
         self.register_placement(stage, owner)
@@ -121,18 +146,34 @@ class _Walker:
     def register_placement(self, stage: Stage[Any, Any, Any], owner: str) -> None:
         """Rejects a second placement under the same identity."""
         if stage.id in self.placed or stage.id in self.handoffs:
-            raise DefinitionError(f"{owner}: identity is used more than once; rename the second placement with .named(...)")
+            raise DefinitionError(
+                f"{owner}: identity is used more than once; rename the second placement with .named(...)"
+            )
         self.placed[stage.id] = stage
 
-    def check_declaration(self, stage: Stage[Any, Any, Any], owner: str, *, with_routes: bool) -> None:
+    def check_declaration(
+        self, stage: Stage[Any, Any, Any], owner: str, *, with_routes: bool
+    ) -> None:
         """The checks that need nothing beyond the Stage itself."""
         if stage.once_ is not None and stage.limit_ is not None:
-            raise DefinitionError(f"{owner}: set either once or an at-most-N limit, not both")
-        if stage.once_ is not None and (stage.executor is None or isinstance(stage.executor, Action)):
-            kind = "no executor" if stage.executor is None else "a deterministic action executor"
-            raise DefinitionError(f"{owner}: a once-per-key rule needs an agent or effect executor, but this Stage has {kind}")
+            raise DefinitionError(
+                f"{owner}: set either once or an at-most-N limit, not both"
+            )
+        if stage.once_ is not None and (
+            stage.executor is None or isinstance(stage.executor, Action)
+        ):
+            kind = (
+                "no executor"
+                if stage.executor is None
+                else "a deterministic action executor"
+            )
+            raise DefinitionError(
+                f"{owner}: a once-per-key rule needs an agent or effect executor, but this Stage has {kind}"
+            )
         if stage.limit_ is not None and stage.limit_.attempts < 1:
-            raise DefinitionError(f"{owner}: the limit must allow at least 1 attempt, not {stage.limit_.attempts}")
+            raise DefinitionError(
+                f"{owner}: the limit must allow at least 1 attempt, not {stage.limit_.attempts}"
+            )
         if with_routes:
             self.check_rework(stage, owner)
 
@@ -144,20 +185,38 @@ class _Walker:
     def check_rework(self, stage: Stage[Any, Any, Any], owner: str) -> None:
         """Rework is for failures of this Stage only, bounded, and never combined with a retained worktree."""
         routes = stage.routes
-        reworks = [route for route in (routes.passed, routes.failed, routes.held) if isinstance(route, Rework)]
+        reworks = [
+            route
+            for route in (routes.passed, routes.failed, routes.held)
+            if isinstance(route, Rework)
+        ]
         if isinstance(routes.held, Rework):
-            raise DefinitionError(f"{owner}: a hold route cannot ask for rework; a hold waits for something outside")
+            raise DefinitionError(
+                f"{owner}: a hold route cannot ask for rework; a hold waits for something outside"
+            )
         if isinstance(routes.passed, Rework):
             raise DefinitionError(f"{owner}: a pass route cannot ask for rework")
         for route in reworks:
             if route.max_attempts < 1:
-                raise DefinitionError(f"{owner}: the rework bound must be at least 1, not {route.max_attempts}")
+                raise DefinitionError(
+                    f"{owner}: the rework bound must be at least 1, not {route.max_attempts}"
+                )
             if not isinstance(route.then, (Stop, Handoff)):
-                raise DefinitionError(f"{owner}: rework ends in a stop or a hand-off, not {route.then!r}")
-        if reworks and isinstance(stage.work, HarnessCommits) and isinstance(stage.work.on_fail, Retain):
-            raise DefinitionError(f"{owner}: retains a failed attempt for inspection, so it cannot have a rework route")
+                raise DefinitionError(
+                    f"{owner}: rework ends in a stop or a hand-off, not {route.then!r}"
+                )
+        if (
+            reworks
+            and isinstance(stage.work, HarnessCommits)
+            and isinstance(stage.work.on_fail, Retain)
+        ):
+            raise DefinitionError(
+                f"{owner}: retains a failed attempt for inspection, so it cannot have a rework route"
+            )
 
-    def check_workspace(self, stage: Stage[Any, Any, Any], owner: str, env: _Env) -> None:
+    def check_workspace(
+        self, stage: Stage[Any, Any, Any], owner: str, env: _Env
+    ) -> None:
         """An agent, a repository contract or the workspace itself needs an enclosing workspace scope."""
         if env.workspace:
             return
@@ -167,7 +226,9 @@ class _Walker:
             reason = f"has the repository contract {type(stage.work).__name__}"
         else:
             return
-        raise DefinitionError(f"{owner}: {reason} but is placed outside a workspace scope")
+        raise DefinitionError(
+            f"{owner}: {reason} but is placed outside a workspace scope"
+        )
 
     def stage_exit(self, stage: Stage[Any, Any, Any], facts: tuple[Fact, ...]) -> _Exit:
         """The facts after a Stage on every path that continues to the next node."""
@@ -182,11 +243,15 @@ class _Walker:
 
     # ---- routes ------------------------------------------------------------------------------------------
 
-    def check_route(self, owner: str, route: Route, facts: tuple[Fact, ...], env: _Env) -> None:
+    def check_route(
+        self, owner: str, route: Route, facts: tuple[Fact, ...], env: _Env
+    ) -> None:
         """A route must make sense where it is written."""
         match route:
             case NextItem() if self.strict and not env.items:
-                raise DefinitionError(f"{owner}: a next-item route appears outside an each loop")
+                raise DefinitionError(
+                    f"{owner}: a next-item route appears outside an each loop"
+                )
             case Reroute() if self.strict:
                 self.check_reroute(owner, route, env)
             case Handoff():
@@ -205,14 +270,18 @@ class _Walker:
             )
         case.reroutes.setdefault(case.current, {})[route.variant] = owner
 
-    def check_handoff(self, owner: str, route: Handoff, facts: tuple[Fact, ...], env: _Env) -> None:
+    def check_handoff(
+        self, owner: str, route: Handoff, facts: tuple[Fact, ...], env: _Env
+    ) -> None:
         """A hand-off runs an effect or action Stage, which is checked where the hand-off is written."""
         stage = route.stage
         label = f"Stage '{stage.id}'" if isinstance(stage, Stage) else repr(stage)
         if not isinstance(stage, Stage):
             raise DefinitionError(f"{owner}: a hand-off runs a Stage, not {stage!r}")
         if isinstance(stage.executor, AgentExecution):
-            raise DefinitionError(f"{owner}: hand-off Stage '{stage.id}' runs an agent; a hand-off runs an effect or action Stage")
+            raise DefinitionError(
+                f"{owner}: hand-off Stage '{stage.id}' runs an agent; a hand-off runs an effect or action Stage"
+            )
         self.register_handoff(stage, owner)
         self.check_declaration(stage, label, with_routes=False)
         self.require_git_for_contract(stage)
@@ -223,31 +292,56 @@ class _Walker:
     def register_handoff(self, stage: Stage[Any, Any, Any], owner: str) -> None:
         """A hand-off identity belongs to one Stage value, which any number of routes may share."""
         known = self.handoffs.get(stage.id)
-        if stage.id in self.placed or (known is not None and known is not stage and known != stage):
-            raise DefinitionError(f"{owner}: hand-off Stage identity '{stage.id}' is already used by a different Stage")
+        if stage.id in self.placed or (
+            known is not None and known is not stage and known != stage
+        ):
+            raise DefinitionError(
+                f"{owner}: hand-off Stage identity '{stage.id}' is already used by a different Stage"
+            )
         self.handoffs[stage.id] = stage
 
     # ---- input resolution --------------------------------------------------------------------------------
 
     def resolve_inputs(
-        self, owner: str, row_id: str, input_type: type, reads: tuple[tuple[type[Event], str], ...],
-        facts: tuple[Fact, ...], env: _Env,
+        self,
+        owner: str,
+        row_id: str,
+        input_type: type,
+        reads: tuple[tuple[type[Event], str], ...],
+        facts: tuple[Fact, ...],
+        env: _Env,
     ) -> None:
         """Resolves every field of an input, recording its wiring row; raises naming the owner, the field and the producers."""
         fields = input_fields(owner, input_type)
         bindings = dict(reads)
         for item in fields:
-            kind = place_plain(item, env.context, env.items) if item.kind is FieldKind.PLAIN else item.kind
+            kind = (
+                place_plain(item, env.context, env.items)
+                if item.kind is FieldKind.PLAIN
+                else item.kind
+            )
             source = self.resolve_field(owner, item, kind, bindings, facts, env)
             self.rows.append(WiringRow(row_id, item.name, kind, source))
         if not fields:
             self.rows.append(WiringRow(row_id, "-", FieldKind.PLAIN, "no input"))
         for event, producer in reads:
-            if not any(item.kind in (FieldKind.EVENT, FieldKind.OPTIONAL) and event in item.shape for item in fields):
-                raise DefinitionError(f"{owner}: reads {event.__name__} from '{producer}', but no input field reads {event.__name__}")
+            if not any(
+                item.kind in (FieldKind.EVENT, FieldKind.OPTIONAL)
+                and event in item.shape
+                for item in fields
+            ):
+                raise DefinitionError(
+                    f"{owner}: reads {event.__name__} from '{producer}', but no input field reads {event.__name__}"
+                )
 
     def resolve_field(
-        self, owner: str, item: InputField, kind: FieldKind, bindings: dict[type[Event], str], facts: tuple[Fact, ...], env: _Env,
+        self,
+        owner: str,
+        item: InputField,
+        kind: FieldKind,
+        bindings: dict[type[Event], str],
+        facts: tuple[Fact, ...],
+        env: _Env,
     ) -> str:
         """Resolves one field and returns the source text for the wiring table."""
         match kind:
@@ -262,7 +356,9 @@ class _Walker:
                 return f"history {_names(item.shape)}"
             case FieldKind.WORKSPACE:
                 if not env.workspace:
-                    raise DefinitionError(f"{owner} field '{item.name}': reads the agent workspace outside a workspace scope")
+                    raise DefinitionError(
+                        f"{owner} field '{item.name}': reads the agent workspace outside a workspace scope"
+                    )
                 return "workspace"
             case FieldKind.CONTEXT:
                 return f"context {item.type_.__name__}"
@@ -272,11 +368,19 @@ class _Walker:
         return f"service {item.type_.__name__}"
 
     def resolve_event(
-        self, owner: str, item: InputField, kind: FieldKind, bindings: dict[type[Event], str], facts: tuple[Fact, ...],
+        self,
+        owner: str,
+        item: InputField,
+        kind: FieldKind,
+        bindings: dict[type[Event], str],
+        facts: tuple[Fact, ...],
     ) -> str:
         """Resolves an Event field: one named or unambiguous producer, definitely produced unless the field is optional."""
         label = f"{owner} field '{item.name}'"
-        bound = next((producer for event, producer in bindings.items() if event in item.shape), None)
+        bound = next(
+            (producer for event, producer in bindings.items() if event in item.shape),
+            None,
+        )
         producers = self.producers(label, item, facts)
         if bound is not None:
             self.check_binding(label, item, bound, producers)
@@ -290,32 +394,57 @@ class _Walker:
         suffix = " (optional)" if kind is FieldKind.OPTIONAL else ""
         return f"event {_names(item.shape)} from {producers[0]}{suffix}"
 
-    def producers(self, label: str, item: InputField, facts: tuple[Fact, ...]) -> tuple[str, ...]:
+    def producers(
+        self, label: str, item: InputField, facts: tuple[Fact, ...]
+    ) -> tuple[str, ...]:
         """The upstream producers of the field, raising with the field's label when there is none."""
-        producers = tuple(dict.fromkeys(p for event in sorted(item.shape, key=_name) for p in producers_of(facts, event)))
+        producers = tuple(
+            dict.fromkeys(
+                p
+                for event in sorted(item.shape, key=_name)
+                for p in producers_of(facts, event)
+            )
+        )
         if not producers:
-            raise DefinitionError(f"{label}: no earlier Stage produces {_names(item.shape)}; place a producer before this Stage")
+            raise DefinitionError(
+                f"{label}: no earlier Stage produces {_names(item.shape)}; place a producer before this Stage"
+            )
         return producers
 
-    def check_binding(self, label: str, item: InputField, bound: str, producers: tuple[str, ...]) -> None:
+    def check_binding(
+        self, label: str, item: InputField, bound: str, producers: tuple[str, ...]
+    ) -> None:
         """A named producer must produce the Event and sit upstream."""
         if bound in producers:
             return
         stage = self.stages.get(bound)
         if stage is None:
-            raise DefinitionError(f"{label}: producer '{bound}' is not upstream; no earlier Stage has that identity")
+            raise DefinitionError(
+                f"{label}: producer '{bound}' is not upstream; no earlier Stage has that identity"
+            )
         if not item.shape & (_produced(stage) | frozenset(stage.may_emit)):
-            raise DefinitionError(f"{label}: producer '{bound}' does not produce {_names(item.shape)}")
-        raise DefinitionError(f"{label}: producer '{bound}' is not upstream of this Stage")
+            raise DefinitionError(
+                f"{label}: producer '{bound}' does not produce {_names(item.shape)}"
+            )
+        raise DefinitionError(
+            f"{label}: producer '{bound}' is not upstream of this Stage"
+        )
 
-    def require_definite(self, label: str, item: InputField, producer: str, facts: tuple[Fact, ...]) -> None:
+    def require_definite(
+        self, label: str, item: InputField, producer: str, facts: tuple[Fact, ...]
+    ) -> None:
         """A non-optional Event must be produced on every path that reaches the reader."""
-        if any(fact.producer == producer and fact.definite and fact.shape <= item.shape for fact in facts):
+        if any(
+            fact.producer == producer and fact.definite and fact.shape <= item.shape
+            for fact in facts
+        ):
             return
         stage = self.stages.get(producer)
         if stage is not None and stage.when_ is not None:
             why = "its condition may skip it"
-        elif stage is not None and (isinstance(stage.routes.failed, Next) or isinstance(stage.routes.held, Next)):
+        elif stage is not None and (
+            isinstance(stage.routes.failed, Next) or isinstance(stage.routes.held, Next)
+        ):
             why = "its fail or hold route continues without it"
         else:
             why = "it does not produce exactly that Event on every path"
@@ -336,15 +465,27 @@ class _Walker:
         self.flow(node.body.nodes, facts, body_env)
         return _Exit((*facts, *_maybe_produced(node.body.nodes)))
 
-    def resolve_selector(self, select: Selector[Any, Any], facts: tuple[Fact, ...], env: _Env) -> None:
+    def resolve_selector(
+        self, select: Selector[Any, Any], facts: tuple[Fact, ...], env: _Env
+    ) -> None:
         """A Selector's input resolves like a Stage's."""
-        self.resolve_inputs(f"Selector '{select.id}'", select.id, select.input, (), facts, env)
+        self.resolve_inputs(
+            f"Selector '{select.id}'", select.id, select.input, (), facts, env
+        )
 
-    def check_loop_route(self, select: Selector[Any, Any], route: Route, facts: tuple[Fact, ...], env: _Env) -> None:
+    def check_loop_route(
+        self,
+        select: Selector[Any, Any],
+        route: Route,
+        facts: tuple[Fact, ...],
+        env: _Env,
+    ) -> None:
         """A loop's own routes cannot rework; the rest follow the usual placement rules."""
         owner = f"Selector '{select.id}'"
         if isinstance(route, Rework):
-            raise DefinitionError(f"{owner}: an each loop cannot rework; rework belongs to a Stage's own route")
+            raise DefinitionError(
+                f"{owner}: an each loop cannot rework; rework belongs to a Stage's own route"
+            )
         self.check_route(owner, route, facts, env)
 
     def within(self, node: WithinNode, facts: tuple[Fact, ...], env: _Env) -> _Exit:
@@ -353,16 +494,22 @@ class _Walker:
             self.resolve_opener(node.opener, facts, env)
         return self.flow(node.body.nodes, facts, replace(env, workspace=True))
 
-    def resolve_opener(self, opener: WorkspaceOpener[Any], facts: tuple[Fact, ...], env: _Env) -> None:
+    def resolve_opener(
+        self, opener: WorkspaceOpener[Any], facts: tuple[Fact, ...], env: _Env
+    ) -> None:
         """A workspace opener's input resolves like a Stage's."""
-        self.resolve_inputs(f"Workspace opener '{opener.id}'", opener.id, opener.input, (), facts, env)
+        self.resolve_inputs(
+            f"Workspace opener '{opener.id}'", opener.id, opener.input, (), facts, env
+        )
 
     def dispatch(self, node: DispatchNode, facts: tuple[Fact, ...], env: _Env) -> _Exit:
         """An exhaustive switch over a closed sum, each case seeing its variant as definitely produced."""
         name = getattr(node.on, "__name__", repr(node.on))
         variants = closed_sum(node.on)
         if variants is None:
-            raise DefinitionError(f"dispatch on {name}: not a closed sum of at least two Events")
+            raise DefinitionError(
+                f"dispatch on {name}: not a closed sum of at least two Events"
+            )
         self.check_exhaustive(name, variants, node)
         if self.strict:
             self.check_switched_sum_produced(name, variants, facts)
@@ -375,31 +522,55 @@ class _Walker:
         continuing = [exit_.facts for exit_ in exits if exit_.continues]
         return _Exit(merge(continuing)) if continuing else _Exit(facts, False)
 
-    def check_exhaustive(self, name: str, variants: frozenset[type], node: DispatchNode) -> None:
+    def check_exhaustive(
+        self, name: str, variants: frozenset[type], node: DispatchNode
+    ) -> None:
         """Every variant is covered exactly once and nothing else is."""
         keys = [variant for variant, _ in node.cases]
         duplicated = sorted({key.__name__ for key in keys if keys.count(key) > 1})
-        missing = sorted(variant.__name__ for variant in variants if variant not in keys)
+        missing = sorted(
+            variant.__name__ for variant in variants if variant not in keys
+        )
         extra = sorted(key.__name__ for key in keys if key not in variants)
         if duplicated or missing or extra:
             problems = [
-                f"{label} {', '.join(names)}" for label, names in (
-                    ("misses", missing), ("duplicates", duplicated), ("covers non-variants", extra),
-                ) if names
+                f"{label} {', '.join(names)}"
+                for label, names in (
+                    ("misses", missing),
+                    ("duplicates", duplicated),
+                    ("covers non-variants", extra),
+                )
+                if names
             ]
             raise DefinitionError(f"dispatch on {name}: " + "; ".join(problems))
 
-    def check_switched_sum_produced(self, name: str, variants: frozenset[type], facts: tuple[Fact, ...]) -> None:
+    def check_switched_sum_produced(
+        self, name: str, variants: frozenset[type], facts: tuple[Fact, ...]
+    ) -> None:
         """Some earlier Stage must definitely produce a variant, or the switch has nothing to switch on."""
         if not any(fact.definite and fact.shape & variants for fact in facts):
-            raise DefinitionError(f"dispatch on {name}: no earlier Stage definitely produces any variant of {name}")
+            raise DefinitionError(
+                f"dispatch on {name}: no earlier Stage definitely produces any variant of {name}"
+            )
 
     def case(
-        self, variant: type, case: Any, variants: frozenset[type], reroutes: dict[type, dict[type, str]],
-        facts: tuple[Fact, ...], env: _Env,
+        self,
+        variant: type,
+        case: Any,
+        variants: frozenset[type],
+        reroutes: dict[type, dict[type, str]],
+        facts: tuple[Fact, ...],
+        env: _Env,
     ) -> _Exit:
         """One case: a Flow runs with its variant produced; a stop or hand-off ends the scope."""
-        seen = (*facts, *(Fact(frozenset({variant}), f.producer, True) for f in facts if f.definite and variant in f.shape))
+        seen = (
+            *facts,
+            *(
+                Fact(frozenset({variant}), f.producer, True)
+                for f in facts
+                if f.definite and variant in f.shape
+            ),
+        )
         if isinstance(case, Handoff):
             self.check_handoff(f"dispatch case {variant.__name__}", case, seen, env)
             return _Exit(facts, False)
@@ -427,7 +598,9 @@ def _stages_in(nodes: Iterable[Node]) -> Iterable[Stage[Any, Any, Any]]:
         match node:
             case StageNode(stage):
                 yield stage
-                yield from _hand_offs((stage.routes.passed, stage.routes.failed, stage.routes.held))
+                yield from _hand_offs(
+                    (stage.routes.passed, stage.routes.failed, stage.routes.held)
+                )
             case EachNode(body=body):
                 yield from _hand_offs((node.on_fail, node.on_hold))
                 yield from _stages_in(body.nodes)
@@ -452,7 +625,8 @@ def _hand_offs(routes: Iterable[Route]) -> Iterable[Stage[Any, Any, Any]]:
 def _maybe_produced(nodes: Iterable[Node]) -> tuple[Fact, ...]:
     """Facts that every Event a body's Stages may produce is only maybe produced."""
     return tuple(
-        fact for stage in _stages_in(nodes)
+        fact
+        for stage in _stages_in(nodes)
         for fact in (Fact(_produced(stage), stage.id, False), *_may_emit(stage))
     )
 
@@ -483,10 +657,18 @@ def _require_acyclic(name: str, reroutes: dict[type, dict[type, str]]) -> None:
 
     def visit(variant: type, path: tuple[type, ...]) -> None:
         if variant in path:
-            cycle = " -> ".join(_name(step) for step in (*path[path.index(variant):], variant))
-            steps = (*path[path.index(variant):], variant)
-            owners = ", ".join(dict.fromkeys(reroutes[source][target] for source, target in zip(steps, steps[1:])))
-            raise DefinitionError(f"dispatch on {name}: reroutes form a cycle {cycle} (via {owners})")
+            cycle = " -> ".join(
+                _name(step) for step in (*path[path.index(variant) :], variant)
+            )
+            steps = (*path[path.index(variant) :], variant)
+            owners = ", ".join(
+                dict.fromkeys(
+                    reroutes[source][target] for source, target in zip(steps, steps[1:])
+                )
+            )
+            raise DefinitionError(
+                f"dispatch on {name}: reroutes form a cycle {cycle} (via {owners})"
+            )
         if variant in finished:
             return
         for target in reroutes.get(variant, {}):
@@ -498,7 +680,11 @@ def _require_acyclic(name: str, reroutes: dict[type, dict[type, str]]) -> None:
 
 
 def analyze(
-    nodes: Sequence[Node], *, strict: bool, context: type | None = None, error_routes: Sequence[ErrorRoute] = (),
+    nodes: Sequence[Node],
+    *,
+    strict: bool,
+    context: type | None = None,
+    error_routes: Sequence[ErrorRoute] = (),
     whole: bool = False,
 ) -> Analysis:
     """Validates a definition; `strict` resolves inputs against the Workflow, `whole` adds the checks that need every Stage."""
@@ -516,10 +702,16 @@ def analyze(
 
 def _require_history_producers(walker: _Walker) -> None:
     """Every History[T] needs some Stage of the definition that produces T."""
-    produced = {event for stage in walker.stages.values() for event in (*_produced(stage), *stage.may_emit)}
+    produced = {
+        event
+        for stage in walker.stages.values()
+        for event in (*_produced(stage), *stage.may_emit)
+    }
     for owner, name, event in walker.histories:
         if event not in produced:
-            raise DefinitionError(f"{owner} field '{name}': no Stage of the definition produces {_name(event)} for its history")
+            raise DefinitionError(
+                f"{owner} field '{name}': no Stage of the definition produces {_name(event)} for its history"
+            )
 
 
 def _distinct(rows: Iterable[WiringRow]) -> tuple[WiringRow, ...]:

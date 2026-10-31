@@ -48,7 +48,11 @@ class SpecGraphSnapshot:
     @property
     def complete(self) -> bool:
         """The Spec, every Ticket, and the sub-issue listing were all fully read."""
-        return not self.gaps and self.spec.complete and all(ticket.complete for ticket in self.tickets)
+        return (
+            not self.gaps
+            and self.spec.complete
+            and all(ticket.complete for ticket in self.tickets)
+        )
 
     @property
     def number(self) -> int:
@@ -122,7 +126,10 @@ class SpecGraphSnapshot:
         return tuple(
             ticket.number
             for ticket in self.tickets
-            if ticket.state is IssueState.OPEN and not (ticket.actionable and readiness[ticket.number] is TicketReadiness.READY)
+            if ticket.state is IssueState.OPEN
+            and not (
+                ticket.actionable and readiness[ticket.number] is TicketReadiness.READY
+            )
         )
 
     @property
@@ -160,15 +167,21 @@ class SpecGraphSnapshot:
         """This snapshot with the Ticket closed as completed, which satisfies the edges that wait for it."""
         closed = Ticket.of(self.ticket(number).closed(CloseReason.COMPLETED))
         edges = tuple(
-            replace(edge, state=IssueState.CLOSED, close_reason=CloseReason.COMPLETED) if edge.blocker == closed.ref else edge
+            replace(edge, state=IssueState.CLOSED, close_reason=CloseReason.COMPLETED)
+            if edge.blocker == closed.ref
+            else edge
             for edge in self.blocked_by
         )
         return replace(self._with_ticket(closed), blocked_by=edges)
 
-    def with_created(self, created: Iterable[Ticket], blocked_by: Iterable[BlockedByRelation] = ()) -> SpecGraphSnapshot:
+    def with_created(
+        self, created: Iterable[Ticket], blocked_by: Iterable[BlockedByRelation] = ()
+    ) -> SpecGraphSnapshot:
         """This snapshot with newly created Tickets appended, related to the Spec, and ordered by `blocked_by`."""
         created = tuple(created)
-        relations = tuple(IssueRelation(self.spec.ref, ticket.ref) for ticket in created)
+        relations = tuple(
+            IssueRelation(self.spec.ref, ticket.ref) for ticket in created
+        )
         return replace(
             self,
             tickets=(*self.tickets, *created),
@@ -178,4 +191,10 @@ class SpecGraphSnapshot:
         )
 
     def _with_ticket(self, changed: Ticket) -> SpecGraphSnapshot:
-        return replace(self, tickets=tuple(changed if ticket.number == changed.number else ticket for ticket in self.tickets))
+        return replace(
+            self,
+            tickets=tuple(
+                changed if ticket.number == changed.number else ticket
+                for ticket in self.tickets
+            ),
+        )

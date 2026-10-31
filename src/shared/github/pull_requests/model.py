@@ -221,12 +221,18 @@ class PullRequestSnapshot:
     @property
     def current_checks(self) -> tuple[CheckResult, ...]:
         """The check results produced for the current head commit."""
-        return tuple(check for check in self.checks if not check.stale(self.pull_request.head_sha))
+        return tuple(
+            check
+            for check in self.checks
+            if not check.stale(self.pull_request.head_sha)
+        )
 
     @property
     def stale_checks(self) -> tuple[CheckResult, ...]:
         """The check results produced for any other commit."""
-        return tuple(check for check in self.checks if check.stale(self.pull_request.head_sha))
+        return tuple(
+            check for check in self.checks if check.stale(self.pull_request.head_sha)
+        )
 
 
 @dataclass(frozen=True)

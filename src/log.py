@@ -22,7 +22,11 @@ def configure_logging(
 
     Handlers go on the `logger` subtree only; pass "" to configure the root logger for a whole application.
     """
-    numeric_level = level if isinstance(level, int) else getattr(logging, level.upper(), logging.INFO)
+    numeric_level = (
+        level
+        if isinstance(level, int)
+        else getattr(logging, level.upper(), logging.INFO)
+    )
 
     handlers = [_console_handler(numeric_level, stream)]
     if numeric_level <= logging.DEBUG and log_file is not None:

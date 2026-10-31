@@ -12,11 +12,21 @@ from pathlib import Path
 from subprocess import CalledProcessError
 from types import FrameType
 
-from loop import Agent, LoopHook, WorktreeError, configure_logging
-
-from workflows.software_factory.events.specs import RepositoryTarget
-from loop import Ledger, LogSpans, RunResult, Services, Spans, StopSignal, Workflow, WorktreeGit, run
-from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
+from loop import (
+    Agent,
+    Ledger,
+    LogSpans,
+    LoopHook,
+    RunResult,
+    Services,
+    Spans,
+    StopSignal,
+    Workflow,
+    WorktreeError,
+    WorktreeGit,
+    configure_logging,
+    run,
+)
 from loop.shared.git import GitClient
 from loop.shared.github.account import GitHub
 from loop.shared.github.issues.client import Issues
@@ -24,7 +34,15 @@ from loop.shared.github.issues.errors import IssueError
 from loop.shared.github.issues.graph import SpecGraphSnapshot
 from loop.shared.github.repo import GhCli, GitHubRepo
 from loop.shared.process import CommandRunner, git_command
-from workflows.software_factory.infrastructure.telemetry import OtelSpans, OtlpObserverFactory, Tee, TracingObserver
+
+from workflows.software_factory.events.specs import RepositoryTarget
+from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
+from workflows.software_factory.infrastructure.telemetry import (
+    OtelSpans,
+    OtlpObserverFactory,
+    Tee,
+    TracingObserver,
+)
 from workflows.software_factory.stages.specs import post_failure_comment
 
 from .definition import FAILURE_ERRORS, NAME, implement_spec
@@ -85,8 +103,12 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="implement_spec")
     parser.add_argument("--log-dir", type=Path, default=None)
     parser.add_argument("--log-level", default=LOG_LEVEL)
-    parser.add_argument("--spec", type=int, default=None, help="deliver only this Spec number")
-    parser.add_argument("--no-otel", action="store_true", help="disable telemetry, including for --dry")
+    parser.add_argument(
+        "--spec", type=int, default=None, help="deliver only this Spec number"
+    )
+    parser.add_argument(
+        "--no-otel", action="store_true", help="disable telemetry, including for --dry"
+    )
     parser.add_argument(
         "--otlp-endpoint",
         default=None,
@@ -104,8 +126,17 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         action="store_true",
         help=f"fake every dependency and publish telemetry to the dashboard (OTLP endpoint defaults to {DRY_OTLP_ENDPOINT})",
     )
-    parser.add_argument("--fake-speed", type=float, default=1.0, help="delay multiplier for the fake agent; 0 is instant")
-    parser.add_argument("--no-rework", action="store_true", help="the fake agent never fails a first attempt")
+    parser.add_argument(
+        "--fake-speed",
+        type=float,
+        default=1.0,
+        help="delay multiplier for the fake agent; 0 is instant",
+    )
+    parser.add_argument(
+        "--no-rework",
+        action="store_true",
+        help="the fake agent never fails a first attempt",
+    )
     args = parser.parse_args(argv)
     if args.dry:
         args.fake = list(SEAMS)
@@ -113,17 +144,23 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     if args.no_otel:
         args.otlp_endpoint = None
     if "git" in args.fake and "agent" not in args.fake:
-        parser.error("--fake git needs --fake agent: a real agent would commit where the fake git cannot see")
+        parser.error(
+            "--fake git needs --fake agent: a real agent would commit where the fake git cannot see"
+        )
     return args
 
 
 def _dry_endpoint(endpoint: str | None) -> str:
-    return endpoint or os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT") or DRY_OTLP_ENDPOINT
+    return (
+        endpoint or os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT") or DRY_OTLP_ENDPOINT
+    )
 
 
 def harness_target() -> RepositoryTarget:
     """The harness repository as the one target, with every optional activity on."""
-    return RepositoryTarget(HARNESS_SLUG, _ROOT, _ROOT / "workspace" / f"{_ROOT.name}.worktrees")
+    return RepositoryTarget(
+        HARNESS_SLUG, _ROOT, _ROOT / "workspace" / f"{_ROOT.name}.worktrees"
+    )
 
 
 def build_services(fakes: Fakes, observer: TracingObserver | None) -> Services:
@@ -132,16 +169,31 @@ def build_services(fakes: Fakes, observer: TracingObserver | None) -> Services:
     harness = harness_target()
     gh = GhCli(run_process, cwd=harness.checkout)
     dry_git = fakes.git()
-    git, worktree_git = dry_git if dry_git is not None else (GitClient(run_process), WorktreeGit(git_command))
+    git, worktree_git = (
+        dry_git
+        if dry_git is not None
+        else (GitClient(run_process), WorktreeGit(git_command))
+    )
     repository = fakes.github() or GitHubRepo.from_slug(harness.slug, gh)
     github = GitHub(fakes.gh if "github" in fakes.seams else gh)
     launcher = AgentLauncher(fakes.new_agent() or Agent, observer, fakes.readers())
-    return Services(Issues(repository), github, launcher).bind(GitClient, git).bind(WorktreeGit, worktree_git)
+    return (
+        Services(Issues(repository), github, launcher)
+        .bind(GitClient, git)
+        .bind(WorktreeGit, worktree_git)
+    )
 
 
-def _runtime(settings: ImplementSpecSettings, fakes: Fakes, observer: TracingObserver | None, stop: StopSignal) -> Runtime:
+def _runtime(
+    settings: ImplementSpecSettings,
+    fakes: Fakes,
+    observer: TracingObserver | None,
+    stop: StopSignal,
+) -> Runtime:
     ledger = Ledger(fakes.ledger_root() or settings.ledger_root)
-    spans: Spans = LogSpans() if observer is None else Tee(LogSpans(), OtelSpans(observer))
+    spans: Spans = (
+        LogSpans() if observer is None else Tee(LogSpans(), OtelSpans(observer))
+    )
     return Runtime(ledger, spans, stop)
 
 
@@ -166,30 +218,53 @@ def main(argv: Sequence[str] | None = None, *, services: Services | None = None)
     except KeyboardInterrupt:
         logger.warning("implement_spec interrupted")
         return _INTERRUPTED
-    except Exception as exception:  # last-resort boundary: log and fail, never crash bare
-        logger.error("implement_spec failed (%s); enable DEBUG for details", type(exception).__name__)
+    except (
+        Exception
+    ) as exception:  # last-resort boundary: log and fail, never crash bare
+        logger.error(
+            "implement_spec failed (%s); enable DEBUG for details",
+            type(exception).__name__,
+        )
         logger.debug("unexpected error: %s", exception, exc_info=True)
         return 1
 
 
-def _serve(settings: ImplementSpecSettings, fakes: Fakes, given: Services | None) -> int:
+def _serve(
+    settings: ImplementSpecSettings, fakes: Fakes, given: Services | None
+) -> int:
     """Builds what the caller did not pass, then runs every Spec once."""
     interrupt = InterruptRequest()
     observer = _observer(settings) if given is None else None
     services = given or build_services(fakes, observer)
-    runtime = services.get(Runtime) if Runtime in services.types() else _runtime(settings, fakes, observer, interrupt)
+    runtime = (
+        services.get(Runtime)
+        if Runtime in services.types()
+        else _runtime(settings, fakes, observer, interrupt)
+    )
     if given is None:
         return _run_interruptible(settings, services, runtime, interrupt)
     return _run_specs(settings, services, runtime)
 
 
 def _observer(settings: ImplementSpecSettings) -> TracingObserver | None:
-    return OtlpObserverFactory(NAME, resource_per_agent=True)(settings.otlp_endpoint) if settings.otlp_endpoint else None
+    return (
+        OtlpObserverFactory(NAME, resource_per_agent=True)(settings.otlp_endpoint)
+        if settings.otlp_endpoint
+        else None
+    )
 
 
-def _run_interruptible(settings: ImplementSpecSettings, services: Services, runtime: Runtime, interrupt: InterruptRequest) -> int:
+def _run_interruptible(
+    settings: ImplementSpecSettings,
+    services: Services,
+    runtime: Runtime,
+    interrupt: InterruptRequest,
+) -> int:
     """Runs the Specs with SIGINT and SIGTERM asking the run to stop between Tickets."""
-    handlers = {name: signal.signal(name, interrupt.request) for name in (signal.SIGINT, signal.SIGTERM)}
+    handlers = {
+        name: signal.signal(name, interrupt.request)
+        for name in (signal.SIGINT, signal.SIGTERM)
+    }
     try:
         return _run_specs(settings, services, runtime)
     finally:
@@ -197,9 +272,15 @@ def _run_interruptible(settings: ImplementSpecSettings, services: Services, runt
             signal.signal(name, handler)
 
 
-def _run_specs(settings: ImplementSpecSettings, services: Services, runtime: Runtime) -> int:
+def _run_specs(
+    settings: ImplementSpecSettings, services: Services, runtime: Runtime
+) -> int:
     """Takes up the open Specs and runs the definition once for each; the exit code is the worst of their results."""
-    targets = services.get(Targets) if Targets in services.types() else Targets((harness_target(),))
+    targets = (
+        services.get(Targets)
+        if Targets in services.types()
+        else Targets((harness_target(),))
+    )
     definition = implement_spec(settings, targets)
     selection = select_specs(services.get(Issues), settings.spec_number)
     if settings.spec_number is not None and not _found(selection):
@@ -221,10 +302,22 @@ def _found(selection: Selection) -> bool:
     return bool(selection.runnable or selection.unreadable or selection.awaiting_human)
 
 
-def _run_spec(definition: Workflow[SpecWork], spec: SpecGraphSnapshot, services: Services, runtime: Runtime) -> int:
+def _run_spec(
+    definition: Workflow[SpecWork],
+    spec: SpecGraphSnapshot,
+    services: Services,
+    runtime: Runtime,
+) -> int:
     """The exit code of one Spec's run; a worktree that cannot be closed clean, or a declared error outside any Stage such as a failing worktree hook, fails the Spec, not the whole intake."""
     try:
-        result = run(definition, work_of(spec), services=services, ledger=runtime.ledger, spans=runtime.spans, stop=runtime.stop)
+        result = run(
+            definition,
+            work_of(spec),
+            services=services,
+            ledger=runtime.ledger,
+            spans=runtime.spans,
+            stop=runtime.stop,
+        )
     except WorktreeError as exception:
         logger.error("Spec #%s failed: %s", spec.number, exception)
         return 1
@@ -240,11 +333,18 @@ def _comment_failure(tracker: Issues, number: int) -> None:
     try:
         post_failure_comment(tracker, number, source=SOURCE)
     except (IssueError, CalledProcessError) as exception:
-        logger.error("Spec #%s: the failure could not be commented: %s", number, exception)
+        logger.error(
+            "Spec #%s: the failure could not be commented: %s", number, exception
+        )
 
 
 def _report(spec: SpecGraphSnapshot, result: RunResult) -> None:
-    logger.info("Spec #%s %s%s", spec.number, result.status, f": {result.reason}" if result.reason else "")
+    logger.info(
+        "Spec #%s %s%s",
+        spec.number,
+        result.status,
+        f": {result.reason}" if result.reason else "",
+    )
 
 
 def _configure_logging(level: str, log_dir: Path) -> None:
@@ -255,13 +355,19 @@ def _configure_logging(level: str, log_dir: Path) -> None:
     library_logger.setLevel(logging.NOTSET)
     library_logger.propagate = True
     for handler in logging.getLogger().handlers:
-        if isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler):
+        if isinstance(handler, logging.StreamHandler) and not isinstance(
+            handler, logging.FileHandler
+        ):
             handler.addFilter(_high_level_log)
 
 
 def _high_level_log(record: logging.LogRecord) -> bool:
     return record.levelno >= logging.INFO and (
-        record.name == _SPAN_LOGGER or (record.name == "workflow.implement_spec" and record.levelno >= logging.WARNING)
+        record.name == _SPAN_LOGGER
+        or (
+            record.name == "workflow.implement_spec"
+            and record.levelno >= logging.WARNING
+        )
     )
 
 

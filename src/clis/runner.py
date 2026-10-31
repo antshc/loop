@@ -3,10 +3,10 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator, Protocol
+from typing import Protocol
 
 from ..hooks import AgentCliHookWiring
 from ..run import AgentRequest, RunContext
@@ -17,16 +17,30 @@ logger = logging.getLogger(__name__)
 
 
 class CliRunner(Protocol):
-    def run(self, profile: AgentProfile, request: AgentRequest, turn: Turn, context: RunContext) -> CliOutcome: ...
+    def run(
+        self,
+        profile: AgentProfile,
+        request: AgentRequest,
+        turn: Turn,
+        context: RunContext,
+    ) -> CliOutcome: ...
 
 
 class ProcessCliRunner:
     """Runs any AgentCli as a process in the agent cwd; `run` is injectable for testing."""
 
-    def __init__(self, *, run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run) -> None:
+    def __init__(
+        self, *, run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run
+    ) -> None:
         self._run = run
 
-    def run(self, profile: AgentProfile, request: AgentRequest, turn: Turn, context: RunContext) -> CliOutcome:
+    def run(
+        self,
+        profile: AgentProfile,
+        request: AgentRequest,
+        turn: Turn,
+        context: RunContext,
+    ) -> CliOutcome:
         argv = profile.cli.command(request, profile, turn, context)
         wiring = (
             profile.cli.hook_wiring(context.agent_cli_hooks, turn, context.agent.cwd)
@@ -38,11 +52,27 @@ class ProcessCliRunner:
             extra["env"] = {**os.environ, **(context.agent.env or {}), **wiring.env}
         if context.agent.timeout_sec is not None:
             extra["timeout"] = context.agent.timeout_sec
-        logger.info("agent run started: cli=%s session=%s cwd=%s", profile.cli.name, turn.name.value, context.agent.cwd)
+        logger.info(
+            "agent run started: cli=%s session=%s cwd=%s",
+            profile.cli.name,
+            turn.name.value,
+            context.agent.cwd,
+        )
         logger.debug("agent command: %s", argv)
         with self._hook_files(wiring, context.agent.cwd):
-            result = self._run(argv, cwd=context.agent.cwd, check=True, capture_output=True, text=True, **extra)
-        logger.info("agent run finished: cli=%s exit_code=%s", profile.cli.name, result.returncode)
+            result = self._run(
+                argv,
+                cwd=context.agent.cwd,
+                check=True,
+                capture_output=True,
+                text=True,
+                **extra,
+            )
+        logger.info(
+            "agent run finished: cli=%s exit_code=%s",
+            profile.cli.name,
+            result.returncode,
+        )
         logger.debug("agent stdout: %s chars", len(result.stdout or ""))
         return profile.cli.parse(result.stdout, turn, result.returncode)
 
@@ -66,7 +96,9 @@ class ProcessCliRunner:
     def _exclude(self, cwd: Path, patterns: tuple[str, ...]) -> None:
         found = self._run(
             ["git", "-C", str(cwd), "rev-parse", "--git-path", "info/exclude"],
-            check=False, capture_output=True, text=True,
+            check=False,
+            capture_output=True,
+            text=True,
         )
         if found.returncode != 0 or not found.stdout.strip():
             return

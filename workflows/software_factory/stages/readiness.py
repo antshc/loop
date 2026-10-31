@@ -4,8 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from workflows.software_factory.events.pull_requests import ReadinessCheck, ReadinessReported
 from loop import Evidence, Pass, Stage, Verdict
+
+from workflows.software_factory.events.pull_requests import (
+    ReadinessCheck,
+    ReadinessReported,
+)
 
 
 @dataclass(frozen=True)
@@ -34,5 +38,7 @@ def report() -> Stage[ReportInput, ReadinessReported, ReadinessReported]:
     )
 
 
-def _reported(_: ReportInput, reported: ReadinessReported, __: Evidence) -> Verdict[ReadinessReported]:
+def _reported(
+    _: ReportInput, reported: ReadinessReported, __: Evidence
+) -> Verdict[ReadinessReported]:
     return Pass(reported)

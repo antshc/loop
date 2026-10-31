@@ -55,7 +55,9 @@ class GitClient:
         self._git(path, "fetch", "origin", sha)
 
     def remote_branch_exists(self, path: Path, branch: str) -> bool:
-        return self._succeeds(path, "show-ref", "--verify", "--quiet", f"refs/remotes/origin/{branch}")
+        return self._succeeds(
+            path, "show-ref", "--verify", "--quiet", f"refs/remotes/origin/{branch}"
+        )
 
     def push_if_ahead(self, path: Path, branch: str, base: str) -> bool:
         """Pushes `branch` when it holds commits beyond its `origin` counterpart (or beyond `base` when it has none); returns whether it pushed."""
@@ -66,9 +68,15 @@ class GitClient:
 
     def is_ahead(self, path: Path, branch: str, base: str) -> bool:
         """Whether local `branch` holds commits beyond its `origin` counterpart (or beyond `base` when it has none)."""
-        if not self._succeeds(path, "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"):
+        if not self._succeeds(
+            path, "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"
+        ):
             return False
-        upstream = f"origin/{branch}" if self.remote_branch_exists(path, branch) else f"origin/{base}"
+        upstream = (
+            f"origin/{branch}"
+            if self.remote_branch_exists(path, branch)
+            else f"origin/{base}"
+        )
         return bool(self._git(path, "rev-list", f"{upstream}..{branch}").strip())
 
     def publish(self, path: Path, branch: str) -> None:
@@ -86,7 +94,10 @@ class GitClient:
 
     def is_rebased_copy(self, path: Path, upstream: str) -> bool:
         """Whether every commit of HEAD beyond `upstream` already has a patch-equivalent in `upstream`, as after a rebase."""
-        return all(line.startswith("-") for line in self._git(path, "cherry", upstream).splitlines())
+        return all(
+            line.startswith("-")
+            for line in self._git(path, "cherry", upstream).splitlines()
+        )
 
     def head(self, path: Path) -> Commit:
         return self._log(path, "-1")[0]
@@ -101,20 +112,30 @@ class GitClient:
 
     def initiative_commits(self, path: Path, base: str, prefix: str) -> list[Commit]:
         """Commits after `origin/<base>` whose subject starts with `prefix`, oldest first."""
-        commits = self._log(path, "--reverse", "--fixed-strings", f"--grep={prefix}", f"origin/{base}..HEAD")
+        commits = self._log(
+            path,
+            "--reverse",
+            "--fixed-strings",
+            f"--grep={prefix}",
+            f"origin/{base}..HEAD",
+        )
         # `--grep` also matches body lines, so keep only subjects that carry the prefix.
         return [commit for commit in commits if commit.subject.startswith(prefix)]
 
     def commit(self, path: Path, subject: str, body: str = "") -> Commit:
         """Stages every change in `path`, commits it and returns the new HEAD."""
         self._git(path, "add", "-A")
-        self._git(path, "commit", "-m", subject, *(["-m", body] if body.strip() else []))
+        self._git(
+            path, "commit", "-m", subject, *(["-m", body] if body.strip() else [])
+        )
         return self.head(path)
 
     def changed_files(self, path: Path) -> list[str]:
         """Paths with uncommitted changes (renames report the new path), untracked files included."""
         files: list[str] = []
-        for line in self._git(path, "status", "--porcelain", "--untracked-files=all").splitlines():
+        for line in self._git(
+            path, "status", "--porcelain", "--untracked-files=all"
+        ).splitlines():
             entry = line[3:].split(" -> ")[-1].strip().strip('"')
             if entry:
                 files.append(entry)
@@ -140,7 +161,10 @@ class GitClient:
         output = self._git(path, "log", f"--format={_LOG_FORMAT}", *args)
         records = (record.lstrip("\n") for record in output.split(_RECORD_SEP))
         fields = (record.split(_FIELD_SEP, 2) for record in records if record)
-        return [Commit(sha, subject, rest[0].strip() if rest else "") for sha, subject, *rest in fields]
+        return [
+            Commit(sha, subject, rest[0].strip() if rest else "")
+            for sha, subject, *rest in fields
+        ]
 
     def _succeeds(self, path: Path, *args: str) -> bool:
         try:
