@@ -9,8 +9,8 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.sdk.trace.sampling import ALWAYS_ON
 
-from workflows.software_factory.shared.telemetry import OtelSpans
-from workflows.software_factory.pr_babysit.__main__ import Runtime
+from workflows.software_factory.infrastructure.telemetry import OtelSpans
+from workflows.software_factory.workflows.pr_babysit.__main__ import Runtime
 
 from .harness import Babysit
 

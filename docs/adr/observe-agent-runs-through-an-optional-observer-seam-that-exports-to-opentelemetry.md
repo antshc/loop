@@ -28,4 +28,4 @@ Operators want to see what an Agent Run did — its tool calls, token and AIU us
 - The Copilot log format is undocumented; golden-log tests and the `usage=None` fallback bound the damage when it changes.
 - Spans are exported when they end and tool and usage data arrive after the CLI exits, so a dashboard shows an Agent Run only once it finishes.
 - One writer per session is assumed; concurrent resumes of one session are unsupported.
-- `workflows/software_factory/implement_spec` opts in with `--otlp-endpoint`; its Spec and Ticket spans are now derived by Loop's Workflow runtime ([Report Workflow runs as runtime OpenTelemetry spans](report-factory-runs-as-opentelemetry-spans-bypassing-loops-phase-reporting.md)); Aspire-specific per-role colouring stays a Workflow concern.
+- `workflows/software_factory/workflows/implement_spec` opts in with `--otlp-endpoint`; its Spec and Ticket spans are now derived by Loop's Workflow runtime ([Report Workflow runs as runtime OpenTelemetry spans](report-factory-runs-as-opentelemetry-spans-bypassing-loops-phase-reporting.md)); Aspire-specific per-role colouring stays a Workflow concern.

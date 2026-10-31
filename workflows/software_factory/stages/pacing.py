@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 from workflows.software_factory.events.pull_requests import PollStarted
 from loop import Evidence, History, Item, Nothing, Pass, Selector, Stage, Verdict
-from workflows.software_factory.shared.pacing import Pacer
+from workflows.software_factory.infrastructure.pacing import Pacer
 
 
 @dataclass(frozen=True)

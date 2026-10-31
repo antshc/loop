@@ -11,12 +11,12 @@ Loop is a library of an agent builder, agent CLI adapters, git and hooks, the de
 
 - The core of Loop is the **agent builder** and git. `Agent()` returns an `AgentBuilder`; `open()` creates a worktree under the harness's `workspace` folder on a branch strategy and yields clients that run the agent CLI directly on the host in that worktree, and removes the worktree on exit ([Build agents with an agent builder](../adr/build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md)).
 - The **runtime** (`loop.runtime`, exported from top-level `loop`) runs every Workflow: Stages with typed inputs and trusted gates, routes, the Execution ledger and spans ([Compose Workflows as declarative definitions](../adr/compose-factory-workflows-as-declarative-definitions-over-a-stages-library-run-by-a-factory-runtime.md)). A typed agent (`TypedAgent`) is one reusable role: a profile, a request encoder and a reply decoder.
-- Loop ships default implementations for git, the Copilot and Codex agent CLIs, and an in-memory session store. The replaceable seams are `CliRunner`, `GitService`, `DockerService`, and `SessionStore`; tests replace them with fakes ([Ship Loop as a workflow library](../adr/ship-loop-as-a-workflow-library-with-no-built-in-workflows.md)). `loop.shared` ships the Workflow-side Git helper, the process runner and the GitHub package (issues, pull requests, and the Spec and Ticket model) as concrete helpers ([Share the Spec and Ticket model](../adr/share-the-spec-and-ticket-model-in-workflows-shared-while-dev-keeps-its-delivery-policy.md)); implement_spec owns its delivery policy in `workflows/software_factory/implement_spec/policy.py`, and the factory's Stage library owns response decoding and publication.
+- Loop ships default implementations for git, the Copilot and Codex agent CLIs, and an in-memory session store. The replaceable seams are `CliRunner`, `GitService`, `DockerService`, and `SessionStore`; tests replace them with fakes ([Ship Loop as a workflow library](../adr/ship-loop-as-a-workflow-library-with-no-built-in-workflows.md)). `loop.shared` ships the Workflow-side Git helper, the process runner and the GitHub package (issues, pull requests, and the Spec and Ticket model) as concrete helpers ([Share the Spec and Ticket model](../adr/share-the-spec-and-ticket-model-in-workflows-shared-while-dev-keeps-its-delivery-policy.md)); implement_spec owns its delivery policy in `workflows/software_factory/workflows/implement_spec/policy.py`, and the factory's Stage library owns response decoding and publication.
 - Loop ships no workflows: the user writes every workflow, `implement_spec` included; this repository's `workflows/` tree is only examples and test subjects, run from the clone and never installed ([Keep the software factory in this repository under `workflows/`](../adr/keep-software-factory-in-this-repository-as-an-unpackaged-root.md)).
 - The runtime's definition language, Stage contract, Routes, Execution ledger, spans and escape hatches are recorded in [Factory Workflow Runtime](str-factory-workflow-runtime.md); this concept covers the library and the user-written workflow.
-- The example `implement_spec` is a definition (`__init__.py`) that places Stages and Flow fragments from the factory's Stage library; the Stages are independent of each other and of the definition, and per-repository variability is data on the routed `RepositoryTarget`, not a delegate.
+- The example `implement_spec` is a definition (`definition.py`) that places Stages and Flow fragments from the factory's Stage library; the Stages are independent of each other and of the definition, and per-repository variability is data on the routed `RepositoryTarget`, not a delegate.
 - A workflow imports only the public `loop` API (and its public `loop.shared` modules) and is a runnable module: its entry point takes an argument list and returns an exit code, and a `__main__` guard passes that code to the process exit. Every Workflow builds its services by hand (no container) and `main(argv, *, services=None)` accepts a `Services` bundle, or injectable defaults, so tests substitute fakes.
-- Loop ships no command: the user runs a workflow module through their own shell alias (for example `alias loop-implement-spec='python -m workflows.software_factory.implement_spec'`), with the harness as the current folder ([Ship Loop as a workflow library](../adr/ship-loop-as-a-workflow-library-with-no-built-in-workflows.md)).
+- Loop ships no command: the user runs a workflow module through their own shell alias (for example `alias loop-implement-spec='python -m workflows.software_factory.workflows.implement_spec'`), with the harness as the current folder ([Ship Loop as a workflow library](../adr/ship-loop-as-a-workflow-library-with-no-built-in-workflows.md)).
 - The workflow's Python code carries its own settings: harness root, log dir, agent profiles, retry and failure bounds, prompts, and Loop hooks. `implement_spec` keeps entry-point settings in `__main__.py` and `settings.py`, its policy values in `policy.py`, and its role agents' prompt templates in `workflows/software_factory/agents/roles/<role>/prompt.md`. Command-line arguments are optional overrides; there is no Loop configuration file.
 - Inside the library, each layer imports only the layers below it; the runtime sits on top beside the `Agent()` factory, shared helpers at the bottom, and nothing in Loop imports a workflow or a test.
 
@@ -37,7 +37,7 @@ Loop is a library of an agent builder, agent CLI adapters, git and hooks, the de
 - MUST keep the library layered by import direction (`runtime | factory` > `builder` > `agents` > `clis | docker | git` > `run` > `hooks` > `sessions` > `observe` > `shared`), and each workflow independent of sibling Workflows.
 - MUST keep process execution (`git`, `gh`, agent CLIs) inside shipped implementations.
 - MUST NOT run a workflow file from outside the harness-root workflows folder; running it executes its code.
-- MUST place only logic whose business meaning is identical across workflows in Loop (`loop.shared`, the runtime); a factory Workflow's own rules and policy values stay in its `workflows/software_factory/<workflow>/` package, and reusable activity logic lives in the factory's Stage library, except the Spec and Ticket model, which lives in `loop.shared.github` while implement_spec keeps its delivery policy. The library returns the agent CLI's raw stdout ([Build agents with an agent builder](../adr/build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md)).
+- MUST place only logic whose business meaning is identical across workflows in Loop (`loop.shared`, the runtime); a factory Workflow's own rules and policy values stay in its `workflows/software_factory/workflows/<workflow>/` package, and reusable activity logic lives in the factory's Stage library, except the Spec and Ticket model, which lives in `loop.shared.github` while implement_spec keeps its delivery policy. The library returns the agent CLI's raw stdout ([Build agents with an agent builder](../adr/build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md)).
 - SHOULD accept small duplication between workflows over extracting shared code that only looks similar; group code by feature, not by technical layer.
 
 ## Example
@@ -56,14 +56,15 @@ src/  (package loop)                     # public API: builder, profiles, strate
 <harness root>/workflows/                # run from the clone; never installed
 ├── loop/plan_implement.py               # python -m workflows.loop.plan_implement
 └── software_factory/
-    ├── agents/, events/, stages/, flows/, shared/   # role agents, Events, Stage library, fragments, factory-only infrastructure
-    ├── implement_spec/                  # python -m workflows.software_factory.implement_spec
-    │   ├── __init__.py                  # the definition over the Stage library
-    │   ├── policy.py                    # hitl label, hand-off texts, subjects, work item, release rule
-    │   ├── intake.py, settings.py, dry.py
-    │   └── __main__.py                  # entry point, services, console and OpenTelemetry spans
-    ├── pr_babysit/                      # python -m workflows.software_factory.pr_babysit
-    └── address_once/                    # python -m workflows.software_factory.address_once
+    ├── agents/, events/, stages/, flows/, infrastructure/   # role agents, Events, Stage library, fragments, factory-only infrastructure
+    └── workflows/
+        ├── implement_spec/                  # python -m workflows.software_factory.workflows.implement_spec
+        │   ├── definition.py                # the definition over the Stage library
+        │   ├── policy.py                    # hitl label, hand-off texts, subjects, work item, release rule
+        │   ├── intake.py, settings.py, dry.py
+        │   └── __main__.py                  # entry point, services, console and OpenTelemetry spans
+        ├── pr_babysit/                      # python -m workflows.software_factory.workflows.pr_babysit
+        └── address_once/                    # python -m workflows.software_factory.workflows.address_once
 <harness root>/tests/                    # library tests by capability
 <harness root>/workflows/tests/          # loop/ and software_factory/ Workflow tests
 ```
@@ -87,7 +88,7 @@ if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))
 ```
 
-The user's aliases (`alias loop-implement-spec='python -m workflows.software_factory.implement_spec'`) call the module; Loop provides no command.
+The user's aliases (`alias loop-implement-spec='python -m workflows.software_factory.workflows.implement_spec'`) call the module; Loop provides no command.
 
 ## Benefits and Trade-offs
 

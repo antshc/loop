@@ -13,7 +13,7 @@ from loop import AgentRequest, FakeReply, RunContext
 
 from workflows.software_factory.events.pull_requests import PullRequestPolled, PullRequestWork
 from loop import Event, Fail, Nothing, Pass, RunResult, Services, Stage, StopSignal, Workflow, run
-from workflows.software_factory.shared.pacing import Pacer
+from workflows.software_factory.infrastructure.pacing import Pacer
 from workflows.software_factory.stages import pull_requests
 from tests.runtime.harness import GIT
 from tests.runtime.support import NoInput

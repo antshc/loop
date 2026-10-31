@@ -15,12 +15,12 @@ from workflows.software_factory.events.specs import RepositoryTarget
 from loop import Ledger, LedgerCorrupted, RunStatus, StopSignal, WorkItemLocked
 from loop.shared.github.account import GitHub
 from loop.shared.github.pull_requests.model import PullRequest
-from workflows.software_factory.shared.pacing import Pacer
-from workflows.software_factory.shared.state import JsonFile, StateError, process_lock
+from workflows.software_factory.infrastructure.pacing import Pacer
+from workflows.software_factory.infrastructure.state import JsonFile, StateError, process_lock
 from workflows.software_factory.stages import pull_requests
 from workflows.software_factory.stages.ci import DiagnoseInput, signal
 
-from . import NAME
+from .definition import NAME
 from .legacy import adopt_v1, read_status, state_path
 from .policy import ADOPTED, Blocked, fingerprint, has_changed, is_blocked, released_for_change
 from .settings import Settings
@@ -65,7 +65,7 @@ class ChildLauncher(Protocol):
 
 def child_command(config: Path, url: str) -> list[str]:
     """An independent babysit process without a scheduler trace parent."""
-    return [sys.executable, "-m", "workflows.software_factory.pr_babysit", "--config", str(config), "--pr", url]
+    return [sys.executable, "-m", "workflows.software_factory.workflows.pr_babysit", "--config", str(config), "--pr", url]
 
 
 def child_environment() -> dict[str, str]:
@@ -74,7 +74,7 @@ def child_environment() -> dict[str, str]:
 
 
 class ProcessLauncher:
-    """Starts `python -m workflows.software_factory.pr_babysit --pr <url>` as a child process."""
+    """Starts `python -m workflows.software_factory.workflows.pr_babysit --pr <url>` as a child process."""
 
     def start(self, config: Path, url: str) -> Child:
         """The running child."""

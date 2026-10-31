@@ -13,7 +13,7 @@ from workflows.software_factory.events.pull_requests import PollStarted, PullReq
 from workflows.software_factory.events.specs import RepositoryTarget
 from loop import Flow, Item, Ledger, Nothing, Pass, Stage, WorkItemLog, Workflow
 from loop.runtime._engine.scope import Scope
-from workflows.software_factory.shared.pacing import Pacer
+from workflows.software_factory.infrastructure.pacing import Pacer
 from workflows.software_factory.stages import pacing, pull_requests
 from tests.runtime.harness import StopAfter
 from workflows.tests.software_factory.stages.pr_support import SLUG

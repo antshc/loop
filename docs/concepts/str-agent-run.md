@@ -89,4 +89,4 @@ The `plan_implement` Workflow runs a planning Run and an implementation Run with
 |---|---|---|
 | Agent invocation | One request crosses the library agent boundary and returns one result | `loop`: `AgentClient`, `AgentRequest`, `AgentResult` |
 | Worktree binding | A worktree hands out clients per profile | `loop`: `AgentBuilder.open`, `Worktree.agent` |
-| Workflow ownership | Workflow definitions decide repeated and conditional agent execution | `workflows.software_factory.implement_spec`, `workflows.loop.plan_implement` |
+| Workflow ownership | Workflow definitions decide repeated and conditional agent execution | `workflows.software_factory.workflows.implement_spec`, `workflows.loop.plan_implement` |

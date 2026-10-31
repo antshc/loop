@@ -14,7 +14,7 @@ The factory first lived in `software_factory/` beside a nested `loop/` project, 
 ## Decision
 
 - The installed artifact is the `loop` library only: no Workflow, prompt, settings file or test is packaged.
-- Factory code imports as `workflows.software_factory`; users run `python -m workflows.software_factory.<workflow>` (and `python -m workflows.loop.plan_implement`) from the repository root. There are no old-namespace modules or command aliases.
+- Factory code imports as `workflows.software_factory`; users run `python -m workflows.software_factory.workflows.<workflow>` (and `python -m workflows.loop.plan_implement`) from the repository root. There are no old-namespace modules or command aliases.
 - Factory and example code imports only the public `loop` package and its public `loop.shared` modules; import-linter contracts and the structural tests in `workflows/tests/software_factory/architecture/` enforce the factory's layering in the same `pytest` run as the library's.
 - Execution ledgers written before the move name types by their old modules and fail to decode with an explicit error; they are neither migrated nor deleted.
 

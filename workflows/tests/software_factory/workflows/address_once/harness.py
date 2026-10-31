@@ -10,13 +10,13 @@ from loop import FakeCliRunner, GitCli, GitRuntime, fake_agent
 
 from workflows.software_factory.events.pull_requests import PullRequestWork
 from loop import Event, RecordingSpans, RunStatus, Services, WorktreeGit
-from workflows.software_factory.shared.agents.launcher import AgentLauncher
+from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
 from loop.shared.git import GitClient
 from tests.runtime.harness import GIT, command
 from workflows.tests.software_factory.stages.pr_support import NUMBER, SLUG, AddressAgent, answer, thread
 from workflows.tests.software_factory.stages.watch_support import WatchRig
-from workflows.software_factory.address_once import NAME
-from workflows.software_factory.address_once.__main__ import Runtime, main
+from workflows.software_factory.workflows.address_once.definition import NAME
+from workflows.software_factory.workflows.address_once.__main__ import Runtime, main
 
 URL = f"https://github.com/{SLUG}/pull/{NUMBER}"
 

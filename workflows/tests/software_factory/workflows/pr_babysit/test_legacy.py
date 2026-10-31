@@ -10,8 +10,8 @@ from loop.shared.github.pull_requests.babysit import digest
 from tests.runtime.harness import command
 from workflows.tests.software_factory.stages.pr_support import NUMBER, SLUG, answer, reply_text, selected_batch, thread
 from loop import Ledger, WorkItemLog
-from workflows.software_factory.pr_babysit.legacy import adopt_v1, state_path
-from workflows.software_factory.pr_babysit.policy import ADOPTED, FINGERPRINT
+from workflows.software_factory.workflows.pr_babysit.legacy import adopt_v1, state_path
+from workflows.software_factory.workflows.pr_babysit.policy import ADOPTED, FINGERPRINT
 
 from .golden import GOLDEN, OPEN, build_host
 from .harness import Babysit

@@ -12,7 +12,7 @@ from loop import AgentWorkspace
 from workflows.software_factory.events.checks import ChecksPassed
 from workflows.software_factory.events.feedback import FeedbackBatch
 from loop import Evidence, Fail, Hold, Pass, Stage, Verdict, Verify
-from workflows.software_factory.shared.checks import CheckCommand, CheckRunner
+from workflows.software_factory.infrastructure.checks import CheckCommand, CheckRunner
 
 
 @dataclass(frozen=True)

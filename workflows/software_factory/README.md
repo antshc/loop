@@ -34,7 +34,7 @@ sys.exit(result.exit_code)        # completed/idle/held → 0, handed_off/failed
 
 ## A third Workflow from existing Stages
 
-`workflows/address_once/` addresses the trusted feedback of one pull request once. It holds no Stage logic: three Stages and the shared address fragment, spliced with `.then(flow)`, which only inlines a fragment's nodes.
+`workflows/address_once/definition.py` addresses the trusted feedback of one pull request once. It holds no Stage logic: three Stages and the shared address fragment, spliced with `.then(flow)`, which only inlines a fragment's nodes.
 
 ```python
 ADDRESS_ONCE = (
@@ -47,21 +47,33 @@ ADDRESS_ONCE = (
 ```
 
 ```sh
-python -m workflows.software_factory.address_once --config address_once.json --pr https://github.com/owner/repo/pull/123
+python -m workflows.software_factory.workflows.address_once --config address_once.json --pr https://github.com/owner/repo/pull/123
 ```
 
 ## Layout
 
+Workflow commands now use `python -m workflows.software_factory.workflows.<workflow>`.
+Import each definition from `workflows.software_factory.workflows.<workflow>.definition`;
+factory-only infrastructure lives under `workflows.software_factory.infrastructure`.
+
+
 ```text
 workflows/software_factory/
-├── events/          # the Event vocabulary Stages share; frozen dataclasses only
-├── agents/          # role agents: private kit, one package per role (the typed agent contract is Loop's)
-├── stages/          # every Stage, Selector and workspace opener; flat modules independent of each other
+├── workflows/       # one package per runnable Workflow
+│   ├── implement_spec/
+│   │   ├── definition.py
+│   │   ├── __main__.py
+│   │   ├── intake.py
+│   │   ├── policy.py
+│   │   ├── settings.py
+│   │   └── dry.py
+│   ├── pr_babysit/
+│   └── address_once/
 ├── flows/           # Flow fragments composed from several Stage modules; no Stage logic
-├── shared/          # factory-only infrastructure: repository checks, pacing, state, telemetry, the agent launcher
-├── implement_spec/  # one package per Workflow: definition, policy values, settings, entry point
-├── pr_babysit/
-└── address_once/
+├── stages/          # every Stage, Selector and workspace opener; independent flat modules
+├── events/          # shared Event vocabulary; frozen dataclasses only
+├── agents/          # private kit and one package per role, with messages and prompts
+└── infrastructure/  # repository checks, pacing, state, telemetry and the agent launcher
 workflows/tests/software_factory/  # Stage, fragment, Workflow scenario and architecture tests
 ```
 
@@ -69,7 +81,7 @@ Loop provides the runtime (`loop.runtime`, exported from `loop`), the typed agen
 helpers (`loop.shared`); the factory is not installed and runs from the repository clone.
 
 ```text
-Workflow packages → flows → stages → events → (agents | shared) → loop
+Workflow packages → flows → stages → events → (agents | infrastructure) → loop
 ```
 
 ## What keeps it this way

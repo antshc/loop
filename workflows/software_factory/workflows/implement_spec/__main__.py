@@ -16,7 +16,7 @@ from loop import Agent, LoopHook, WorktreeError, configure_logging
 
 from workflows.software_factory.events.specs import RepositoryTarget
 from loop import Ledger, LogSpans, RunResult, Services, Spans, StopSignal, Workflow, WorktreeGit, run
-from workflows.software_factory.shared.agents.launcher import AgentLauncher
+from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
 from loop.shared.git import GitClient
 from loop.shared.github.account import GitHub
 from loop.shared.github.issues.client import Issues
@@ -24,10 +24,10 @@ from loop.shared.github.issues.errors import IssueError
 from loop.shared.github.issues.graph import SpecGraphSnapshot
 from loop.shared.github.repo import GhCli, GitHubRepo
 from loop.shared.process import CommandRunner, git_command
-from workflows.software_factory.shared.telemetry import OtelSpans, OtlpObserverFactory, Tee, TracingObserver
+from workflows.software_factory.infrastructure.telemetry import OtelSpans, OtlpObserverFactory, Tee, TracingObserver
 from workflows.software_factory.stages.specs import post_failure_comment
 
-from . import FAILURE_ERRORS, NAME, implement_spec
+from .definition import FAILURE_ERRORS, NAME, implement_spec
 from .dry import SEAMS, Fakes
 from .intake import Selection, release_held, select_specs, work_of
 from .policy import SOURCE, SpecWork
@@ -47,7 +47,7 @@ DRY_OTLP_ENDPOINT = "http://localhost:4318"
 
 HARNESS_SLUG = "antshc/loop"
 
-_ROOT = Path(__file__).resolve().parents[3]
+_ROOT = Path(__file__).resolve().parents[4]
 
 _INTERRUPTED = 130
 

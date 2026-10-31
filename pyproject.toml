@@ -100,11 +100,11 @@ allow_indirect_imports = true
 name = "The factory is layered: Workflow definitions over Flow fragments over Stages over Events over role agents and shared infrastructure"
 type = "layers"
 layers = [
-    "workflows.software_factory.address_once | workflows.software_factory.implement_spec | workflows.software_factory.pr_babysit",
+    "workflows.software_factory.workflows.address_once | workflows.software_factory.workflows.implement_spec | workflows.software_factory.workflows.pr_babysit",
     "workflows.software_factory.flows",
     "workflows.software_factory.stages",
     "workflows.software_factory.events",
-    "workflows.software_factory.agents | workflows.software_factory.shared",
+    "workflows.software_factory.agents | workflows.software_factory.infrastructure",
 ]
 
 [[tool.importlinter.contracts]]
@@ -151,10 +151,10 @@ source_modules = [
     "workflows.software_factory.events",
     "workflows.software_factory.stages",
     "workflows.software_factory.flows",
-    "workflows.software_factory.shared",
-    "workflows.software_factory.address_once",
-    "workflows.software_factory.implement_spec",
-    "workflows.software_factory.pr_babysit",
+    "workflows.software_factory.infrastructure",
+    "workflows.software_factory.workflows.address_once",
+    "workflows.software_factory.workflows.implement_spec",
+    "workflows.software_factory.workflows.pr_babysit",
     "workflows.loop",
 ]
 forbidden_modules = ["tests", "workflows.tests"]
@@ -175,9 +175,9 @@ forbidden_modules = ["workflows.loop"]
 name = "No Workflow imports another: factory Workflow definitions and the examples are independent"
 type = "independence"
 modules = [
-    "workflows.software_factory.address_once",
-    "workflows.software_factory.implement_spec",
-    "workflows.software_factory.pr_babysit",
+    "workflows.software_factory.workflows.address_once",
+    "workflows.software_factory.workflows.implement_spec",
+    "workflows.software_factory.workflows.pr_babysit",
     "workflows.loop.plan_implement",
 ]
 
@@ -190,13 +190,13 @@ modules = ["workflows.software_factory.agents.roles.*"]
 name = "The private agent kit is unreachable outside the agents package"
 type = "forbidden"
 source_modules = [
-    "workflows.software_factory.address_once",
-    "workflows.software_factory.implement_spec",
-    "workflows.software_factory.pr_babysit",
+    "workflows.software_factory.workflows.address_once",
+    "workflows.software_factory.workflows.implement_spec",
+    "workflows.software_factory.workflows.pr_babysit",
     "workflows.software_factory.events",
     "workflows.software_factory.stages",
     "workflows.software_factory.flows",
-    "workflows.software_factory.shared",
+    "workflows.software_factory.infrastructure",
     "workflows.loop",
 ]
 forbidden_modules = ["workflows.software_factory.agents._kit"]
@@ -255,24 +255,24 @@ type = "forbidden"
 source_modules = [
     "workflows.software_factory.stages",
     "workflows.software_factory.flows",
-    "workflows.software_factory.address_once",
-    "workflows.software_factory.implement_spec",
-    "workflows.software_factory.pr_babysit",
+    "workflows.software_factory.workflows.address_once",
+    "workflows.software_factory.workflows.implement_spec",
+    "workflows.software_factory.workflows.pr_babysit",
 ]
 forbidden_modules = ["loop.shared.process", "subprocess"]
 # A definition and an entry point name the hook and process errors an error route turns into a hand-off or an exit code.
 ignore_imports = [
-    "workflows.software_factory.address_once -> subprocess",
-    "workflows.software_factory.address_once.__main__ -> subprocess",
-    "workflows.software_factory.address_once.__main__ -> loop.shared.process",
-    "workflows.software_factory.implement_spec -> subprocess",
-    "workflows.software_factory.implement_spec.__main__ -> subprocess",
-    "workflows.software_factory.implement_spec.__main__ -> loop.shared.process",
-    "workflows.software_factory.pr_babysit -> subprocess",
-    "workflows.software_factory.pr_babysit.__main__ -> subprocess",
-    "workflows.software_factory.pr_babysit.__main__ -> loop.shared.process",
-    "workflows.software_factory.implement_spec.dry -> loop.shared.process",
-    "workflows.software_factory.pr_babysit.intake -> subprocess",
+    "workflows.software_factory.workflows.address_once.definition -> subprocess",
+    "workflows.software_factory.workflows.address_once.__main__ -> subprocess",
+    "workflows.software_factory.workflows.address_once.__main__ -> loop.shared.process",
+    "workflows.software_factory.workflows.implement_spec.definition -> subprocess",
+    "workflows.software_factory.workflows.implement_spec.__main__ -> subprocess",
+    "workflows.software_factory.workflows.implement_spec.__main__ -> loop.shared.process",
+    "workflows.software_factory.workflows.pr_babysit.definition -> subprocess",
+    "workflows.software_factory.workflows.pr_babysit.__main__ -> subprocess",
+    "workflows.software_factory.workflows.pr_babysit.__main__ -> loop.shared.process",
+    "workflows.software_factory.workflows.implement_spec.dry -> loop.shared.process",
+    "workflows.software_factory.workflows.pr_babysit.intake -> subprocess",
 ]
 allow_indirect_imports = true
 unmatched_ignore_imports_alerting = "none"
@@ -281,9 +281,9 @@ unmatched_ignore_imports_alerting = "none"
 name = "A Workflow's policy module holds values and pure functions: no process, Git or GitHub client"
 type = "forbidden"
 source_modules = [
-    "workflows.software_factory.address_once.policy",
-    "workflows.software_factory.implement_spec.policy",
-    "workflows.software_factory.pr_babysit.policy",
+    "workflows.software_factory.workflows.address_once.policy",
+    "workflows.software_factory.workflows.implement_spec.policy",
+    "workflows.software_factory.workflows.pr_babysit.policy",
 ]
 forbidden_modules = [
     "loop.shared.process",

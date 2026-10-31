@@ -18,8 +18,10 @@ import pytest
 
 import workflows as workflows_root
 import workflows.software_factory as factory
+import workflows.software_factory.workflows as definitions
 
 FACTORY = factory.__name__
+WORKFLOWS = definitions.__name__
 # The factory and the `workflows` namespace package that holds it, run from the repository clone.
 PACKAGE_DIRS = {"workflows": Path(workflows_root.__file__).parent}
 
@@ -33,7 +35,8 @@ root = pathlib.Path.cwd().resolve()
 package = importlib.import_module(sys.argv[1])
 if importlib.util.find_spec(sys.argv[1] + ".__main__"):
     importlib.import_module(sys.argv[1] + ".__main__")
-definition = portable_samples.call_with_samples(getattr(package, package.NAME))
+module = importlib.import_module(sys.argv[1] + ".definition")
+definition = portable_samples.call_with_samples(getattr(module, module.NAME))
 definition.check()
 foreign = [
     name for name, module in sys.modules.items()
@@ -46,8 +49,8 @@ print(json.dumps({"name": definition.name, "foreign": foreign}))
 def workflow_names() -> list[str]:
     """The package name of every Workflow definition: each factory package with an entry point."""
     return sorted(
-        info.name for info in pkgutil.iter_modules(factory.__path__)
-        if info.ispkg and (Path(factory.__file__).parent / info.name / "__main__.py").exists()
+        info.name for info in pkgutil.iter_modules(definitions.__path__)
+        if info.ispkg and (Path(definitions.__file__).parent / info.name / "__main__.py").exists()
     )
 
 
@@ -138,7 +141,7 @@ def probe(package: str, target: Path) -> subprocess.CompletedProcess[str]:
 @pytest.mark.parametrize("name", workflow_names())
 def test_each_workflow_runs_from_its_import_closure_alone(name: str, tmp_path: Path) -> None:
     """Given a Workflow copied with only its import closure, when its package and entry point are imported and its definition built, then it validates and imports nothing outside the copy."""
-    package = f"{FACTORY}.{name}"
+    package = f"{WORKFLOWS}.{name}"
     closure = closure_of(package)
     copy_closure(closure, tmp_path)
 
@@ -151,8 +154,8 @@ def test_each_workflow_runs_from_its_import_closure_alone(name: str, tmp_path: P
 @pytest.mark.parametrize("name", workflow_names())
 def test_a_workflows_import_closure_holds_no_other_workflow_and_no_tests(name: str) -> None:
     """Given the import closure of a Workflow, when its modules are listed, then no other Workflow and no test module is among them."""
-    package = f"{FACTORY}.{name}"
-    others = [f"{FACTORY}.{other}" for other in workflow_names() if other != name]
+    package = f"{WORKFLOWS}.{name}"
+    others = [f"{WORKFLOWS}.{other}" for other in workflow_names() if other != name]
 
     unexpected = sorted(
         module for module in closure_of(package)
@@ -165,7 +168,7 @@ def test_a_workflows_import_closure_holds_no_other_workflow_and_no_tests(name: s
 
 def test_a_workflow_that_needs_another_workflow_does_not_run_from_its_own_closure(tmp_path: Path) -> None:
     """Given a closure missing a module the Workflow imports, when its package is imported in the copy, then the import fails."""
-    package = f"{FACTORY}.address_once"
+    package = f"{WORKFLOWS}.address_once"
     closure = {name: file for name, file in closure_of(package).items() if name != f"{FACTORY}.flows.address"}
     copy_closure(closure, tmp_path)
 

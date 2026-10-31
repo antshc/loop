@@ -21,7 +21,7 @@ class TracingObserver(RunObserver, Protocol):
 
 ObserverFactory = Callable[[str], TracingObserver]
 
-LOGGER = logging.getLogger("workflows.software_factory.shared.telemetry")
+LOGGER = logging.getLogger("workflows.software_factory.infrastructure.telemetry")
 
 type Attributes = Mapping[str, str | int | bool]
 
