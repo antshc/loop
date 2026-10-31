@@ -17,7 +17,7 @@ from workflows.software_factory.events.pull_requests import CiFailing, CopilotRe
 from loop import Event, Ledger, Nothing, WorkItemLocked, WorkKey, encode
 from workflows.software_factory.stages.pacing import Poll
 
-from . import NAME
+from .definition import NAME
 from .policy import ADOPTED, FINGERPRINT, REASON
 
 __all__ = ["adopt_v1", "read_status", "state_path"]

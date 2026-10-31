@@ -11,8 +11,8 @@ from loop.shared.github.issues.client import Issues
 from loop.shared.github.repo import GitHubRepo
 from tests.shared.builders import build_graph, build_ticket
 from tests.shared.fakes import FakeGhCli, issue
-from workflows.software_factory.implement_spec.intake import select_specs, work_of
-from workflows.software_factory.implement_spec.policy import (
+from workflows.software_factory.workflows.implement_spec.intake import select_specs, work_of
+from workflows.software_factory.workflows.implement_spec.policy import (
     HELD_SPEC, HELD_TICKET, HITL, chore_subject, held_by_spec, held_by_ticket, release_reason, spec_revision,
 )
 

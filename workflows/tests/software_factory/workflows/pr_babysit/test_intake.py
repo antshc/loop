@@ -11,14 +11,14 @@ from workflows.software_factory.events.pull_requests import PullRequestWork
 from workflows.software_factory.events.specs import RepositoryTarget
 from loop import Ledger, RecordingSpans, Services
 from loop.shared.github.account import GitHub
-from workflows.software_factory.shared.pacing import Pacer
+from workflows.software_factory.infrastructure.pacing import Pacer
 from workflows.software_factory.stages import pull_requests
 from tests.shared.fakes import FakeGhCli, FakePullRequestHost, issue_comment
 from workflows.tests.software_factory.workflows.pr_babysit.golden import GOLDEN, GREEN, OPEN, build_host
-from workflows.software_factory.pr_babysit import NAME
-from workflows.software_factory.pr_babysit.__main__ import Runtime, main
-from workflows.software_factory.pr_babysit.intake import ChildLauncher, Registry, child_environment
-from workflows.software_factory.pr_babysit.policy import FINGERPRINT, Blocked, fingerprint
+from workflows.software_factory.workflows.pr_babysit.definition import NAME
+from workflows.software_factory.workflows.pr_babysit.__main__ import Runtime, main
+from workflows.software_factory.workflows.pr_babysit.intake import ChildLauncher, Registry, child_environment
+from workflows.software_factory.workflows.pr_babysit.policy import FINGERPRINT, Blocked, fingerprint
 
 
 class Child:

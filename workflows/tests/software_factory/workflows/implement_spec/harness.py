@@ -11,13 +11,13 @@ from typing import Any
 from loop import AgentRequest, FakeCliRunner, FakeReply, GitCli, GitRuntime, RunContext, fake_agent
 
 from loop import RecordingSpans, Services
-from workflows.software_factory.shared.agents.launcher import AgentLauncher
+from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
 from tests.runtime.harness import GIT, command
 from tests.shared.fakes import issue
 from workflows.tests.software_factory.stages.support import BRANCH, LABELS, StageRig, envelope
-from workflows.software_factory.implement_spec.__main__ import Runtime, main
-from workflows.software_factory.implement_spec.dry import commit_in_worktree
-from workflows.software_factory.implement_spec.settings import Targets
+from workflows.software_factory.workflows.implement_spec.__main__ import Runtime, main
+from workflows.software_factory.workflows.implement_spec.dry import commit_in_worktree
+from workflows.software_factory.workflows.implement_spec.settings import Targets
 
 TICKET_PROMPT = re.compile(r"subject `ccode\((?P<identifier>[^)|]+\|(?P<number>\d+))\): ")
 

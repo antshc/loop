@@ -12,7 +12,7 @@ from loop import AgentWorkspace, BranchStrategy, GitOptions, LoopHook, WorktreeE
 from workflows.software_factory.events.pull_requests import PullRequestPolled
 from workflows.software_factory.events.specs import SpecRouted
 from loop import Evidence, Hold, Nothing, Pass, Stage, Verdict, WorkspaceOpener
-from workflows.software_factory.shared.agents.launcher import AgentLauncher
+from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
 from loop.shared.git import GitClient
 
 

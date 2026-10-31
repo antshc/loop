@@ -41,9 +41,9 @@ python --version
 python -m pip install -e ".[dev]" --config-settings editable_mode=strict
 python -m pip check
 python -m pytest
-python -m workflows.software_factory.implement_spec --help
-python -m workflows.software_factory.pr_babysit --help
-python -m workflows.software_factory.address_once --help
+python -m workflows.software_factory.workflows.implement_spec --help
+python -m workflows.software_factory.workflows.pr_babysit --help
+python -m workflows.software_factory.workflows.address_once --help
 python -m workflows.loop.plan_implement --help
 ```
 
@@ -71,10 +71,10 @@ Verify — may drift.
 | Envelope builders | Response envelopes the Workflows extract | `workflows/tests/loop/workflow_harness.py`: `plan_envelope`, `implement_envelope`; `workflows/tests/software_factory/stages/support.py`: `envelope`, `answers` |
 | Boundary fakes | One fake per boundary | `workflows/tests/software_factory/workflows/implement_spec/harness.py`: `Agents` (the scripted agent runner) over a real temporary repository; `tests/shared/fakes/gh.py`: `FakeGhCli` and `ScriptedGh` for `gh`, with the pull request side (`FakePullRequestHost`) in `tests/shared/fakes/pull_requests.py`, shared by the `implement_spec` and `pr_babysit` harnesses |
 | Compatibility goldens | Values a migration must not change are captured from the old code first, then compared byte for byte | `workflows/tests/software_factory/workflows/pr_babysit/golden.json` with `golden.py` and `test_golden.py`: babysit fingerprints and agent envelopes (its saved per-PR states seed `test_legacy.py`; the state golden is retired with the state model); `workflows/tests/software_factory/agents/goldens/prompts/`: the role prompts; `workflows/tests/software_factory/workflows/implement_spec/fake_run_tracker_writes.json`: the fake run's tracker writes; `wiring.txt`: the definition's wiring table |
-| Unit tests | Library, runtime, Stage and Workflow rules against fakes | `tests/` (`runtime`, `agents`, `shared`) and `workflows/tests/` (`loop`, and `software_factory` with `stages`, `flows`, `agents`, `events`, `shared`, `workflows/{implement_spec,pr_babysit,address_once}`, each mirroring its source folders); all discovered by root `pytest` |
+| Unit tests | Library, runtime, Stage and Workflow rules against fakes | `tests/` (`runtime`, `agents`, `shared`) and `workflows/tests/` (`loop`, and `software_factory` with `stages`, `flows`, `agents`, `events`, `infrastructure`, `workflows/{implement_spec,pr_babysit,address_once}`, each mirroring its source folders); all discovered by root `pytest` |
 | Stage tests | One Stage run alone as a one-Stage Workflow | `workflows/tests/software_factory/stages/support.py`: `StageRig`, `DeveloperScript`; `workflows/tests/software_factory/stages/test_*.py` |
 | Definition check and wiring golden | Every definition builds, passes `check()`, and its `explain()` equals the stored table | `workflows/tests/software_factory/workflows/<workflow>/test_definition.py`, `wiring.txt`; `workflows/tests/software_factory/architecture/` |
-| Package independence | `implement_spec` runs with only `workflows/software_factory/agents`, `workflows/software_factory/stages`, `src/runtime`, `workflows/software_factory/shared` and no sibling Workflow files, and the role agents resolve their prompts from their own packages | `lint-imports` contracts "No Workflow imports another" and "The factory is layered" in `pyproject.toml`; `workflows/tests/software_factory/architecture/test_portability.py` |
+| Package independence | `implement_spec` runs with only `workflows/software_factory/agents`, `workflows/software_factory/stages`, `src/runtime`, `workflows/software_factory/infrastructure` and no sibling Workflow files, and the role agents resolve their prompts from their own packages | `lint-imports` contracts "No Workflow imports another" and "The factory is layered" in `pyproject.toml`; `workflows/tests/software_factory/architecture/test_portability.py` |
 | Architecture checks | Import rules enforced as a test | `tests/test_architecture.py`: every import-linter contract in `pyproject.toml` |
 
 ## References

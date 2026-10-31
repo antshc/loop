@@ -13,7 +13,7 @@ The process diagrams below describe the Ticket delivery portion; the surrounding
 
 ## Default definition
 
-`workflows/software_factory/implement_spec/__init__.py` declares the delivery as one definition over the Stages
+`workflows/software_factory/workflows/implement_spec/definition.py` declares the delivery as one definition over the Stages
 library, run once per Spec by Loop's Workflow runtime: route the Spec; prepare the checkout; conditional planning and Ticket
 creation; publication of earlier work; delivery of each ready Ticket in the feature worktree with bounded rework,
 closing it and publishing the draft pull request after it; publication after delivery; announcement; best-effort chore
@@ -188,8 +188,8 @@ Decisions: [Compose Workflows as declarative definitions](../adr/compose-factory
 ## Implementation Map
 | Concern | Stable anchor | Semantic locator |
 |---|---|---|
-| External contract | Operator-run service for one repository board | `workflows/software_factory/implement_spec/__main__.py`: runnable package (`python -m workflows.software_factory.implement_spec`) `main(argv, *, services=None)`, options `--spec`, `--log-dir`, `--log-level`, `--otlp-endpoint`, `--no-otel`, `--fake`, `--dry`; run from the harness root |
-| Spec and Ticket selection | Open Specs; actionable Tickets | `src/shared/github/issues/`: `Issues.specs` (complete reads), `SpecGraphSnapshot`, `IssueClassifier`; `workflows/software_factory/implement_spec/intake.py`: the open, complete Specs not awaiting a person; `workflows/software_factory/stages/tickets.py`: `next_ready_ticket` |
+| External contract | Operator-run service for one repository board | `workflows/software_factory/workflows/implement_spec/__main__.py`: runnable package (`python -m workflows.software_factory.workflows.implement_spec`) `main(argv, *, services=None)`, options `--spec`, `--log-dir`, `--log-level`, `--otlp-endpoint`, `--no-otel`, `--fake`, `--dry`; run from the harness root |
+| Spec and Ticket selection | Open Specs; actionable Tickets | `src/shared/github/issues/`: `Issues.specs` (complete reads), `SpecGraphSnapshot`, `IssueClassifier`; `workflows/software_factory/workflows/implement_spec/intake.py`: the open, complete Specs not awaiting a person; `workflows/software_factory/stages/tickets.py`: `next_ready_ticket` |
 | Execution | Fresh non-interactive Copilot run per Ticket by default | `loop`: `AgentBuilder`, `Worktree.agent`, `AgentClient`; `workflows/software_factory/stages/tickets.py`: `implement_ticket`; `workflows/software_factory/agents/roles/developer/`: the developer role agent, its prompt and its identifier-checking reply decoder |
-| Failure bound | Per-Ticket failure count per work item and release, across runs | `workflows/software_factory/implement_spec/__init__.py`: `rework(max_attempts=settings.max_failures, then=handoff(escalate_ticket))`, counted in the Execution ledger (`src/runtime/ledger.py`); `policy.py`: `release_reason` |
+| Failure bound | Per-Ticket failure count per work item and release, across runs | `workflows/software_factory/workflows/implement_spec/definition.py`: `rework(max_attempts=settings.max_failures, then=handoff(escalate_ticket))`, counted in the Execution ledger (`src/runtime/ledger.py`); `policy.py`: `release_reason` |
 | Tests | Workflow scenarios against fakes | `workflows/tests/software_factory/workflows/implement_spec/`: scenarios through `main(argv, services=...)` over `harness.py` (fake tracker, real temporary repository, scripted agent, temporary ledger, recorded spans) |

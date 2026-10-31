@@ -131,7 +131,7 @@ The examples live in this repository and are not included in the installed
 | Example | Purpose |
 |---|---|
 | [Library usage](USAGE.md#library-examples) | One-shot runs, profiles, shared worktrees, sessions, and Loop hooks |
-| [PR scheduler and babysitter](workflows/software_factory/pr_babysit/README.md) | Discover user-authored PRs and address reviews/CI with ledger recovery and scoped telemetry |
+| [PR scheduler and babysitter](workflows/software_factory/workflows/pr_babysit/README.md) | Discover user-authored PRs and address reviews/CI with ledger recovery and scoped telemetry |
 | [Address one pull request once](USAGE.md#other-factory-workflows) | Address the trusted review feedback of one pull request with `address_once`, assembled from existing Stages |
 | [Write a factory Workflow](workflows/software_factory/README.md) | Compose a Workflow definition from the factory's Stages and run it with Loop's Workflow runtime |
 | [Plan and implement](workflows/loop/plan_implement.py) | Plan and implement with different models on one worktree |
@@ -153,9 +153,9 @@ implements and then reviews. Repositories must already be cloned under
 from pathlib import Path
 
 from workflows.software_factory.events.specs import RepositoryTarget
-from workflows.software_factory.implement_spec.__main__ import build_services, main
-from workflows.software_factory.implement_spec.dry import Fakes
-from workflows.software_factory.implement_spec.settings import Targets
+from workflows.software_factory.workflows.implement_spec.__main__ import build_services, main
+from workflows.software_factory.workflows.implement_spec.dry import Fakes
+from workflows.software_factory.workflows.implement_spec.settings import Targets
 
 workspace = Path.cwd() / "workspace"
 targets = Targets((

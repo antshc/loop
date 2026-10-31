@@ -20,7 +20,7 @@ from workflows.software_factory.events.specs import RepositoryTarget
 from loop import (
     Event, Fail, Flow, Ledger, Nothing, Pass, RecordingSpans, RunResult, Services, Stage, Workflow, WorkspaceOpener, run,
 )
-from workflows.software_factory.shared.agents.launcher import AgentLauncher
+from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
 from loop.shared.git import GitClient
 from loop.shared.github.account import GitHub
 from loop.shared.github.pull_requests.babysit import babysit_snapshot, bot_logins

@@ -12,16 +12,16 @@ from loop import AgentRequest, FakeCliRunner, FakeReply, GitCli, GitRuntime, Run
 
 from workflows.software_factory.events.pull_requests import PullRequestWork
 from loop import Event, RecordingSpans, RunStatus, Services, WorktreeGit
-from workflows.software_factory.shared.agents.launcher import AgentLauncher
+from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
 from loop.shared.git import GitClient
-from workflows.software_factory.shared.pacing import Pacer
+from workflows.software_factory.infrastructure.pacing import Pacer
 from tests.runtime.harness import GIT, command
 from tests.shared.fakes import workflow_run
 from workflows.tests.software_factory.stages.pr_support import NUMBER, SLUG, AddressAgent
 from workflows.tests.software_factory.stages.watch_support import MaintainerAgent, WatchRig
-from workflows.software_factory.pr_babysit import NAME
-from workflows.software_factory.pr_babysit.__main__ import Runtime, main
-from workflows.software_factory.pr_babysit.intake import REVISION
+from workflows.software_factory.workflows.pr_babysit.definition import NAME
+from workflows.software_factory.workflows.pr_babysit.__main__ import Runtime, main
+from workflows.software_factory.workflows.pr_babysit.intake import REVISION
 
 URL = f"https://github.com/{SLUG}/pull/{NUMBER}"
 

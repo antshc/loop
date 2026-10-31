@@ -12,8 +12,8 @@ from workflows.software_factory.events.feedback import FeedbackHandled
 from workflows.software_factory.events.pull_requests import CopilotRequested, ReadinessReported
 from tests.runtime.harness import StopAfter, command
 from workflows.tests.software_factory.stages.pr_support import answer, reply_text, thread
-from workflows.software_factory.pr_babysit import __main__ as entry
-from workflows.software_factory.pr_babysit.policy import FINGERPRINT, REASON, fingerprint
+from workflows.software_factory.workflows.pr_babysit import __main__ as entry
+from workflows.software_factory.workflows.pr_babysit.policy import FINGERPRINT, REASON, fingerprint
 
 from .harness import FAILS_AFTER_EDIT, FAILS_UNTIL_FIXED, Babysit, LocalOrigin
 

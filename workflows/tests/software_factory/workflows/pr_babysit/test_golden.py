@@ -16,7 +16,7 @@ from workflows.software_factory.events.specs import RepositoryTarget
 from loop.shared.github.pull_requests.babysit import babysit_snapshot, bot_logins, ci_state
 from workflows.software_factory.stages import ci, pull_requests
 from workflows.software_factory.stages.address import GroupInput, IssueWork, group_feedback, resolve_issue
-from workflows.software_factory.pr_babysit.policy import TRUST, fingerprint
+from workflows.software_factory.workflows.pr_babysit.policy import TRUST, fingerprint
 
 from .golden import CLOSED, GOLDEN, GREEN, OPEN, build_host, pulls_over
 

@@ -13,7 +13,7 @@ from loop import (
 )
 
 from loop import Evidence, Flow, Hold, Nothing, Pass, RunResult, Stage, Workflow
-from workflows.software_factory.shared.agents.launcher import AgentLauncher
+from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
 from workflows.software_factory.stages import specs, workspaces
 from tests.runtime.harness import command
 from workflows.tests.software_factory.stages.pr_support import AddressAgent, PrRig, PrWork, workspace_at

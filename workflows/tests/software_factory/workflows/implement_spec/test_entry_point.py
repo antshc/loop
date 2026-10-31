@@ -10,9 +10,9 @@ from subprocess import CalledProcessError
 import pytest
 from loop import LoopHookError, LoopHookPoint, WorktreeError
 
-from workflows.software_factory.implement_spec import __main__ as entry
-from workflows.software_factory.implement_spec import dry
-from workflows.software_factory.implement_spec.__main__ import main
+from workflows.software_factory.workflows.implement_spec import __main__ as entry
+from workflows.software_factory.workflows.implement_spec import dry
+from workflows.software_factory.workflows.implement_spec.__main__ import main
 
 from .harness import ImplementSpecHarness
 
@@ -206,3 +206,8 @@ def test_the_real_entry_point_installs_the_signal_handlers_only_while_it_runs(tm
     main(["--log-dir", str(tmp_path), *FAKE_ARGUMENTS])
 
     assert {name: signal.getsignal(name) for name in before} == before
+
+
+def test_default_harness_checkout_is_the_repository_root() -> None:
+    """The relocated entry point still targets the harness repository root."""
+    assert entry.harness_target().checkout == Path(__file__).resolve().parents[5]

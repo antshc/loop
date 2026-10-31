@@ -19,6 +19,7 @@ import workflows.software_factory.agents as agents
 import workflows.software_factory.events as events
 import workflows.software_factory.flows as flows
 import workflows.software_factory.stages as stages
+import workflows.software_factory.workflows as workflows
 from loop import Declined, Event, Flow, Handoff, Message, Rework, Route, Selector, Stage, Workflow, WorkspaceOpener
 from loop.runtime._engine.codec import decode, encode
 from loop.runtime.nodes import DispatchNode, EachNode, StageNode, WithinNode
@@ -49,19 +50,20 @@ def submodules(package: ModuleType) -> Iterator[ModuleType]:
 
 def workflow_packages() -> list[ModuleType]:
     """Every factory Workflow package: a factory package with an entry point."""
-    root = Path(factory.__file__).parent
+    root = Path(workflows.__file__).parent
     return [
-        importlib.import_module(f"{factory.__name__}.{info.name}")
-        for info in pkgutil.iter_modules(factory.__path__)
+        importlib.import_module(f"{workflows.__name__}.{info.name}")
+        for info in pkgutil.iter_modules(workflows.__path__)
         if info.ispkg and (root / info.name / "__main__.py").exists()
     ]
 
 
 def definition_factories() -> dict[str, Callable[..., Workflow]]:
-    """The definition factory of every Workflow package: the function its package names in `NAME`."""
+    """The definition factory of every Workflow: the function its definition module names in `NAME`."""
     found = {}
     for package in workflow_packages():
-        found[package.NAME] = getattr(package, package.NAME)
+        definition = importlib.import_module(f"{package.__name__}.definition")
+        found[definition.NAME] = getattr(definition, definition.NAME)
     return found
 
 

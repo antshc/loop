@@ -5,11 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from loop import WorktreeGit
-from workflows.software_factory.shared.agents.launcher import AgentLauncher
+from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
 from loop.shared.git import GitClient
 from loop.shared.github.account import GitHub
 from loop.shared.github.issues.client import Issues
-from workflows.software_factory.implement_spec import ImplementSpecSettings, Targets, implement_spec
+from workflows.software_factory.workflows.implement_spec.definition import ImplementSpecSettings, Targets, implement_spec
 
 WIRING = Path(__file__).with_name("wiring.txt")
 

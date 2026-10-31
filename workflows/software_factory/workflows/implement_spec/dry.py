@@ -24,7 +24,7 @@ from loop import (
 )
 
 from loop import WorktreeCommit, WorktreeGit
-from workflows.software_factory.shared.agents.launcher import AgentFactory
+from workflows.software_factory.infrastructure.agents.launcher import AgentFactory
 from loop.shared.git import Commit, GitClient
 from loop.shared.github.identity import RepositoryId
 from loop.shared.github.repo import GitHubRepo

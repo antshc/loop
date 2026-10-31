@@ -110,7 +110,7 @@ Verify — may drift.
 |---|---|---|
 | Definition language | Immutable Stage, Flow and Workflow, validated as built | `src/runtime/`: `stage.py`, `definition.py`, `routes.py`, `facts.py`, `analysis.py` |
 | Interpreter | `run(...)` and the private engine | `src/runtime/run.py`, `src/runtime/_engine/` |
-| Ledger and spans | Execution ledger; span seam | `src/runtime/ledger.py`, `src/runtime/spans.py`, `workflows/software_factory/shared/telemetry.py` |
+| Ledger and spans | Execution ledger; span seam | `src/runtime/ledger.py`, `src/runtime/spans.py`, `workflows/software_factory/infrastructure/telemetry.py` |
 | Stage library and fragments | Reusable Stages and Flow fragments | `workflows/software_factory/stages/`, `workflows/software_factory/flows/` |
-| Workflows | Definition, policy, entry point | `workflows/software_factory/{implement_spec,pr_babysit,address_once}/`, `workflows/loop/plan_implement.py` |
+| Workflows | Definition, policy, entry point | `workflows/software_factory/workflows/{implement_spec,pr_babysit,address_once}/`, `workflows/loop/plan_implement.py` |
 | Structure checks | Layer contracts and derived tests | `pyproject.toml` (`[tool.importlinter]`), `workflows/tests/software_factory/architecture/` |

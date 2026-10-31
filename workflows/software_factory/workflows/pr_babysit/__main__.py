@@ -19,17 +19,17 @@ from loop import Agent
 
 from workflows.software_factory.events.pull_requests import PullRequestWork
 from loop import DefinitionError, Fail, Ledger, LogSpans, RunResult, Services, Spans, StopSignal, Verify, WorktreeGit, run
-from workflows.software_factory.shared.agents.launcher import AgentLauncher
+from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
 from loop.shared.git import GitClient
 from loop.shared.github.account import GitHub
 from loop.shared.github.repo import GhCli
-from workflows.software_factory.shared.pacing import Pacer
+from workflows.software_factory.infrastructure.pacing import Pacer
 from loop.shared.process import CommandRunner, git_command
-from workflows.software_factory.shared.telemetry import OtelSpans, OtlpObserverFactory, Tee, TracingObserver
+from workflows.software_factory.infrastructure.telemetry import OtelSpans, OtlpObserverFactory, Tee, TracingObserver
 from workflows.software_factory.stages import pull_requests
 from workflows.software_factory.stages.checks import as_verify
 
-from . import HANDED_OFF_ERRORS, NAME, pr_babysit
+from .definition import HANDED_OFF_ERRORS, NAME, pr_babysit
 from .intake import ChildLauncher, DiscoveryRequest, ProcessLauncher, Scheduler, adopt_state, release_if_changed, work_of
 from .policy import FINGERPRINT, REASON, Blocked, fingerprint
 from .settings import Repository, Settings
