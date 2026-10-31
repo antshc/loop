@@ -7,7 +7,8 @@ from dataclasses import replace
 from typing import Any
 from urllib.parse import quote
 
-from ...process import CommandError
+from loop.shared.process import CommandError
+
 from ..identity import IssueIdentity, IssueRef, RepositoryId
 from ..repo import GitHubRepo, denied
 from .errors import IssueError

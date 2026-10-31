@@ -3,7 +3,8 @@ from __future__ import annotations
 from dataclasses import FrozenInstanceError
 
 import pytest
-from loop.shared.github.identity import (
+
+from workflows.software_factory.infrastructure.github.identity import (
     CommentRef,
     IssueIdentity,
     IssueRef,

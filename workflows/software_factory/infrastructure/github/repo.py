@@ -7,8 +7,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from ..git import github_slug
-from ..process import CommandError, Runner
+from loop.shared.git import github_slug
+from loop.shared.process import CommandError, Runner
+
 from .identity import RepositoryId
 
 GhRunner = Callable[[tuple[str, ...]], str]

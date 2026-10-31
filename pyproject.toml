@@ -34,9 +34,6 @@ packages = [
     "loop.runtime._engine",
     "loop.sessions",
     "loop.shared",
-    "loop.shared.github",
-    "loop.shared.github.issues",
-    "loop.shared.github.pull_requests",
 ]
 
 [tool.setuptools.package-dir]
@@ -108,38 +105,38 @@ layers = [
 ]
 
 [[tool.importlinter.contracts]]
-name = "Pure modules of the shared GitHub issues package never import the gh process layer; only its reader, commands, ticketing service, and client do"
+name = "Pure modules of the factory GitHub issues package never import the gh process layer; only its reader, commands, ticketing service, and client do"
 type = "forbidden"
-source_modules = ["loop.shared.github.issues"]
+source_modules = ["workflows.software_factory.infrastructure.github.issues"]
 forbidden_modules = [
     "loop.shared.process",
-    "loop.shared.github.repo",
-    "loop.shared.github.account",
-    "loop.shared.github.pull_requests",
+    "workflows.software_factory.infrastructure.github.repo",
+    "workflows.software_factory.infrastructure.github.account",
+    "workflows.software_factory.infrastructure.github.pull_requests",
 ]
 ignore_imports = [
-    "loop.shared.github.issues.reader -> loop.shared.process",
-    "loop.shared.github.issues.reader -> loop.shared.github.repo",
-    "loop.shared.github.issues.commands -> loop.shared.github.repo",
-    "loop.shared.github.issues.ticketing -> loop.shared.process",
-    "loop.shared.github.issues.client -> loop.shared.github.repo",
+    "workflows.software_factory.infrastructure.github.issues.reader -> loop.shared.process",
+    "workflows.software_factory.infrastructure.github.issues.reader -> workflows.software_factory.infrastructure.github.repo",
+    "workflows.software_factory.infrastructure.github.issues.commands -> workflows.software_factory.infrastructure.github.repo",
+    "workflows.software_factory.infrastructure.github.issues.ticketing -> loop.shared.process",
+    "workflows.software_factory.infrastructure.github.issues.client -> workflows.software_factory.infrastructure.github.repo",
 ]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
-name = "Pure modules of the shared GitHub pull_requests package never import the gh process layer; only its reader, policy reader, and client do"
+name = "Pure modules of the factory GitHub pull_requests package never import the gh process layer; only its reader, policy reader, and client do"
 type = "forbidden"
-source_modules = ["loop.shared.github.pull_requests"]
+source_modules = ["workflows.software_factory.infrastructure.github.pull_requests"]
 forbidden_modules = [
     "loop.shared.process",
-    "loop.shared.github.repo",
-    "loop.shared.github.account",
+    "workflows.software_factory.infrastructure.github.repo",
+    "workflows.software_factory.infrastructure.github.account",
 ]
 ignore_imports = [
-    "loop.shared.github.pull_requests.reader -> loop.shared.github.repo",
-    "loop.shared.github.pull_requests.client -> loop.shared.github.repo",
-    "loop.shared.github.pull_requests.policy_reader -> loop.shared.process",
-    "loop.shared.github.pull_requests.policy_reader -> loop.shared.github.repo",
+    "workflows.software_factory.infrastructure.github.pull_requests.reader -> workflows.software_factory.infrastructure.github.repo",
+    "workflows.software_factory.infrastructure.github.pull_requests.client -> workflows.software_factory.infrastructure.github.repo",
+    "workflows.software_factory.infrastructure.github.pull_requests.policy_reader -> loop.shared.process",
+    "workflows.software_factory.infrastructure.github.pull_requests.policy_reader -> workflows.software_factory.infrastructure.github.repo",
 ]
 allow_indirect_imports = true
 
@@ -242,8 +239,8 @@ type = "forbidden"
 source_modules = ["workflows.software_factory.events"]
 forbidden_modules = [
     "loop.shared.git",
-    "loop.shared.github.repo",
-    "loop.shared.github.account",
+    "workflows.software_factory.infrastructure.github.repo",
+    "workflows.software_factory.infrastructure.github.account",
     "workflows.software_factory.stages",
     "workflows.software_factory.flows",
 ]
@@ -288,10 +285,10 @@ source_modules = [
 forbidden_modules = [
     "loop.shared.process",
     "loop.shared.git",
-    "loop.shared.github.repo",
-    "loop.shared.github.account",
-    "loop.shared.github.issues.client",
-    "loop.shared.github.pull_requests.client",
+    "workflows.software_factory.infrastructure.github.repo",
+    "workflows.software_factory.infrastructure.github.account",
+    "workflows.software_factory.infrastructure.github.issues.client",
+    "workflows.software_factory.infrastructure.github.pull_requests.client",
     "subprocess",
 ]
 allow_indirect_imports = true

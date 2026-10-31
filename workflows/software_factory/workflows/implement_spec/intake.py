@@ -6,8 +6,11 @@ import logging
 from dataclasses import dataclass
 
 from loop import Ledger
-from loop.shared.github.issues.client import Issues
-from loop.shared.github.issues.graph import SpecGraphSnapshot
+
+from workflows.software_factory.infrastructure.github.issues.client import Issues
+from workflows.software_factory.infrastructure.github.issues.graph import (
+    SpecGraphSnapshot,
+)
 
 from .policy import SpecWork, release_reason, spec_revision
 

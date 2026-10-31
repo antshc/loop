@@ -7,11 +7,6 @@ from dataclasses import dataclass
 
 from loop import Stage
 from loop.shared.git import GitClient
-from loop.shared.github.account import GitHub
-from loop.shared.github.issues.client import Issues
-from loop.shared.github.issues.graph import SpecGraphSnapshot
-from loop.shared.github.issues.issue import IssueState
-from loop.shared.github.pull_requests import PublishedPullRequest
 
 from workflows.software_factory.events.chore import ChoreDiscarded, ChoreRefined
 from workflows.software_factory.events.pull_requests import (
@@ -21,6 +16,15 @@ from workflows.software_factory.events.pull_requests import (
 from workflows.software_factory.events.review import PullRequestReviewed, ReviewFailed
 from workflows.software_factory.events.specs import SpecRouted, SpecWork
 from workflows.software_factory.events.tickets import Delivery
+from workflows.software_factory.infrastructure.github.account import GitHub
+from workflows.software_factory.infrastructure.github.issues.client import Issues
+from workflows.software_factory.infrastructure.github.issues.graph import (
+    SpecGraphSnapshot,
+)
+from workflows.software_factory.infrastructure.github.issues.issue import IssueState
+from workflows.software_factory.infrastructure.github.pull_requests import (
+    PublishedPullRequest,
+)
 
 REQUIRED_AXES = frozenset({"bugs", "quality", "smells", "initiative"})
 # Findings of these kinds keep the pull request a draft; the others are only reported.

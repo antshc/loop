@@ -1,16 +1,21 @@
 from __future__ import annotations
 
 import pytest
-from loop.shared.github.issues.client import Issues
-from loop.shared.github.issues.readiness import TicketReadiness
-from loop.shared.github.issues.ticketing import (
+
+from workflows.software_factory.infrastructure.github.issues.client import Issues
+from workflows.software_factory.infrastructure.github.issues.readiness import (
+    TicketReadiness,
+)
+from workflows.software_factory.infrastructure.github.issues.ticketing import (
     SpecTicketingService,
     TicketDraft,
     TicketingError,
 )
-from loop.shared.github.repo import GitHubRepo
-
-from tests.shared.fakes import FakeGhCli, issue
+from workflows.software_factory.infrastructure.github.repo import GitHubRepo
+from workflows.tests.software_factory.infrastructure.github.fakes import (
+    FakeGhCli,
+    issue,
+)
 
 _ROUTING = ("spec", "repo:target:o/r", "repo:base:main")
 

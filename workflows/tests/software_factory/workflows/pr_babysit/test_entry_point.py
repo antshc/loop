@@ -22,11 +22,10 @@ from loop import (
     fake_agent,
 )
 from loop.shared.git import GitClient
-from loop.shared.github.account import GitHub
 from loop.shared.process import CommandRunner
 
-from tests.shared.fakes import FakeGhCli
 from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
+from workflows.software_factory.infrastructure.github.account import GitHub
 from workflows.software_factory.infrastructure.pacing import Pacer
 from workflows.software_factory.infrastructure.telemetry import Tee
 from workflows.software_factory.workflows.pr_babysit import __main__ as entry
@@ -37,6 +36,7 @@ from workflows.software_factory.workflows.pr_babysit.policy import (
     fingerprint,
 )
 from workflows.software_factory.workflows.pr_babysit.settings import Settings
+from workflows.tests.software_factory.infrastructure.github.fakes import FakeGhCli
 from workflows.tests.software_factory.stages.pr_support import thread
 
 from .harness import Babysit, LocalOrigin

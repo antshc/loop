@@ -18,8 +18,6 @@ from loop import (
     Verdict,
     Verify,
 )
-from loop.shared.github.account import GitHub
-from loop.shared.github.pull_requests.babysit import ci_state, digest
 
 from workflows.software_factory.agents.roles.maintainer import (
     DIAGNOSE_CI,
@@ -39,6 +37,11 @@ from workflows.software_factory.events.ci import (
     Transient,
 )
 from workflows.software_factory.events.pull_requests import PullRequestPolled
+from workflows.software_factory.infrastructure.github.account import GitHub
+from workflows.software_factory.infrastructure.github.pull_requests.babysit import (
+    ci_state,
+    digest,
+)
 
 __all__ = [
     "BranchBroken",

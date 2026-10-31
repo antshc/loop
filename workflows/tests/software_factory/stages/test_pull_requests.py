@@ -12,7 +12,6 @@ from loop import Evidence, Fail, Flow, Nothing, Pass, Stage, handoff, stop
 
 from tests.runtime.harness import command
 from tests.runtime.support import NoInput
-from tests.shared.fakes import comment_node, issue_comment, thread_node
 from workflows.software_factory.events.ci import CiFixed
 from workflows.software_factory.events.feedback import (
     FeedbackBatch,
@@ -38,6 +37,11 @@ from workflows.software_factory.stages.pull_requests import (
     DecideInput,
     PublishInput,
     publish_batch,
+)
+from workflows.tests.software_factory.infrastructure.github.fakes import (
+    comment_node,
+    issue_comment,
+    thread_node,
 )
 from workflows.tests.software_factory.stages.pr_support import (
     BRANCH,

@@ -19,7 +19,6 @@ from loop import (
     Agent,
     DefinitionError,
     Fail,
-    Ledger,
     LogSpans,
     RunResult,
     Services,
@@ -30,12 +29,13 @@ from loop import (
     run,
 )
 from loop.shared.git import GitClient
-from loop.shared.github.account import GitHub
-from loop.shared.github.repo import GhCli
 from loop.shared.process import CommandRunner, git_command
 
 from workflows.software_factory.events.pull_requests import PullRequestWork
 from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
+from workflows.software_factory.infrastructure.github.account import GitHub
+from workflows.software_factory.infrastructure.github.repo import GhCli
+from workflows.software_factory.infrastructure.ledger import Ledger
 from workflows.software_factory.infrastructure.pacing import Pacer
 from workflows.software_factory.infrastructure.telemetry import (
     OtelSpans,

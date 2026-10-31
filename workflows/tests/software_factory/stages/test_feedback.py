@@ -6,17 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
-from loop.shared.github.account import GitHub
-from loop.shared.github.pull_requests.babysit import ci_failed, digest, pending_items
 
-from tests.shared.fakes import (
-    FakeGhCli,
-    check_run,
-    comment_node,
-    commit_status,
-    thread_node,
-    workflow_run,
-)
 from workflows.software_factory.agents.roles.address import (
     GROUP_FEEDBACK,
     RESOLVE_ISSUE,
@@ -28,6 +18,12 @@ from workflows.software_factory.events.feedback import (
 )
 from workflows.software_factory.events.specs import RepositoryTarget
 from workflows.software_factory.flows.address import address_feedback
+from workflows.software_factory.infrastructure.github.account import GitHub
+from workflows.software_factory.infrastructure.github.pull_requests.babysit import (
+    ci_failed,
+    digest,
+    pending_items,
+)
 from workflows.software_factory.stages.address import (
     GroupInput,
     IssueWork,
@@ -35,6 +31,14 @@ from workflows.software_factory.stages.address import (
     resolve_issue,
 )
 from workflows.software_factory.stages.feedback import SelectInput, select
+from workflows.tests.software_factory.infrastructure.github.fakes import (
+    FakeGhCli,
+    check_run,
+    comment_node,
+    commit_status,
+    thread_node,
+    workflow_run,
+)
 from workflows.tests.software_factory.stages.pr_support import (
     NUMBER,
     TRUST,

@@ -4,7 +4,7 @@ Shared domain language for the [Loop library](README.md) and the [Agentic Softwa
 
 ## Loop Library
 
-Reusable building blocks in the installable `loop` package, including the Workflow runtime, the typed agent contract and the shared Git, process and GitHub helpers. Loop does not ship a CLI, a fixed SDLC, or built-in workflows.
+Reusable building blocks in the installable `loop` package, including the Workflow runtime, the typed agent contract and the shared Git and process helpers. Loop does not ship a CLI, a fixed SDLC, or built-in workflows.
 
 ### Composition and execution
 
@@ -129,4 +129,4 @@ Product and SDLC language for user-owned workflows built **on** Loop. Warp Facto
 - [Loop library building blocks](docs/building-blocks/loop.md), [public API](src/__init__.py), [Workflow runtime](src/runtime/__init__.py), and [unified workflow plan](docs/researches/unified-event-driven-sdlc-workflow.md).
 - [Warp Factories overview](https://docs.warp.dev/factories/), [how factories work](https://docs.warp.dev/factories/how-factories-work/), [agents](https://docs.warp.dev/factories/factory-agents/), [automations](https://docs.warp.dev/factories/automations/), and [issue-to-PR example](https://github.com/warpdotdev/warp-factory-examples/tree/main/examples/02-sdlc-issue-to-pr).
 - [SSSF overview](https://github.com/antshc/super-simple-software-factory/blob/main/.claude/skills/sssf/cookbooks/sssf_overview.md), [agent-driven workflows](https://github.com/antshc/super-simple-software-factory/blob/main/.claude/skills/sssf/cookbooks/create_adw.md), and [deterministic gates](https://github.com/antshc/super-simple-software-factory/blob/main/.claude/skills/sssf/templates/adws/adw_modules/gates.py).
-- **Boundary:** Loop owns agent execution, local Git/worktree lifecycle, the Workflow runtime (with its Execution ledger and spans), the typed agent contract, and the shared Git, process and GitHub helpers including the Spec and Ticket model. The factory owns intake, routing, business gates, policy, role agents, Stages, GitHub publication decisions, approvals, and delivery. Proposed terms do not assert that the event-driven factory is already implemented.
+- **Boundary:** Loop owns agent execution, local Git/worktree lifecycle, the Workflow runtime (with its Execution ledger and spans), the typed agent contract, and the shared Git and process helpers. The factory owns intake, routing, business gates, policy, role agents, Stages, the GitHub integration including Spec and Ticket models, GitHub publication decisions, approvals, and delivery. Proposed terms do not assert that the event-driven factory is already implemented.

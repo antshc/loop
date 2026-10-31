@@ -8,16 +8,16 @@ from subprocess import CalledProcessError
 
 import pytest
 from loop import Flow, Item, Selector, Stage, handoff, next_, rework
-from loop.shared.github.issues.spec import Ticket
 
 from tests.runtime.support import NoInput
-from tests.shared.fakes import issue
 from workflows.software_factory.events.tickets import (
     Delivery,
     TicketImplemented,
     TicketRejected,
 )
+from workflows.software_factory.infrastructure.github.issues.spec import Ticket
 from workflows.software_factory.stages import specs, tickets
+from workflows.tests.software_factory.infrastructure.github.fakes import issue
 from workflows.tests.software_factory.stages.support import (
     HITL,
     DeveloperScript,

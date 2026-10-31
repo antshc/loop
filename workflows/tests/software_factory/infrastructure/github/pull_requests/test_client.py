@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 import pytest
-from loop.shared.github.pull_requests import PullRequests as PullRequestClient
-from loop.shared.github.pull_requests.lifecycle import PullRequestLifecycleError
-from loop.shared.github.pull_requests.model import PullRequestState
-from loop.shared.github.repo import GitHubRepo
 from loop.shared.process import CommandError
 
-from tests.shared.fakes import (
+from workflows.software_factory.infrastructure.github.pull_requests import (
+    PullRequests as PullRequestClient,
+)
+from workflows.software_factory.infrastructure.github.pull_requests.lifecycle import (
+    PullRequestLifecycleError,
+)
+from workflows.software_factory.infrastructure.github.pull_requests.model import (
+    PullRequestState,
+)
+from workflows.software_factory.infrastructure.github.repo import GitHubRepo
+from workflows.tests.software_factory.infrastructure.github.fakes import (
     PR_DIFF,
     FakeGhCli,
     FakePullRequestHost,

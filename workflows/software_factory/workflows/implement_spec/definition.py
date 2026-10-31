@@ -5,10 +5,10 @@ from __future__ import annotations
 from subprocess import CalledProcessError
 
 from loop import Flow, LoopHookError, Workflow, handoff, next_, rework, stop
-from loop.shared.github.issues.errors import IssueError
 
 from workflows.software_factory.events.pull_requests import DraftPullRequestPublished
 from workflows.software_factory.events.tickets import Delivery
+from workflows.software_factory.infrastructure.github.issues.errors import IssueError
 from workflows.software_factory.stages import (
     chore,
     finalize,

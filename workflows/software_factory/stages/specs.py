@@ -9,8 +9,6 @@ from typing import Any
 
 from loop import Evidence, Fail, History, Hold, Pass, Stage, Verdict
 from loop.shared.git import GitClient
-from loop.shared.github.issues.client import Issues
-from loop.shared.github.issues.graph import SpecGraphSnapshot
 
 from workflows.software_factory.events.pull_requests import DraftPullRequestPublished
 from workflows.software_factory.events.specs import (
@@ -24,6 +22,10 @@ from workflows.software_factory.events.specs import (
     SpecRouted,
     SpecWork,
     WorkFound,
+)
+from workflows.software_factory.infrastructure.github.issues.client import Issues
+from workflows.software_factory.infrastructure.github.issues.graph import (
+    SpecGraphSnapshot,
 )
 
 _VERSION = re.compile(r"(\d+(?:\.\d+)+)")

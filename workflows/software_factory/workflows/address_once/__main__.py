@@ -12,7 +12,6 @@ from subprocess import CalledProcessError, TimeoutExpired
 
 from loop import (
     Agent,
-    Ledger,
     LogSpans,
     RunResult,
     Services,
@@ -22,13 +21,14 @@ from loop import (
     run,
 )
 from loop.shared.git import GitClient
-from loop.shared.github.account import GitHub
-from loop.shared.github.repo import GhCli
 from loop.shared.process import CommandRunner, git_command
 
 from workflows.software_factory.events.pull_requests import PullRequestWork
 from workflows.software_factory.events.specs import RepositoryTarget
 from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
+from workflows.software_factory.infrastructure.github.account import GitHub
+from workflows.software_factory.infrastructure.github.repo import GhCli
+from workflows.software_factory.infrastructure.ledger import Ledger
 from workflows.software_factory.stages.checks import as_verify
 
 from .definition import NAME, address_once

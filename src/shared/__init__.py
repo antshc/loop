@@ -1,4 +1,4 @@
-"""Reusable Workflow infrastructure: process execution, the Git helper and GitHub access through the `gh` CLI."""
+"""Reusable Workflow infrastructure: process execution and the Git helper."""
 
 from __future__ import annotations
 

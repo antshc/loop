@@ -7,13 +7,15 @@ from dataclasses import dataclass
 
 from loop import History, Stage
 from loop.shared.git import GitClient
-from loop.shared.github.account import GitHub
-from loop.shared.github.issues.client import Issues
-from loop.shared.github.issues.graph import SpecGraphSnapshot
 
 from workflows.software_factory.events.pull_requests import DraftPullRequestPublished
 from workflows.software_factory.events.specs import SpecRouted, SpecWork
 from workflows.software_factory.events.tickets import TicketClosed
+from workflows.software_factory.infrastructure.github.account import GitHub
+from workflows.software_factory.infrastructure.github.issues.client import Issues
+from workflows.software_factory.infrastructure.github.issues.graph import (
+    SpecGraphSnapshot,
+)
 
 
 @dataclass(frozen=True)

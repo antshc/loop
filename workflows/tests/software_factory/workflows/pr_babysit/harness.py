@@ -25,13 +25,13 @@ from loop import (
 from loop.shared.git import GitClient
 
 from tests.runtime.harness import GIT, command
-from tests.shared.fakes import workflow_run
 from workflows.software_factory.events.pull_requests import PullRequestWork
 from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
 from workflows.software_factory.infrastructure.pacing import Pacer
 from workflows.software_factory.workflows.pr_babysit.__main__ import Runtime, main
 from workflows.software_factory.workflows.pr_babysit.definition import NAME
 from workflows.software_factory.workflows.pr_babysit.intake import REVISION
+from workflows.tests.software_factory.infrastructure.github.fakes import workflow_run
 from workflows.tests.software_factory.stages.pr_support import (
     NUMBER,
     SLUG,

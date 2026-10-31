@@ -3,14 +3,18 @@ from __future__ import annotations
 from dataclasses import replace
 
 import pytest
-from loop.shared.github.pull_requests import (
+
+from workflows.software_factory.infrastructure.github.pull_requests import (
     LifecycleAction,
     LifecycleDecision,
     PullRequestLifecyclePolicy,
 )
-from loop.shared.github.pull_requests.model import PullRequestState
-
-from tests.shared.builders import build_pull_request_snapshot
+from workflows.software_factory.infrastructure.github.pull_requests.model import (
+    PullRequestState,
+)
+from workflows.tests.software_factory.infrastructure.github.builders import (
+    build_pull_request_snapshot,
+)
 
 CLOSE, REOPEN = LifecycleAction.CLOSE, LifecycleAction.REOPEN
 VALID, NO_OP, INVALID = (

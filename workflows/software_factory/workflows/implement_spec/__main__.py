@@ -14,7 +14,6 @@ from types import FrameType
 
 from loop import (
     Agent,
-    Ledger,
     LogSpans,
     LoopHook,
     RunResult,
@@ -28,15 +27,18 @@ from loop import (
     run,
 )
 from loop.shared.git import GitClient
-from loop.shared.github.account import GitHub
-from loop.shared.github.issues.client import Issues
-from loop.shared.github.issues.errors import IssueError
-from loop.shared.github.issues.graph import SpecGraphSnapshot
-from loop.shared.github.repo import GhCli, GitHubRepo
 from loop.shared.process import CommandRunner, git_command
 
 from workflows.software_factory.events.specs import RepositoryTarget
 from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
+from workflows.software_factory.infrastructure.github.account import GitHub
+from workflows.software_factory.infrastructure.github.issues.client import Issues
+from workflows.software_factory.infrastructure.github.issues.errors import IssueError
+from workflows.software_factory.infrastructure.github.issues.graph import (
+    SpecGraphSnapshot,
+)
+from workflows.software_factory.infrastructure.github.repo import GhCli, GitHubRepo
+from workflows.software_factory.infrastructure.ledger import Ledger
 from workflows.software_factory.infrastructure.telemetry import (
     OtelSpans,
     OtlpObserverFactory,

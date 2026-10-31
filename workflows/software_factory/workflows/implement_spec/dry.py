@@ -25,11 +25,11 @@ from loop import (
     fake_agent,
 )
 from loop.shared.git import Commit, GitClient
-from loop.shared.github.identity import RepositoryId
-from loop.shared.github.repo import GitHubRepo
 from loop.shared.process import CommandRunner
 
 from workflows.software_factory.infrastructure.agents.launcher import AgentFactory
+from workflows.software_factory.infrastructure.github.identity import RepositoryId
+from workflows.software_factory.infrastructure.github.repo import GitHubRepo
 
 logger = logging.getLogger("workflow.implement_spec")
 

@@ -1,5 +1,7 @@
 # Share the Spec and Ticket model in Loop's shared GitHub package while implement_spec keeps its delivery policy
 
+**Superseded by [Keep GitHub integration in the factory](keep-github-integration-in-the-factory.md).**
+
 [Loop Library Workflow Architecture](../concepts/str-loop-library-workflow-architecture.md) keeps Workflow-specific models inside their Workflow, and `Spec` and `Ticket` began as `implement_spec` records. They live in Loop's shared GitHub package (`src/shared/github/`, imported as `loop.shared.github`) on top of the shared `Issue` model, together with their metadata (Initiative id, target repository, base branch), classification, readiness and ticketing, so every Workflow that works Specs reuses one model. `implement_spec` keeps its delivery policy: the `hitl` hand-off and escalation, its comment text, branch naming, failure counts, and the Ticket, plan and review result types. Applies only to `Spec` and `Ticket`.
 
 ## Considered Options

@@ -11,11 +11,10 @@ from unittest.mock import patch
 
 import pytest
 from loop import Ledger, RecordingSpans, Services
-from loop.shared.github.account import GitHub
 
-from tests.shared.fakes import FakeGhCli, FakePullRequestHost, issue_comment
 from workflows.software_factory.events.pull_requests import PullRequestWork
 from workflows.software_factory.events.specs import RepositoryTarget
+from workflows.software_factory.infrastructure.github.account import GitHub
 from workflows.software_factory.infrastructure.pacing import Pacer
 from workflows.software_factory.infrastructure.state import StateError, process_lock
 from workflows.software_factory.stages import pull_requests
@@ -37,6 +36,11 @@ from workflows.software_factory.workflows.pr_babysit.policy import (
     fingerprint,
 )
 from workflows.software_factory.workflows.pr_babysit.settings import Settings
+from workflows.tests.software_factory.infrastructure.github.fakes import (
+    FakeGhCli,
+    FakePullRequestHost,
+    issue_comment,
+)
 from workflows.tests.software_factory.workflows.pr_babysit.golden import (
     GOLDEN,
     GREEN,

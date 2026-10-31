@@ -21,11 +21,11 @@ from loop import (
 )
 
 from tests.runtime.harness import GIT, command
-from tests.shared.fakes import issue
 from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
 from workflows.software_factory.workflows.implement_spec.__main__ import Runtime, main
 from workflows.software_factory.workflows.implement_spec.dry import commit_in_worktree
 from workflows.software_factory.workflows.implement_spec.settings import Targets
+from workflows.tests.software_factory.infrastructure.github.fakes import issue
 from workflows.tests.software_factory.stages.support import (
     BRANCH,
     LABELS,

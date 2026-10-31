@@ -50,10 +50,10 @@ CLIENTS = (
     "loop.runtime._engine",
     "loop.shared.process",
     "loop.shared.git",
-    "loop.shared.github.repo",
-    "loop.shared.github.account",
-    "loop.shared.github.issues.client",
-    "loop.shared.github.pull_requests.client",
+    "workflows.software_factory.infrastructure.github.repo",
+    "workflows.software_factory.infrastructure.github.account",
+    "workflows.software_factory.infrastructure.github.issues.client",
+    "workflows.software_factory.infrastructure.github.pull_requests.client",
 )
 
 type Part = Stage | Selector | WorkspaceOpener
@@ -386,7 +386,7 @@ def test_a_policy_module_with_a_behaviour_class_or_a_client_import_is_reported_b
     """Given a policy source with a class that has methods and imports of a client, when it is checked, then each is named."""
     source = (
         "import subprocess\n"
-        "from loop.shared.github.account import GitHub\n"
+        "from workflows.software_factory.infrastructure.github.account import GitHub\n"
         "from dataclasses import dataclass\n\n"
         "class Fingerprinter:\n    def digest(self): ...\n\n"
         "@dataclass(frozen=True)\nclass Value:\n    def doubled(self): ...\n\n"
@@ -396,8 +396,8 @@ def test_a_policy_module_with_a_behaviour_class_or_a_client_import_is_reported_b
     assert policy_violations("demo.policy", source) == [
         "demo.policy: class Fingerprinter has methods",
         "demo.policy: imports subprocess",
-        "demo.policy: imports loop.shared.github.account",
-        "demo.policy: imports loop.shared.github.account.GitHub",
+        "demo.policy: imports workflows.software_factory.infrastructure.github.account",
+        "demo.policy: imports workflows.software_factory.infrastructure.github.account.GitHub",
     ]
 
 

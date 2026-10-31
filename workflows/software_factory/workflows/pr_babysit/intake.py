@@ -12,11 +12,13 @@ from pathlib import Path
 from typing import Protocol
 
 from loop import Ledger, LedgerCorrupted, RunStatus, StopSignal, WorkItemLocked
-from loop.shared.github.account import GitHub
-from loop.shared.github.pull_requests.model import PullRequest
 
 from workflows.software_factory.events.pull_requests import PullRequestWork
 from workflows.software_factory.events.specs import RepositoryTarget
+from workflows.software_factory.infrastructure.github.account import GitHub
+from workflows.software_factory.infrastructure.github.pull_requests.model import (
+    PullRequest,
+)
 from workflows.software_factory.infrastructure.pacing import Pacer
 from workflows.software_factory.infrastructure.state import (
     JsonFile,

@@ -2,11 +2,22 @@
 
 from __future__ import annotations
 
-from loop.shared.github.identity import IssueIdentity, IssueRef, RepositoryId
-from loop.shared.github.issues.graph import BlockedByRelation, SpecGraphSnapshot
-from loop.shared.github.issues.issue import CloseReason, Issue, IssueState
-from loop.shared.github.issues.spec import Spec, Ticket
-from loop.shared.github.pull_requests.model import (
+from workflows.software_factory.infrastructure.github.identity import (
+    IssueIdentity,
+    IssueRef,
+    RepositoryId,
+)
+from workflows.software_factory.infrastructure.github.issues.graph import (
+    BlockedByRelation,
+    SpecGraphSnapshot,
+)
+from workflows.software_factory.infrastructure.github.issues.issue import (
+    CloseReason,
+    Issue,
+    IssueState,
+)
+from workflows.software_factory.infrastructure.github.issues.spec import Spec, Ticket
+from workflows.software_factory.infrastructure.github.pull_requests.model import (
     CheckKind,
     CheckOutcome,
     CheckResult,

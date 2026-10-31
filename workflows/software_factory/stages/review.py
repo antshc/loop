@@ -15,7 +15,6 @@ from loop import (
     Stage,
     Verdict,
 )
-from loop.shared.github.account import GitHub
 
 from workflows.software_factory.agents.roles.reviewer import (
     REVIEWER,
@@ -30,6 +29,7 @@ from workflows.software_factory.events.review import (
 )
 from workflows.software_factory.events.specs import SpecRouted, SpecWork
 from workflows.software_factory.events.tickets import Delivery
+from workflows.software_factory.infrastructure.github.account import GitHub
 
 
 @dataclass(frozen=True)

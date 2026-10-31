@@ -1,21 +1,23 @@
 from __future__ import annotations
 
 import pytest
-from loop.shared.github.account import GitHub
-from loop.shared.github.identity import (
+from loop.shared.process import CommandError
+
+from workflows.software_factory.infrastructure.github.account import GitHub
+from workflows.software_factory.infrastructure.github.identity import (
     CommentRef,
     IssueIdentity,
     IssueRef,
     RepositoryId,
 )
-from loop.shared.github.issues.issue import Comment
-from loop.shared.github.pull_requests import (
+from workflows.software_factory.infrastructure.github.issues.issue import Comment
+from workflows.software_factory.infrastructure.github.pull_requests import (
     MergeGateEvaluator,
     MergePolicySnapshot,
     PullRequests,
     ReasonCode,
 )
-from loop.shared.github.pull_requests.model import (
+from workflows.software_factory.infrastructure.github.pull_requests.model import (
     CheckKind,
     Mergeability,
     MergeState,
@@ -24,9 +26,7 @@ from loop.shared.github.pull_requests.model import (
     ReviewDecision,
     ReviewVerdict,
 )
-from loop.shared.process import CommandError
-
-from tests.shared.fakes import (
+from workflows.tests.software_factory.infrastructure.github.fakes import (
     FakeGhCli,
     FakePullRequestHost,
     check_run,

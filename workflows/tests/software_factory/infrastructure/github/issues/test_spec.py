@@ -3,10 +3,13 @@ from __future__ import annotations
 from dataclasses import FrozenInstanceError
 
 import pytest
-from loop.shared.github.issues.issue import IssueState
-from loop.shared.github.issues.spec import SpecMetadata
 
-from tests.shared.builders import build_spec, build_ticket
+from workflows.software_factory.infrastructure.github.issues.issue import IssueState
+from workflows.software_factory.infrastructure.github.issues.spec import SpecMetadata
+from workflows.tests.software_factory.infrastructure.github.builders import (
+    build_spec,
+    build_ticket,
+)
 
 
 def _metadata(
