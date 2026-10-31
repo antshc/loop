@@ -1,9 +1,13 @@
-"""pr_babysit's discovery through the command line: which pull requests get a worker, read from the baseline and the Execution ledger, with fake GitHub and a fake child launcher."""
+"""pr_babysit's discovery through the command line: which pull requests get a worker, read from the baseline and the Execution ledger, with fake GitHub and synchronized thread workers."""
 
 from __future__ import annotations
 
 import json
+from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
+from queue import Queue
+from threading import Event
+from unittest.mock import patch
 
 import pytest
 from loop import Ledger, RecordingSpans, Services
@@ -13,19 +17,26 @@ from tests.shared.fakes import FakeGhCli, FakePullRequestHost, issue_comment
 from workflows.software_factory.events.pull_requests import PullRequestWork
 from workflows.software_factory.events.specs import RepositoryTarget
 from workflows.software_factory.infrastructure.pacing import Pacer
+from workflows.software_factory.infrastructure.state import StateError, process_lock
 from workflows.software_factory.stages import pull_requests
-from workflows.software_factory.workflows.pr_babysit.__main__ import Runtime, main
+from workflows.software_factory.workflows.pr_babysit.__main__ import (
+    Runtime,
+    StopRequest,
+    _discover,
+    main,
+)
 from workflows.software_factory.workflows.pr_babysit.definition import NAME
 from workflows.software_factory.workflows.pr_babysit.intake import (
-    ChildLauncher,
+    DiscoveryRequest,
+    Maintain,
     Registry,
-    child_environment,
 )
 from workflows.software_factory.workflows.pr_babysit.policy import (
     FINGERPRINT,
     Blocked,
     fingerprint,
 )
+from workflows.software_factory.workflows.pr_babysit.settings import Settings
 from workflows.tests.software_factory.workflows.pr_babysit.golden import (
     GOLDEN,
     GREEN,
@@ -34,39 +45,57 @@ from workflows.tests.software_factory.workflows.pr_babysit.golden import (
 )
 
 
-class Child:
-    """A worker process that has not exited until it is told to."""
-
-    returncode: int | None = None
-
-    def poll(self) -> int | None:
-        return self.returncode
-
-    def terminate(self) -> None:
-        self.returncode = 0
-
-    def kill(self) -> None:
-        self.returncode = -9
-
-    def wait(self, timeout: float | None = None) -> int:
-        return self.returncode or 0
-
-
-class Children:
-    """The launcher: remembers every pull request it started a worker for."""
+class Worker:
+    """A PR action released explicitly by the scheduler's test pacer."""
 
     def __init__(self) -> None:
-        self.started: list[str] = []
-        self.children: list[Child] = []
+        self.finished = Event()
+        self._returncode: int | None = None
 
-    def start(self, config: Path, url: str) -> Child:
-        self.started.append(url)
-        self.children.append(Child())
-        return self.children[-1]
+    @property
+    def returncode(self) -> int | None:
+        return self._returncode
+
+    @returncode.setter
+    def returncode(self, value: int) -> None:
+        self._returncode = value
+        self.finished.set()
+
+
+class Workers:
+    """Records PR invocations and holds them until the test releases their action."""
+
+    def __init__(self, ledger: Ledger) -> None:
+        self.ledger = ledger
+        self.started: list[str] = []
+        self.runs: list[Worker] = []
+        self.entered: Queue[None] = Queue()
+
+    def __call__(self, slug: str, number: int) -> int:
+        worker = Worker()
+        self.started.append(f"https://github.com/{slug}/pull/{number}")
+        self.runs.append(worker)
+        self.entered.put(None)
+        assert worker.finished.wait(5), "worker was not released"
+        if worker.returncode:
+            raise RuntimeError("unexpected worker failure")
+        if self.ledger.status(NAME, f"{slug}#{number}") is None:
+            self.ledger.item(NAME, f"{slug}#{number}").seed(
+                [
+                    {"kind": "run-opened", "epoch": 1},
+                    {
+                        "kind": "run-closed",
+                        "status": "interrupted",
+                        "reason": None,
+                        "attributes": {},
+                    },
+                ]
+            )
+        return 0
 
 
 class Stopping:
-    """The stop signal, on after `ticks` waits."""
+    """The scheduler stop signal controlled by the test pacer."""
 
     def __init__(self) -> None:
         self.on = False
@@ -76,7 +105,7 @@ class Stopping:
 
 
 class Discovery:
-    """Open pull requests of a/b authored by the operator, a ledger, a child launcher and a pacer that ends discovery after `ticks` waits."""
+    """Open pull requests of a/b authored by the operator, a ledger, thread workers and a pacer that ends discovery after `ticks` waits."""
 
     def __init__(
         self,
@@ -92,7 +121,7 @@ class Discovery:
             self.host.add(1, head_sha="sha1")
         self.github = GitHub(FakeGhCli(pulls=self.host))
         self.ledger = Ledger(tmp_path / "ledger")
-        self.children = Children()
+        self.workers = Workers(self.ledger)
         self.stop = Stopping()
         self.config = tmp_path / "babysit.json"
         self.config.write_text(
@@ -118,16 +147,41 @@ class Discovery:
         """Runs discovery for `ticks` scans, calling `on_tick` after each."""
         self.waits = 0
 
+        futures: list[Future[int]] = []
+        workers = self.workers
+
+        class StartedExecutor(ThreadPoolExecutor):
+            def submit(self, fn, /, *args, **kwargs):
+                future = super().submit(fn, *args, **kwargs)
+                futures.append(future)
+                workers.entered.get(timeout=5)
+                return future
+
         def wait(seconds: float) -> None:
             self.waits += 1
             on_tick(self.waits)
             self.stop.on = self.waits >= ticks
+            if self.stop.on:
+                for worker in workers.runs:
+                    if worker.returncode is None:
+                        worker.returncode = 0
+            # Let explicitly completed actions finish before the next scan.
+            for worker, future in zip(workers.runs[-len(futures) :], futures):
+                if worker.finished.is_set():
+                    try:
+                        future.result(timeout=5)
+                    except RuntimeError:
+                        pass
 
         self.stop.on = False
         services = Services(
             self.github, Pacer(wait), Runtime(self.ledger, RecordingSpans(), self.stop)
-        ).bind(ChildLauncher, self.children)
-        return main(["--config", str(self.config), *argv], services=services)
+        ).bind(Maintain, self.workers)
+        with patch(
+            "workflows.software_factory.workflows.pr_babysit.intake.ThreadPoolExecutor",
+            StartedExecutor,
+        ):
+            return main(["--config", str(self.config), *argv], services=services)
 
     def work(self, number: int) -> PullRequestWork:
         return PullRequestWork(
@@ -174,7 +228,7 @@ def test_the_first_baseline_is_ignored_and_a_pull_request_that_appears_later_is_
 
     discovery.serve(3, on_tick=appear)
 
-    assert discovery.children.started == ["https://github.com/a/b/pull/2"]
+    assert discovery.workers.started == ["https://github.com/a/b/pull/2"]
     assert [record["ignored"] for record in discovery.registry()["prs"].values()] == [
         True,
         False,
@@ -189,7 +243,7 @@ def test_existing_pull_requests_are_enrolled_with_the_include_existing_option_an
 
     discovery.serve(3, "--include-existing")
 
-    assert discovery.children.started == [
+    assert discovery.workers.started == [
         "https://github.com/a/b/pull/1",
         "https://github.com/a/b/pull/2",
     ]
@@ -200,15 +254,15 @@ def test_a_blocked_pull_request_is_started_again_only_after_its_fingerprint_chan
 ) -> None:
     """Given a pull request blocked at its current fingerprint, when its head changes, then a worker starts and the ledger records a release."""
     discovery.serve(1, "--include-existing")
-    discovery.children.started.clear()
+    discovery.workers.started.clear()
     discovery.block(1, discovery.current(1))
 
     discovery.serve(2)
-    unchanged = list(discovery.children.started)
+    unchanged = list(discovery.workers.started)
     discovery.host.pulls[1].head_sha = "new"
     discovery.serve(2)
 
-    assert unchanged == [] and discovery.children.started == [
+    assert unchanged == [] and discovery.workers.started == [
         "https://github.com/a/b/pull/1"
     ]
     assert discovery.ledger.status(NAME, "a/b#1").released
@@ -219,13 +273,13 @@ def test_an_unchanged_blocked_pull_request_gets_no_worker_so_no_agent_runs_and_n
 ) -> None:
     """Given a blocked pull request without a retry and with an unchanged fingerprint, when discovery runs, then it is not enrolled again for a worker and nothing is released."""
     discovery.serve(1, "--include-existing")
-    discovery.children.started.clear()
+    discovery.workers.started.clear()
     discovery.block(1, discovery.current(1))
 
     discovery.serve(3)
 
     assert (
-        discovery.children.started == []
+        discovery.workers.started == []
         and not discovery.ledger.status(NAME, "a/b#1").released
     )
 
@@ -236,15 +290,15 @@ def test_a_blocked_pull_request_with_new_feedback_gets_a_worker(tmp_path: Path) 
     host.pulls.pop(GREEN)
     discovery = Discovery(tmp_path, host)
     discovery.serve(1, "--include-existing")
-    discovery.children.started.clear()
+    discovery.workers.started.clear()
     discovery.block(OPEN, json.loads(GOLDEN.read_text())["open"]["fingerprint"])
 
     discovery.serve(2)
-    unchanged = list(discovery.children.started)
+    unchanged = list(discovery.workers.started)
     host.pulls[OPEN].comments.append(issue_comment(900, "reviewer", "One more thing"))
     discovery.serve(2)
 
-    assert unchanged == [] and discovery.children.started == [
+    assert unchanged == [] and discovery.workers.started == [
         f"https://github.com/a/b/pull/{OPEN}"
     ]
 
@@ -255,13 +309,13 @@ def test_a_retry_releases_a_blocked_pull_request_and_starts_its_worker(
     """Given a blocked pull request at an unchanged fingerprint, when discovery is asked to retry its URL, then the ledger records a release, a worker starts, and another blocked pull request stays held."""
     discovery.host.add(2, head_sha="sha2")
     discovery.serve(1, "--include-existing")
-    discovery.children.started.clear()
+    discovery.workers.started.clear()
     for number in (1, 2):
         discovery.block(number, discovery.current(number))
 
     discovery.serve(2, "--retry", "https://github.com/a/b/pull/1")
 
-    assert discovery.children.started == ["https://github.com/a/b/pull/1"]
+    assert discovery.workers.started == ["https://github.com/a/b/pull/1"]
     assert (
         discovery.ledger.status(NAME, "a/b#1").released
         and not discovery.ledger.status(NAME, "a/b#2").released
@@ -274,17 +328,17 @@ def test_a_worker_that_died_without_closing_its_run_is_not_started_again_without
     """Given a worker that exits while its run never closed, when discovery goes on, then the pull request is held for an explicit retry, which starts it again."""
 
     def die(tick: int) -> None:
-        for child in discovery.children.children:
+        for child in discovery.workers.runs:
             child.returncode = 1
 
     discovery.serve(4, "--include-existing", on_tick=die)
-    after_crash = list(discovery.children.started)
+    after_crash = list(discovery.workers.started)
     discovery.serve(2)
-    held = list(discovery.children.started)
+    held = list(discovery.workers.started)
     discovery.serve(2, "--retry", "https://github.com/a/b/pull/1")
 
     assert after_crash == ["https://github.com/a/b/pull/1"] and held == after_crash
-    assert discovery.children.started == after_crash * 2
+    assert discovery.workers.started == after_crash * 2
     assert discovery.registry()["prs"]["a/b#1"]["crashed"] is False
 
 
@@ -317,7 +371,7 @@ def test_a_damaged_log_marks_only_its_pull_request_crashed_and_the_others_still_
 
     code = discovery.serve(2, "--include-existing")
 
-    assert code == 0 and discovery.children.started == ["https://github.com/a/b/pull/2"]
+    assert code == 0 and discovery.workers.started == ["https://github.com/a/b/pull/2"]
     assert discovery.registry()["prs"]["a/b#1"]["crashed"] is True
     assert any(
         "a/b#1" in record.message and str(path) in record.message
@@ -333,12 +387,12 @@ def test_a_damaged_log_of_an_exited_worker_does_not_stop_the_scheduler(
     def die_damaged(tick: int) -> None:
         if tick == 1:
             corrupt(discovery, 1)
-            for child in discovery.children.children:
+            for child in discovery.workers.runs:
                 child.returncode = 1
 
     code = discovery.serve(3, "--include-existing", on_tick=die_damaged)
 
-    assert code == 0 and discovery.children.started == ["https://github.com/a/b/pull/1"]
+    assert code == 0 and discovery.workers.started == ["https://github.com/a/b/pull/1"]
     assert discovery.registry()["prs"]["a/b#1"]["crashed"] is True
 
 
@@ -347,7 +401,7 @@ def test_a_reopened_pull_request_whose_run_completed_starts_again(
 ) -> None:
     """Given a pull request whose run completed, when it is open again, then discovery starts a worker for it."""
     discovery.serve(1, "--include-existing")
-    discovery.children.started.clear()
+    discovery.workers.started.clear()
     log = discovery.ledger.item(NAME, "a/b#1")
     log.seed(
         [
@@ -363,7 +417,7 @@ def test_a_reopened_pull_request_whose_run_completed_starts_again(
 
     discovery.serve(1)
 
-    assert discovery.children.started == ["https://github.com/a/b/pull/1"]
+    assert discovery.workers.started == ["https://github.com/a/b/pull/1"]
 
 
 def test_the_concurrency_limit_holds_back_the_other_pull_requests(
@@ -375,7 +429,7 @@ def test_the_concurrency_limit_holds_back_the_other_pull_requests(
 
     discovery.serve(2, "--include-existing")
 
-    assert len(discovery.children.started) == 1
+    assert len(discovery.workers.started) == 1
 
 
 def test_a_pull_request_whose_work_item_a_surviving_worker_still_holds_is_not_started(
@@ -385,21 +439,7 @@ def test_a_pull_request_whose_work_item_a_surviving_worker_still_holds_is_not_st
     with discovery.ledger.item(NAME, "a/b#1").lock():
         discovery.serve(2, "--include-existing")
 
-    assert discovery.children.started == []
-
-
-def test_trace_context_is_not_inherited_by_a_worker(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Given distributed trace context in the environment, when a worker's environment is built, then it is dropped and the exporter configuration kept."""
-    monkeypatch.setenv("TRACEPARENT", "parent")
-    monkeypatch.setenv("baggage", "something")
-    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
-
-    environment = child_environment()
-
-    assert "TRACEPARENT" not in environment and "baggage" not in environment
-    assert environment["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://localhost:4318"
+    assert discovery.workers.started == []
 
 
 def test_a_change_of_discovery_configuration_does_not_silently_rebaseline(
@@ -410,3 +450,94 @@ def test_a_change_of_discovery_configuration_does_not_silently_rebaseline(
 
     with pytest.raises(Blocked, match="configuration changed"):
         Registry(tmp_path, "another-user", ["a/b"])
+
+
+def test_a_third_pr_starts_only_after_one_of_two_active_workers_finishes(
+    discovery: Discovery,
+) -> None:
+    """A completed action frees one slot while the other PR keeps running."""
+    discovery.host.add(2, head_sha="sha2")
+    discovery.host.add(3, head_sha="sha3")
+    active_counts = []
+
+    def complete_first(tick: int) -> None:
+        active_counts.append(
+            sum(worker.returncode is None for worker in discovery.workers.runs)
+        )
+        if tick == 1:
+            assert len(discovery.workers.started) == 2
+            discovery.host.pulls[1].close()
+            discovery.workers.runs[0].returncode = 0
+        elif tick == 2:
+            assert discovery.workers.started[-1].endswith("/3")
+            assert discovery.workers.runs[1].returncode is None
+
+    discovery.serve(3, "--include-existing", on_tick=complete_first)
+
+    assert discovery.workers.started == [
+        f"https://github.com/a/b/pull/{number}" for number in (1, 2, 3)
+    ]
+    assert max(active_counts) == 2
+
+
+def test_a_worker_exception_frees_its_slot_without_stopping_another_pr(
+    discovery: Discovery, caplog: pytest.LogCaptureFixture
+) -> None:
+    """One unexpected exception is quarantined while another PR keeps its thread."""
+    discovery.host.add(2, head_sha="sha2")
+    discovery.host.add(3, head_sha="sha3")
+
+    def fail_first(tick: int) -> None:
+        if tick == 1:
+            discovery.workers.runs[0].returncode = 1
+        if tick == 2:
+            assert len(discovery.workers.started) == 3
+            assert discovery.workers.runs[1].returncode is None
+
+    discovery.serve(3, "--include-existing", on_tick=fail_first)
+
+    assert discovery.registry()["prs"]["a/b#1"]["crashed"] is True
+    assert "a/b#1: worker failed" in caplog.text
+
+
+def test_a_scheduler_error_notifies_workers_and_keeps_its_lock_until_they_exit(
+    discovery: Discovery,
+) -> None:
+    """Error cleanup wakes workers before joining and keeps their ownership intact."""
+    stop = StopRequest()
+    entered, finished = Event(), Event()
+
+    def maintain(slug: str, number: int) -> int:
+        entered.set()
+        stop.wait(5)
+        assert stop.requested()
+        with pytest.raises(StateError):
+            with process_lock(discovery.tmp_path / "scheduler.lock"):
+                pass
+        log = discovery.ledger.item(NAME, f"{slug}#{number}")
+        log.seed(
+            [
+                {"kind": "run-opened", "epoch": 1},
+                {"kind": "run-closed", "status": "interrupted", "attributes": {}},
+            ]
+        )
+        finished.set()
+        return 130
+
+    def fail(seconds: float) -> None:
+        assert entered.wait(5)
+        raise RuntimeError("scheduler failed")
+
+    services = Services(discovery.github, Pacer(fail)).bind(Maintain, maintain)
+    with pytest.raises(RuntimeError, match="scheduler failed"):
+        _discover(
+            Settings.load(discovery.config),
+            services,
+            DiscoveryRequest(include_existing=True),
+            stop,
+        )
+
+    assert finished.is_set() and stop.requested()
+    assert not discovery.registry()["prs"]["a/b#1"].get("crashed", False)
+    with process_lock(discovery.tmp_path / "scheduler.lock"):
+        pass

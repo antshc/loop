@@ -418,7 +418,7 @@ def test_the_golden_blocked_state_carries_its_status_and_fingerprint_into_the_le
         and status.status == "handed_off"
         and status.attributes[FINGERPRINT] == golden["fingerprint"]
     )
-    assert status.attributes[ADOPTED] is True and discovery.children.started == []
+    assert status.attributes[ADOPTED] is True and discovery.workers.started == []
     assert path.read_text() == golden["state_file"]
 
 
@@ -463,4 +463,4 @@ def test_a_pull_request_the_earlier_baseline_ignored_stays_ignored(
 
     discovery.serve(3)
 
-    assert discovery.children.started == []
+    assert discovery.workers.started == []

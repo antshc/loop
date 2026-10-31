@@ -42,15 +42,15 @@ from workflows.software_factory.infrastructure.telemetry import (
     OtlpObserverFactory,
     Tee,
     TracingObserver,
+    closing_observer,
 )
 from workflows.software_factory.stages import pull_requests
 from workflows.software_factory.stages.checks import as_verify
 
 from .definition import HANDED_OFF_ERRORS, NAME, pr_babysit
 from .intake import (
-    ChildLauncher,
     DiscoveryRequest,
-    ProcessLauncher,
+    Maintain,
     Scheduler,
     adopt_state,
     release_if_changed,
@@ -91,9 +91,13 @@ class StopRequest:
         """Waits `seconds`, or until an interrupt arrives."""
         self._requested.wait(seconds)
 
+    def stop(self) -> None:
+        """Requests cooperative shutdown without touching signal handlers."""
+        self._requested.set()
+
     def request(self, signum: int, frame: FrameType | None) -> None:
         """The signal handler: ask for a stop and give the signals back to their default action."""
-        self._requested.set()
+        self.stop()
         logger.warning("interrupt requested; stopping after the current poll")
         for name in (signal.SIGINT, signal.SIGTERM):
             signal.signal(name, signal.SIG_DFL)
@@ -164,13 +168,16 @@ def main(argv: Sequence[str] | None = None, *, services: Services | None = None)
     logging.basicConfig(level=logging.INFO)
     try:
         settings = Settings.load(args.config)
-        if match:
-            return _maintain(settings, services, match[1], int(match[2]))
-        return _discover(
-            settings,
-            services,
-            DiscoveryRequest(args.config.resolve(), args.include_existing, args.retry),
-        )
+        stop = StopRequest()
+        with _handling(stop, services is None):
+            if match:
+                return _maintain(settings, services, match[1], int(match[2]), stop)
+            return _discover(
+                settings,
+                services,
+                DiscoveryRequest(args.include_existing, args.retry),
+                stop,
+            )
     except (Blocked, ValueError, OSError) as exception:
         logger.error("PR maintenance stopped: %s", exception)
         return 1
@@ -180,22 +187,24 @@ def main(argv: Sequence[str] | None = None, *, services: Services | None = None)
 
 
 def _maintain(
-    settings: Settings, given: Services | None, slug: str, number: int
+    settings: Settings,
+    given: Services | None,
+    slug: str,
+    number: int,
+    stop: StopRequest,
 ) -> int:
     """Maintains one pull request until it closes, blocks or is interrupted; the exit code of its run."""
-    stop = StopRequest()
-    observer = _observer(settings) if given is None else None
-    services = given or build_services(observer, stop)
-    runtime = _runtime_of(settings, services, observer, stop)
-    work = work_of(settings, slug, number)
-    github = services.get(GitHub)
-    adopt_state(settings, runtime.ledger, github, work)
-    release_if_changed(runtime.ledger, github, work)
-    definition = pr_babysit(
-        settings,
-        verify_of(settings.repository(slug), settings.timeout, CommandRunner()),
-    )
-    with _handling(stop, given is None):
+    with closing_observer(_observer(settings) if given is None else None) as observer:
+        services = given or build_services(observer, stop)
+        runtime = _runtime_of(settings, services, observer, stop)
+        work = work_of(settings, slug, number)
+        github = services.get(GitHub)
+        adopt_state(settings, runtime.ledger, github, work)
+        release_if_changed(runtime.ledger, github, work)
+        definition = pr_babysit(
+            settings,
+            verify_of(settings.repository(slug), settings.timeout, CommandRunner()),
+        )
         try:
             result = run(
                 definition,
@@ -209,33 +218,35 @@ def _maintain(
             raise
         except HANDED_OFF_ERRORS as exception:
             return _hand_off_unclosed(runtime.ledger, github, work, str(exception))
-    _report(work, result)
-    return result.exit_code
+        _report(work, result)
+        return result.exit_code
 
 
 def _discover(
-    settings: Settings, given: Services | None, request: DiscoveryRequest
+    settings: Settings,
+    given: Services | None,
+    request: DiscoveryRequest,
+    stop: StopRequest,
 ) -> int:
-    """Scans for pull requests and supervises one child process for each, until asked to stop."""
-    stop = StopRequest()
+    """Scans for pull requests and supervises one thread per eligible PR."""
     services = given or build_services(None, stop)
     runtime = _runtime_of(settings, services, None, stop)
-    children = (
-        services.get(ChildLauncher)
-        if ChildLauncher in services.types()
-        else ProcessLauncher()
+    maintain = (
+        services.get(Maintain)
+        if Maintain in services.types()
+        else lambda slug, number: _maintain(settings, None, slug, number, stop)
     )
     scheduler = Scheduler(
         settings,
         request,
         services.get(GitHub),
         runtime.ledger,
-        children,
+        maintain,
         services.get(Pacer),
         runtime.stop,
+        stop.stop,
     )
-    with _handling(stop, given is None):
-        return scheduler.serve()
+    return scheduler.serve()
 
 
 def _runtime_of(

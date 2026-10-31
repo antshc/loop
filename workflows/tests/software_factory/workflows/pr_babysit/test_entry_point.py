@@ -5,11 +5,29 @@ from __future__ import annotations
 import json
 import signal
 from pathlib import Path
+from queue import Queue
 from subprocess import CalledProcessError, TimeoutExpired
+from threading import Barrier, current_thread, main_thread
+from unittest.mock import Mock
 
 import pytest
-from loop import DefinitionError, WorktreeError
+from loop import (
+    DefinitionError,
+    FakeCliRunner,
+    FakeReply,
+    GitCli,
+    GitRuntime,
+    RunResult,
+    WorktreeError,
+    fake_agent,
+)
+from loop.shared.git import GitClient
+from loop.shared.github.account import GitHub
+from loop.shared.process import CommandRunner
 
+from tests.shared.fakes import FakeGhCli
+from workflows.software_factory.infrastructure.agents.launcher import AgentLauncher
+from workflows.software_factory.infrastructure.pacing import Pacer
 from workflows.software_factory.infrastructure.telemetry import Tee
 from workflows.software_factory.workflows.pr_babysit import __main__ as entry
 from workflows.software_factory.workflows.pr_babysit.__main__ import StopRequest, main
@@ -19,8 +37,9 @@ from workflows.software_factory.workflows.pr_babysit.policy import (
     fingerprint,
 )
 from workflows.software_factory.workflows.pr_babysit.settings import Settings
+from workflows.tests.software_factory.stages.pr_support import thread
 
-from .harness import Babysit
+from .harness import Babysit, LocalOrigin
 from .test_intake import Discovery
 from .test_scenarios import addressing
 
@@ -176,16 +195,17 @@ def test_a_definition_error_is_not_recorded_as_a_hand_off(
     assert rig.babysit() == 1 and rig.status() is None
 
 
-def test_an_interrupt_request_asks_the_run_to_stop_wakes_the_pacer_and_gives_the_signals_back() -> (
-    None
-):
+@pytest.mark.parametrize("signum", [signal.SIGINT, signal.SIGTERM])
+def test_an_interrupt_request_asks_the_run_to_stop_wakes_the_pacer_and_gives_the_signals_back(
+    signum: int,
+) -> None:
     """Given an interrupt request, when SIGINT arrives, then the run is asked to stop, a waiting pacer returns at once and a second SIGINT takes the default action."""
     saved = {name: signal.getsignal(name) for name in (signal.SIGINT, signal.SIGTERM)}
     request = StopRequest()
     try:
         assert not request.requested()
 
-        request.request(signal.SIGINT, None)
+        request.request(signum, None)
         request.wait(60)
 
         assert request.requested()
@@ -229,8 +249,8 @@ def test_a_discovery_that_is_asked_to_stop_exits_0_and_stops_its_workers(
 
     code = discovery.serve(1, "--include-existing")
 
-    assert code == 0 and len(discovery.children.started) == 1
-    assert [child.returncode for child in discovery.children.children] == [0]
+    assert code == 0 and len(discovery.workers.started) == 1
+    assert [child.returncode for child in discovery.workers.runs] == [0]
 
 
 def test_the_real_services_are_exactly_what_the_definition_and_the_scheduler_need() -> (
@@ -242,3 +262,94 @@ def test_the_real_services_are_exactly_what_the_definition_and_the_scheduler_nee
     )
 
     assert names == ["AgentLauncher", "GitClient", "GitHub", "Pacer", "WorktreeGit"]
+
+
+def test_discovered_prs_in_one_repository_have_separate_services_worktrees_and_ledgers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two real workflow runs overlap in distinct worktrees of the same checkout."""
+    rig = Babysit(tmp_path, threads=[thread("first", "Inspect cart")])
+    second = rig.host.add(8, head_ref="feature", head_sha=rig.head)
+    second.head_repo = "owner/repo"
+    second.threads = [thread("second", "Inspect cart")]
+    grouped = Barrier(2, timeout=10)
+    completed: Queue[None] = Queue()
+    paths, services_seen, ledgers = [], [], []
+    original_build, original_run = entry.build_services, entry.run
+
+    def answer(request, context):
+        paths.append(context.agent.cwd)
+        grouped.wait()
+        # An invalid grouping hands off without edits or remote writes.
+        return FakeReply("invalid grouping")
+
+    def build(observer, stop):
+        services = original_build(observer, stop)
+        github = GitHub(FakeGhCli(pulls=rig.host))
+        if current_thread() is main_thread():
+
+            def wait(seconds):
+                completed.get(timeout=15)
+                completed.get(timeout=15)
+                stop.stop()
+
+            return services.replace(github, Pacer(wait))
+        launcher = AgentLauncher(
+            lambda: fake_agent(FakeCliRunner(answer, speed=0), GitRuntime(GitCli()))
+        )
+        services = services.replace(github, launcher).bind(
+            GitClient, LocalOrigin(CommandRunner())
+        )
+        services_seen.append(services)
+        return services
+
+    def run(*args, **kwargs):
+        ledgers.append(kwargs["ledger"])
+        try:
+            return original_run(*args, **kwargs)
+        finally:
+            completed.put(None)
+
+    monkeypatch.setattr(entry, "build_services", build)
+    monkeypatch.setattr(entry, "run", run)
+
+    assert main(["--config", str(rig.config), "--include-existing"]) == 0
+    assert {path.name for path in paths} == {"7", "8"}
+    assert all(
+        path.parent == tmp_path / "worktrees/babysit/owner/repo" for path in paths
+    )
+    assert len(services_seen) == 2 and services_seen[0] is not services_seen[1]
+    assert len(ledgers) == 2 and ledgers[0] is not ledgers[1]
+    for type_ in services_seen[0].types():
+        assert services_seen[0].get(type_) is not services_seen[1].get(type_)
+    assert rig.ledger.status("pr_babysit", "owner/repo#7").status == "handed_off"
+    assert rig.ledger.status("pr_babysit", "owner/repo#8").status == "handed_off"
+    assert all(not path.exists() for path in paths)
+
+
+@pytest.mark.parametrize(
+    "failure", [None, WorktreeError("retained edits"), RuntimeError("worker failed")]
+)
+def test_an_owned_observer_closes_after_success_or_worker_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure
+) -> None:
+    """Each PR invocation releases telemetry even when its workflow raises."""
+
+    rig = Babysit(tmp_path)
+    observer = Mock()
+    monkeypatch.setattr(entry, "_observer", lambda _: observer)
+    monkeypatch.setattr(entry, "build_services", lambda observer, stop: rig.services)
+
+    def run(*args, **kwargs):
+        if failure is not None:
+            raise failure
+        return RunResult("completed", None, 1)
+
+    monkeypatch.setattr(entry, "run", run)
+    argv = ["--config", str(rig.config), "--pr", "https://github.com/owner/repo/pull/7"]
+    if type(failure) is RuntimeError:
+        with pytest.raises(RuntimeError, match="worker failed"):
+            main(argv)
+    else:
+        assert main(argv) == (1 if failure else 0)
+    observer.close.assert_called_once()

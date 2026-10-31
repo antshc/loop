@@ -21,7 +21,7 @@ pr_babysit/
     definition.py                # the definition: validate origin, then poll until the pull request closes
     policy.py                    # trust rules, fingerprint, commit subjects, what a blocked run records
     settings.py, settings.example.json
-    intake.py                    # discovery scheduler, one child process per PR, reads the Execution ledger
+    intake.py                    # discovery scheduler, one thread per PR, reads the Execution ledger
     legacy.py                    # one-time adoption of the earlier per-PR JSON state into the ledger
     __main__.py                  # CLI, services built by hand, console and OpenTelemetry spans
 ```
@@ -54,8 +54,8 @@ python3 -m workflows.software_factory.workflows.pr_babysit --config babysit.loca
 
 The default first scan baselines existing PRs. `--include-existing` enrolls them
 on that first scan. Future open PRs by the selected author, including drafts, start
-independent workers. The default scan/poll interval is 60 seconds; `concurrency`
-limits active workers. Enrolled PRs restart when reopened. Merged/closed PRs finish;
+independent PR threads in the scheduler process. The default scan/poll interval
+is 60 seconds; `concurrency` limits active workers. Enrolled PRs restart when reopened. Merged/closed PRs finish;
 green CI is a milestone, so open PRs continue watching for late feedback.
 
 `--pr` runs one PR directly. A run that ends blocked is *handed off* with the pull
@@ -147,8 +147,14 @@ discovery baseline:
 
 Keep state outside tracked files. Writes use file fsync; a torn last line is ignored.
 OS locks release on process exit. Changing discovery author/repositories requires a new
-state directory or migration. One PR's blocker does not stop others. Shutdown stops owned
-worker processes; unfinished work and local recovery branches remain available.
+state directory or migration. One PR's blocker does not stop others. Shutdown
+requests a shared stop, wakes poll waits, and joins owned PR threads before
+releasing the scheduler lock. Unfinished work and local recovery branches remain available.
+Unexpected scheduler errors request the same cooperative shutdown. There is no per-worker
+terminate/kill fallback: in-flight actions must return before their threads can exit.
+Agent and check timeouts still apply, but some Git operations have no timeout, so shutdown
+has no guaranteed upper bound. Ordinary worker exceptions are isolated per PR; a fatal
+process crash affects every PR thread.
 
 ### Adopting the earlier per-PR state
 
@@ -162,9 +168,11 @@ status keeps its fingerprint. The old file is left in place and never read again
 ## Telemetry and validation
 
 Discovery, dispatch, state access, and scheduler waits produce local logs only; the
-scheduler creates no observer. Separate worker processes discard inherited distributed trace
-headers. Each run exports an independent `pr_babysit` root with its scope and Stage attempt
-spans, shared with agent observations; a poll that does nothing exports no span and writes
+scheduler creates no observer. Each PR thread builds its own services and observer,
+and each submitted run starts with an empty context without changing process-wide trace
+headers. Owned telemetry providers are flushed and closed when the run exits. Each
+run exports an independent `pr_babysit` root with its scope and Stage attempt spans,
+shared with agent observations; a poll that does nothing exports no span and writes
 nothing to the ledger. Retained worktrees end their active telemetry span without claiming
 disk removal.
 
