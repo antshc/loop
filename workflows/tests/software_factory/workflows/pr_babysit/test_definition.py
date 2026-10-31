@@ -51,6 +51,7 @@ def test_the_configured_timeout_bounds_every_agent_stage() -> None:
         "fix-ci",
         "group-feedback",
         "resolve-issue",
+        "resolve-conflicts",
     } and set(agents.values()) == {42}
 
 

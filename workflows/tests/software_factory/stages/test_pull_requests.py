@@ -24,6 +24,7 @@ from workflows.software_factory.events.pull_requests import (
     CiFailing,
     CopilotDue,
     CopilotRequested,
+    MergeConflict,
     NextAction,
     OriginValidated,
     PrBlocked,
@@ -724,7 +725,13 @@ def test_an_unsupported_pull_request_dispatched_to_the_block_hand_off_records_wh
     block = pull_requests.block_pr(fingerprint=fingerprint_of)
     cases = {
         variant: stop.completed()
-        for variant in (PullRequestClosed, FeedbackBatch, CiFailing, ReadinessCheck)
+        for variant in (
+            PullRequestClosed,
+            FeedbackBatch,
+            CiFailing,
+            ReadinessCheck,
+            MergeConflict,
+        )
     }
     elsewhere = (
         Flow("elsewhere")

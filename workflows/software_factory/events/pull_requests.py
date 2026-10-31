@@ -105,6 +105,46 @@ class CiFailing(Event):
 
 
 @dataclass(frozen=True)
+class MergeConflict(Event):
+    """GitHub confirmed a conflict between `head` and the pinned base revision."""
+
+    head: str
+    base_ref: str
+    base: str
+
+
+@dataclass(frozen=True)
+class MergePlanned(Event):
+    """The PR head, retained local head and base revision before a merge starts."""
+
+    head: str
+    start: str
+    base_ref: str
+    base: str
+
+
+@dataclass(frozen=True)
+class MergePrepared(Event):
+    """The paths left conflicted by Python's merge; empty for a clean merge."""
+
+    paths: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class MergeVerified(Event):
+    """The exact staged tree that passed the repository's verification commands."""
+
+    tree: str
+
+
+@dataclass(frozen=True)
+class MergePublished(Event):
+    """The verified head confirmed on the PR branch after conflict recovery."""
+
+    head: str
+
+
+@dataclass(frozen=True)
 class CopilotDue(Event):
     """A Copilot review is wanted for the pull request head `head` and was not requested yet."""
 
@@ -122,6 +162,7 @@ class ReadinessCheck(Event):
 type NextAction = (
     PullRequestClosed
     | Unsupported
+    | MergeConflict
     | FeedbackBatch
     | CiFailing
     | CopilotDue

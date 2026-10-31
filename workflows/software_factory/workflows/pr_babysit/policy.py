@@ -14,6 +14,7 @@ from workflows.software_factory.events.pull_requests import PullRequestPolled
 if TYPE_CHECKING:
     from workflows.software_factory.stages.address import IssueWork
     from workflows.software_factory.stages.ci import FixInput
+    from workflows.software_factory.stages.conflicts import PublishInput
 
 __all__ = [
     "ADOPTED",
@@ -24,6 +25,7 @@ __all__ = [
     "Blocked",
     "address_subject",
     "ci_subject",
+    "merge_subject",
     "fingerprint",
     "has_changed",
     "is_blocked",
@@ -66,9 +68,9 @@ def digest(value: object) -> str:
 
 
 def fingerprint(polled: PullRequestPolled) -> str:
-    """Identifies changed review and CI inputs without scheduler telemetry."""
+    """Identifies head, base, review and CI changes, preserving the legacy component."""
     snapshot = polled.snapshot
-    return digest(
+    observed = digest(
         {
             "sha": snapshot["pr"]["head"]["sha"],
             "state": snapshot["pr"]["state"],
@@ -84,6 +86,8 @@ def fingerprint(polled: PullRequestPolled) -> str:
             ],
         }
     )
+    base = snapshot["pr"].get("base", {})
+    return f"{observed}:{digest({key: base.get(key) for key in ('ref', 'sha')})}"
 
 
 def address_subject(work: IssueWork) -> str:
@@ -96,6 +100,11 @@ def ci_subject(work: FixInput) -> str:
     return f"babysit: fix CI (PR #{work.polled.number})"
 
 
+def merge_subject(work: PublishInput) -> str:
+    """The subject of the verified base-to-PR merge commit."""
+    return f"babysit: merge {work.plan.base_ref} (PR #{work.polled.number})"
+
+
 def is_blocked(status: RunStatus | None) -> bool:
     """Whether the latest run ended handed off and nobody has released the work since."""
     return status is not None and status.status == "handed_off" and not status.released
@@ -104,7 +113,12 @@ def is_blocked(status: RunStatus | None) -> bool:
 def has_changed(status: RunStatus | None, current: str) -> bool:
     """Whether the pull request's fingerprint is no longer the one its blocked run recorded."""
     recorded = None if status is None else status.attributes.get(FINGERPRINT)
-    return recorded not in (current, CRASHED)
+    if recorded in (current, CRASHED):
+        return False
+    # Older blocked runs have no base observation; a format change must not release them.
+    if isinstance(recorded, str) and ":" not in recorded:
+        return recorded != current.partition(":")[0]
+    return True
 
 
 def released_for_change(status: RunStatus | None, current: str) -> bool:

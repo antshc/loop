@@ -264,6 +264,7 @@ class FakePull:
         self.title = f"Change {number}"
         self.body = "Body"
         self.base_ref = "main"
+        self.base_sha: str | Callable[[], str] = "base0"
         self.head_ref = head_ref
         self.head_sha = head_sha
         # The commits of the pull request before its head, oldest first.
@@ -318,7 +319,7 @@ class FakePull:
             "base": {
                 "label": f"a:{self.base_ref}",
                 "ref": self.base_ref,
-                "sha": "base0",
+                "sha": self.base_sha() if callable(self.base_sha) else self.base_sha,
                 "repo": {"full_name": "a/b"},
             },
             "requested_reviewers": [

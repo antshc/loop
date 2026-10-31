@@ -63,11 +63,12 @@ def decided(polled: PullRequestPolled) -> NextAction:
 
 
 @pytest.mark.parametrize("scenario,number", SCENARIOS)
-def test_the_change_fingerprint_is_the_one_computed_before_the_migration(
+def test_the_review_and_ci_fingerprint_preserves_the_pre_migration_component(
     golden: dict, scenario: str, number: int
 ) -> None:
-    """Given each golden pull request, when the policy fingerprints it, then the value equals the one captured before the migration."""
-    assert fingerprint(polled_of(number)) == golden[scenario]["fingerprint"]
+    """The base suffix extends the fingerprint without changing its legacy component."""
+    observed, base = fingerprint(polled_of(number)).split(":")
+    assert observed == golden[scenario]["fingerprint"] and base
 
 
 @pytest.mark.parametrize("scenario,number", SCENARIOS)

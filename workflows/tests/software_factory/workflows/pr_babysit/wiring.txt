@@ -15,6 +15,34 @@ decide-next             requested    history CopilotRequested
 pr-worktree             polled       event PullRequestPolled from snapshot
 pr-worktree             launcher     service AgentLauncher
 pr-worktree             git          service GitClient
+plan-merge              polled       event PullRequestPolled from snapshot
+plan-merge              conflict     event MergeConflict from decide-next
+plan-merge              worktree     workspace
+plan-merge              git          service GitClient
+plan-merge              github       service GitHub
+prepare-merge           polled       event PullRequestPolled from snapshot
+prepare-merge           plan         event MergePlanned from plan-merge
+prepare-merge           worktree     workspace
+prepare-merge           git          service GitClient
+prepare-merge           github       service GitHub
+resolve-conflicts       polled       event PullRequestPolled from snapshot
+resolve-conflicts       plan         event MergePlanned from plan-merge
+resolve-conflicts       worktree     workspace
+resolve-conflicts       git          service GitClient
+resolve-conflicts       github       service GitHub
+resolve-conflicts       prepared     event MergePrepared from prepare-merge
+verify-merge            polled       event PullRequestPolled from snapshot
+verify-merge            plan         event MergePlanned from plan-merge
+verify-merge            worktree     workspace
+verify-merge            git          service GitClient
+verify-merge            github       service GitHub
+publish-merge           polled       event PullRequestPolled from snapshot
+publish-merge           plan         event MergePlanned from plan-merge
+publish-merge           worktree     workspace
+publish-merge           git          service GitClient
+publish-merge           github       service GitHub
+publish-merge           verified     event MergeVerified from verify-merge
+pace-merge              pacer        service Pacer
 require-clean           worktree     workspace
 require-clean           git          service GitClient
 baseline                worktree     workspace

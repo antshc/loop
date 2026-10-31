@@ -5,7 +5,7 @@ from __future__ import annotations
 from loop import ReplyMismatch, TypedAgent
 
 from ... import _kit
-from .messages import DiagnoseRequest, Diagnosis, Fixed, FixRequest
+from .messages import ConflictRequest, DiagnoseRequest, Diagnosis, Fixed, FixRequest
 
 _CLASSIFICATIONS = ("branch", "transient", "blocked")
 _VERDICTS = ("fixed", "blocked")
@@ -27,7 +27,7 @@ def _decode_diagnose(request: DiagnoseRequest, output: str) -> Diagnosis:
     return Diagnosis(result["classification"], _reason(result))
 
 
-def _decode_fix(request: FixRequest, output: str) -> Fixed:
+def _decode_fix(request: FixRequest | ConflictRequest, output: str) -> Fixed:
     result = _kit.read_object(output)
     if result.get("verdict") not in _VERDICTS:
         raise ReplyMismatch(f"invalid verdict: {result.get('verdict')!r}")
@@ -40,10 +40,15 @@ DIAGNOSE_CI: TypedAgent[DiagnoseRequest, Diagnosis] = _kit.mode_agent(
 FIX_CI: TypedAgent[FixRequest, Fixed] = _kit.mode_agent(
     "maintainer", "fix", profile=_PROFILE, decode=_decode_fix
 )
+RESOLVE_CONFLICTS: TypedAgent[ConflictRequest, Fixed] = _kit.mode_agent(
+    "maintainer", "resolve-conflicts", profile=_PROFILE, decode=_decode_fix
+)
 
 __all__ = [
     "DIAGNOSE_CI",
     "FIX_CI",
+    "RESOLVE_CONFLICTS",
+    "ConflictRequest",
     "Diagnosis",
     "DiagnoseRequest",
     "Fixed",

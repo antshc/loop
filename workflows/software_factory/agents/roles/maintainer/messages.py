@@ -37,3 +37,14 @@ class Fixed(Message):
 
     verdict: str
     reason: str = ""
+
+
+@dataclass(frozen=True)
+class ConflictRequest(Message):
+    """Resolve supplied conflicts between pinned revisions in an existing merge."""
+
+    snapshot: Json
+    head: str
+    base_ref: str
+    base: str
+    paths: tuple[str, ...]

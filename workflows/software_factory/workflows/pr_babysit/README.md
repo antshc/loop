@@ -26,13 +26,15 @@ pr_babysit/
     __main__.py                  # CLI, services built by hand, console and OpenTelemetry spans
 ```
 
-On every poll the definition does exactly one of: address trusted unhandled feedback
+On every poll the definition does exactly one of: repair a confirmed merge conflict,
+address trusted unhandled feedback
 (clean tree, baseline check, group, resolve each issue, push once, reply once), maintain
 a failing CI (diagnose; rerun a transient failure up to the retry budget per head, or fix
 a broken branch and publish; then pace), request a Copilot review once per head, or
 report readiness when it changed (then pace). A red baseline while CI is red maintains CI
 instead of addressing feedback in that poll. A closed pull request completes the run;
-anything stuck or unsupported blocks it.
+anything stuck or unsupported blocks it. Conflict repair takes priority over feedback
+and CI. Unknown mergeability waits for GitHub's next computation.
 
 ## Configure and run
 
@@ -61,7 +63,7 @@ green CI is a milestone, so open PRs continue watching for late feedback.
 `--pr` runs one PR directly. A run that ends blocked is *handed off* with the pull
 request's fingerprint recorded on the run, and while it stays blocked no agent runs and
 nothing is pushed for it. Discovery starts a worker for a blocked PR again only when its
-fingerprint changed (head, review, or CI inputs), which first releases the blocked work so
+fingerprint changed (head, base revision, review, or CI inputs), which first releases the blocked work so
 the next run starts a fresh scope; `--retry <pr-url>` writes the release itself, whatever the
 fingerprint. A worker that died without closing its run requires an explicit `--retry`.
 Pressing Ctrl+C (or SIGTERM) stops a run after its current poll and exits 130.
@@ -77,7 +79,7 @@ review prevents the readiness milestone, while unavailable Copilot does not bloc
 |---|---|
 | Loop library | Create/reuse named worktrees; remove clean directories; preserve dirty work; retain branch commits; prune stale metadata |
 | Address | Group review feedback, investigate with evidence, edit justified fixes, draft replies |
-| Maintainer | Diagnose CI read-only, fix branch defects, identify transient failures |
+| Maintainer | Diagnose CI read-only, fix branch defects, identify transient failures, resolve merge conflicts |
 | Factory runtime | Verify, commit each fix with the Workflow's subject, push, post replies, retry CI, record every attempt in the Execution ledger, serialize one pull request with a lock |
 
 The role agents' profiles and complete Markdown instructions live with the typed role agents under [`workflows/software_factory/agents`](../../agents).
@@ -91,6 +93,28 @@ for reviewers; no code merges PRs. Maintainer uses the same explicit publication
 sequence. Three transient retry cycles per SHA are allowed by default; repeated
 stale CI snapshots do not spend another cycle. Baseline verification must pass
 before review edits; Maintainer can repair a failing CI baseline first.
+
+### Merge conflict recovery
+
+Python pins the PR head, recovery head and actual base branch revision in the ledger,
+then starts `git merge --no-commit --no-ff <base-sha>` in the clean recovery worktree.
+Maintainer resolves conflicting files only; ambiguous intent blocks with the decision
+needed. A clean merge needs no agent. Python stages resolutions, rejects remaining
+conflict markers, runs the configured build/tests, and records the verified tree.
+Only that tree can become the two-parent merge commit. Before publication, Python
+rechecks the PR's head, base and open state, pushes without force, and confirms the
+remote SHA. The next poll reads fresh CI and reviews. No rebase, force-push or PR merge
+is performed.
+
+Failed checks and interrupted edits retain the worktree for inspection. Interrupted
+commit/publication attempts reconcile against the recorded tree and ordered parents;
+an already published merge is not duplicated. A rejected push keeps the local commit:
+after inspection and `--retry`, it is verified again and published without another
+resolver call. Dirty or ambiguous recovery work is never discarded automatically.
+
+New blocked fingerprints include the base ref/SHA. Older blocked records retain their
+previous comparison until another head/review/CI input changes or `--retry` is used;
+a base-only change cannot release a record that never observed its earlier base.
 
 ## Worktree lifecycle and recovery
 

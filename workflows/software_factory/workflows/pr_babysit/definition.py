@@ -11,6 +11,7 @@ from workflows.software_factory.events.feedback import FeedbackBatch
 from workflows.software_factory.events.pull_requests import (
     CiFailing,
     CopilotDue,
+    MergeConflict,
     NextAction,
     PullRequestClosed,
     PullRequestWork,
@@ -20,6 +21,7 @@ from workflows.software_factory.events.pull_requests import (
 from workflows.software_factory.flows import address
 from workflows.software_factory.stages import (
     ci,
+    conflicts,
     copilot,
     pacing,
     pull_requests,
@@ -27,7 +29,14 @@ from workflows.software_factory.stages import (
     workspaces,
 )
 
-from .policy import TRUST, Blocked, address_subject, ci_subject, fingerprint
+from .policy import (
+    TRUST,
+    Blocked,
+    address_subject,
+    ci_subject,
+    fingerprint,
+    merge_subject,
+)
 from .settings import Settings
 
 NAME = "pr_babysit"
@@ -46,8 +55,23 @@ HANDED_OFF_ERRORS: tuple[type[Exception], ...] = (
 
 
 def pr_babysit(settings: Settings, verify: Verify) -> Workflow[PullRequestWork]:
-    """One pull request until it closes: on every poll exactly one of address feedback, maintain CI, request a Copilot review or report readiness; `settings.timeout` bounds every agent run and every check."""
+    """Poll until closed, repairing conflicts before feedback or CI; `settings.timeout` bounds agents and checks."""
     block = handoff(pull_requests.block_pr(fingerprint=fingerprint))
+    fix_conflicts = (
+        Flow("fix-conflicts")
+        .within(
+            workspaces.pr_worktree(),
+            Flow("merge")
+            .stage(conflicts.plan().on_fail(block))
+            .stage(conflicts.prepare().on_fail(block))
+            .stage(
+                conflicts.resolve().tune(timeout_sec=settings.timeout).on_fail(block)
+            )
+            .stage(conflicts.verify(checks=verify).on_fail(block))
+            .stage(conflicts.publish(message=merge_subject).on_fail(block)),
+        )
+        .stage(pacing.pace(settings.interval).named("pace-merge"))
+    )
     maintain_ci = (
         Flow("maintain-ci")
         .within(
@@ -110,6 +134,7 @@ def pr_babysit(settings: Settings, verify: Verify) -> Workflow[PullRequestWork]:
                     # A hold ends the poll loop, which is how a closed pull request completes the run.
                     PullRequestClosed: stop.held("the pull request is closed"),
                     Unsupported: block,
+                    MergeConflict: fix_conflicts,
                     FeedbackBatch: address.address_feedback(
                         message=address_subject,
                         verify=verify,

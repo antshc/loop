@@ -12,6 +12,7 @@ from workflows.software_factory.events.pull_requests import (
     CiFailing,
     CopilotDue,
     CopilotRequested,
+    MergeConflict,
     NextAction,
     PullRequestClosed,
     ReadinessCheck,
@@ -36,6 +37,7 @@ def report_readiness() -> Workflow[Any]:
             Unsupported,
             FeedbackBatch,
             CiFailing,
+            MergeConflict,
             CopilotDue,
         )
     }

@@ -22,6 +22,7 @@ from workflows.software_factory.events.pull_requests import (
     CiFailing,
     CopilotDue,
     CopilotRequested,
+    MergeConflict,
     NextAction,
     OriginValidated,
     PrBlocked,
@@ -123,7 +124,7 @@ def decide_next(
     author: str | None,
     copilot: Callable[[PullRequestPolled], bool],
 ) -> Stage[DecideInput, NextAction, NextAction]:
-    """Pure: closed, then author or fork mismatch, then trusted feedback not handled in earlier runs, then failed CI, then a Copilot review `copilot` wants for a head not requested yet, otherwise a readiness check; `author` defaults to the acting account."""
+    """Pure: closed, unsupported, unknown mergeability, conflict, feedback, failed CI, Copilot, then readiness; `author` defaults to the acting account."""
     return (
         Stage("decide-next", DecideInput, produces=NextAction)
         .action(lambda i: _decide(i, trust, author, copilot))
@@ -307,6 +308,12 @@ def _decide(
         return PullRequestClosed(polled.head, bool(polled.snapshot["pr"].get("merged")))
     if _unsupported(polled, author):
         return Unsupported(_UNSUPPORTED)
+    pr = polled.snapshot["pr"]
+    if pr.get("mergeable") is None:
+        return ReadinessCheck(polled.head, False)
+    if pr.get("mergeable") is False:
+        base = pr["base"]
+        return MergeConflict(polled.head, base["ref"], base["sha"])
     batch = _feedback(i, trust)
     if batch is not None:
         return batch
