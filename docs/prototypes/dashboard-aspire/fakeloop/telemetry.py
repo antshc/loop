@@ -8,10 +8,10 @@ from dataclasses import dataclass, field
 from opentelemetry import trace
 from opentelemetry._logs import SeverityNumber
 from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk._logs import LoggerProvider
 from opentelemetry.sdk._logs.export import SimpleLogRecordProcessor
-from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
@@ -64,35 +64,59 @@ class Telemetry:
         self._tracer_providers = {SERVICE_NAME: self._new_tracer_provider(resource)}
         self._logger_provider = LoggerProvider(resource=resource)
         self._logger_provider.add_log_record_processor(
-            SimpleLogRecordProcessor(OTLPLogExporter()))
+            SimpleLogRecordProcessor(OTLPLogExporter())
+        )
         self._meter_provider = MeterProvider(
-            resource=resource, metric_readers=[PeriodicExportingMetricReader(
-                OTLPMetricExporter(), export_interval_millis=2000)])
+            resource=resource,
+            metric_readers=[
+                PeriodicExportingMetricReader(
+                    OTLPMetricExporter(), export_interval_millis=2000
+                )
+            ],
+        )
         self.tracer = self._tracer_providers[SERVICE_NAME].get_tracer(SCOPE)
         self._logger = self._logger_provider.get_logger(SCOPE)
         meter = self._meter_provider.get_meter(SCOPE)
         self.token_usage = meter.create_histogram(
-            "gen_ai.client.token.usage", unit="{token}",
-            description="Tokens used per agent invocation, by token type.")
+            "gen_ai.client.token.usage",
+            unit="{token}",
+            description="Tokens used per agent invocation, by token type.",
+        )
         self.operation_duration = meter.create_histogram(
-            "gen_ai.client.operation.duration", unit="s",
-            description="Duration of an agent invocation.")
+            "gen_ai.client.operation.duration",
+            unit="s",
+            description="Duration of an agent invocation.",
+        )
         self.cost = meter.create_counter(
-            "loop.agent.cost", unit="USD", description="Estimated agent spend.")
+            "loop.agent.cost", unit="USD", description="Estimated agent spend."
+        )
         self.aiu = meter.create_counter(
-            "loop.agent.aiu", unit="{AIU}", description="GitHub AI units the agent consumed.")
+            "loop.agent.aiu",
+            unit="{AIU}",
+            description="GitHub AI units the agent consumed.",
+        )
         self.premium_requests = meter.create_counter(
-            "loop.agent.premium_requests", unit="{request}",
-            description="Premium requests the user's prompts billed.")
+            "loop.agent.premium_requests",
+            unit="{request}",
+            description="Premium requests the user's prompts billed.",
+        )
         self.gate_results = meter.create_counter(
-            "loop.gate.results", unit="{gate}", description="Gate verdicts by gate and outcome.")
+            "loop.gate.results",
+            unit="{gate}",
+            description="Gate verdicts by gate and outcome.",
+        )
         self.phase_duration = meter.create_histogram(
-            "loop.phase.duration", unit="s", description="Duration of a phase, by outcome.")
+            "loop.phase.duration",
+            unit="s",
+            description="Duration of a phase, by outcome.",
+        )
 
     def tracer_for(self, role: str) -> trace.Tracer:
         """The tracer that exports spans as the resource configured for `role`."""
         if role not in self._tracer_providers:
-            self._tracer_providers[role] = self._new_tracer_provider(_resource(self._names.of(role)))
+            self._tracer_providers[role] = self._new_tracer_provider(
+                _resource(self._names.of(role))
+            )
         return self._tracer_providers[role].get_tracer(SCOPE)
 
     @staticmethod
@@ -101,15 +125,25 @@ class Telemetry:
         provider.add_span_processor(SimpleSpanProcessor(OTLPSpanExporter()))
         return provider
 
-    def started(self, span: Span, event: str, attributes: Attributes,
-                parent: Span | None = None) -> None:
+    def started(
+        self, span: Span, event: str, attributes: Attributes, parent: Span | None = None
+    ) -> None:
         """Logs that `span` opened; the span itself is exported only when it ends."""
-        marker = {**(attributes or {}), "loop.event": event, "loop.span_id": span_hex(span)}
+        marker = {
+            **(attributes or {}),
+            "loop.event": event,
+            "loop.span_id": span_hex(span),
+        }
         if parent is not None:
             marker["loop.parent_span_id"] = span_hex(parent)
-        self._logger.emit(context=trace.set_span_in_context(span),
-                          severity_number=SeverityNumber.INFO, severity_text="Information",
-                          body=event, event_name=event, attributes=marker)
+        self._logger.emit(
+            context=trace.set_span_in_context(span),
+            severity_number=SeverityNumber.INFO,
+            severity_text="Information",
+            body=event,
+            event_name=event,
+            attributes=marker,
+        )
 
     def shutdown(self) -> None:
         """Flushes and closes the exporters."""

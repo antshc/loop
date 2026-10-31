@@ -39,7 +39,9 @@ def _apply_options(context: AgentContext, options: AgentOptions | None) -> Agent
     return context
 
 
-def repo_agent(repo: str, branch: str | None = None, session: SessionName | None = None) -> AgentClient:
+def repo_agent(
+    repo: str, branch: str | None = None, session: SessionName | None = None
+) -> AgentClient:
     """One worktree-isolated agent for workspace/<repo>, with worktrees in workspace/<repo>.worktrees; a `session` continues across runs."""
     workspace = Path("workspace")
     options = GitOptions(
@@ -48,4 +50,6 @@ def repo_agent(repo: str, branch: str | None = None, session: SessionName | None
         strategy=BranchStrategy(branch) if branch else MergeToHeadStrategy(),
     )
     builder = Agent().with_git(options).with_docker()
-    return builder.with_session().create(session=session) if session else builder.create()
+    return (
+        builder.with_session().create(session=session) if session else builder.create()
+    )

@@ -1,0 +1,90 @@
+stage                   field        source
+validate-origin         work         context PullRequestWork
+validate-origin         git          service GitClient
+block-pr                work         context PullRequestWork
+block-pr                polled       history PullRequestPolled
+block-pr                unsupported  history Unsupported
+block-pr                github       service GitHub
+polls                   started      history PollStarted
+start-poll              poll         item Poll
+snapshot                work         context PullRequestWork
+snapshot                github       service GitHub
+decide-next             polled       event PullRequestPolled from snapshot
+decide-next             handled      history FeedbackHandled
+decide-next             requested    history CopilotRequested
+pr-worktree             polled       event PullRequestPolled from snapshot
+pr-worktree             launcher     service AgentLauncher
+pr-worktree             git          service GitClient
+plan-merge              polled       event PullRequestPolled from snapshot
+plan-merge              conflict     event MergeConflict from decide-next
+plan-merge              worktree     workspace
+plan-merge              git          service GitClient
+plan-merge              github       service GitHub
+prepare-merge           polled       event PullRequestPolled from snapshot
+prepare-merge           plan         event MergePlanned from plan-merge
+prepare-merge           worktree     workspace
+prepare-merge           git          service GitClient
+prepare-merge           github       service GitHub
+resolve-conflicts       polled       event PullRequestPolled from snapshot
+resolve-conflicts       plan         event MergePlanned from plan-merge
+resolve-conflicts       worktree     workspace
+resolve-conflicts       git          service GitClient
+resolve-conflicts       github       service GitHub
+resolve-conflicts       prepared     event MergePrepared from prepare-merge
+verify-merge            polled       event PullRequestPolled from snapshot
+verify-merge            plan         event MergePlanned from plan-merge
+verify-merge            worktree     workspace
+verify-merge            git          service GitClient
+verify-merge            github       service GitHub
+publish-merge           polled       event PullRequestPolled from snapshot
+publish-merge           plan         event MergePlanned from plan-merge
+publish-merge           worktree     workspace
+publish-merge           git          service GitClient
+publish-merge           github       service GitHub
+publish-merge           verified     event MergeVerified from verify-merge
+pace-merge              pacer        service Pacer
+require-clean           worktree     workspace
+require-clean           git          service GitClient
+baseline                worktree     workspace
+baseline                batch        event FeedbackBatch from decide-next
+group-feedback          batch        event FeedbackBatch from decide-next
+group-feedback          grouped      history FeedbackGrouped
+issues                  batch        event FeedbackBatch from decide-next
+issues                  grouped      history FeedbackGrouped
+resolve-issue           issue        item GroupedIssue
+resolve-issue           batch        event FeedbackBatch from decide-next
+resolve-issue           polled       event PullRequestPolled from snapshot
+resolve-issue           resolved     history IssueResolved
+resolve-issue           unclear      history IssueUnclear
+publish-batch           worktree     workspace
+publish-batch           batch        event CiFixed | FeedbackBatch from decide-next
+publish-batch           polled       event PullRequestPolled from snapshot
+publish-batch           resolved     history IssueResolved
+publish-batch           unclear      history IssueUnclear
+publish-batch           git          service GitClient
+publish-batch           github       service GitHub
+require-no-unclear      batch        event FeedbackBatch from decide-next
+require-no-unclear      unclear      history IssueUnclear
+require-clean-ci        worktree     workspace
+require-clean-ci        git          service GitClient
+diagnose-ci             polled       event PullRequestPolled from snapshot
+diagnose-ci             github       service GitHub
+rerun-failed            polled       event PullRequestPolled from snapshot
+rerun-failed            reruns       history CiRerun
+rerun-failed            github       service GitHub
+fix-ci                  polled       event PullRequestPolled from snapshot
+fix-ci                  broken       event BranchBroken from diagnose-ci
+publish-ci-fix          worktree     workspace
+publish-ci-fix          batch        event CiFixed | FeedbackBatch from fix-ci
+publish-ci-fix          polled       event PullRequestPolled from snapshot
+publish-ci-fix          resolved     history IssueResolved
+publish-ci-fix          unclear      history IssueUnclear
+publish-ci-fix          git          service GitClient
+publish-ci-fix          github       service GitHub
+pace-ci                 pacer        service Pacer
+request-copilot-review  due          event CopilotDue from decide-next
+request-copilot-review  polled       event PullRequestPolled from snapshot
+request-copilot-review  requested    history CopilotRequested
+request-copilot-review  github       service GitHub
+report-readiness        check        event ReadinessCheck from decide-next
+pace-ready              pacer        service Pacer

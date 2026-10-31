@@ -1,0 +1,150 @@
+from __future__ import annotations
+
+import hashlib
+import json
+from pathlib import Path
+
+from ..hooks import (
+    AgentCliHook,
+    AgentCliHookPoint,
+    AgentCliHookWiring,
+    ordered,
+    shim_command,
+)
+from ..run import AgentRequest, RunContext
+from ..sessions import CliOutcome, NativeHandle, Resume, SessionName, Start, Turn
+from .base import AgentProfile
+from .permissions import Permissions, has_permission_args
+from .transport import CopilotText, Transport
+
+
+class CopilotCli:
+    """Copilot CLI adapter."""
+
+    name = "copilot"
+    hook_points = frozenset(AgentCliHookPoint)
+    _EVENTS = {
+        AgentCliHookPoint.SESSION_START: "sessionStart",
+        AgentCliHookPoint.SESSION_END: "sessionEnd",
+        AgentCliHookPoint.AGENT_STOP: "agentStop",
+        AgentCliHookPoint.PROMPT_SUBMITTED: "userPromptSubmitted",
+        AgentCliHookPoint.PRE_TOOL: "preToolUse",
+        AgentCliHookPoint.POST_TOOL: "postToolUse",
+        AgentCliHookPoint.SUBAGENT_START: "subagentStart",
+        AgentCliHookPoint.SUBAGENT_STOP: "subagentStop",
+        AgentCliHookPoint.PRE_COMPACT: "preCompact",
+    }
+
+    def __init__(
+        self,
+        args: tuple[str, ...] = ("--autopilot", "--allow-all", "--no-ask-user"),
+        *,
+        transport: Transport = CopilotText(),
+    ) -> None:
+        self._args = args
+        self.transport = transport
+
+    def native_point(self, point: AgentCliHookPoint) -> str:
+        return self._EVENTS[point]
+
+    def hook_wiring(
+        self, hooks: tuple[AgentCliHook, ...], turn: Turn, workdir: Path
+    ) -> AgentCliHookWiring:
+        events: dict[str, list[dict[str, object]]] = {}
+        for point, hook in ordered(hooks):
+            events.setdefault(self._EVENTS[point], []).append(
+                {
+                    "type": "command",
+                    "bash": shim_command(self.name, point, turn, hook),
+                    "timeoutSec": hook.timeout_sec,
+                }
+            )
+        digest = hashlib.sha1(turn.name.value.encode()).hexdigest()[:8]
+        content = json.dumps({"version": 1, "hooks": events}, indent=2)
+        return AgentCliHookWiring(
+            files={Path(f".github/hooks/loop-{digest}.json"): content},
+            git_excludes=(".github/hooks/loop-*.json",),
+            # Without it `copilot -p` silently skips repo hook files in an untrusted worktree.
+            env={"GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS": "true"},
+        )
+
+    def handle_for_new(self, name: SessionName) -> NativeHandle:
+        return NativeHandle(self.name, name.value)
+
+    def permission_args(self, permissions: Permissions) -> tuple[str, ...]:
+        """Replace broad defaults with native tool approvals and deny patterns."""
+        defaults = tuple(
+            arg
+            for arg in self._args
+            if arg not in ("--allow-all", "--yolo", "--allow-all-tools")
+        )
+        if has_permission_args(defaults):
+            raise ValueError(
+                "CLI permission arguments conflict with profile permissions"
+            )
+        allow = (
+            ("--allow-all-tools",)
+            if permissions.tools == "allow-all"
+            else tuple(
+                part for tool in permissions.tools for part in ("--allow-tool", tool)
+            )
+        )
+        deny = tuple(
+            part for tool in permissions.deny_tools for part in ("--deny-tool", tool)
+        )
+        return (*defaults, *allow, *deny)
+
+    def command(
+        self,
+        request: AgentRequest,
+        profile: AgentProfile,
+        turn: Turn,
+        context: RunContext,
+    ) -> list[str]:
+        profile.validate_permissions()
+        cli_args = (
+            self._args
+            if profile.permissions is None
+            else self.permission_args(profile.permissions)
+        )
+        dirs = [
+            part
+            for directory in context.agent.add_dirs
+            for part in ("--add-dir", str(directory))
+        ]
+        settings = {
+            "--model": profile.model,
+            "--reasoning-effort": profile.reasoning_effort,
+            "--context": profile.context,
+        }
+        run_args = [
+            part
+            for flag, value in settings.items()
+            if value is not None
+            for part in (flag, value)
+        ]
+        session_args = (
+            ["--name", request.name or turn.name.value]
+            if isinstance(turn, Start)
+            else [f"--resume={turn.handle.value}"]
+        )
+        return [
+            "copilot",
+            "-p",
+            request.prompt,
+            *self.transport.args,
+            *session_args,
+            *cli_args,
+            *run_args,
+            *profile.args,
+            *dirs,
+        ]
+
+    def parse(self, stdout: str, turn: Turn, exit_code: int) -> CliOutcome:
+        transcript = self.transport.decode(stdout)
+        handle = (
+            turn.handle if isinstance(turn, Resume) else self.handle_for_new(turn.name)
+        )
+        # The process exit code wins; a 0 falls back to the stream's own exitCode, when the transport reports one.
+        code = exit_code if exit_code != 0 else (transcript.exit_code or 0)
+        return CliOutcome(transcript.text, handle, code)

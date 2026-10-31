@@ -9,7 +9,7 @@ Define Loop's smallest agent-execution unit so workflows can compose planner, im
 
 An **Agent Run** is one bounded invocation of one Headless AI Agent with one request on one prepared worktree.
 
-The library owns the Run boundary: an `AgentClient` built for one `AgentProfile` (CLI, model, reasoning effort) takes an `AgentRequest(prompt)`, runs the agent CLI on the host in the worktree, and returns one `AgentResult` with the raw output. A Workflow owns topology by composing Runs with ordinary Python control flow such as sequence, branching, iteration, and concurrency. A Run does not encode workflow roles such as planner, implementer, or reviewer.
+The library owns the Run boundary: an `AgentClient` built for one `AgentProfile` (CLI, model, reasoning effort) takes an `AgentRequest(prompt)`, runs the agent CLI on the host in the worktree, and returns one `AgentResult` with the raw output. A Workflow owns topology by composing Runs, usually as the agent executors of Stages in a declarative definition run by Loop's Workflow runtime (sequence, per-item loop, switch, workspace scope). A Run does not encode workflow roles such as planner, implementer, or reviewer.
 
 ## Rules
 
@@ -21,7 +21,7 @@ The library owns the Run boundary: an `AgentClient` built for one `AgentProfile`
 - MUST keep workflow topology in Workflow code rather than in the Run abstraction.
 - MUST let a Workflow decide subsequent Runs from prior Run results and external state.
 - MUST keep a Run prompt scoped to that Run's agent task rather than workflow orchestration.
-- MUST compose Workflows with ordinary Python control flow rather than a separate workflow DSL.
+- MUST compose Workflows from Runs through the Workflow's own code or Loop's declarative runtime; a Run never schedules another Run ([Compose Workflows as declarative definitions](../adr/compose-factory-workflows-as-declarative-definitions-over-a-stages-library-run-by-a-factory-runtime.md)).
 - MUST NOT encode planner, implementer, reviewer, or other workflow-specific roles into the Run contract.
 
 ### Variant: Shared Worktree
@@ -64,18 +64,18 @@ The Workflow selects the variant, sequence, conditions, and concurrency. Each Ru
 
 **Benefits**
 
-- Workflows stay explicit and readable because orchestration is normal Python control flow.
+- Workflows stay explicit and readable because orchestration is a short declarative definition.
 - Agent-provider details stay behind one library boundary.
 - New workflow shapes can reuse the same Run primitive without expanding the library contract.
 
 **Trade-offs**
 
-- Workflows may repeat some orchestration code instead of relying on a workflow engine.
+- Workflows depend on the runtime's definition language; what its four constructs cannot express needs an escape hatch.
 - State shared between Runs must be explicit in the worktree, Run results, or external durable state.
 
 ## Validation
 
-The `plan_implement` Workflow runs a planning Run and an implementation Run with different profiles on one worktree; the `implement_spec` Workflow runs one Run per Ticket and keeps repeated invocation policy in its own code.
+The `plan_implement` Workflow runs a planning Run and an implementation Run with different profiles on one worktree scope; the `implement_spec` Workflow runs one Run per Ticket and keeps repeated invocation policy in its definition and policy.
 
 ## References
 
@@ -89,4 +89,4 @@ The `plan_implement` Workflow runs a planning Run and an implementation Run with
 |---|---|---|
 | Agent invocation | One request crosses the library agent boundary and returns one result | `loop`: `AgentClient`, `AgentRequest`, `AgentResult` |
 | Worktree binding | A worktree hands out clients per profile | `loop`: `AgentBuilder.open`, `Worktree.agent` |
-| Workflow ownership | Workflow code decides repeated and conditional agent execution | `workflows`: `implement_spec`, `plan_implement` |
+| Workflow ownership | Workflow definitions decide repeated and conditional agent execution | `workflows.software_factory.workflows.implement_spec`, `workflows.loop.plan_implement` |

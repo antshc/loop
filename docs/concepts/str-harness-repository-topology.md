@@ -7,8 +7,8 @@ The harness contains agent instructions, skills, Specs, and Tickets. The impleme
 
 ## Harness and target repositories
 
-`software_factory/workflows/implement_spec/` reads Specs and Tickets from the harness repository (`HARNESS_SLUG`, `harness_target()` in `__main__.py`); target repositories are `RepositoryTarget` values (slug, checkout, worktrees, and whether it plans, runs the chore and reviews) the entry point passes as `Targets`, which tests replace through `main(argv, services=...)`.
-`RepositoryId` is the shared GitHub repository identity in `software_factory/src/shared/github/`. With no other target configuration, the workflow defaults to
+`workflows/software_factory/workflows/implement_spec/` reads Specs and Tickets from the harness repository (`HARNESS_SLUG`, `harness_target()` in `__main__.py`); target repositories are `RepositoryTarget` values (slug, checkout, worktrees, and whether it plans, runs the chore and reviews) the entry point passes as `Targets`, which tests replace through `main(argv, services=...)`.
+`RepositoryId` is the shared GitHub repository identity in `workflows/software_factory/infrastructure/github/`. With no other target configuration, the workflow defaults to
 implementation on the harness repository.
 
 ```python
@@ -30,7 +30,7 @@ class RepositoryTarget:
     review: bool = True
 
 
-ROOT = Path(__file__).resolve().parents[3]  # software_factory/workflows/implement_spec/__main__.py
+ROOT = Path(__file__).resolve().parents[4]  # workflows/software_factory/workflows/implement_spec/__main__.py
 HARNESS = RepositoryTarget(
     slug="antshc/loop",
     checkout=ROOT,

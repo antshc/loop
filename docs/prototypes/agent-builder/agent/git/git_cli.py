@@ -21,20 +21,36 @@ class GitCli:
     def fetch(self, repository: Path) -> None:
         self._git(repository, "fetch", "--all", "--prune")
 
-    def add_worktree(self, repository: Path, target: Path, branch: str, base: str = "HEAD") -> None:
+    def add_worktree(
+        self, repository: Path, target: Path, branch: str, base: str = "HEAD"
+    ) -> None:
         """Validate `branch`, reuse it if it exists locally, else create it, then attach a worktree at `target`."""
         self._git(repository, "check-ref-format", "--branch", branch)
-        if not self._succeeds(repository, "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"):
-            remote = self._succeeds(repository, "show-ref", "--verify", "--quiet", f"refs/remotes/origin/{branch}")
-            self._git(repository, "branch", branch, f"origin/{branch}" if remote else base)
+        if not self._succeeds(
+            repository, "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"
+        ):
+            remote = self._succeeds(
+                repository,
+                "show-ref",
+                "--verify",
+                "--quiet",
+                f"refs/remotes/origin/{branch}",
+            )
+            self._git(
+                repository, "branch", branch, f"origin/{branch}" if remote else base
+            )
         self._git(repository, "worktree", "add", str(target), branch)
 
-    def remove_worktree(self, repository: Path, target: Path, *, force: bool = False) -> None:
+    def remove_worktree(
+        self, repository: Path, target: Path, *, force: bool = False
+    ) -> None:
         """Detach the worktree at `target`; git refuses when it has uncommitted changes unless `force`. The branch is kept."""
         flags = ["--force"] if force else []
         self._git(repository, "worktree", "remove", *flags, str(target))
 
-    def run_hook(self, hook: LoopHook, cwd: Path, repository: Path, worktree: Path) -> None:
+    def run_hook(
+        self, hook: LoopHook, cwd: Path, repository: Path, worktree: Path
+    ) -> None:
         try:
             result = self._run(
                 hook.command,
@@ -52,9 +68,13 @@ class GitCli:
                 check=False,
             )
         except subprocess.TimeoutExpired:
-            raise LoopHookError(hook.point, hook.command, f"timed out after {hook.timeout_sec}s") from None
+            raise LoopHookError(
+                hook.point, hook.command, f"timed out after {hook.timeout_sec}s"
+            ) from None
         if result.returncode != 0:
-            raise LoopHookError(hook.point, hook.command, (result.stdout or "") + (result.stderr or ""))
+            raise LoopHookError(
+                hook.point, hook.command, (result.stdout or "") + (result.stderr or "")
+            )
 
     def commit_all(self, worktree: Path, message: str) -> None:
         """Commit every change in the worktree; no-op when there is nothing to commit."""

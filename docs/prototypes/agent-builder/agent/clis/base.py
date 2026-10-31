@@ -18,7 +18,9 @@ class AgentCli(Protocol):
     name: str
     hook_points: frozenset[AgentCliHookPoint]
 
-    def hook_wiring(self, hooks: tuple[AgentCliHook, ...], turn: Turn, workdir: Path) -> AgentCliHookWiring:
+    def hook_wiring(
+        self, hooks: tuple[AgentCliHook, ...], turn: Turn, workdir: Path
+    ) -> AgentCliHookWiring:
         """Pure translation of `hooks` into this CLI's native wiring; does no I/O."""
         ...
 
@@ -31,7 +33,11 @@ class AgentCli(Protocol):
         ...
 
     def command(
-        self, request: AgentRequest, profile: AgentProfile, turn: Turn, context: RunContext
+        self,
+        request: AgentRequest,
+        profile: AgentProfile,
+        turn: Turn,
+        context: RunContext,
     ) -> list[str]: ...
 
     def parse(self, stdout: str, turn: Turn, exit_code: int) -> CliOutcome:

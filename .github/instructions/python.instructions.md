@@ -7,9 +7,17 @@ applyTo: "**/*.py"
 
 Confirm each rule below against neighboring files in the same package before trusting it over what the codebase actually does — the codebase wins when it conflicts.
 
+## Automated style checks
+
+- MUST follow PEP 8 naming and spacing, with Ruff formatting at 88 columns and the lint rules configured in `pyproject.toml`.
+- Install the pinned Ruff version with the development dependencies: `python -m pip install -e ".[dev]" --config-settings editable_mode=strict`.
+- MUST run `python -m ruff check .` and `python -m ruff format --check .` from the repository root before completing Python changes, even if skipping them would be faster; the pull request gate runs the same commands to prevent style drift.
+- Fix supported lint issues with `python -m ruff check . --fix`, then format with `python -m ruff format .`; review the diff and run the checks and `python -m pytest` again.
+- Keep `archive/` excluded; do not suppress checks or expand exclusions to hide failures in active code.
+
 ## Runtime compatibility
 
-- MUST keep `loop/src/`, `software_factory/`, `loop/workflows/`, and tests compatible with Python 3.14; `pyproject.toml` declares the supported minimum.
+- MUST keep `src/`, `tests/`, `workflows/` (including `workflows/tests/`) compatible with Python 3.14; `pyproject.toml` declares the supported minimum.
 - MAY use any 3.14 syntax and standard-library API (`StrEnum`, `Exception.add_note`, variable-fraction `datetime.fromisoformat`); no fallbacks for older runtimes.
 - Validate compatibility changes on the minimum supported runtime per [Test Strategy](../../docs/concepts/ops-test-strategy.md#python-compatibility).
 
