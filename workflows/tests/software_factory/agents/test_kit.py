@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from loop import DEFAULT, Message
 
-from workflows.software_factory.shared.agents._kit import (
+from software_factory.core.agents._kit import (
     PromptError,
     mode_agent,
     placeholders,

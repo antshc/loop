@@ -8,11 +8,10 @@ from pathlib import Path
 import pytest
 from loop import AgentReplyError, Declined
 
-from workflows.software_factory.shared.agents.roles import (
-    address,
+from software_factory.pull_requests.agents.roles import address, maintainer
+from software_factory.spec_delivery.agents.roles import (
     chore,
     developer,
-    maintainer,
     planner,
     reviewer,
 )

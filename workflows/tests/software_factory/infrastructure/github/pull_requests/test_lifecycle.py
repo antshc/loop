@@ -4,12 +4,12 @@ from dataclasses import replace
 
 import pytest
 
-from workflows.software_factory.shared.infrastructure.github.pull_requests import (
+from software_factory.pull_requests.infrastructure.github.pull_requests import (
     LifecycleAction,
     LifecycleDecision,
     PullRequestLifecyclePolicy,
 )
-from workflows.software_factory.shared.infrastructure.github.pull_requests.model import (
+from software_factory.pull_requests.infrastructure.github.pull_requests.model import (
     PullRequestState,
 )
 from workflows.tests.software_factory.infrastructure.github.builders import (

@@ -5,18 +5,18 @@ from __future__ import annotations
 import pytest
 from loop import RunStatus
 
-from workflows.software_factory.shared.events.specs import (
+from software_factory.core.infrastructure.github.repo import GitHubRepo
+from software_factory.spec_delivery.events.specs import (
     SpecBlocked,
     SpecHandedToHuman,
 )
-from workflows.software_factory.shared.events.tickets import TicketEscalated
-from workflows.software_factory.shared.infrastructure.github.issues.client import Issues
-from workflows.software_factory.shared.infrastructure.github.repo import GitHubRepo
-from workflows.software_factory.workflows.implement_spec.intake import (
+from software_factory.spec_delivery.events.tickets import TicketEscalated
+from software_factory.spec_delivery.infrastructure.github.issues.client import Issues
+from software_factory.workflows.implement_spec.intake import (
     select_specs,
     work_of,
 )
-from workflows.software_factory.workflows.implement_spec.policy import (
+from software_factory.workflows.implement_spec.policy import (
     HELD_SPEC,
     HELD_TICKET,
     HITL,

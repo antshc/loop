@@ -4,7 +4,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from workflows.software_factory.shared.infrastructure.github.identity import (
+from software_factory.core.infrastructure.github.identity import (
     CommentRef,
     IssueIdentity,
     IssueRef,

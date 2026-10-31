@@ -7,30 +7,30 @@ from pathlib import Path
 
 import pytest
 
-from workflows.software_factory.shared.agents.roles.address import (
+from software_factory.core.infrastructure.github.account import GitHub
+from software_factory.pull_requests.agents.roles.address import (
     GROUP_FEEDBACK,
     RESOLVE_ISSUE,
 )
-from workflows.software_factory.shared.events.feedback import (
+from software_factory.pull_requests.events.feedback import (
     FeedbackHandled,
     GroupedIssue,
     TrustPolicy,
 )
-from workflows.software_factory.shared.events.specs import RepositoryTarget
-from workflows.software_factory.shared.flows.address import address_feedback
-from workflows.software_factory.shared.infrastructure.github.account import GitHub
-from workflows.software_factory.shared.infrastructure.github.pull_requests.babysit import (
+from software_factory.pull_requests.flows.address import address_feedback
+from software_factory.pull_requests.infrastructure.github.pull_requests.babysit import (
     ci_failed,
     digest,
     pending_items,
 )
-from workflows.software_factory.shared.stages.address import (
+from software_factory.pull_requests.stages.address import (
     GroupInput,
     IssueWork,
     group_feedback,
     resolve_issue,
 )
-from workflows.software_factory.shared.stages.feedback import SelectInput, select
+from software_factory.pull_requests.stages.feedback import SelectInput, select
+from software_factory.spec_delivery.events.specs import RepositoryTarget
 from workflows.tests.software_factory.infrastructure.github.fakes import (
     FakeGhCli,
     check_run,

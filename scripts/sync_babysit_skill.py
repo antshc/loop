@@ -9,16 +9,16 @@ from pathlib import Path
 
 SOURCES = (
     ("scripts/babysit", ""),
-    ("workflows/software_factory/shared", "_bundled/workflows/software_factory/shared"),
+    ("software_factory/core", "software_factory/core"),
+    ("software_factory/pull_requests", "software_factory/pull_requests"),
     (
-        "workflows/software_factory/workflows/pr_babysit",
-        "_bundled/workflows/software_factory/workflows/pr_babysit",
+        "software_factory/workflows/pr_babysit",
+        "software_factory/workflows/pr_babysit",
     ),
 )
 PACKAGE_MARKERS = (
-    "workflows/__init__.py",
-    "workflows/software_factory/__init__.py",
-    "workflows/software_factory/workflows/__init__.py",
+    "software_factory/__init__.py",
+    "software_factory/workflows/__init__.py",
 )
 DESTINATION = Path("skills/babysit/scripts")
 
@@ -65,7 +65,7 @@ def expected(root: Path, staged: bool) -> dict[Path, bytes]:
         content = _read(root, Path(source), staged)
         if content is None:
             raise ValueError(f"Missing package marker: {source}")
-        result[DESTINATION / "_bundled" / source] = content
+        result[DESTINATION / source] = content
     if not result:
         raise ValueError("No canonical babysit sources found")
     return result

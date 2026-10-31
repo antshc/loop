@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from workflows.software_factory.shared.agents._kit import (
+from software_factory.core.agents._kit import (
     ContentDecodeError,
     LastJsonObject,
 )

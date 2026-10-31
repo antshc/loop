@@ -7,14 +7,14 @@ from pathlib import Path
 import pytest
 from loop import Evidence, Fail, Hold, Item, Pass
 
-from workflows.software_factory.shared.agents.roles.address import (
+from software_factory.pull_requests.agents.roles.address import (
     FeedbackIssue,
     FeedbackReply,
     Grouped,
     Resolved,
     ResolveRequest,
 )
-from workflows.software_factory.shared.events.feedback import (
+from software_factory.pull_requests.events.feedback import (
     FeedbackBatch,
     FeedbackGrouped,
     GroupedIssue,
@@ -22,9 +22,8 @@ from workflows.software_factory.shared.events.feedback import (
     IssueUnclear,
     ReplyDraft,
 )
-from workflows.software_factory.shared.events.pull_requests import PullRequestPolled
-from workflows.software_factory.shared.events.specs import RepositoryTarget
-from workflows.software_factory.shared.stages.address import (
+from software_factory.pull_requests.events.pull_requests import PullRequestPolled
+from software_factory.pull_requests.stages.address import (
     CLARIFICATION_REQUESTED,
     GroupInput,
     IssueWork,
@@ -34,6 +33,7 @@ from workflows.software_factory.shared.stages.address import (
     require_no_unclear,
     resolve_issue,
 )
+from software_factory.spec_delivery.events.specs import RepositoryTarget
 
 ITEMS = tuple({"key": f"k{n}", "kind": "thread", "status": "pending"} for n in (1, 2))
 BATCH = FeedbackBatch("head", False, ITEMS)

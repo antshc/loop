@@ -45,13 +45,13 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor  # noqa: E402
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter  # noqa: E402
 from opentelemetry.trace import StatusCode  # noqa: E402
 
-from tests.runtime.harness import TESTER, Ask, Rig, WorkCtx, editing  # noqa: E402
-from tests.runtime.support import NoInput, Routed  # noqa: E402
-from workflows.software_factory.shared.infrastructure.telemetry import (  # noqa: E402
+from software_factory.core.infrastructure.telemetry import (  # noqa: E402
     OtelSpans,
     Tee,
     closing_observer,
 )
+from tests.runtime.harness import TESTER, Ask, Rig, WorkCtx, editing  # noqa: E402
+from tests.runtime.support import NoInput, Routed  # noqa: E402
 
 # The repository root: where `tests` and `workflows` import from.
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -426,7 +426,7 @@ def test_without_the_extra_the_factory_runs_with_console_logging_and_reports_the
         sys.modules["opentelemetry"] = None
         from pathlib import Path
         from loop import Ledger, LogSpans, Pass, Services, Stage, Workflow, run
-        from workflows.software_factory.shared.infrastructure.telemetry import OtlpObserverFactory, Tee
+        from software_factory.core.infrastructure.telemetry import OtlpObserverFactory, Tee
         from tests.runtime.harness import WorkCtx
         from tests.runtime.support import Alpha, NoInput
 

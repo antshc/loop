@@ -17,14 +17,14 @@ LOGGER = logging.getLogger("babysit.skill")
 
 
 def bundle_path() -> Path:
-    """Find the generated module tree relative to this script, not the caller."""
-    return Path(__file__).resolve().parent / "_bundled"
+    """Find the generated software_factory package next to this script."""
+    return Path(__file__).resolve().parent
 
 
 def load_factory() -> None:
     """Prefer the generated factory modules and require Loop's installed runtime."""
     bundled = str(bundle_path())
-    if not bundle_path().is_dir():
+    if not (bundle_path() / "software_factory").is_dir():
         raise ValueError("Bundled factory code is missing; regenerate the skill")
     if bundled not in sys.path:
         sys.path.insert(0, bundled)
@@ -72,11 +72,11 @@ def python_environment() -> dict[str, str]:
 def supervise(url: str, config: Path, ready: Path, stop: threading.Event) -> int:
     """Run the existing workflow, waiting through blocked work until PR closure."""
     load_factory()
-    from workflows.software_factory.shared.infrastructure.ledger import Ledger
-    from workflows.software_factory.shared.infrastructure.state import process_lock
-    from workflows.software_factory.workflows.pr_babysit.definition import NAME
-    from workflows.software_factory.workflows.pr_babysit.intake import work_of
-    from workflows.software_factory.workflows.pr_babysit.settings import Settings
+    from software_factory.core.infrastructure.ledger import Ledger
+    from software_factory.core.infrastructure.state import process_lock
+    from software_factory.workflows.pr_babysit.definition import NAME
+    from software_factory.workflows.pr_babysit.intake import work_of
+    from software_factory.workflows.pr_babysit.settings import Settings
 
     slug, number = parse_pr(url)
     settings = Settings.load(config)
@@ -99,7 +99,7 @@ def supervise(url: str, config: Path, ready: Path, stop: threading.Event) -> int
             command = [
                 sys.executable,
                 "-m",
-                "workflows.software_factory.workflows.pr_babysit",
+                "software_factory.workflows.pr_babysit",
                 "--config",
                 str(config),
                 "--pr",

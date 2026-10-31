@@ -25,14 +25,14 @@ from loop import (
     run,
 )
 
-from tests.runtime.harness import GIT
-from tests.runtime.support import NoInput
-from workflows.software_factory.shared.events.pull_requests import (
+from software_factory.core.infrastructure.pacing import Pacer
+from software_factory.pull_requests.events.pull_requests import (
     PullRequestPolled,
     PullRequestWork,
 )
-from workflows.software_factory.shared.infrastructure.pacing import Pacer
-from workflows.software_factory.shared.stages import pull_requests
+from software_factory.pull_requests.stages import pull_requests
+from tests.runtime.harness import GIT
+from tests.runtime.support import NoInput
 from workflows.tests.software_factory.infrastructure.github.fakes import (
     check_run,
     workflow_run,

@@ -12,33 +12,33 @@ from unittest.mock import patch
 import pytest
 from loop import Ledger, RecordingSpans, Services
 
-from workflows.software_factory.shared.events.pull_requests import PullRequestWork
-from workflows.software_factory.shared.events.specs import RepositoryTarget
-from workflows.software_factory.shared.infrastructure.github.account import GitHub
-from workflows.software_factory.shared.infrastructure.pacing import Pacer
-from workflows.software_factory.shared.infrastructure.state import (
+from software_factory.core.infrastructure.github.account import GitHub
+from software_factory.core.infrastructure.pacing import Pacer
+from software_factory.core.infrastructure.state import (
     StateError,
     process_lock,
 )
-from workflows.software_factory.shared.stages import pull_requests
-from workflows.software_factory.workflows.pr_babysit.__main__ import (
+from software_factory.pull_requests.events.pull_requests import PullRequestWork
+from software_factory.pull_requests.stages import pull_requests
+from software_factory.spec_delivery.events.specs import RepositoryTarget
+from software_factory.workflows.pr_babysit.__main__ import (
     Runtime,
     StopRequest,
     _discover,
     main,
 )
-from workflows.software_factory.workflows.pr_babysit.definition import NAME
-from workflows.software_factory.workflows.pr_babysit.intake import (
+from software_factory.workflows.pr_babysit.definition import NAME
+from software_factory.workflows.pr_babysit.intake import (
     DiscoveryRequest,
     Maintain,
     Registry,
 )
-from workflows.software_factory.workflows.pr_babysit.policy import (
+from software_factory.workflows.pr_babysit.policy import (
     FINGERPRINT,
     Blocked,
     fingerprint,
 )
-from workflows.software_factory.workflows.pr_babysit.settings import Settings
+from software_factory.workflows.pr_babysit.settings import Settings
 from workflows.tests.software_factory.infrastructure.github.fakes import (
     FakeGhCli,
     FakePullRequestHost,
@@ -185,7 +185,7 @@ class Discovery:
             self.github, Pacer(wait), Runtime(self.ledger, RecordingSpans(), self.stop)
         ).bind(Maintain, self.workers)
         with patch(
-            "workflows.software_factory.workflows.pr_babysit.intake.ThreadPoolExecutor",
+            "software_factory.workflows.pr_babysit.intake.ThreadPoolExecutor",
             StartedExecutor,
         ):
             return main(["--config", str(self.config), *argv], services=services)

@@ -29,7 +29,7 @@ def config_path(explicit: Path | None) -> Path:
 def launch(url: str, config: Path) -> tuple[int, Path]:
     """Start a new process and confirm that it holds the PR's monitor lock."""
     load_factory()
-    from workflows.software_factory.workflows.pr_babysit.settings import Settings
+    from software_factory.workflows.pr_babysit.settings import Settings
 
     slug, number = parse_pr(url)
     settings = Settings.load(config)

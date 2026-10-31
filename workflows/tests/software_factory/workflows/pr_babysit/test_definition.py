@@ -9,13 +9,13 @@ from loop import AgentExecution, WorktreeGit
 from loop.runtime.analysis import _stages_in
 from loop.shared.git import GitClient
 
-from workflows.software_factory.shared.infrastructure.agents.launcher import (
+from software_factory.core.infrastructure.agents.launcher import (
     AgentLauncher,
 )
-from workflows.software_factory.shared.infrastructure.github.account import GitHub
-from workflows.software_factory.shared.infrastructure.pacing import Pacer
-from workflows.software_factory.workflows.pr_babysit.definition import pr_babysit
-from workflows.software_factory.workflows.pr_babysit.settings import (
+from software_factory.core.infrastructure.github.account import GitHub
+from software_factory.core.infrastructure.pacing import Pacer
+from software_factory.workflows.pr_babysit.definition import pr_babysit
+from software_factory.workflows.pr_babysit.settings import (
     Repository,
     Settings,
 )

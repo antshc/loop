@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from loop import AgentReplyError, AgentRunError, Declined
 
-from workflows.software_factory.shared.agents.roles.developer import (
+from software_factory.spec_delivery.agents.roles.developer import (
     DEVELOPER,
     Delivered,
     DeveloperRequest,

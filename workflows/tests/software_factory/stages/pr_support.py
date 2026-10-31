@@ -36,23 +36,23 @@ from loop import (
 )
 from loop.shared.git import GitClient
 
-from tests.runtime.harness import GIT, Repo, command
-from tests.runtime.support import NoInput
-from workflows.software_factory.shared.events.feedback import FeedbackBatch, TrustPolicy
-from workflows.software_factory.shared.events.pull_requests import PullRequestPolled
-from workflows.software_factory.shared.events.specs import RepositoryTarget
-from workflows.software_factory.shared.infrastructure.agents.launcher import (
+from software_factory.core.infrastructure.agents.launcher import (
     AgentLauncher,
 )
-from workflows.software_factory.shared.infrastructure.github.account import GitHub
-from workflows.software_factory.shared.infrastructure.github.pull_requests.babysit import (
+from software_factory.core.infrastructure.github.account import GitHub
+from software_factory.pull_requests.events.feedback import FeedbackBatch, TrustPolicy
+from software_factory.pull_requests.events.pull_requests import PullRequestPolled
+from software_factory.pull_requests.infrastructure.github.pull_requests.babysit import (
     babysit_snapshot,
     bot_logins,
 )
-from workflows.software_factory.shared.infrastructure.github.pull_requests.model import (
+from software_factory.pull_requests.infrastructure.github.pull_requests.model import (
     PullRequestSnapshot,
 )
-from workflows.software_factory.shared.stages import feedback
+from software_factory.pull_requests.stages import feedback
+from software_factory.spec_delivery.events.specs import RepositoryTarget
+from tests.runtime.harness import GIT, Repo, command
+from tests.runtime.support import NoInput
 from workflows.tests.software_factory.infrastructure.github.fakes import (
     FakeGhCli,
     FakePullRequestHost,

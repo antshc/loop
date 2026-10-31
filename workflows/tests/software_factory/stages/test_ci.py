@@ -9,31 +9,32 @@ from typing import Any
 import pytest
 from loop import Evidence, Fail, Flow, Hold, Pass, Workflow, WorktreeError, handoff
 
-from tests.runtime.harness import command
-from workflows.software_factory.shared.agents.roles.maintainer import (
+from software_factory.core.infrastructure.github.repo import CommandError
+from software_factory.core.stages import workspaces
+from software_factory.pull_requests.agents.roles.maintainer import (
     DIAGNOSE_CI,
     FIX_CI,
     Diagnosis,
     FixRequest,
 )
-from workflows.software_factory.shared.events.ci import (
+from software_factory.pull_requests.events.ci import (
     BranchBroken,
     CiFixed,
     CiRerun,
     Transient,
 )
-from workflows.software_factory.shared.events.feedback import (
+from software_factory.pull_requests.events.feedback import (
     IssueResolved,
     IssueUnclear,
 )
-from workflows.software_factory.shared.events.pull_requests import (
+from software_factory.pull_requests.events.pull_requests import (
     PrBlocked,
     PullRequestPolled,
     Unsupported,
 )
-from workflows.software_factory.shared.events.specs import RepositoryTarget
-from workflows.software_factory.shared.infrastructure.github.repo import CommandError
-from workflows.software_factory.shared.stages import ci, pull_requests, workspaces
+from software_factory.pull_requests.stages import ci, pull_requests
+from software_factory.spec_delivery.events.specs import RepositoryTarget
+from tests.runtime.harness import command
 from workflows.tests.software_factory.infrastructure.github.fakes import check_run
 from workflows.tests.software_factory.stages.pr_support import (
     BRANCH,

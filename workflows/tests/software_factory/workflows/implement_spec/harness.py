@@ -20,13 +20,13 @@ from loop import (
     fake_agent,
 )
 
-from tests.runtime.harness import GIT, command
-from workflows.software_factory.shared.infrastructure.agents.launcher import (
+from software_factory.core.infrastructure.agents.launcher import (
     AgentLauncher,
 )
-from workflows.software_factory.workflows.implement_spec.__main__ import Runtime, main
-from workflows.software_factory.workflows.implement_spec.dry import commit_in_worktree
-from workflows.software_factory.workflows.implement_spec.settings import Targets
+from software_factory.workflows.implement_spec.__main__ import Runtime, main
+from software_factory.workflows.implement_spec.dry import commit_in_worktree
+from software_factory.workflows.implement_spec.settings import Targets
+from tests.runtime.harness import GIT, command
 from workflows.tests.software_factory.infrastructure.github.fakes import issue
 from workflows.tests.software_factory.stages.support import (
     BRANCH,

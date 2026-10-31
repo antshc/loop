@@ -16,14 +16,13 @@ from pathlib import Path
 import loop
 import pytest
 
-import workflows as workflows_root
-import workflows.software_factory as factory
-import workflows.software_factory.workflows as definitions
+import software_factory as factory
+import software_factory.workflows as definitions
 
 FACTORY = factory.__name__
 WORKFLOWS = definitions.__name__
-# The factory and the `workflows` namespace package that holds it, run from the repository clone.
-PACKAGE_DIRS = {"workflows": Path(workflows_root.__file__).parent}
+# The factory is a standalone package; a skill copies its import closure.
+PACKAGE_DIRS = {"software_factory": Path(factory.__file__).parent}
 
 SAMPLES = Path(__file__).with_name("samples.py")
 
@@ -40,7 +39,7 @@ definition = portable_samples.call_with_samples(getattr(module, module.NAME))
 definition.check()
 foreign = [
     name for name, module in sys.modules.items()
-    if (name == "workflows" or name.startswith("workflows.software_factory")) and not str(getattr(module, "__file__", "")).startswith(str(root))
+    if (name == "software_factory" or name.startswith("software_factory.")) and not str(getattr(module, "__file__", "")).startswith(str(root))
 ]
 print(json.dumps({"name": definition.name, "foreign": foreign}))
 """
@@ -77,7 +76,7 @@ def runtime_nodes(node: ast.AST) -> Iterator[ast.AST]:
 def module_file(name: str) -> Path | None:
     """The source file of a factory module, or None when `name` is no factory module."""
     top, *rest = name.split(".")
-    if top not in PACKAGE_DIRS or (rest and rest[0] != "software_factory"):
+    if top not in PACKAGE_DIRS:
         return None
     base = PACKAGE_DIRS[top].joinpath(*rest)
     if (base / "__init__.py").exists():
@@ -207,10 +206,10 @@ def test_a_workflow_that_needs_another_workflow_does_not_run_from_its_own_closur
     closure = {
         name: file
         for name, file in closure_of(package).items()
-        if name != f"{FACTORY}.shared.flows.address"
+        if name != f"{FACTORY}.pull_requests.flows.address"
     }
     copy_closure(closure, tmp_path)
 
     result = probe(package, tmp_path)
 
-    assert result.returncode != 0 and f"{FACTORY}.shared.flows" in result.stderr
+    assert result.returncode != 0 and f"{FACTORY}.pull_requests.flows" in result.stderr

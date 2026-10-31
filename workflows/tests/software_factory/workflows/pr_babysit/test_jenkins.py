@@ -8,18 +8,18 @@ from pathlib import Path
 import pytest
 from loop import AgentRequest, FakeReply, RunContext
 
-from workflows.software_factory.shared.events.jenkins import JenkinsRestarted
-from workflows.software_factory.shared.events.pull_requests import ReadinessReported
-from workflows.software_factory.shared.infrastructure.jenkins import (
+from software_factory.pull_requests.events.jenkins import JenkinsRestarted
+from software_factory.pull_requests.events.pull_requests import ReadinessReported
+from software_factory.pull_requests.infrastructure.jenkins import (
     Jenkins,
     JenkinsSettings,
 )
-from workflows.software_factory.workflows.pr_babysit.__main__ import (
+from software_factory.workflows.pr_babysit.__main__ import (
     StopRequest,
     build_services,
 )
-from workflows.software_factory.workflows.pr_babysit.definition import pr_babysit
-from workflows.software_factory.workflows.pr_babysit.settings import Settings
+from software_factory.workflows.pr_babysit.definition import pr_babysit
+from software_factory.workflows.pr_babysit.settings import Settings
 from workflows.tests.software_factory.infrastructure.github.fakes import commit_status
 from workflows.tests.software_factory.infrastructure.test_jenkins import (
     JOB,

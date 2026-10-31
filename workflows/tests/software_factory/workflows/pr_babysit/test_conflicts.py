@@ -7,9 +7,9 @@ from pathlib import Path
 import pytest
 from loop.shared.process import CommandError
 
+from software_factory.pull_requests.events.pull_requests import MergePublished
+from software_factory.workflows.pr_babysit.policy import fingerprint
 from tests.runtime.harness import command
-from workflows.software_factory.shared.events.pull_requests import MergePublished
-from workflows.software_factory.workflows.pr_babysit.policy import fingerprint
 from workflows.tests.software_factory.stages.pr_support import Crash, answer, thread
 
 from .harness import Babysit, LocalOrigin

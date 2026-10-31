@@ -8,20 +8,20 @@ from subprocess import CalledProcessError
 import pytest
 from loop import Event
 
-from tests.runtime.harness import command
-from workflows.software_factory.shared.events.chore import ChoreDiscarded, ChoreRefined
-from workflows.software_factory.shared.events.pull_requests import (
+from software_factory.pull_requests.events.pull_requests import (
     DraftPullRequestPublished,
     Finalized,
 )
-from workflows.software_factory.shared.events.review import (
+from software_factory.spec_delivery.events.chore import ChoreDiscarded, ChoreRefined
+from software_factory.spec_delivery.events.review import (
     PullRequestReviewed,
     ReviewAxis,
     ReviewFailed,
     ReviewFinding,
 )
-from workflows.software_factory.shared.events.tickets import Delivery
-from workflows.software_factory.shared.stages import finalize
+from software_factory.spec_delivery.events.tickets import Delivery
+from software_factory.spec_delivery.stages import finalize
+from tests.runtime.harness import command
 from workflows.tests.software_factory.infrastructure.github.fakes import issue
 from workflows.tests.software_factory.stages.support import (
     BRANCH,

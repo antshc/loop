@@ -12,17 +12,18 @@ import pytest
 from loop import Event
 from loop.runtime._engine.codec import decode, encode
 
-import workflows.software_factory.shared.events as events
-from workflows.software_factory.shared.events.checks import ChecksPassed
-from workflows.software_factory.shared.events.chore import ChoreDiscarded, ChoreRefined
-from workflows.software_factory.shared.events.ci import (
+import software_factory.core.events as core_events
+import software_factory.pull_requests.events as pr_events
+import software_factory.spec_delivery.events as spec_events
+from software_factory.core.events.checks import ChecksPassed
+from software_factory.pull_requests.events.ci import (
     BranchBroken,
     CiFixed,
     CiRerun,
     Diagnosis,
     Transient,
 )
-from workflows.software_factory.shared.events.feedback import (
+from software_factory.pull_requests.events.feedback import (
     FeedbackBatch,
     FeedbackGrouped,
     FeedbackHandled,
@@ -31,7 +32,7 @@ from workflows.software_factory.shared.events.feedback import (
     IssueUnclear,
     ReplyDraft,
 )
-from workflows.software_factory.shared.events.jenkins import (
+from software_factory.pull_requests.events.jenkins import (
     JenkinsCapacity,
     JenkinsFailed,
     JenkinsObservation,
@@ -39,7 +40,7 @@ from workflows.software_factory.shared.events.jenkins import (
     JenkinsWaiting,
     OtherCi,
 )
-from workflows.software_factory.shared.events.pull_requests import (
+from software_factory.pull_requests.events.pull_requests import (
     CiFailing,
     CopilotDue,
     CopilotRequested,
@@ -60,13 +61,14 @@ from workflows.software_factory.shared.events.pull_requests import (
     ReadinessReported,
     Unsupported,
 )
-from workflows.software_factory.shared.events.review import (
+from software_factory.spec_delivery.events.chore import ChoreDiscarded, ChoreRefined
+from software_factory.spec_delivery.events.review import (
     PullRequestReviewed,
     ReviewAxis,
     ReviewFailed,
     ReviewFinding,
 )
-from workflows.software_factory.shared.events.specs import (
+from software_factory.spec_delivery.events.specs import (
     CheckoutPrepared,
     DeliveryAnnounced,
     RepositoryTarget,
@@ -77,7 +79,7 @@ from workflows.software_factory.shared.events.specs import (
     SpecRouted,
     WorkFound,
 )
-from workflows.software_factory.shared.events.tickets import (
+from software_factory.spec_delivery.events.tickets import (
     Delivery,
     PlannedTicket,
     PlanProposed,
@@ -243,6 +245,7 @@ def test_every_event_class_is_frozen_and_has_a_round_trip_sample() -> None:
     """Given every Event defined in the events package, when scanned, then each is a frozen dataclass with a sample above."""
     defined = {
         member
+        for events in (core_events, pr_events, spec_events)
         for module in pkgutil.iter_modules(events.__path__)
         for _, member in inspect.getmembers(
             importlib.import_module(f"{events.__name__}.{module.name}"), inspect.isclass

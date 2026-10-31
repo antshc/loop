@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from workflows.software_factory.shared.infrastructure.github.issues.client import Issues
-from workflows.software_factory.shared.infrastructure.github.repo import GitHubRepo
-from workflows.software_factory.workflows.implement_spec.dry import (
+from software_factory.core.infrastructure.github.repo import GitHubRepo
+from software_factory.spec_delivery.infrastructure.github.issues.client import Issues
+from software_factory.workflows.implement_spec.dry import (
     DryGh,
     DryGit,
     DryHistory,

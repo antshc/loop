@@ -8,12 +8,12 @@ from pathlib import Path
 import pytest
 from loop import Event, Pass, Services, Stage, Workflow, encode, run
 
-from tests.runtime.harness import WorkCtx
-from tests.runtime.support import NoInput
-from workflows.software_factory.shared.infrastructure.github.issues.graph import (
+from software_factory.core.infrastructure.ledger import Ledger
+from software_factory.spec_delivery.infrastructure.github.issues.graph import (
     SpecGraphSnapshot,
 )
-from workflows.software_factory.shared.infrastructure.ledger import Ledger
+from tests.runtime.harness import WorkCtx
+from tests.runtime.support import NoInput
 from workflows.tests.software_factory.infrastructure.github.builders import (
     build_graph,
     build_ticket,
@@ -63,7 +63,7 @@ def test_old_github_reply_resumes_without_repeating_the_effect(
         run(workflow, work, services=Services(), ledger=ledger)
     path = ledger.item("test", work.id).path
     legacy = path.read_text().replace(
-        "workflows.software_factory.shared.infrastructure.github.", historical_prefix
+        "software_factory.spec_delivery.infrastructure.github.", historical_prefix
     )
     assert f"{historical_prefix}issues.graph.SpecGraphSnapshot" in legacy
     path.write_text(legacy)
@@ -93,7 +93,10 @@ def test_relocation_preserves_text_and_torn_tail_recovery(tmp_path: Path) -> Non
     restored = Ledger(tmp_path).item("test", "item")
     record = restored.records()[0]
     assert record["text"] == text
-    assert record["reply"]["type"].endswith(".github.issues.issue.Issue")
+    assert (
+        record["reply"]["type"]
+        == "software_factory.core.infrastructure.github.issue.Issue"
+    )
     assert record["reply"]["type"] != text
     assert log.path.read_bytes() == original + b'{"kind":'
     with restored.lock():
@@ -104,14 +107,35 @@ def test_relocation_preserves_text_and_torn_tail_recovery(tmp_path: Path) -> Non
 
 
 @pytest.mark.parametrize(
-    "package", ["agents", "events", "flows", "infrastructure", "stages"]
+    ("historical", "expected"),
+    [
+        (
+            "workflows.software_factory.shared.events.feedback.FeedbackBatch",
+            "software_factory.pull_requests.events.feedback.FeedbackBatch",
+        ),
+        (
+            "workflows.software_factory.events.specs.RepositoryTarget",
+            "software_factory.core.events.targets.RepositoryTarget",
+        ),
+        (
+            "workflows.software_factory.shared.events.tickets.TicketClosed",
+            "software_factory.spec_delivery.events.tickets.TicketClosed",
+        ),
+        (
+            "workflows.software_factory.shared.stages.pacing.Poll",
+            "software_factory.pull_requests.stages.pacing.Poll",
+        ),
+        (
+            "workflows.software_factory.shared.infrastructure.github.issues.issue.Issue",
+            "software_factory.core.infrastructure.github.issue.Issue",
+        ),
+    ],
 )
 def test_factory_type_tags_relocate_without_changing_user_text(
-    tmp_path: Path, package: str
+    tmp_path: Path, historical: str, expected: str
 ) -> None:
     """Only structured type tags migrate; persisted user text stays unchanged."""
-    historical = f"workflows.software_factory.{package}.thing.Value"
-    log = Ledger(tmp_path).item("test", package)
+    log = Ledger(tmp_path).item("test", "item")
     log.seed(
         [
             {
@@ -122,10 +146,7 @@ def test_factory_type_tags_relocate_without_changing_user_text(
         ]
     )
 
-    record = Ledger(tmp_path).item("test", package).records()[0]
+    record = Ledger(tmp_path).item("test", "item").records()[0]
     assert record["text"] == historical
-    assert (
-        record["item"]["type"]
-        == f"workflows.software_factory.shared.{package}.thing.Value"
-    )
+    assert record["item"]["type"] == expected
     assert historical in log.path.read_text()

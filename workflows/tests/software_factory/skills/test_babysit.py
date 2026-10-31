@@ -23,12 +23,12 @@ PR = "https://github.com/antshc/loop/pull/123"
 def test_generated_skill_imports_without_the_factory_checkout(tmp_path: Path) -> None:
     """Bundled imports resolve when the caller has no factory source directory."""
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(ROOT / DESTINATION / "_bundled")
+    env["PYTHONPATH"] = str(ROOT / DESTINATION)
     result = subprocess.run(
         [
             sys.executable,
             "-m",
-            "workflows.software_factory.workflows.pr_babysit",
+            "software_factory.workflows.pr_babysit",
             "--help",
         ],
         cwd=tmp_path,
@@ -43,17 +43,23 @@ def test_generated_skill_imports_without_the_factory_checkout(tmp_path: Path) ->
     assert "--pr" in result.stdout
 
 
+def test_skill_declares_loop_runtime_requirement() -> None:
+    """The skill includes an installable Loop runtime dependency."""
+    requirements = (ROOT / "skills/babysit/requirements.txt").read_text()
+
+    assert "loop[otel] @ git+https://github.com/antshc/loop.git@main" in requirements
+
+
 def test_sync_reads_the_index_not_unstaged_edits(tmp_path: Path) -> None:
     """The generated commit snapshot matches the index, even with later worktree edits."""
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     contents = {
         "scripts/babysit/start.py": "one\n",
         "scripts/babysit/supervise.py": "supervise\n",
-        "workflows/__init__.py": "",
-        "workflows/software_factory/__init__.py": "",
-        "workflows/software_factory/workflows/__init__.py": "",
-        "workflows/software_factory/shared/events/__init__.py": "event\n",
-        "workflows/software_factory/workflows/pr_babysit/__main__.py": "workflow\n",
+        "software_factory/__init__.py": "",
+        "software_factory/workflows/__init__.py": "",
+        "software_factory/core/events/__init__.py": "event\n",
+        "software_factory/workflows/pr_babysit/__main__.py": "workflow\n",
     }
     for name, content in contents.items():
         path = tmp_path / name
@@ -80,14 +86,12 @@ def test_sync_reads_the_index_not_unstaged_edits(tmp_path: Path) -> None:
     subprocess.run(
         ["git", "add", "-A", "--", str(DESTINATION)], cwd=tmp_path, check=True
     )
-    source = "workflows/software_factory/shared/events/__init__.py"
+    source = "software_factory/core/events/__init__.py"
     (tmp_path / source).unlink()
     subprocess.run(["git", "add", "-u", "--", source], cwd=tmp_path, check=True)
     synchronize(tmp_path, staged=True, check=False)
     assert not (
-        tmp_path
-        / DESTINATION
-        / "_bundled/workflows/software_factory/shared/events/__init__.py"
+        tmp_path / DESTINATION / "software_factory/core/events/__init__.py"
     ).exists()
 
 
@@ -102,8 +106,8 @@ def test_supervisor_watches_a_blocked_pr_until_it_closes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A handed-off workflow remains watched without repeating work immediately."""
-    from workflows.software_factory.shared.infrastructure import ledger
-    from workflows.software_factory.workflows.pr_babysit.settings import Settings
+    from software_factory.core.infrastructure import ledger
+    from software_factory.workflows.pr_babysit.settings import Settings
 
     settings = SimpleNamespace(
         state_dir=tmp_path / "state",
@@ -160,7 +164,7 @@ def test_launcher_detaches_and_reports_only_after_ready(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The launcher returns a PID only after its supervisor confirms startup."""
-    from workflows.software_factory.workflows.pr_babysit.settings import Settings
+    from software_factory.workflows.pr_babysit.settings import Settings
 
     monkeypatch.syspath_prepend(str(ROOT / "scripts" / "babysit"))
     start = importlib.import_module("start")

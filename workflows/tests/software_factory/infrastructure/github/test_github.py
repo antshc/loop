@@ -5,13 +5,13 @@ import json
 import pytest
 from loop.shared.process import CommandError
 
-from workflows.software_factory.shared.infrastructure.github.account import GitHub
-from workflows.software_factory.shared.infrastructure.github.pull_requests import (
-    PullRequests,
-)
-from workflows.software_factory.shared.infrastructure.github.repo import (
+from software_factory.core.infrastructure.github.account import GitHub
+from software_factory.core.infrastructure.github.repo import (
     GitHubRepo,
     denied,
+)
+from software_factory.pull_requests.infrastructure.github.pull_requests import (
+    PullRequests,
 )
 from workflows.tests.software_factory.infrastructure.github.fakes import (
     FakeGhCli,

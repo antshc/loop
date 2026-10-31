@@ -29,21 +29,31 @@ from loop import (
 from loop.runtime._engine.codec import decode, encode
 from loop.runtime.nodes import DispatchNode, EachNode, StageNode, WithinNode
 
-import workflows.software_factory as factory
-import workflows.software_factory.shared.agents as agents
-import workflows.software_factory.shared.events as events
-import workflows.software_factory.shared.flows as flows
-import workflows.software_factory.shared.stages as stages
-import workflows.software_factory.workflows as workflows
-from workflows.software_factory.shared.infrastructure.jenkins import JenkinsSettings
-from workflows.software_factory.shared.stages import pull_requests
-from workflows.software_factory.workflows.pr_babysit.settings import (
+import software_factory as factory
+import software_factory.core.agents as core_agents
+import software_factory.core.events as core_events
+import software_factory.core.stages as core_stages
+import software_factory.pull_requests.agents as pr_agents
+import software_factory.pull_requests.events as pr_events
+import software_factory.pull_requests.flows as pr_flows
+import software_factory.pull_requests.stages as pr_stages
+import software_factory.spec_delivery.agents as spec_agents
+import software_factory.spec_delivery.events as spec_events
+import software_factory.spec_delivery.stages as spec_stages
+import software_factory.workflows as workflows
+from software_factory.pull_requests.infrastructure.jenkins import JenkinsSettings
+from software_factory.pull_requests.stages import pull_requests
+from software_factory.workflows.pr_babysit.settings import (
     Settings as BabysitSettings,
 )
 
 from .samples import call_with_samples, sample_dataclass
 
 FACTORIES = (Stage, Selector, WorkspaceOpener)
+STAGE_PACKAGES = (core_stages, pr_stages, spec_stages)
+EVENT_PACKAGES = (core_events, pr_events, spec_events)
+AGENT_PACKAGES = (core_agents, pr_agents, spec_agents)
+FLOW_PACKAGES = (pr_flows,)
 
 # The retired Phase-reporting names; `Workflow` is now the runtime's definition type.
 PHASE_API = {"WorkflowBuilder", "WorkflowRun", "Phases", "Phase", "Kind"}
@@ -54,10 +64,10 @@ CLIENTS = (
     "loop.runtime._engine",
     "loop.shared.process",
     "loop.shared.git",
-    "workflows.software_factory.shared.infrastructure.github.repo",
-    "workflows.software_factory.shared.infrastructure.github.account",
-    "workflows.software_factory.shared.infrastructure.github.issues.client",
-    "workflows.software_factory.shared.infrastructure.github.pull_requests.client",
+    "software_factory.core.infrastructure.github.repo",
+    "software_factory.core.infrastructure.github.account",
+    "software_factory.spec_delivery.infrastructure.github.issues.client",
+    "software_factory.pull_requests.infrastructure.github.pull_requests.client",
 )
 
 type Part = Stage | Selector | WorkspaceOpener
@@ -91,29 +101,31 @@ def definition_factories() -> dict[str, Callable[..., Workflow]]:
 def library_factories() -> dict[str, Callable[..., Part]]:
     """Every public function of the Stage modules that returns a Stage, a Selector or a workspace opener."""
     found = {}
-    for module in submodules(stages):
-        for name, function in inspect.getmembers(module, inspect.isfunction):
-            returns = typing.get_type_hints(function).get("return")
-            if (
-                function.__module__ == module.__name__
-                and not name.startswith("_")
-                and (typing.get_origin(returns) or returns) in FACTORIES
-            ):
-                found[f"{module.__name__.rsplit('.', 1)[1]}.{name}"] = function
+    for package in STAGE_PACKAGES:
+        for module in submodules(package):
+            for name, function in inspect.getmembers(module, inspect.isfunction):
+                returns = typing.get_type_hints(function).get("return")
+                if (
+                    function.__module__ == module.__name__
+                    and not name.startswith("_")
+                    and (typing.get_origin(returns) or returns) in FACTORIES
+                ):
+                    found[f"{module.__name__.rsplit('.', 1)[1]}.{name}"] = function
     return found
 
 
 def fragment_factories() -> dict[str, Callable[..., Flow]]:
     """Every public function of the Flow fragment modules that returns a Flow."""
     found = {}
-    for module in submodules(flows):
-        for name, function in inspect.getmembers(module, inspect.isfunction):
-            if (
-                function.__module__ == module.__name__
-                and not name.startswith("_")
-                and typing.get_type_hints(function).get("return") is Flow
-            ):
-                found[f"{module.__name__.rsplit('.', 1)[1]}.{name}"] = function
+    for package in FLOW_PACKAGES:
+        for module in submodules(package):
+            for name, function in inspect.getmembers(module, inspect.isfunction):
+                if (
+                    function.__module__ == module.__name__
+                    and not name.startswith("_")
+                    and typing.get_type_hints(function).get("return") is Flow
+                ):
+                    found[f"{module.__name__.rsplit('.', 1)[1]}.{name}"] = function
     return found
 
 
@@ -396,7 +408,7 @@ def test_a_policy_module_with_a_behaviour_class_or_a_client_import_is_reported_b
     """Given a policy source with a class that has methods and imports of a client, when it is checked, then each is named."""
     source = (
         "import subprocess\n"
-        "from workflows.software_factory.shared.infrastructure.github.account import GitHub\n"
+        "from software_factory.core.infrastructure.github.account import GitHub\n"
         "from dataclasses import dataclass\n\n"
         "class Fingerprinter:\n    def digest(self): ...\n\n"
         "@dataclass(frozen=True)\nclass Value:\n    def doubled(self): ...\n\n"
@@ -406,8 +418,8 @@ def test_a_policy_module_with_a_behaviour_class_or_a_client_import_is_reported_b
     assert policy_violations("demo.policy", source) == [
         "demo.policy: class Fingerprinter has methods",
         "demo.policy: imports subprocess",
-        "demo.policy: imports workflows.software_factory.shared.infrastructure.github.account",
-        "demo.policy: imports workflows.software_factory.shared.infrastructure.github.account.GitHub",
+        "demo.policy: imports software_factory.core.infrastructure.github.account",
+        "demo.policy: imports software_factory.core.infrastructure.github.account.GitHub",
     ]
 
 
@@ -474,14 +486,26 @@ def defined_in(package: ModuleType, base: type) -> list[type]:
 def codec_subjects() -> list[type]:
     """Every Event and every agent message the ledger may hold."""
     # Declined is the agent message Loop's typed agent contract owns; every role may store it.
-    return [*defined_in(events, Event), *defined_in(agents, Message), Declined]
+    return [
+        *(
+            subject
+            for package in EVENT_PACKAGES
+            for subject in defined_in(package, Event)
+        ),
+        *(
+            subject
+            for package in AGENT_PACKAGES
+            for subject in defined_in(package, Message)
+        ),
+        Declined,
+    ]
 
 
 @pytest.mark.parametrize(
     "subject",
     codec_subjects(),
     ids=lambda subject: (
-        f"{subject.__module__.removeprefix('workflows.software_factory.')}.{subject.__qualname__}"
+        f"{subject.__module__.removeprefix('software_factory.')}.{subject.__qualname__}"
     ),
 )
 def test_every_event_and_agent_message_round_trips_through_the_ledger_codec(

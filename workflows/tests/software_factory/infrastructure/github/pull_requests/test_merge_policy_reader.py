@@ -3,12 +3,12 @@ from __future__ import annotations
 import pytest
 from loop.shared.process import CommandError
 
-from workflows.software_factory.shared.infrastructure.github.account import GitHub
-from workflows.software_factory.shared.infrastructure.github.pull_requests import (
+from software_factory.core.infrastructure.github.account import GitHub
+from software_factory.pull_requests.infrastructure.github.pull_requests import (
     MergePolicyReader,
     MergePolicySnapshot,
 )
-from workflows.software_factory.shared.infrastructure.github.pull_requests.merge_policy import (
+from software_factory.pull_requests.infrastructure.github.pull_requests.merge_policy import (
     PolicySource,
 )
 from workflows.tests.software_factory.infrastructure.github.fakes import (

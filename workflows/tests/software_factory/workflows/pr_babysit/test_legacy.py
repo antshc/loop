@@ -8,12 +8,12 @@ from pathlib import Path
 
 from loop import Ledger, WorkItemLog
 
-from tests.runtime.harness import command
-from workflows.software_factory.shared.infrastructure.github.pull_requests.babysit import (
+from software_factory.pull_requests.infrastructure.github.pull_requests.babysit import (
     digest,
 )
-from workflows.software_factory.workflows.pr_babysit.legacy import adopt_v1, state_path
-from workflows.software_factory.workflows.pr_babysit.policy import ADOPTED, FINGERPRINT
+from software_factory.workflows.pr_babysit.legacy import adopt_v1, state_path
+from software_factory.workflows.pr_babysit.policy import ADOPTED, FINGERPRINT
+from tests.runtime.harness import command
 from workflows.tests.software_factory.stages.pr_support import (
     NUMBER,
     SLUG,

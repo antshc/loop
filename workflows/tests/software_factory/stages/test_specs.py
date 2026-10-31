@@ -7,10 +7,10 @@ from pathlib import Path
 import pytest
 from loop import DefinitionError, Stage, Workflow, handoff
 
-from workflows.software_factory.shared.events.pull_requests import (
+from software_factory.pull_requests.events.pull_requests import (
     DraftPullRequestPublished,
 )
-from workflows.software_factory.shared.events.specs import (
+from software_factory.spec_delivery.events.specs import (
     CheckoutPrepared,
     DeliveryAnnounced,
     RepositoryTarget,
@@ -18,10 +18,10 @@ from workflows.software_factory.shared.events.specs import (
     SpecWork,
     WorkFound,
 )
-from workflows.software_factory.shared.infrastructure.github.issues.errors import (
+from software_factory.spec_delivery.infrastructure.github.issues.errors import (
     IssueError,
 )
-from workflows.software_factory.shared.stages import specs
+from software_factory.spec_delivery.stages import specs
 from workflows.tests.software_factory.infrastructure.github.fakes import issue
 from workflows.tests.software_factory.stages.support import (
     BRANCH,

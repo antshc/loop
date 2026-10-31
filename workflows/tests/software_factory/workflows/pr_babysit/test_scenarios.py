@@ -8,18 +8,18 @@ from pathlib import Path
 import pytest
 from loop import AgentRequest, FakeReply, RunContext
 
-from tests.runtime.harness import StopAfter, command
-from workflows.software_factory.shared.events.feedback import FeedbackHandled
-from workflows.software_factory.shared.events.pull_requests import (
+from software_factory.pull_requests.events.feedback import FeedbackHandled
+from software_factory.pull_requests.events.pull_requests import (
     CopilotRequested,
     ReadinessReported,
 )
-from workflows.software_factory.workflows.pr_babysit import __main__ as entry
-from workflows.software_factory.workflows.pr_babysit.policy import (
+from software_factory.workflows.pr_babysit import __main__ as entry
+from software_factory.workflows.pr_babysit.policy import (
     FINGERPRINT,
     REASON,
     fingerprint,
 )
+from tests.runtime.harness import StopAfter, command
 from workflows.tests.software_factory.stages.pr_support import (
     answer,
     reply_text,

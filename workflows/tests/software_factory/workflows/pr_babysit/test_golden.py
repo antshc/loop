@@ -7,37 +7,37 @@ from pathlib import Path
 
 import pytest
 
-from workflows.software_factory.shared.agents.roles.address import (
+from software_factory.pull_requests.agents.roles.address import (
     GROUP_FEEDBACK,
     RESOLVE_ISSUE,
 )
-from workflows.software_factory.shared.agents.roles.maintainer import (
+from software_factory.pull_requests.agents.roles.maintainer import (
     DIAGNOSE_CI,
     FIX_CI,
 )
-from workflows.software_factory.shared.events.ci import BranchBroken
-from workflows.software_factory.shared.events.feedback import (
+from software_factory.pull_requests.events.ci import BranchBroken
+from software_factory.pull_requests.events.feedback import (
     FeedbackBatch,
     GroupedIssue,
 )
-from workflows.software_factory.shared.events.pull_requests import (
+from software_factory.pull_requests.events.pull_requests import (
     NextAction,
     PullRequestPolled,
 )
-from workflows.software_factory.shared.events.specs import RepositoryTarget
-from workflows.software_factory.shared.infrastructure.github.pull_requests.babysit import (
+from software_factory.pull_requests.infrastructure.github.pull_requests.babysit import (
     babysit_snapshot,
     bot_logins,
     ci_state,
 )
-from workflows.software_factory.shared.stages import ci, pull_requests
-from workflows.software_factory.shared.stages.address import (
+from software_factory.pull_requests.stages import ci, pull_requests
+from software_factory.pull_requests.stages.address import (
     GroupInput,
     IssueWork,
     group_feedback,
     resolve_issue,
 )
-from workflows.software_factory.workflows.pr_babysit.policy import TRUST, fingerprint
+from software_factory.spec_delivery.events.specs import RepositoryTarget
+from software_factory.workflows.pr_babysit.policy import TRUST, fingerprint
 
 from .golden import CLOSED, GOLDEN, GREEN, OPEN, build_host, pulls_over
 

@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
+from software_factory.pull_requests.events.feedback import FeedbackHandled
+from software_factory.workflows.address_once import __main__ as entry
 from tests.runtime.harness import command
-from workflows.software_factory.shared.events.feedback import FeedbackHandled
-from workflows.software_factory.workflows.address_once import __main__ as entry
 from workflows.tests.software_factory.infrastructure.github.fakes import (
     comment_node,
     thread_node,

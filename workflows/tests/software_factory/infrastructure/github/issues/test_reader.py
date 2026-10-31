@@ -3,30 +3,30 @@ from __future__ import annotations
 import pytest
 from loop.shared.process import CommandError
 
-from workflows.software_factory.shared.infrastructure.github.identity import (
+from software_factory.core.infrastructure.github.identity import (
     CommentRef,
     IssueIdentity,
     IssueRef,
     RepositoryId,
 )
-from workflows.software_factory.shared.infrastructure.github.issues.client import Issues
-from workflows.software_factory.shared.infrastructure.github.issues.errors import (
-    IssueError,
-)
-from workflows.software_factory.shared.infrastructure.github.issues.issue import (
+from software_factory.core.infrastructure.github.issue import (
     CloseReason,
     GapState,
     IssueState,
 )
-from workflows.software_factory.shared.infrastructure.github.issues.issue_classifier import (
-    LabelTypeDisagreement,
-)
-from workflows.software_factory.shared.infrastructure.github.issues.readiness import (
-    TicketReadiness,
-)
-from workflows.software_factory.shared.infrastructure.github.repo import (
+from software_factory.core.infrastructure.github.repo import (
     GhRunner,
     GitHubRepo,
+)
+from software_factory.spec_delivery.infrastructure.github.issues.client import Issues
+from software_factory.spec_delivery.infrastructure.github.issues.errors import (
+    IssueError,
+)
+from software_factory.spec_delivery.infrastructure.github.issues.issue_classifier import (
+    LabelTypeDisagreement,
+)
+from software_factory.spec_delivery.infrastructure.github.issues.readiness import (
+    TicketReadiness,
 )
 from workflows.tests.software_factory.infrastructure.github.fakes import (
     FakeGhCli,

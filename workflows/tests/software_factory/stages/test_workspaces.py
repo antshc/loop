@@ -28,11 +28,13 @@ from loop import (
     WorktreeReadyLoopHook,
 )
 
-from tests.runtime.harness import command
-from workflows.software_factory.shared.infrastructure.agents.launcher import (
+from software_factory.core.infrastructure.agents.launcher import (
     AgentLauncher,
 )
-from workflows.software_factory.shared.stages import specs, workspaces
+from software_factory.core.stages import workspaces
+from software_factory.spec_delivery.stages import specs
+from software_factory.spec_delivery.stages import workspaces as spec_workspaces
+from tests.runtime.harness import command
 from workflows.tests.software_factory.stages.pr_support import (
     AddressAgent,
     PrRig,
@@ -98,7 +100,7 @@ def test_the_feature_worktree_opener_creates_the_feature_branch_from_origins_bas
     branches: list[str] = []
     hook = WorktreeReadyLoopHook("touch ../hook-ran")
     workflow = rig.workflow(specs.prepare_checkout()).within(
-        workspaces.feature_worktree(hooks=(hook,)),
+        spec_workspaces.feature_worktree(hooks=(hook,)),
         Flow("w").stage(record_workspace(paths, branches)),
     )
 

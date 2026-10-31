@@ -10,9 +10,9 @@ from subprocess import CalledProcessError
 import pytest
 from loop import LoopHookError, LoopHookPoint, WorktreeError
 
-from workflows.software_factory.workflows.implement_spec import __main__ as entry
-from workflows.software_factory.workflows.implement_spec import dry
-from workflows.software_factory.workflows.implement_spec.__main__ import main
+from software_factory.workflows.implement_spec import __main__ as entry
+from software_factory.workflows.implement_spec import dry
+from software_factory.workflows.implement_spec.__main__ import main
 
 from .harness import ImplementSpecHarness
 

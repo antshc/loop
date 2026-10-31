@@ -2,18 +2,18 @@ from __future__ import annotations
 
 import pytest
 
-from workflows.software_factory.shared.infrastructure.github.issues.graph import (
-    SpecGraphSnapshot,
-)
-from workflows.software_factory.shared.infrastructure.github.issues.issue import (
+from software_factory.core.infrastructure.github.issue import (
     CloseReason,
     IssueState,
 )
-from workflows.software_factory.shared.infrastructure.github.issues.readiness import (
+from software_factory.spec_delivery.infrastructure.github.issues.graph import (
+    SpecGraphSnapshot,
+)
+from software_factory.spec_delivery.infrastructure.github.issues.readiness import (
     TicketReadiness,
     TicketReadinessPolicy,
 )
-from workflows.software_factory.shared.infrastructure.github.issues.spec import Ticket
+from software_factory.spec_delivery.infrastructure.github.issues.spec import Ticket
 from workflows.tests.software_factory.infrastructure.github.builders import (
     build_blocker,
     build_graph,

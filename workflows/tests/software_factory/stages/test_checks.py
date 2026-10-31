@@ -8,14 +8,14 @@ import pytest
 from loop import Evidence, Fail, Hold, Pass
 from loop.shared.process import CommandError
 
-from workflows.software_factory.shared.events.checks import ChecksPassed
-from workflows.software_factory.shared.events.feedback import FeedbackBatch
-from workflows.software_factory.shared.infrastructure.checks import CheckCommand
-from workflows.software_factory.shared.stages.checks import (
+from software_factory.core.events.checks import ChecksPassed
+from software_factory.core.infrastructure.checks import CheckCommand
+from software_factory.core.stages.checks import (
     ChecksInput,
     as_verify,
     run_checks,
 )
+from software_factory.pull_requests.events.feedback import FeedbackBatch
 from workflows.tests.software_factory.stages.pr_support import workspace_at
 
 EVIDENCE = Evidence("", "", False)

@@ -3,16 +3,16 @@ from __future__ import annotations
 import pytest
 from loop.shared.process import CommandError
 
-from workflows.software_factory.shared.infrastructure.github.pull_requests import (
+from software_factory.core.infrastructure.github.repo import GitHubRepo
+from software_factory.pull_requests.infrastructure.github.pull_requests import (
     PullRequests as PullRequestClient,
 )
-from workflows.software_factory.shared.infrastructure.github.pull_requests.lifecycle import (
+from software_factory.pull_requests.infrastructure.github.pull_requests.lifecycle import (
     PullRequestLifecycleError,
 )
-from workflows.software_factory.shared.infrastructure.github.pull_requests.model import (
+from software_factory.pull_requests.infrastructure.github.pull_requests.model import (
     PullRequestState,
 )
-from workflows.software_factory.shared.infrastructure.github.repo import GitHubRepo
 from workflows.tests.software_factory.infrastructure.github.fakes import (
     PR_DIFF,
     FakeGhCli,

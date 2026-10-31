@@ -10,17 +10,15 @@ from typing import Any
 import pytest
 from loop import Evidence, Fail, Flow, Nothing, Pass, Stage, handoff, stop
 
-from tests.runtime.harness import command
-from tests.runtime.support import NoInput
-from workflows.software_factory.shared.events.ci import CiFixed
-from workflows.software_factory.shared.events.feedback import (
+from software_factory.pull_requests.events.ci import CiFixed
+from software_factory.pull_requests.events.feedback import (
     FeedbackBatch,
     FeedbackHandled,
     IssueResolved,
     IssueUnclear,
     ReplyDraft,
 )
-from workflows.software_factory.shared.events.pull_requests import (
+from software_factory.pull_requests.events.pull_requests import (
     CiFailing,
     CopilotDue,
     CopilotRequested,
@@ -33,12 +31,14 @@ from workflows.software_factory.shared.events.pull_requests import (
     ReadinessCheck,
     Unsupported,
 )
-from workflows.software_factory.shared.stages import pull_requests
-from workflows.software_factory.shared.stages.pull_requests import (
+from software_factory.pull_requests.stages import pull_requests
+from software_factory.pull_requests.stages.pull_requests import (
     DecideInput,
     PublishInput,
     publish_batch,
 )
+from tests.runtime.harness import command
+from tests.runtime.support import NoInput
 from workflows.tests.software_factory.infrastructure.github.fakes import (
     comment_node,
     issue_comment,

@@ -3,12 +3,12 @@ from __future__ import annotations
 import pytest
 from loop.shared.process import CommandError
 
-from workflows.software_factory.shared.infrastructure.github.issues.client import Issues
-from workflows.software_factory.shared.infrastructure.github.issues.errors import (
+from software_factory.core.infrastructure.github.repo import GitHubRepo
+from software_factory.spec_delivery.infrastructure.github.issues.client import Issues
+from software_factory.spec_delivery.infrastructure.github.issues.errors import (
     IncompleteReadError,
     IssueError,
 )
-from workflows.software_factory.shared.infrastructure.github.repo import GitHubRepo
 from workflows.tests.software_factory.infrastructure.github.fakes import (
     FakeGhCli,
     issue,

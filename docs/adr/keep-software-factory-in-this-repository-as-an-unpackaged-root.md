@@ -1,5 +1,7 @@
 # Keep the software factory in this repository under `workflows/`, outside the library-only `loop` wheel
 
+Status: Superseded by [Package the software factory by capability for skills](package-software-factory-by-capability-for-skills.md). Historical decision below.
+
 The factory first lived in `software_factory/` beside a nested `loop/` project, with its own `src/`, `workflows/` and `tests/` mapped into three package roots (`loop`, `software_factory`, `factory_workflows`) that one editable install exposed. Once Loop took over the generic Workflow runtime, the typed agent contract and the Git, process and GitHub helpers, the factory had only Workflow-specific code left. The repository now holds the library in `src/` (package `loop`, mapped by `package-dir`), its tests in `tests/`, and every repository-run Workflow under `workflows/`: the factory in `workflows/software_factory/` (Stages, Events, Flow fragments, role agents, factory-only infrastructure and the `implement_spec`, `pr_babysit` and `address_once` packages), its tests in `workflows/tests/software_factory/`, and the standalone example in `workflows/loop/`. Applies to this repository's factory and example Workflows.
 
 ## Considered Options

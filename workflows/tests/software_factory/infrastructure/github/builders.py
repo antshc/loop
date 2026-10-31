@@ -2,25 +2,17 @@
 
 from __future__ import annotations
 
-from workflows.software_factory.shared.infrastructure.github.identity import (
+from software_factory.core.infrastructure.github.identity import (
     IssueIdentity,
     IssueRef,
     RepositoryId,
 )
-from workflows.software_factory.shared.infrastructure.github.issues.graph import (
-    BlockedByRelation,
-    SpecGraphSnapshot,
-)
-from workflows.software_factory.shared.infrastructure.github.issues.issue import (
+from software_factory.core.infrastructure.github.issue import (
     CloseReason,
     Issue,
     IssueState,
 )
-from workflows.software_factory.shared.infrastructure.github.issues.spec import (
-    Spec,
-    Ticket,
-)
-from workflows.software_factory.shared.infrastructure.github.pull_requests.model import (
+from software_factory.pull_requests.infrastructure.github.pull_requests.model import (
     CheckKind,
     CheckOutcome,
     CheckResult,
@@ -33,6 +25,14 @@ from workflows.software_factory.shared.infrastructure.github.pull_requests.model
     ReviewDecision,
     ReviewThread,
     ReviewVerdict,
+)
+from software_factory.spec_delivery.infrastructure.github.issues.graph import (
+    BlockedByRelation,
+    SpecGraphSnapshot,
+)
+from software_factory.spec_delivery.infrastructure.github.issues.spec import (
+    Spec,
+    Ticket,
 )
 
 REPOSITORY = RepositoryId("owner", "repo")

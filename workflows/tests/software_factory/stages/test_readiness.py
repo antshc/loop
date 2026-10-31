@@ -7,11 +7,11 @@ from typing import Any
 
 from loop import Flow, Workflow, stop
 
-from workflows.software_factory.shared.events.feedback import (
+from software_factory.pull_requests.events.feedback import (
     FeedbackBatch,
     FeedbackHandled,
 )
-from workflows.software_factory.shared.events.pull_requests import (
+from software_factory.pull_requests.events.pull_requests import (
     CiFailing,
     CopilotDue,
     CopilotRequested,
@@ -22,7 +22,7 @@ from workflows.software_factory.shared.events.pull_requests import (
     ReadinessReported,
     Unsupported,
 )
-from workflows.software_factory.shared.stages import pull_requests, readiness
+from software_factory.pull_requests.stages import pull_requests, readiness
 from workflows.tests.software_factory.stages.pr_support import TRUST
 from workflows.tests.software_factory.stages.watch_support import (
     WatchRig,

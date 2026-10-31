@@ -5,15 +5,15 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
-from tests.runtime.harness import Repo
-from workflows.software_factory.shared.events.review import (
+from software_factory.spec_delivery.events.review import (
     PullRequestReviewed,
     ReviewAxis,
     ReviewFailed,
     ReviewFinding,
 )
-from workflows.software_factory.shared.events.tickets import Delivery
-from workflows.software_factory.shared.stages import review
+from software_factory.spec_delivery.events.tickets import Delivery
+from software_factory.spec_delivery.stages import review
+from tests.runtime.harness import Repo
 from workflows.tests.software_factory.stages.support import (
     PULL_REQUEST,
     DeveloperScript,

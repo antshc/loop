@@ -8,16 +8,16 @@ import pytest
 from loop import Flow, Workflow, WorktreeError, handoff, reroute
 from loop.runtime.nodes import StageNode, WithinNode
 
-from tests.runtime.harness import command
-from workflows.software_factory.shared.events.feedback import (
+from software_factory.pull_requests.events.feedback import (
     FeedbackBatch,
     FeedbackHandled,
     IssueResolved,
     IssueUnclear,
 )
-from workflows.software_factory.shared.flows.address import address_feedback
-from workflows.software_factory.shared.stages import feedback
-from workflows.software_factory.shared.stages.address import IssueWork
+from software_factory.pull_requests.flows.address import address_feedback
+from software_factory.pull_requests.stages import feedback
+from software_factory.pull_requests.stages.address import IssueWork
+from tests.runtime.harness import command
 from workflows.tests.software_factory.infrastructure.github.fakes import (
     check_run,
     issue_comment,

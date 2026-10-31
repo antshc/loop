@@ -3,21 +3,21 @@ from __future__ import annotations
 import pytest
 from loop.shared.process import CommandError
 
-from workflows.software_factory.shared.infrastructure.github.account import GitHub
-from workflows.software_factory.shared.infrastructure.github.identity import (
+from software_factory.core.infrastructure.github.account import GitHub
+from software_factory.core.infrastructure.github.identity import (
     CommentRef,
     IssueIdentity,
     IssueRef,
     RepositoryId,
 )
-from workflows.software_factory.shared.infrastructure.github.issues.issue import Comment
-from workflows.software_factory.shared.infrastructure.github.pull_requests import (
+from software_factory.core.infrastructure.github.issue import Comment
+from software_factory.pull_requests.infrastructure.github.pull_requests import (
     MergeGateEvaluator,
     MergePolicySnapshot,
     PullRequests,
     ReasonCode,
 )
-from workflows.software_factory.shared.infrastructure.github.pull_requests.model import (
+from software_factory.pull_requests.infrastructure.github.pull_requests.model import (
     CheckKind,
     Mergeability,
     MergeState,
