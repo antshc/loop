@@ -1,11 +1,12 @@
-"""pr_babysit's intake: which pull requests a run takes up, scanned continuously, one child process each, as the Execution ledger and the discovery baseline say."""
+"""pr_babysit's intake: which pull requests a run takes up, scanned continuously, one thread each, as the Execution ledger and the discovery baseline say."""
 
 from __future__ import annotations
 
 import logging
-import os
 import subprocess
-import sys
+from collections.abc import Callable
+from concurrent.futures import Future, ThreadPoolExecutor
+from contextvars import Context
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -50,59 +51,14 @@ _CLOSED = {"completed", "idle", "held", "handed_off", "interrupted"}
 class DiscoveryRequest:
     """How the discovery scheduler was asked to run."""
 
-    config: Path
     include_existing: bool = False
     retry: str | None = None
 
 
-class Child(Protocol):
-    """The subset of `subprocess.Popen` the scheduler supervises."""
+class Maintain(Protocol):
+    """Maintains one PR with services owned by that invocation."""
 
-    returncode: int | None
-
-    def poll(self) -> int | None: ...
-
-    def terminate(self) -> None: ...
-
-    def kill(self) -> None: ...
-
-    def wait(self, timeout: float | None = None) -> int: ...
-
-
-class ChildLauncher(Protocol):
-    """Starts the maintenance process of one pull request."""
-
-    def start(self, config: Path, url: str) -> Child: ...
-
-
-def child_command(config: Path, url: str) -> list[str]:
-    """An independent babysit process without a scheduler trace parent."""
-    return [
-        sys.executable,
-        "-m",
-        "workflows.software_factory.workflows.pr_babysit",
-        "--config",
-        str(config),
-        "--pr",
-        url,
-    ]
-
-
-def child_environment() -> dict[str, str]:
-    """Keeps exporter configuration but discards inherited distributed trace context."""
-    return {
-        key: value
-        for key, value in os.environ.items()
-        if key.lower() not in {"traceparent", "tracestate", "baggage"}
-    }
-
-
-class ProcessLauncher:
-    """Starts `python -m workflows.software_factory.workflows.pr_babysit --pr <url>` as a child process."""
-
-    def start(self, config: Path, url: str) -> Child:
-        """The running child."""
-        return subprocess.Popen(child_command(config, url), env=child_environment())
+    def __call__(self, slug: str, number: int) -> int: ...
 
 
 def work_of(settings: Settings, slug: str, number: int) -> PullRequestWork:
@@ -218,7 +174,7 @@ class Registry:
 
 
 class Scheduler:
-    """Scans continuously while child processes own independent babysit runs, one per pull request."""
+    """Scans continuously while threads own independent runs, one per pull request."""
 
     def __init__(
         self,
@@ -226,17 +182,19 @@ class Scheduler:
         request: DiscoveryRequest,
         github: GitHub,
         ledger: Ledger,
-        children: ChildLauncher,
+        maintain: Maintain,
         pacer: Pacer,
         stop: StopSignal,
+        request_stop: Callable[[], None],
     ) -> None:
         self._settings = settings
         self._request = request
         self._github = github
         self._ledger = ledger
-        self._launcher = children
+        self._maintain = maintain
         self._pacer = pacer
         self._stop = stop
+        self._request_stop = request_stop
 
     def discover(self, author: str) -> list[tuple[str, PullRequest]]:
         """A complete discovery scan, taken before the startup baseline advances."""
@@ -247,11 +205,11 @@ class Scheduler:
         ]
 
     def serve(self) -> int:
-        """Scans until asked to stop, then stops the children; always 0."""
+        """Scans until stopped, then notifies and joins every owned PR thread."""
         settings = self._settings
         author = settings.author or self._github.login()
         retry = self._request.retry
-        children: dict[str, Child] = {}
+        active: dict[str, Future[int]] = {}
         try:
             with process_lock(settings.state_dir / "scheduler.lock"):
                 registry = Registry(
@@ -259,23 +217,36 @@ class Scheduler:
                     author,
                     [repository.name for repository in settings.repositories],
                 )
-                try:
-                    while not self._stop.requested():
-                        self._reap(children, registry)
-                        retry = self._scan(author, registry, children, retry)
-                        self._pacer.wait(settings.interval)
-                finally:
-                    self._stop_children(children)
+                with ThreadPoolExecutor(
+                    max_workers=settings.concurrency, thread_name_prefix="pr-babysit"
+                ) as executor:
+                    try:
+                        while not self._stop.requested():
+                            self._reap(active, registry)
+                            retry = self._scan(
+                                author, registry, active, retry, executor
+                            )
+                            self._pacer.wait(settings.interval)
+                    finally:
+                        self._request_stop()
+                        executor.shutdown(wait=True)
+                        self._reap(active, registry)
         except StateError as exception:
             raise Blocked(str(exception)) from exception
         return 0
 
-    def _reap(self, children: dict[str, Child], registry: Registry) -> None:
-        """Forgets the children that exited; a worker that died without closing its run needs an explicit retry."""
-        for key, child in list(children.items()):
-            if child.poll() is None:
+    def _reap(self, active: dict[str, Future[int]], registry: Registry) -> None:
+        """Reaps completed runs; unfinished work requires an explicit retry."""
+        for key, future in list(active.items()):
+            if not future.done():
                 continue
-            del children[key]
+            del active[key]
+            try:
+                code = future.result()
+            except Exception as exception:
+                # The future boundary isolates unexpected failures of one PR.
+                logger.exception("%s: worker failed: %s", key, exception)
+                code = 1
             record = registry.prs[key]
             try:
                 status = self._ledger.status(
@@ -288,7 +259,7 @@ class Scheduler:
                 logger.warning(
                     "%s: worker exited %s without closing its run; explicit retry required",
                     key,
-                    child.returncode,
+                    code,
                 )
                 registry.mark(key, crashed=True)
 
@@ -296,16 +267,19 @@ class Scheduler:
         self,
         author: str,
         registry: Registry,
-        children: dict[str, Child],
+        active: dict[str, Future[int]],
         retry: str | None,
+        executor: ThreadPoolExecutor,
     ) -> str | None:
-        """One pass: enrol what is new, start a child for each pull request that may run; returns the retry still to apply."""
+        """One pass: enrol what is new, start a thread for each pull request that may run; returns the retry still to apply."""
         try:
             prs = self.discover(author)
             registry.enroll(prs, self._request.include_existing)
             open_keys = {f"{repo}#{pr.number}" for repo, pr in prs}
             for key, record in list(registry.prs.items()):
-                if key in children or record.get("ignored") or key not in open_keys:
+                if self._stop.requested():
+                    break
+                if key in active or record.get("ignored") or key not in open_keys:
                     continue
                 explicit = retry == record["url"]
                 try:
@@ -313,11 +287,12 @@ class Scheduler:
                 except LedgerCorrupted as exception:
                     self._quarantine(key, registry, exception)
                     continue
-                if not starts or len(children) >= self._settings.concurrency:
+                if not starts or len(active) >= self._settings.concurrency:
                     continue
                 logger.info("Starting babysit for %s", key)
-                children[key] = self._launcher.start(
-                    self._request.config, record["url"]
+                # A fresh context prevents trace parents leaking across reused threads.
+                active[key] = executor.submit(
+                    Context().run, self._maintain, record["repo"], record["number"]
                 )
                 retry = None if explicit else retry
         except (
@@ -379,14 +354,3 @@ class Scheduler:
                 return True
         except WorkItemLocked:
             return False
-
-    def _stop_children(self, children: dict[str, Child]) -> None:
-        for child in children.values():
-            if child.poll() is None:
-                child.terminate()
-        for child in children.values():
-            try:
-                child.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                child.kill()
-                child.wait(timeout=10)

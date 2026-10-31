@@ -14,6 +14,10 @@ from loop import RunObserver, otlp_observer
 class TracingObserver(RunObserver, Protocol):
     """A RunObserver that also opens Workflow-owned spans on its own trace provider."""
 
+    def close(self) -> None:
+        """Flushes and closes resources owned by this observer."""
+        ...
+
     def span(
         self,
         name: str,
@@ -52,6 +56,21 @@ class OtlpObserverFactory:
                 resource_per_agent=True,
             )
         return otlp_observer(endpoint=endpoint, service_name=self._service_name)
+
+
+@contextmanager
+def closing_observer(
+    observer: TracingObserver | None,
+) -> Iterator[TracingObserver | None]:
+    """Closes an owned observer without letting telemetry hide a workflow failure."""
+    try:
+        yield observer
+    finally:
+        if observer is not None:
+            try:
+                observer.close()
+            except Exception as exception:
+                _report("close observer", exception)
 
 
 class FactorySpan(Protocol):

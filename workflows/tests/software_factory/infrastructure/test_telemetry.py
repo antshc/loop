@@ -47,7 +47,11 @@ from opentelemetry.trace import StatusCode  # noqa: E402
 
 from tests.runtime.harness import TESTER, Ask, Rig, WorkCtx, editing  # noqa: E402
 from tests.runtime.support import NoInput, Routed  # noqa: E402
-from workflows.software_factory.infrastructure.telemetry import OtelSpans, Tee  # noqa: E402
+from workflows.software_factory.infrastructure.telemetry import (  # noqa: E402
+    OtelSpans,
+    Tee,
+    closing_observer,
+)
 
 # The repository root: where `tests` and `workflows` import from.
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -447,3 +451,16 @@ def test_without_the_extra_the_factory_runs_with_console_logging_and_reports_the
     )
 
     assert completed.returncode == 0, completed.stderr
+
+
+def test_observer_cleanup_failure_preserves_the_workflow_exception(caplog):
+    """A failing exporter cleanup cannot hide the PR's actual failure."""
+
+    class BrokenClose:
+        def close(self):
+            raise RuntimeError("exporter cleanup failed")
+
+    with pytest.raises(ValueError, match="workflow failed"):
+        with closing_observer(BrokenClose()):
+            raise ValueError("workflow failed")
+    assert "exporter cleanup failed" in caplog.text

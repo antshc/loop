@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Callable, Mapping
-from contextlib import AbstractContextManager
+from contextlib import AbstractContextManager, ExitStack
 from datetime import datetime
 from pathlib import Path
 
@@ -52,15 +52,23 @@ class OtlpObserver:
         meter_provider: MeterProvider | None = None,
         capture_content: bool = False,
         resource_providers: Callable[[str], TracerProvider] | None = None,
+        close: Callable[[], None] | None = None,
     ) -> None:
         self._tracer = (tracer_provider or trace.get_tracer_provider()).get_tracer(
             SCOPE
         )
         self._resource_providers = resource_providers
+        self._close = close
         meter = (meter_provider or metrics.get_meter_provider()).get_meter(SCOPE)
         self._capture_content = capture_content
         self._worktrees: dict[Path, Span] = {}
         self._create_instruments(meter)
+
+    def close(self) -> None:
+        """Flushes and shuts down owned providers once; supplied providers stay open."""
+        close, self._close = self._close, None
+        if close is not None:
+            close()
 
     def agent_run(self, record: AgentRunRecord) -> None:
         """Exports one `invoke_agent` span, its `execute_tool` children and the usage metrics."""
@@ -277,28 +285,50 @@ def otlp_observer(
             **({"service.instance.id": name} if resource_per_agent else {}),
         }
     )
-    return OtlpObserver(
-        tracer_provider=tracer_provider or _own_tracer_provider(resource, endpoint),
-        meter_provider=meter_provider or _own_meter_provider(resource, endpoint),
-        capture_content=capture_content,
-        resource_providers=_resource_providers(endpoint)
-        if resource_per_agent
-        else None,
-    )
+    with ExitStack() as rollback:
+        cleanup = ExitStack()
+        rollback.callback(cleanup.close)
+        observer = OtlpObserver(
+            tracer_provider=tracer_provider
+            if tracer_provider is not None
+            else _managed(_own_tracer_provider(resource, endpoint), cleanup),
+            meter_provider=meter_provider
+            if meter_provider is not None
+            else _managed(_own_meter_provider(resource, endpoint), cleanup),
+            capture_content=capture_content,
+            resource_providers=_resource_providers(endpoint, cleanup)
+            if resource_per_agent
+            else None,
+            close=cleanup.close,
+        )
+        rollback.pop_all()
+        return observer
 
 
-def _resource_providers(endpoint: str | None) -> Callable[[str], TracerProvider]:
+def _resource_providers(
+    endpoint: str | None, cleanup: ExitStack
+) -> Callable[[str], TracerProvider]:
     providers: dict[str, TracerProvider] = {}
 
     def provider(name: str) -> TracerProvider:
         if name not in providers:
-            # A fixed instance id keeps Aspire from suffixing the resource name with a per-process id.
+            # A fixed instance id keeps Aspire from suffixing the resource name.
             resource = Resource.create(
                 {"service.name": name, "service.instance.id": name}
             )
-            providers[name] = _own_tracer_provider(resource, endpoint)
+            providers[name] = _managed(
+                _own_tracer_provider(resource, endpoint), cleanup
+            )
         return providers[name]
 
+    return provider
+
+
+def _managed[P: SdkTracerProvider | SdkMeterProvider](
+    provider: P, cleanup: ExitStack
+) -> P:
+    cleanup.callback(provider.shutdown)
+    cleanup.callback(provider.force_flush)
     return provider
 
 
