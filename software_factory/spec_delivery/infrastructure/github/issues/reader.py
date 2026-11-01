@@ -8,13 +8,12 @@ from typing import Any
 from urllib.parse import quote
 
 from loop.shared.process import CommandError
-
-from software_factory.core.infrastructure.github.identity import (
+from loop.software_factory.infrastructure.github.identity import (
     IssueIdentity,
     IssueRef,
     RepositoryId,
 )
-from software_factory.core.infrastructure.github.issue import (
+from loop.software_factory.infrastructure.github.issue import (
     CloseReason,
     Comment,
     GapState,
@@ -23,7 +22,7 @@ from software_factory.core.infrastructure.github.issue import (
     ReadGap,
     comment_from_rest,
 )
-from software_factory.core.infrastructure.github.repo import GitHubRepo, denied
+from loop.software_factory.infrastructure.github.repo import GitHubRepo, denied
 
 from .errors import IssueError
 from .graph import BlockedByRelation, IssueRelation, SpecGraphSnapshot

@@ -5,8 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from loop import Event
-
-from software_factory.core.events.targets import RepositoryTarget
+from loop.software_factory.events.targets import RepositoryTarget
 
 
 @dataclass(frozen=True)

@@ -5,8 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from loop import DEFAULT, Declined, Role, TypedAgent
-
-from software_factory.core.agents import _kit
+from loop.software_factory import agents as agent_tools
 
 from .messages import (
     Reviewed,
@@ -18,25 +17,25 @@ from .messages import (
 
 
 def _decode(request: ReviewerRequest, output: str) -> ReviewerReply:
-    envelope = _kit.read_status(output)
+    envelope = agent_tools.read_status(output)
     if envelope.failed:
         return envelope.declined()
     result = envelope.result
     axes = tuple(
         ReviewedAxis(
-            _kit.text(item, "name", required=True),
-            _kit.text(item, "outcome", required=True).lower(),
-            _kit.text(item, "note"),
+            agent_tools.text(item, "name", required=True),
+            agent_tools.text(item, "outcome", required=True).lower(),
+            agent_tools.text(item, "note"),
         )
-        for item in _kit.objects(result, "axes", "axis")
+        for item in agent_tools.objects(result, "axes", "axis")
     )
     findings = tuple(
         ReviewedFinding(
-            _kit.text(item, "kind", required=True).lower(),
-            _kit.text(item, "summary", required=True),
-            _kit.text(item, "axis"),
+            agent_tools.text(item, "kind", required=True).lower(),
+            agent_tools.text(item, "summary", required=True),
+            agent_tools.text(item, "axis"),
         )
-        for item in _kit.objects(result, "findings", "finding")
+        for item in agent_tools.objects(result, "findings", "finding")
     )
     return Reviewed(
         axes,
@@ -46,7 +45,7 @@ def _decode(request: ReviewerRequest, output: str) -> ReviewerReply:
     )
 
 
-REVIEWER: TypedAgent[ReviewerRequest, ReviewerReply] = _kit.template_agent(
+REVIEWER: TypedAgent[ReviewerRequest, ReviewerReply] = agent_tools.template_agent(
     "reviewer",
     package=__name__,
     profile=replace(DEFAULT, name=Role.REVIEWER),

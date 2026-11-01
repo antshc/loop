@@ -53,7 +53,7 @@ def _relocated(value: Any) -> Any:
     return result
 
 
-def _relocated_type(tag: str) -> str:
+def _legacy_type(tag: str) -> str:
     """Map persisted factory type names to capability modules, without rewriting logs."""
     if tag.startswith(_OLD_GITHUB):
         old = "infrastructure.github." + tag.removeprefix(_OLD_GITHUB)
@@ -78,7 +78,7 @@ def _relocated_type(tag: str) -> str:
 
     module = rest.partition(".")[0]
     if package == "events" and rest.startswith("specs.RepositoryTarget"):
-        return "software_factory.core.events.targets." + rest.removeprefix("specs.")
+        return "loop.software_factory.events.targets." + rest.removeprefix("specs.")
     if package == "events":
         domain = (
             "core"
@@ -103,7 +103,7 @@ def _relocated_type(tag: str) -> str:
             else "core"
         )
     elif rest.startswith("github.issues.issue."):
-        return "software_factory.core.infrastructure.github.issue." + rest.removeprefix(
+        return "loop.software_factory.infrastructure.github.issue." + rest.removeprefix(
             "github.issues.issue."
         )
     elif rest.startswith("github.issues."):
@@ -113,3 +113,22 @@ def _relocated_type(tag: str) -> str:
     else:
         domain = "core"
     return f"software_factory.{domain}.{package}.{rest}"
+
+
+def _relocated_type(tag: str) -> str:
+    """Resolve historical core tags to the installed helpers or PR policy."""
+    tag = _legacy_type(tag)
+    prefix = "software_factory.core."
+    if tag.startswith(prefix):
+        tag = "loop.software_factory." + tag.removeprefix(prefix)
+    tag = tag.replace(
+        "loop.software_factory.agents._kit.", "loop.software_factory.agents."
+    )
+    for module, names in {
+        "checks": ("ChecksInput",),
+        "workspaces": ("PullRequestWorktreeInput",),
+    }.items():
+        for name in names:
+            if tag == f"loop.software_factory.stages.{module}.{name}":
+                return f"software_factory.pull_requests.stages.{module}.{name}"
+    return tag

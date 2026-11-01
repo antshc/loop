@@ -19,10 +19,10 @@ from loop import (
     Services,
     fake_agent,
 )
-
-from software_factory.core.infrastructure.agents.launcher import (
+from loop.software_factory.infrastructure.agents.launcher import (
     AgentLauncher,
 )
+
 from software_factory.workflows.implement_spec.__main__ import Runtime, main
 from software_factory.workflows.implement_spec.dry import commit_in_worktree
 from software_factory.workflows.implement_spec.settings import Targets

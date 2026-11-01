@@ -12,6 +12,9 @@ from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
 from types import ModuleType
 
+import loop.software_factory.agents as core_agents
+import loop.software_factory.events as core_events
+import loop.software_factory.stages as core_stages
 import pytest
 from loop import (
     Declined,
@@ -30,9 +33,6 @@ from loop.runtime._engine.codec import decode, encode
 from loop.runtime.nodes import DispatchNode, EachNode, StageNode, WithinNode
 
 import software_factory as factory
-import software_factory.core.agents as core_agents
-import software_factory.core.events as core_events
-import software_factory.core.stages as core_stages
 import software_factory.pull_requests.agents as pr_agents
 import software_factory.pull_requests.events as pr_events
 import software_factory.pull_requests.flows as pr_flows
@@ -64,8 +64,9 @@ CLIENTS = (
     "loop.runtime._engine",
     "loop.shared.process",
     "loop.shared.git",
-    "software_factory.core.infrastructure.github.repo",
-    "software_factory.core.infrastructure.github.account",
+    "loop.software_factory.infrastructure.github.repo",
+    "loop.software_factory.infrastructure.github.account",
+    "software_factory.github",
     "software_factory.spec_delivery.infrastructure.github.issues.client",
     "software_factory.pull_requests.infrastructure.github.pull_requests.client",
 )
@@ -408,7 +409,7 @@ def test_a_policy_module_with_a_behaviour_class_or_a_client_import_is_reported_b
     """Given a policy source with a class that has methods and imports of a client, when it is checked, then each is named."""
     source = (
         "import subprocess\n"
-        "from software_factory.core.infrastructure.github.account import GitHub\n"
+        "from software_factory.github import GitHub\n"
         "from dataclasses import dataclass\n\n"
         "class Fingerprinter:\n    def digest(self): ...\n\n"
         "@dataclass(frozen=True)\nclass Value:\n    def doubled(self): ...\n\n"
@@ -418,8 +419,8 @@ def test_a_policy_module_with_a_behaviour_class_or_a_client_import_is_reported_b
     assert policy_violations("demo.policy", source) == [
         "demo.policy: class Fingerprinter has methods",
         "demo.policy: imports subprocess",
-        "demo.policy: imports software_factory.core.infrastructure.github.account",
-        "demo.policy: imports software_factory.core.infrastructure.github.account.GitHub",
+        "demo.policy: imports software_factory.github",
+        "demo.policy: imports software_factory.github.GitHub",
     ]
 
 

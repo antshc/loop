@@ -28,22 +28,22 @@ from loop import (
 )
 from loop.shared.git import GitClient
 from loop.shared.process import CommandRunner, git_command
-
-from software_factory.core.infrastructure.agents.launcher import (
+from loop.software_factory.infrastructure.agents.launcher import (
     AgentLauncher,
 )
-from software_factory.core.infrastructure.github.account import GitHub
-from software_factory.core.infrastructure.github.repo import (
+from loop.software_factory.infrastructure.github.repo import (
     GhCli,
     GitHubRepo,
 )
-from software_factory.core.infrastructure.ledger import Ledger
-from software_factory.core.infrastructure.telemetry import (
+from loop.software_factory.infrastructure.ledger import Ledger
+from loop.software_factory.infrastructure.telemetry import (
     OtelSpans,
     OtlpObserverFactory,
     Tee,
     TracingObserver,
 )
+
+from software_factory.github import GitHub
 from software_factory.spec_delivery.events.specs import RepositoryTarget
 from software_factory.spec_delivery.infrastructure.github.issues.client import Issues
 from software_factory.spec_delivery.infrastructure.github.issues.errors import (

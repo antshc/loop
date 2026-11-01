@@ -22,14 +22,14 @@ def bundle_path() -> Path:
 
 
 def load_factory() -> None:
-    """Prefer the generated factory modules and require Loop's installed runtime."""
+    """Prefer the generated factory modules and require Loop's installed factory helpers."""
     bundled = str(bundle_path())
     if not (bundle_path() / "software_factory").is_dir():
         raise ValueError("Bundled factory code is missing; regenerate the skill")
     if bundled not in sys.path:
         sys.path.insert(0, bundled)
     try:
-        import loop  # noqa: F401
+        import loop.software_factory  # noqa: F401
     except ImportError as exception:
         raise ValueError(
             "Install a compatible Loop Python package first"
@@ -72,8 +72,9 @@ def python_environment() -> dict[str, str]:
 def supervise(url: str, config: Path, ready: Path, stop: threading.Event) -> int:
     """Run the existing workflow, waiting through blocked work until PR closure."""
     load_factory()
-    from software_factory.core.infrastructure.ledger import Ledger
-    from software_factory.core.infrastructure.state import process_lock
+    from loop.software_factory.infrastructure.ledger import Ledger
+    from loop.software_factory.infrastructure.state import process_lock
+
     from software_factory.workflows.pr_babysit.definition import NAME
     from software_factory.workflows.pr_babysit.intake import work_of
     from software_factory.workflows.pr_babysit.settings import Settings

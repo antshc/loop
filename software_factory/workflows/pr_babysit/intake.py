@@ -12,15 +12,15 @@ from pathlib import Path
 from typing import Protocol
 
 from loop import Ledger, LedgerCorrupted, RunStatus, StopSignal, WorkItemLocked
-
-from software_factory.core.events.targets import RepositoryTarget
-from software_factory.core.infrastructure.github.account import GitHub
-from software_factory.core.infrastructure.pacing import Pacer
-from software_factory.core.infrastructure.state import (
+from loop.software_factory.events.targets import RepositoryTarget
+from loop.software_factory.infrastructure.pacing import Pacer
+from loop.software_factory.infrastructure.state import (
     JsonFile,
     StateError,
     process_lock,
 )
+
+from software_factory.github import GitHub
 from software_factory.pull_requests.events.pull_requests import PullRequestWork
 from software_factory.pull_requests.infrastructure.github.pull_requests.model import (
     PullRequest,

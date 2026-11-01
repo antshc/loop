@@ -35,11 +35,11 @@ from loop import (
     run,
 )
 from loop.shared.git import GitClient
-
-from software_factory.core.infrastructure.agents.launcher import (
+from loop.software_factory.infrastructure.agents.launcher import (
     AgentLauncher,
 )
-from software_factory.core.infrastructure.github.account import GitHub
+
+from software_factory.github import GitHub
 from software_factory.pull_requests.events.feedback import FeedbackBatch, TrustPolicy
 from software_factory.pull_requests.events.pull_requests import PullRequestPolled
 from software_factory.pull_requests.infrastructure.github.pull_requests.babysit import (

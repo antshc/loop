@@ -12,7 +12,7 @@ Review handling follows the [Brain address skill](https://github.com/antshc/brai
 
 `pr_babysit` is one declarative definition over the factory's Stage library, run by
 Loop's Workflow runtime once per pull request. Git, GitHub and process helpers come from Loop (`loop.shared`); state,
-pacing and telemetry infrastructure from [`software_factory/core/infrastructure`](../../core/infrastructure); PR Stages are in
+pacing and telemetry infrastructure from [`src/software_factory/infrastructure`](../../../src/software_factory/infrastructure); PR Stages are in
 [`software_factory/pull_requests/stages`](../../pull_requests/stages) and the address-feedback activity is the
 shared fragment in [`software_factory/pull_requests/flows`](../../pull_requests/flows).
 

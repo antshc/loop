@@ -6,12 +6,12 @@ import os
 from contextvars import ContextVar
 from pathlib import Path
 
+from loop.software_factory.infrastructure.telemetry import OtelSpans
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.sdk.trace.sampling import ALWAYS_ON
 
-from software_factory.core.infrastructure.telemetry import OtelSpans
 from software_factory.workflows.pr_babysit.__main__ import Runtime
 
 from .harness import Babysit

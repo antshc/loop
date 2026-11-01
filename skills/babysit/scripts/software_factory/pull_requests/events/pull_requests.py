@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from loop import Event, Json
+from loop.software_factory.events.targets import RepositoryTarget
 
-from software_factory.core.events.targets import RepositoryTarget
 from software_factory.pull_requests.events.feedback import FeedbackBatch
 
 

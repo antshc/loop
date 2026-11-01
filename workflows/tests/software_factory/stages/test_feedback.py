@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from software_factory.core.infrastructure.github.account import GitHub
+from software_factory.github import GitHub
 from software_factory.pull_requests.agents.roles.address import (
     GROUP_FEEDBACK,
     RESOLVE_ISSUE,

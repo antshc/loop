@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass, fields
 from typing import Self
 
-from software_factory.core.infrastructure.github.issue import Issue, IssueState
+from loop.software_factory.infrastructure.github.issue import Issue, IssueState
 
 SPEC_LABEL = "spec"
 

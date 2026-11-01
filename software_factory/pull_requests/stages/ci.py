@@ -19,7 +19,7 @@ from loop import (
     Verify,
 )
 
-from software_factory.core.infrastructure.github.account import GitHub
+from software_factory.github import GitHub
 from software_factory.pull_requests.agents.roles.maintainer import (
     DIAGNOSE_CI,
     FIX_CI,

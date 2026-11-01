@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import pytest
 from loop.shared.process import CommandError
-
-from software_factory.core.infrastructure.github.account import GitHub
-from software_factory.core.infrastructure.github.identity import (
+from loop.software_factory.infrastructure.github.identity import (
     CommentRef,
     IssueIdentity,
     IssueRef,
     RepositoryId,
 )
-from software_factory.core.infrastructure.github.issue import Comment
+from loop.software_factory.infrastructure.github.issue import Comment
+
+from software_factory.github import GitHub
 from software_factory.pull_requests.infrastructure.github.pull_requests import (
     MergeGateEvaluator,
     MergePolicySnapshot,

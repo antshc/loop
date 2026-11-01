@@ -7,9 +7,9 @@ from dataclasses import dataclass
 
 from loop import AgentWorkspace, Evidence, Fail, Nothing, Pass, Stage, Verify
 from loop.shared.git import GitClient
+from loop.software_factory.infrastructure.github.repo import CommandError
 
-from software_factory.core.infrastructure.github.account import GitHub
-from software_factory.core.infrastructure.github.repo import CommandError
+from software_factory.github import GitHub
 from software_factory.pull_requests.agents.roles.maintainer import (
     RESOLVE_CONFLICTS,
     ConflictRequest,

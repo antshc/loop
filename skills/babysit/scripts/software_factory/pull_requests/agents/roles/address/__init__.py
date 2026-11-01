@@ -5,8 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from loop import ReplyMismatch, TypedAgent
-
-from software_factory.core.agents import _kit
+from loop.software_factory import agents as agent_tools
 
 from .messages import (
     FeedbackIssue,
@@ -19,7 +18,7 @@ from .messages import (
 
 _VERDICTS = ("fix-needed", "no-change-needed", "unclear")
 
-_PROFILE = _kit.profile_with_instructions(__name__, "address", timeout_sec=1800)
+_PROFILE = agent_tools.profile_with_instructions(__name__, "address", timeout_sec=1800)
 
 
 def _strings(value: Any, what: str) -> tuple[str, ...]:
@@ -41,7 +40,7 @@ def _issue(item: Any) -> FeedbackIssue:
 
 
 def _decode_group(request: GroupRequest, output: str) -> Grouped:
-    issues = _kit.read_object(output).get("issues")
+    issues = agent_tools.read_object(output).get("issues")
     if not isinstance(issues, list):
         raise ReplyMismatch(f"issues must be a list: {issues!r}")
     return Grouped(tuple(_issue(item) for item in issues))
@@ -54,7 +53,7 @@ def _reply(key: Any, body: Any) -> FeedbackReply:
 
 
 def _decode_resolve(request: ResolveRequest, output: str) -> Resolved:
-    result = _kit.read_object(output)
+    result = agent_tools.read_object(output)
     verdict, replies, reason = (
         result.get("verdict"),
         result.get("replies"),
@@ -75,10 +74,10 @@ def _decode_resolve(request: ResolveRequest, output: str) -> Resolved:
     )
 
 
-GROUP_FEEDBACK: TypedAgent[GroupRequest, Grouped] = _kit.mode_agent(
+GROUP_FEEDBACK: TypedAgent[GroupRequest, Grouped] = agent_tools.mode_agent(
     "address", "group", profile=_PROFILE, decode=_decode_group
 )
-RESOLVE_ISSUE: TypedAgent[ResolveRequest, Resolved] = _kit.mode_agent(
+RESOLVE_ISSUE: TypedAgent[ResolveRequest, Resolved] = agent_tools.mode_agent(
     "address", "resolve", profile=_PROFILE, decode=_decode_resolve
 )
 

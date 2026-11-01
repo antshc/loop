@@ -6,8 +6,7 @@ import json
 from dataclasses import replace
 
 from loop import DEFAULT, Declined, ReplyMismatch, Role, TypedAgent
-
-from software_factory.core.agents import _kit
+from loop.software_factory import agents as agent_tools
 
 from .messages import Delivered, DeveloperReply, DeveloperRequest
 
@@ -15,7 +14,7 @@ NO_COMMITS = "No task commits for this Initiative exist on the feature branch ye
 
 
 def _decode(request: DeveloperRequest, output: str) -> DeveloperReply:
-    envelope = _kit.read_status(output, identifier=request.identifier)
+    envelope = agent_tools.read_status(output, identifier=request.identifier)
     if envelope.failed:
         return envelope.declined()
     result = envelope.result
@@ -35,7 +34,7 @@ def _decode(request: DeveloperRequest, output: str) -> DeveloperReply:
     return Delivered(commit, summary, verification)
 
 
-DEVELOPER: TypedAgent[DeveloperRequest, DeveloperReply] = _kit.template_agent(
+DEVELOPER: TypedAgent[DeveloperRequest, DeveloperReply] = agent_tools.template_agent(
     "developer",
     package=__name__,
     profile=replace(DEFAULT, name=Role.DEVELOPER),

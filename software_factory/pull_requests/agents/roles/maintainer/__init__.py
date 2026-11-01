@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 from loop import ReplyMismatch, TypedAgent
-
-from software_factory.core.agents import _kit
+from loop.software_factory import agents as agent_tools
 
 from .messages import (
     ConflictRequest,
@@ -19,7 +18,9 @@ from .messages import (
 _CLASSIFICATIONS = ("branch", "transient", "blocked")
 _VERDICTS = ("fixed", "blocked")
 
-_PROFILE = _kit.profile_with_instructions(__name__, "maintainer", timeout_sec=1800)
+_PROFILE = agent_tools.profile_with_instructions(
+    __name__, "maintainer", timeout_sec=1800
+)
 
 
 def _reason(result: dict) -> str:
@@ -30,21 +31,21 @@ def _reason(result: dict) -> str:
 
 
 def _decode_diagnose(request: DiagnoseRequest, output: str) -> Diagnosis:
-    result = _kit.read_object(output)
+    result = agent_tools.read_object(output)
     if result.get("classification") not in _CLASSIFICATIONS:
         raise ReplyMismatch(f"invalid classification: {result.get('classification')!r}")
     return Diagnosis(result["classification"], _reason(result))
 
 
 def _decode_fix(request: FixRequest | ConflictRequest, output: str) -> Fixed:
-    result = _kit.read_object(output)
+    result = agent_tools.read_object(output)
     if result.get("verdict") not in _VERDICTS:
         raise ReplyMismatch(f"invalid verdict: {result.get('verdict')!r}")
     return Fixed(result["verdict"], _reason(result))
 
 
 def _decode_jenkins(request: JenkinsDiagnoseRequest, output: str) -> JenkinsDiagnosis:
-    result = _kit.read_object(output)
+    result = agent_tools.read_object(output)
     classification, category = result.get("classification"), result.get("category")
     categories = {
         "timeout": "transient",
@@ -67,16 +68,18 @@ def _decode_jenkins(request: JenkinsDiagnoseRequest, output: str) -> JenkinsDiag
     return JenkinsDiagnosis(classification, category, reason)
 
 
-DIAGNOSE_CI: TypedAgent[DiagnoseRequest, Diagnosis] = _kit.mode_agent(
+DIAGNOSE_CI: TypedAgent[DiagnoseRequest, Diagnosis] = agent_tools.mode_agent(
     "maintainer", "diagnose", profile=_PROFILE, decode=_decode_diagnose
 )
 DIAGNOSE_JENKINS: TypedAgent[JenkinsDiagnoseRequest, JenkinsDiagnosis] = (
-    _kit.mode_agent("maintainer", "diagnose", profile=_PROFILE, decode=_decode_jenkins)
+    agent_tools.mode_agent(
+        "maintainer", "diagnose", profile=_PROFILE, decode=_decode_jenkins
+    )
 )
-FIX_CI: TypedAgent[FixRequest, Fixed] = _kit.mode_agent(
+FIX_CI: TypedAgent[FixRequest, Fixed] = agent_tools.mode_agent(
     "maintainer", "fix", profile=_PROFILE, decode=_decode_fix
 )
-RESOLVE_CONFLICTS: TypedAgent[ConflictRequest, Fixed] = _kit.mode_agent(
+RESOLVE_CONFLICTS: TypedAgent[ConflictRequest, Fixed] = agent_tools.mode_agent(
     "maintainer", "resolve-conflicts", profile=_PROFILE, decode=_decode_fix
 )
 

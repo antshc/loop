@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from software_factory.core.infrastructure.github.issue import Comment, Issue
-from software_factory.core.infrastructure.github.repo import GitHubRepo
+from loop.software_factory.infrastructure.github.issue import Comment, Issue
+from loop.software_factory.infrastructure.github.repo import GitHubRepo
 
 from .commands import IssueCommands
 from .errors import IssueError

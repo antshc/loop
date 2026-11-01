@@ -9,7 +9,6 @@ from pathlib import Path
 
 SOURCES = (
     ("scripts/babysit", ""),
-    ("software_factory/core", "software_factory/core"),
     ("software_factory/pull_requests", "software_factory/pull_requests"),
     (
         "software_factory/workflows/pr_babysit",
@@ -18,6 +17,7 @@ SOURCES = (
 )
 PACKAGE_MARKERS = (
     "software_factory/__init__.py",
+    "software_factory/github.py",
     "software_factory/workflows/__init__.py",
 )
 DESTINATION = Path("skills/babysit/scripts")

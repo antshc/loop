@@ -26,10 +26,10 @@ from loop import (
     rework,
 )
 from loop.shared.git import GitClient
-
-from software_factory.core.infrastructure.github.issue import (
+from loop.software_factory.infrastructure.github.issue import (
     IssueState,
 )
+
 from software_factory.spec_delivery.agents.roles.developer import (
     DEVELOPER,
     DeveloperReply,

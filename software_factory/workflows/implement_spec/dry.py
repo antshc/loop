@@ -26,14 +26,13 @@ from loop import (
 )
 from loop.shared.git import Commit, GitClient
 from loop.shared.process import CommandRunner
-
-from software_factory.core.infrastructure.agents.launcher import (
+from loop.software_factory.infrastructure.agents.launcher import (
     AgentFactory,
 )
-from software_factory.core.infrastructure.github.identity import (
+from loop.software_factory.infrastructure.github.identity import (
     RepositoryId,
 )
-from software_factory.core.infrastructure.github.repo import GitHubRepo
+from loop.software_factory.infrastructure.github.repo import GitHubRepo
 
 logger = logging.getLogger("workflow.implement_spec")
 

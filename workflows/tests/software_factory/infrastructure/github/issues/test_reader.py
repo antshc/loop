@@ -2,22 +2,22 @@ from __future__ import annotations
 
 import pytest
 from loop.shared.process import CommandError
-
-from software_factory.core.infrastructure.github.identity import (
+from loop.software_factory.infrastructure.github.identity import (
     CommentRef,
     IssueIdentity,
     IssueRef,
     RepositoryId,
 )
-from software_factory.core.infrastructure.github.issue import (
+from loop.software_factory.infrastructure.github.issue import (
     CloseReason,
     GapState,
     IssueState,
 )
-from software_factory.core.infrastructure.github.repo import (
+from loop.software_factory.infrastructure.github.repo import (
     GhRunner,
     GitHubRepo,
 )
+
 from software_factory.spec_delivery.infrastructure.github.issues.client import Issues
 from software_factory.spec_delivery.infrastructure.github.issues.errors import (
     IssueError,

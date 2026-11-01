@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-from software_factory.core.infrastructure.github.identity import (
+from loop.software_factory.infrastructure.github.identity import (
     IssueIdentity,
     IssueRef,
     RepositoryId,
 )
-from software_factory.core.infrastructure.github.issue import (
+from loop.software_factory.infrastructure.github.issue import (
     CloseReason,
     Issue,
     IssueState,
 )
+
 from software_factory.pull_requests.infrastructure.github.pull_requests.model import (
     CheckKind,
     CheckOutcome,

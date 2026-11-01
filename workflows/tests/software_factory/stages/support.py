@@ -31,9 +31,9 @@ from loop import (
 )
 from loop.shared.git import GitClient
 from loop.shared.process import CommandRunner
+from loop.software_factory.infrastructure.github.repo import GitHubRepo
 
-from software_factory.core.infrastructure.github.account import GitHub
-from software_factory.core.infrastructure.github.repo import GitHubRepo
+from software_factory.github import GitHub
 from software_factory.spec_delivery.events.specs import RepositoryTarget, SpecWork
 from software_factory.spec_delivery.events.tickets import TicketClosed
 from software_factory.spec_delivery.infrastructure.github.issues.client import Issues

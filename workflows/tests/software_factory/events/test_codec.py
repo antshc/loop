@@ -8,14 +8,14 @@ import inspect
 import pkgutil
 from pathlib import Path
 
+import loop.software_factory.events as core_events
 import pytest
 from loop import Event
 from loop.runtime._engine.codec import decode, encode
+from loop.software_factory.events.checks import ChecksPassed
 
-import software_factory.core.events as core_events
 import software_factory.pull_requests.events as pr_events
 import software_factory.spec_delivery.events as spec_events
-from software_factory.core.events.checks import ChecksPassed
 from software_factory.pull_requests.events.ci import (
     BranchBroken,
     CiFixed,

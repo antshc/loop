@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import pytest
-
-from software_factory.core.infrastructure.github.issue import (
+from loop.software_factory.infrastructure.github.issue import (
     CloseReason,
     IssueState,
 )
+
 from software_factory.spec_delivery.infrastructure.github.issues.graph import (
     SpecGraphSnapshot,
 )

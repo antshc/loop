@@ -23,11 +23,11 @@ from loop import (
     fake_agent,
 )
 from loop.shared.git import GitClient
-
-from software_factory.core.infrastructure.agents.launcher import (
+from loop.software_factory.infrastructure.agents.launcher import (
     AgentLauncher,
 )
-from software_factory.core.infrastructure.pacing import Pacer
+from loop.software_factory.infrastructure.pacing import Pacer
+
 from software_factory.pull_requests.events.pull_requests import PullRequestWork
 from software_factory.workflows.pr_babysit.__main__ import Runtime, main
 from software_factory.workflows.pr_babysit.definition import NAME

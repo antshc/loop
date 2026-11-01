@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 from loop import RunStatus
+from loop.software_factory.infrastructure.github.repo import GitHubRepo
 
-from software_factory.core.infrastructure.github.repo import GitHubRepo
 from software_factory.spec_delivery.events.specs import (
     SpecBlocked,
     SpecHandedToHuman,

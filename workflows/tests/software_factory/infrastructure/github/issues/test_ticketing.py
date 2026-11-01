@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import pytest
+from loop.software_factory.infrastructure.github.repo import GitHubRepo
 
-from software_factory.core.infrastructure.github.repo import GitHubRepo
 from software_factory.spec_delivery.infrastructure.github.issues.client import Issues
 from software_factory.spec_delivery.infrastructure.github.issues.readiness import (
     TicketReadiness,

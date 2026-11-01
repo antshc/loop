@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
-from software_factory.core.infrastructure.github.issue import Issue
+from loop.software_factory.infrastructure.github.issue import Issue
 
 from .spec import SPEC_LABEL
 

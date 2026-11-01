@@ -30,22 +30,22 @@ from loop import (
 )
 from loop.shared.git import GitClient
 from loop.shared.process import CommandRunner, git_command
-
-from software_factory.core.infrastructure.agents.launcher import (
+from loop.software_factory.infrastructure.agents.launcher import (
     AgentLauncher,
 )
-from software_factory.core.infrastructure.github.account import GitHub
-from software_factory.core.infrastructure.github.repo import GhCli
-from software_factory.core.infrastructure.ledger import Ledger
-from software_factory.core.infrastructure.pacing import Pacer
-from software_factory.core.infrastructure.telemetry import (
+from loop.software_factory.infrastructure.github.repo import GhCli
+from loop.software_factory.infrastructure.ledger import Ledger
+from loop.software_factory.infrastructure.pacing import Pacer
+from loop.software_factory.infrastructure.telemetry import (
     OtelSpans,
     OtlpObserverFactory,
     Tee,
     TracingObserver,
     closing_observer,
 )
-from software_factory.core.stages.checks import as_verify
+from loop.software_factory.stages.checks import as_verify
+
+from software_factory.github import GitHub
 from software_factory.pull_requests.events.pull_requests import PullRequestWork
 from software_factory.pull_requests.infrastructure.jenkins import Jenkins
 from software_factory.pull_requests.stages import pull_requests

@@ -57,8 +57,9 @@ def test_sync_reads_the_index_not_unstaged_edits(tmp_path: Path) -> None:
         "scripts/babysit/start.py": "one\n",
         "scripts/babysit/supervise.py": "supervise\n",
         "software_factory/__init__.py": "",
+        "software_factory/github.py": "",
         "software_factory/workflows/__init__.py": "",
-        "software_factory/core/events/__init__.py": "event\n",
+        "software_factory/pull_requests/events/__init__.py": "event\n",
         "software_factory/workflows/pr_babysit/__main__.py": "workflow\n",
     }
     for name, content in contents.items():
@@ -86,12 +87,12 @@ def test_sync_reads_the_index_not_unstaged_edits(tmp_path: Path) -> None:
     subprocess.run(
         ["git", "add", "-A", "--", str(DESTINATION)], cwd=tmp_path, check=True
     )
-    source = "software_factory/core/events/__init__.py"
+    source = "software_factory/pull_requests/events/__init__.py"
     (tmp_path / source).unlink()
     subprocess.run(["git", "add", "-u", "--", source], cwd=tmp_path, check=True)
     synchronize(tmp_path, staged=True, check=False)
     assert not (
-        tmp_path / DESTINATION / "software_factory/core/events/__init__.py"
+        tmp_path / DESTINATION / "software_factory/pull_requests/events/__init__.py"
     ).exists()
 
 
@@ -106,7 +107,8 @@ def test_supervisor_watches_a_blocked_pr_until_it_closes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A handed-off workflow remains watched without repeating work immediately."""
-    from software_factory.core.infrastructure import ledger
+    from loop.software_factory.infrastructure import ledger
+
     from software_factory.workflows.pr_babysit.settings import Settings
 
     settings = SimpleNamespace(

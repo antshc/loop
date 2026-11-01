@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from loop import Evidence, History, Hold, Pass, Stage, Verdict
 
-from software_factory.core.infrastructure.github.account import GitHub
+from software_factory.github import GitHub
 from software_factory.pull_requests.events.feedback import (
     FeedbackBatch,
     FeedbackHandled,

@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
 
-from software_factory.core.infrastructure.github.identity import IssueRef
-from software_factory.core.infrastructure.github.issue import (
+from loop.software_factory.infrastructure.github.identity import IssueRef
+from loop.software_factory.infrastructure.github.issue import (
     CloseReason,
     Comment,
     IssueState,

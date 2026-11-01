@@ -5,8 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from loop import DEFAULT, Declined, TypedAgent
-
-from software_factory.core.agents import _kit
+from loop.software_factory import agents as agent_tools
 
 from .messages import ChoreReply, ChoreRequest, Refined
 
@@ -14,7 +13,7 @@ NO_COMMITS = "No commits exist on the feature branch yet."
 
 
 def _decode(request: ChoreRequest, output: str) -> ChoreReply:
-    envelope = _kit.read_status(output)
+    envelope = agent_tools.read_status(output)
     if envelope.failed:
         return envelope.declined()
     return Refined(
@@ -24,7 +23,7 @@ def _decode(request: ChoreRequest, output: str) -> ChoreReply:
     )
 
 
-CHORE: TypedAgent[ChoreRequest, ChoreReply] = _kit.template_agent(
+CHORE: TypedAgent[ChoreRequest, ChoreReply] = agent_tools.template_agent(
     "chore",
     package=__name__,
     profile=replace(DEFAULT, name="chore"),

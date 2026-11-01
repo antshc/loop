@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from software_factory.core.infrastructure.github.account import GitHub
+from software_factory.github import GitHub
 from software_factory.pull_requests.infrastructure.github.pull_requests import (
     PullRequests,
 )

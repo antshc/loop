@@ -1,4 +1,4 @@
-"""Private toolkit the role agents are built from; unreachable outside `software_factory.core.agents`."""
+"""Public helpers for building typed factory role agents."""
 
 from __future__ import annotations
 

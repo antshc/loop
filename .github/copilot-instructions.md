@@ -5,7 +5,7 @@
 Single repo: docs and codebase live together at the reporoot. There is no `workspace/` split and no `.harness.env`.
 
 - **Docs & decisions:** `GLOSSARY.md` (domain glossary) and `ARCHITECTURE.md` (ADR index, Concept index, and Codebase Structure), with ADRs under `docs/adr/` and Crosscutting Concepts under `docs/concepts/`.
-- **Code:** `src/` (the `loop` library, including the Workflow runtime in `src/runtime/` and the shared Git and process helpers in `src/shared/`), library tests under `tests/`, the software factory under `software_factory/` (Stages, Events, Flow fragments, role agents, factory-only infrastructure and the `implement_spec`, `pr_babysit` and `address_once` Workflows), the standalone example under `workflows/loop/`, and Workflow tests under `workflows/tests/{loop,software_factory}/`. Loop is a library with no command. The layout is documented under **Codebase Structure** in `ARCHITECTURE.md`.
+- **Code:** `src/` (the `loop` library, including the Workflow runtime in `src/runtime/` and the shared Git and process helpers in `src/shared/`), library tests under `tests/`, the software factory under `software_factory/` (Stages, Events, Flow fragments, role agents, capability infrastructure and the `implement_spec`, `pr_babysit` and `address_once` Workflows), the standalone example under `workflows/loop/`, and Workflow tests under `workflows/tests/{loop,software_factory}/`. Shared factory helpers ship from `src/software_factory/` as `loop.software_factory`. Loop is a library with no command. The layout is documented under **Codebase Structure** in `ARCHITECTURE.md`.
 - **Archive:** `archive/` holds retired prototypes as a parts source only. It is excluded from editor search and file watching (see `.vscode/settings.json`) — do not navigate into it, edit it, or import from it.
 
 Within this file, resolve conflicts in this order: **safety and repository targeting → authoritative sources → navigation → build and validation → documentation conventions.** This ordering scopes only the rules in this file; it does not override `AGENTS.md`, path-scoped instructions, or user instructions.
@@ -49,5 +49,5 @@ Consult these before searching the code:
 
 ## 7. Generated skill scripts
 
-- MUST treat `skills/**/scripts/**/*.py` as generated, read-only code. Edit the canonical source under `scripts/babysit/` or `software_factory/`, then run `python scripts/sync_babysit_skill.py`; never hand-edit the skill copy, even if faster or simpler.
+- MUST treat `skills/**/scripts/**/*.py` as generated, read-only code. Edit the canonical source under `scripts/babysit/` or `software_factory/` (shared helpers: `src/software_factory/`), then run `python scripts/sync_babysit_skill.py`; never hand-edit the skill copy, even if faster or simpler.
 - MUST NOT bypass the skill synchronization pre-commit hook or its CI drift check.

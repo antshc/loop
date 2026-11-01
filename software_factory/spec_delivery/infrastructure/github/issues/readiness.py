@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from software_factory.core.infrastructure.github.issue import CloseReason, IssueState
+from loop.software_factory.infrastructure.github.issue import CloseReason, IssueState
 
 if TYPE_CHECKING:
     from .graph import BlockedByRelation, SpecGraphSnapshot

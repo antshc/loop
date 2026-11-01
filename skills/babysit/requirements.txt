@@ -1,2 +1,2 @@
-# Python 3.14+; Loop provides the workflow runtime and telemetry dependencies.
+# Python 3.14+; Loop provides the workflow runtime, shared factory helpers and telemetry dependencies.
 loop[otel] @ git+https://github.com/antshc/loop.git@main

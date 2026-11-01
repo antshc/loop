@@ -6,8 +6,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from loop import BranchStrategy, GitOptions, LoopHook, WorkspaceOpener
+from loop.software_factory.infrastructure.agents.launcher import AgentLauncher
 
-from software_factory.core.infrastructure.agents.launcher import AgentLauncher
 from software_factory.spec_delivery.events.specs import SpecRouted
 
 

@@ -10,27 +10,16 @@ from pathlib import Path
 from loop import (
     AgentWorkspace,
     BranchStrategy,
-    Evidence,
     GitOptions,
-    Hold,
-    Nothing,
-    Pass,
-    Stage,
-    Verdict,
     WorkspaceOpener,
     WorktreeError,
 )
 from loop.shared.git import GitClient
-
-from software_factory.core.infrastructure.agents.launcher import (
+from loop.software_factory.infrastructure.agents.launcher import (
     AgentLauncher,
 )
+
 from software_factory.pull_requests.events.pull_requests import PullRequestPolled
-
-
-@dataclass(frozen=True)
-class CheckoutInput:
-    launcher: AgentLauncher
 
 
 @dataclass(frozen=True)
@@ -40,30 +29,10 @@ class PullRequestWorktreeInput:
     git: GitClient
 
 
-@dataclass(frozen=True)
-class CleanInput:
-    worktree: AgentWorkspace
-    git: GitClient
-
-
-def checkout() -> WorkspaceOpener[CheckoutInput]:
-    """The harness checkout itself: no worktree is created, so read-only Stages run where the harness runs."""
-    return WorkspaceOpener("checkout", CheckoutInput, lambda i: i.launcher().open())
-
-
 def pr_worktree() -> WorkspaceOpener[PullRequestWorktreeInput]:
     """The pull request's recovery worktree on `babysit/<repository>/<number>`, at the head the batch opens at; commits an earlier run kept ahead of that head stay, a branch left behind is advanced to it, a stale pre-rebase copy of it is reset to it, any other diverged one raises WorktreeError."""
     return WorkspaceOpener(
         "pr-worktree", PullRequestWorktreeInput, _open_pull_request_worktree
-    )
-
-
-def require_clean() -> Stage[CleanInput, bool, Nothing]:
-    """Holds when the worktree has any staged, unstaged or untracked change, so no agent edits on top of unrelated work."""
-    return (
-        Stage("require-clean", CleanInput, produces=Nothing)
-        .action(lambda i: i.git.is_clean(i.worktree.path))
-        .gate(_clean)
     )
 
 
@@ -97,7 +66,3 @@ def _align(git: GitClient, path: Path, head: str) -> None:
         raise WorktreeError(
             f"Unexpected local commits; inspect recovery branch at {path}"
         )
-
-
-def _clean(_: CleanInput, clean: bool, __: Evidence) -> Verdict[Nothing]:
-    return Pass(Nothing()) if clean else Hold("Worktree contains unrelated edits")

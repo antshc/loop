@@ -152,7 +152,7 @@ implements and then reviews. Repositories must already be cloned under
 ```python
 from pathlib import Path
 
-from software_factory.core.events.targets import RepositoryTarget
+from loop.software_factory.events.targets import RepositoryTarget
 from software_factory.workflows.implement_spec.__main__ import build_services, main
 from software_factory.workflows.implement_spec.dry import Fakes
 from software_factory.workflows.implement_spec.settings import Targets
@@ -209,7 +209,9 @@ git config core.hooksPath .githooks
 python scripts/sync_babysit_skill.py --check
 ```
 
-The pre-commit hook copies factory `core/`, `pull_requests/`, the `pr_babysit` workflow, and canonical launcher code into `skills/babysit/scripts/software_factory/`. Edit only canonical sources; CI rejects stale generated copies. To generate a copy before committing, run `python3 scripts/sync_babysit_skill.py`.
+Shared factory core installs with `loop` as `loop.software_factory`; skills do not copy it.
+
+The pre-commit hook copies factory `pull_requests/`, `github.py`, the `pr_babysit` workflow, and canonical launcher code into `skills/babysit/scripts/software_factory/`. Edit only canonical sources; CI rejects stale generated copies. To generate a copy before committing, run `python3 scripts/sync_babysit_skill.py`.
 
 To babysit one PR in the background, configure its checkout, build and test commands in `.loop/pr-babysit.json` (see the [example settings](software_factory/workflows/pr_babysit/settings.example.json)), then run:
 

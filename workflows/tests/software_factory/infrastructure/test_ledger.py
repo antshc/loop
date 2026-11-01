@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 from loop import Event, Pass, Services, Stage, Workflow, encode, run
+from loop.software_factory.infrastructure.ledger import Ledger
 
-from software_factory.core.infrastructure.ledger import Ledger
 from software_factory.spec_delivery.infrastructure.github.issues.graph import (
     SpecGraphSnapshot,
 )
@@ -95,7 +95,7 @@ def test_relocation_preserves_text_and_torn_tail_recovery(tmp_path: Path) -> Non
     assert record["text"] == text
     assert (
         record["reply"]["type"]
-        == "software_factory.core.infrastructure.github.issue.Issue"
+        == "loop.software_factory.infrastructure.github.issue.Issue"
     )
     assert record["reply"]["type"] != text
     assert log.path.read_bytes() == original + b'{"kind":'
@@ -110,12 +110,32 @@ def test_relocation_preserves_text_and_torn_tail_recovery(tmp_path: Path) -> Non
     ("historical", "expected"),
     [
         (
+            "software_factory.core.events.targets.RepositoryTarget",
+            "loop.software_factory.events.targets.RepositoryTarget",
+        ),
+        (
+            "software_factory.core.events.checks.ChecksPassed",
+            "loop.software_factory.events.checks.ChecksPassed",
+        ),
+        (
+            "software_factory.core.stages.checks.ChecksInput",
+            "software_factory.pull_requests.stages.checks.ChecksInput",
+        ),
+        (
+            "workflows.software_factory.stages.workspaces.PullRequestWorktreeInput",
+            "software_factory.pull_requests.stages.workspaces.PullRequestWorktreeInput",
+        ),
+        (
+            "software_factory.core.agents._kit.status.StatusEnvelope",
+            "loop.software_factory.agents.status.StatusEnvelope",
+        ),
+        (
             "workflows.software_factory.shared.events.feedback.FeedbackBatch",
             "software_factory.pull_requests.events.feedback.FeedbackBatch",
         ),
         (
             "workflows.software_factory.events.specs.RepositoryTarget",
-            "software_factory.core.events.targets.RepositoryTarget",
+            "loop.software_factory.events.targets.RepositoryTarget",
         ),
         (
             "workflows.software_factory.shared.events.tickets.TicketClosed",
@@ -127,7 +147,7 @@ def test_relocation_preserves_text_and_torn_tail_recovery(tmp_path: Path) -> Non
         ),
         (
             "workflows.software_factory.shared.infrastructure.github.issues.issue.Issue",
-            "software_factory.core.infrastructure.github.issue.Issue",
+            "loop.software_factory.infrastructure.github.issue.Issue",
         ),
     ],
 )
@@ -150,3 +170,29 @@ def test_factory_type_tags_relocate_without_changing_user_text(
     assert record["text"] == historical
     assert record["item"]["type"] == expected
     assert historical in log.path.read_text()
+
+
+def test_pre_installation_core_events_replay_from_unchanged_ledger(
+    tmp_path: Path,
+) -> None:
+    """Decode a persisted core event after its type moves into the installed package."""
+    from loop.software_factory.events.checks import ChecksPassed
+
+    log = Ledger(tmp_path).item("test", "item")
+    log.seed(
+        [
+            {
+                "kind": "attempt",
+                "status": "passed",
+                "event": {
+                    "type": "software_factory.core.events.checks.ChecksPassed",
+                    "fields": {},
+                },
+            }
+        ]
+    )
+    original = log.path.read_bytes()
+
+    recovered = Ledger(tmp_path).item("test", "item")
+    assert recovered.history(ChecksPassed) == (ChecksPassed(),)
+    assert log.path.read_bytes() == original

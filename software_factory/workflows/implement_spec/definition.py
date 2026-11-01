@@ -5,8 +5,8 @@ from __future__ import annotations
 from subprocess import CalledProcessError
 
 from loop import Flow, LoopHookError, Workflow, handoff, next_, rework, stop
+from loop.software_factory.stages import workspaces
 
-from software_factory.core.stages import workspaces
 from software_factory.pull_requests.events.pull_requests import (
     DraftPullRequestPublished,
 )

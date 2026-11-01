@@ -24,8 +24,8 @@ from loop import (
     Workflow,
     run,
 )
+from loop.software_factory.infrastructure.pacing import Pacer
 
-from software_factory.core.infrastructure.pacing import Pacer
 from software_factory.pull_requests.events.pull_requests import (
     PullRequestPolled,
     PullRequestWork,

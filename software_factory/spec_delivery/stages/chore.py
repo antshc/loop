@@ -25,7 +25,7 @@ from loop import (
 )
 from loop.shared.git import Commit, GitClient
 
-from software_factory.core.infrastructure.github.account import GitHub
+from software_factory.github import GitHub
 from software_factory.spec_delivery.agents.roles.chore import (
     CHORE,
     ChoreReply,

@@ -6,8 +6,8 @@ from dataclasses import replace
 from subprocess import CalledProcessError, TimeoutExpired
 
 from loop import Flow, Verify, Workflow, WorktreeError, handoff, reroute, stop
+from loop.software_factory.stages import workspaces
 
-from software_factory.core.stages import workspaces
 from software_factory.pull_requests.events.ci import CiFixed
 from software_factory.pull_requests.events.feedback import FeedbackBatch
 from software_factory.pull_requests.events.jenkins import (
@@ -37,6 +37,7 @@ from software_factory.pull_requests.stages import (
     pull_requests,
     readiness,
 )
+from software_factory.pull_requests.stages import workspaces as pr_workspaces
 
 from .policy import (
     TRUST,
@@ -69,7 +70,7 @@ def pr_babysit(settings: Settings, verify: Verify) -> Workflow[PullRequestWork]:
     fix_conflicts = (
         Flow("fix-conflicts")
         .within(
-            workspaces.pr_worktree(),
+            pr_workspaces.pr_worktree(),
             Flow("merge")
             .stage(conflicts.plan().on_fail(block))
             .stage(conflicts.prepare().on_fail(block))
@@ -84,7 +85,7 @@ def pr_babysit(settings: Settings, verify: Verify) -> Workflow[PullRequestWork]:
     maintain_ci = (
         Flow("maintain-ci")
         .within(
-            workspaces.pr_worktree(),
+            pr_workspaces.pr_worktree(),
             Flow("ci")
             .stage(workspaces.require_clean().named("require-clean-ci").on_hold(block))
             .stage(
@@ -159,7 +160,7 @@ def pr_babysit(settings: Settings, verify: Verify) -> Workflow[PullRequestWork]:
         jenkins_recovery = (
             Flow("maintain-jenkins")
             .within(
-                replace(workspaces.pr_worktree(), id="jenkins-worktree"),
+                replace(pr_workspaces.pr_worktree(), id="jenkins-worktree"),
                 Flow("jenkins")
                 .stage(
                     workspaces.require_clean()

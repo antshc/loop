@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from loop import History, Stage
 from loop.shared.git import GitClient
 
-from software_factory.core.infrastructure.github.account import GitHub
+from software_factory.github import GitHub
 from software_factory.pull_requests.events.pull_requests import (
     DraftPullRequestPublished,
 )

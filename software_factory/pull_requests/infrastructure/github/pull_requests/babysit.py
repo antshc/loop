@@ -7,7 +7,7 @@ import json
 from collections.abc import Callable
 from typing import Any, Protocol
 
-from software_factory.core.infrastructure.github.issue import Comment
+from loop.software_factory.infrastructure.github.issue import Comment
 
 from .model import (
     CheckKind,

@@ -6,8 +6,7 @@ import logging
 from urllib.parse import quote
 
 from loop.shared.process import CommandError
-
-from software_factory.core.infrastructure.github.repo import GitHubRepo, denied
+from loop.software_factory.infrastructure.github.repo import GitHubRepo, denied
 
 from .merge_policy import (
     MergePolicySnapshot,

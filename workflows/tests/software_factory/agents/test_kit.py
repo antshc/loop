@@ -8,8 +8,7 @@ from pathlib import Path
 
 import pytest
 from loop import DEFAULT, Message
-
-from software_factory.core.agents._kit import (
+from loop.software_factory.agents import (
     PromptError,
     mode_agent,
     placeholders,

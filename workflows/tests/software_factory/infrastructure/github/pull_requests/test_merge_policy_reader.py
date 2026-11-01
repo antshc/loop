@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from loop.shared.process import CommandError
 
-from software_factory.core.infrastructure.github.account import GitHub
+from software_factory.github import GitHub
 from software_factory.pull_requests.infrastructure.github.pull_requests import (
     MergePolicyReader,
     MergePolicySnapshot,

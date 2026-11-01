@@ -23,13 +23,13 @@ from loop import (
 )
 from loop.shared.git import GitClient
 from loop.shared.process import CommandRunner
-
-from software_factory.core.infrastructure.agents.launcher import (
+from loop.software_factory.infrastructure.agents.launcher import (
     AgentLauncher,
 )
-from software_factory.core.infrastructure.github.account import GitHub
-from software_factory.core.infrastructure.pacing import Pacer
-from software_factory.core.infrastructure.telemetry import Tee
+from loop.software_factory.infrastructure.pacing import Pacer
+from loop.software_factory.infrastructure.telemetry import Tee
+
+from software_factory.github import GitHub
 from software_factory.workflows.pr_babysit import __main__ as entry
 from software_factory.workflows.pr_babysit.__main__ import StopRequest, main
 from software_factory.workflows.pr_babysit.policy import (

@@ -7,8 +7,8 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 
 from loop import Evidence, History, Item, Nothing, Pass, Selector, Stage, Verdict
+from loop.software_factory.infrastructure.pacing import Pacer
 
-from software_factory.core.infrastructure.pacing import Pacer
 from software_factory.pull_requests.events.pull_requests import PollStarted
 
 

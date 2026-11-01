@@ -11,13 +11,13 @@ from unittest.mock import patch
 
 import pytest
 from loop import Ledger, RecordingSpans, Services
-
-from software_factory.core.infrastructure.github.account import GitHub
-from software_factory.core.infrastructure.pacing import Pacer
-from software_factory.core.infrastructure.state import (
+from loop.software_factory.infrastructure.pacing import Pacer
+from loop.software_factory.infrastructure.state import (
     StateError,
     process_lock,
 )
+
+from software_factory.github import GitHub
 from software_factory.pull_requests.events.pull_requests import PullRequestWork
 from software_factory.pull_requests.stages import pull_requests
 from software_factory.spec_delivery.events.specs import RepositoryTarget

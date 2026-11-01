@@ -5,8 +5,8 @@ from __future__ import annotations
 import hashlib
 import re
 
-from software_factory.core.infrastructure.github.issue import Comment, IssueState
-from software_factory.core.infrastructure.github.repo import GitHubRepo
+from loop.software_factory.infrastructure.github.issue import Comment, IssueState
+from loop.software_factory.infrastructure.github.repo import GitHubRepo
 
 from .errors import IncompleteReadError, IssueError
 from .graph import SpecGraphSnapshot

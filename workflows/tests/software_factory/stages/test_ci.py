@@ -8,9 +8,9 @@ from typing import Any
 
 import pytest
 from loop import Evidence, Fail, Flow, Hold, Pass, Workflow, WorktreeError, handoff
+from loop.software_factory.infrastructure.github.repo import CommandError
+from loop.software_factory.stages import workspaces
 
-from software_factory.core.infrastructure.github.repo import CommandError
-from software_factory.core.stages import workspaces
 from software_factory.pull_requests.agents.roles.maintainer import (
     DIAGNOSE_CI,
     FIX_CI,
@@ -33,6 +33,7 @@ from software_factory.pull_requests.events.pull_requests import (
     Unsupported,
 )
 from software_factory.pull_requests.stages import ci, pull_requests
+from software_factory.pull_requests.stages import workspaces as pr_workspaces
 from software_factory.spec_delivery.events.specs import RepositoryTarget
 from tests.runtime.harness import command
 from workflows.tests.software_factory.infrastructure.github.fakes import check_run
@@ -87,7 +88,7 @@ def maintain(
     )
     return (
         watch(pull_requests.snapshot())
-        .within(workspaces.pr_worktree(), activity)
+        .within(pr_workspaces.pr_worktree(), activity)
         .stage(produces(IssueResolved("b", "i", "fix-needed", ())))
         .stage(produces(IssueUnclear("b", "i", "why", ())))
         .stage(produces(Unsupported("x")))

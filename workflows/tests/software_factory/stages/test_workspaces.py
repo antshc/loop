@@ -27,11 +27,12 @@ from loop import (
     WorktreeError,
     WorktreeReadyLoopHook,
 )
-
-from software_factory.core.infrastructure.agents.launcher import (
+from loop.software_factory.infrastructure.agents.launcher import (
     AgentLauncher,
 )
-from software_factory.core.stages import workspaces
+from loop.software_factory.stages import workspaces
+
+from software_factory.pull_requests.stages import workspaces as pr_workspaces
 from software_factory.spec_delivery.stages import specs
 from software_factory.spec_delivery.stages import workspaces as spec_workspaces
 from tests.runtime.harness import command
@@ -122,7 +123,8 @@ def pr_workflow(rig: PrRig, paths: list[Path], branches: list[str]) -> Workflow[
         .context(PrWork)
         .stage(rig.poll())
         .within(
-            workspaces.pr_worktree(), Flow("w").stage(record_workspace(paths, branches))
+            pr_workspaces.pr_worktree(),
+            Flow("w").stage(record_workspace(paths, branches)),
         )
     )
 

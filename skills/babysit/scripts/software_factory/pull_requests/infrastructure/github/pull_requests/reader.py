@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from software_factory.core.infrastructure.github.identity import IssueIdentity, IssueRef
-from software_factory.core.infrastructure.github.issue import Comment, comment_from_rest
-from software_factory.core.infrastructure.github.repo import GitHubRepo
+from loop.software_factory.infrastructure.github.identity import IssueIdentity, IssueRef
+from loop.software_factory.infrastructure.github.issue import Comment, comment_from_rest
+from loop.software_factory.infrastructure.github.repo import GitHubRepo
 
 from .model import (
     CheckKind,

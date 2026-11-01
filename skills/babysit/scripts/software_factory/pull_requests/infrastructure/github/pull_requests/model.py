@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
-from software_factory.core.infrastructure.github.identity import IssueIdentity, IssueRef
-from software_factory.core.infrastructure.github.issue import Comment
+from loop.software_factory.infrastructure.github.identity import IssueIdentity, IssueRef
+from loop.software_factory.infrastructure.github.issue import Comment
 
 
 # A fresh field per class: the GitHub payload an object was read from, which a Workflow whose persisted shapes predate the typed model projects from.

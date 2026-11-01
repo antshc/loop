@@ -6,11 +6,11 @@ from pathlib import Path
 
 from loop import WorktreeGit
 from loop.shared.git import GitClient
-
-from software_factory.core.infrastructure.agents.launcher import (
+from loop.software_factory.infrastructure.agents.launcher import (
     AgentLauncher,
 )
-from software_factory.core.infrastructure.github.account import GitHub
+
+from software_factory.github import GitHub
 from software_factory.spec_delivery.infrastructure.github.issues.client import Issues
 from software_factory.workflows.implement_spec.definition import (
     ImplementSpecSettings,

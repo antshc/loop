@@ -1,11 +1,10 @@
-"""The authenticated `gh` account and the repositories it reaches."""
+"""Compose factory GitHub capabilities over the installed repository transport."""
 
 from __future__ import annotations
 
-import json
 from typing import TYPE_CHECKING
 
-from .repo import GhRunner, GitHubRepo
+from loop.software_factory.infrastructure.github.account import GitHub as GitHubAccount
 
 if TYPE_CHECKING:
     from software_factory.pull_requests.infrastructure.github.pull_requests import (
@@ -17,19 +16,8 @@ if TYPE_CHECKING:
     )
 
 
-class GitHub:
-    """The authenticated `gh` account and the repositories it reaches."""
-
-    def __init__(self, gh: GhRunner) -> None:
-        self._gh = gh
-
-    def login(self) -> str:
-        """The authenticated actor."""
-        return json.loads(self._gh(("api", "user")))["login"]
-
-    def repository(self, slug: str) -> GitHubRepo:
-        """The repository named `owner/name`."""
-        return GitHubRepo.from_slug(slug, self._gh)
+class GitHub(GitHubAccount):
+    """The account with this factory's issue and pull-request capabilities."""
 
     def issues(self, slug: str) -> Issues:
         """The issues of the repository named `owner/name`."""

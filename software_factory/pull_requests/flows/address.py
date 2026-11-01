@@ -5,9 +5,10 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from loop import Flow, Route, Verify, next_item, stop
+from loop.software_factory.stages import workspaces
 
-from software_factory.core.stages import checks, workspaces
-from software_factory.pull_requests.stages import pull_requests
+from software_factory.pull_requests.stages import checks, pull_requests
+from software_factory.pull_requests.stages import workspaces as pr_workspaces
 from software_factory.pull_requests.stages.address import (
     IssueWork,
     group_feedback,
@@ -33,7 +34,7 @@ def address_feedback(
             resolve.tune(timeout_sec=agent_timeout),
         )
     return Flow("address").within(
-        workspaces.pr_worktree(),
+        pr_workspaces.pr_worktree(),
         Flow("batch")
         .stage(workspaces.require_clean().on_hold(on_stuck))
         .stage(

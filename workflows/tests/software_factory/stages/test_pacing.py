@@ -10,8 +10,8 @@ from typing import Any
 import pytest
 from loop import Flow, Item, Ledger, Nothing, Pass, Stage, Workflow, WorkItemLog
 from loop.runtime._engine.scope import Scope
+from loop.software_factory.infrastructure.pacing import Pacer
 
-from software_factory.core.infrastructure.pacing import Pacer
 from software_factory.pull_requests.events.pull_requests import (
     PollStarted,
     PullRequestPolled,

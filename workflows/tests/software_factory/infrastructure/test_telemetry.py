@@ -38,6 +38,11 @@ from loop import (  # noqa: E402  # noqa: E402
     rework,
 )
 from loop.observe.otel import OtlpObserver  # noqa: E402
+from loop.software_factory.infrastructure.telemetry import (  # noqa: E402
+    OtelSpans,
+    Tee,
+    closing_observer,
+)
 from opentelemetry.sdk.metrics import MeterProvider  # noqa: E402
 from opentelemetry.sdk.resources import Resource  # noqa: E402
 from opentelemetry.sdk.trace import ReadableSpan, TracerProvider  # noqa: E402
@@ -45,11 +50,6 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor  # noqa: E402
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter  # noqa: E402
 from opentelemetry.trace import StatusCode  # noqa: E402
 
-from software_factory.core.infrastructure.telemetry import (  # noqa: E402
-    OtelSpans,
-    Tee,
-    closing_observer,
-)
 from tests.runtime.harness import TESTER, Ask, Rig, WorkCtx, editing  # noqa: E402
 from tests.runtime.support import NoInput, Routed  # noqa: E402
 
@@ -426,7 +426,7 @@ def test_without_the_extra_the_factory_runs_with_console_logging_and_reports_the
         sys.modules["opentelemetry"] = None
         from pathlib import Path
         from loop import Ledger, LogSpans, Pass, Services, Stage, Workflow, run
-        from software_factory.core.infrastructure.telemetry import OtlpObserverFactory, Tee
+        from loop.software_factory.infrastructure.telemetry import OtlpObserverFactory, Tee
         from tests.runtime.harness import WorkCtx
         from tests.runtime.support import Alpha, NoInput
 

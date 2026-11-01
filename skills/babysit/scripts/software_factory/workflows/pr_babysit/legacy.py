@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Any
 
 from loop import Event, Ledger, Nothing, WorkItemLocked, WorkKey, encode
+from loop.software_factory.events.checks import ChecksPassed
 
-from software_factory.core.events.checks import ChecksPassed
 from software_factory.pull_requests.events.ci import (
     BranchBroken,
     CiFixed,

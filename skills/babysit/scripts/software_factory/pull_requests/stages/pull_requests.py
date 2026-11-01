@@ -9,9 +9,9 @@ from typing import Any
 
 from loop import AgentWorkspace, Evidence, Fail, History, Hold, Pass, Stage, Verdict
 from loop.shared.git import GitClient
+from loop.software_factory.infrastructure.github.repo import CommandError
 
-from software_factory.core.infrastructure.github.account import GitHub
-from software_factory.core.infrastructure.github.repo import CommandError
+from software_factory.github import GitHub
 from software_factory.pull_requests.events.ci import CiFixed
 from software_factory.pull_requests.events.feedback import (
     FeedbackBatch,

@@ -3,10 +3,10 @@ from __future__ import annotations
 from dataclasses import FrozenInstanceError
 
 import pytest
-
-from software_factory.core.infrastructure.github.issue import (
+from loop.software_factory.infrastructure.github.issue import (
     IssueState,
 )
+
 from software_factory.spec_delivery.infrastructure.github.issues.spec import (
     SpecMetadata,
 )

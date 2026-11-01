@@ -29,7 +29,7 @@ class TracingObserver(RunObserver, Protocol):
 
 ObserverFactory = Callable[[str], TracingObserver]
 
-LOGGER = logging.getLogger("software_factory.core.infrastructure.telemetry")
+LOGGER = logging.getLogger("loop.software_factory.infrastructure.telemetry")
 
 type Attributes = Mapping[str, str | int | bool]
 

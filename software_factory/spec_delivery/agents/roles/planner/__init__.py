@@ -6,8 +6,7 @@ import json
 from dataclasses import replace
 
 from loop import DEFAULT, Declined, ReplyMismatch, Role, TypedAgent
-
-from software_factory.core.agents import _kit
+from loop.software_factory import agents as agent_tools
 
 from .messages import PlannerReply, PlannerRequest, Proposed, ProposedTicket
 
@@ -22,25 +21,27 @@ def _ticket(item: dict) -> ProposedTicket:
             f"planned ticket blocked_by must be a list of indexes: {item!r}"
         )
     return ProposedTicket(
-        _kit.text(item, "title", required=True).strip(),
-        _kit.text(item, "body"),
+        agent_tools.text(item, "title", required=True).strip(),
+        agent_tools.text(item, "body"),
         tuple(blockers),
     )
 
 
 def _decode(request: PlannerRequest, output: str) -> PlannerReply:
-    envelope = _kit.read_status(output)
+    envelope = agent_tools.read_status(output)
     if envelope.failed:
         return envelope.declined()
     return Proposed(
         tuple(
             _ticket(item)
-            for item in _kit.objects(envelope.result, "tickets", "planned ticket")
+            for item in agent_tools.objects(
+                envelope.result, "tickets", "planned ticket"
+            )
         )
     )
 
 
-PLANNER: TypedAgent[PlannerRequest, PlannerReply] = _kit.template_agent(
+PLANNER: TypedAgent[PlannerRequest, PlannerReply] = agent_tools.template_agent(
     "planner",
     package=__name__,
     profile=replace(DEFAULT, name=Role.PLANNER),

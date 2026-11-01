@@ -16,7 +16,7 @@ from loop import (
     Verdict,
 )
 
-from software_factory.core.infrastructure.github.account import GitHub
+from software_factory.github import GitHub
 from software_factory.spec_delivery.agents.roles.reviewer import (
     REVIEWER,
     ReviewerReply,

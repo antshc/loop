@@ -7,7 +7,7 @@ import re
 from collections.abc import Iterable
 from dataclasses import replace
 
-from software_factory.core.infrastructure.github.repo import CommandError, GitHubRepo
+from loop.software_factory.infrastructure.github.repo import CommandError, GitHubRepo
 
 from .lifecycle import (
     LifecycleAction,

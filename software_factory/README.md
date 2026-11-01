@@ -54,16 +54,12 @@ python -m software_factory.workflows.address_once --config address_once.json --p
 
 Workflow commands now use `python -m software_factory.workflows.<workflow>`.
 Import each definition from `software_factory.workflows.<workflow>.definition`;
-factory-only infrastructure belongs to the `core`, `pull_requests`, or `spec_delivery` capability.
+shared infrastructure ships as `loop.software_factory`; capability policy stays in `pull_requests` or `spec_delivery`.
 
 
 ```text
 software_factory/
-├── core/            # common contracts, tools, GitHub transport, state and ledger
-│   ├── agents/
-│   ├── events/
-│   ├── stages/
-│   └── infrastructure/
+├── github.py        # capability composition over installed GitHub transport
 ├── pull_requests/   # PR feedback, CI, conflicts and merge readiness
 │   ├── agents/
 │   ├── events/
@@ -82,8 +78,8 @@ software_factory/
 workflows/tests/software_factory/  # Stage, fragment, Workflow scenario and architecture tests
 ```
 
-Loop provides the runtime (`loop.runtime`, exported from `loop`), the typed agent contract and the Git, process and GitHub
-helpers (`loop.shared`); the factory is not installed and runs from the repository clone.
+Loop provides the runtime (`loop.runtime`, exported from `loop`), the typed agent contract and Git/process helpers (`loop.shared`). Shared factory infrastructure ships in
+`loop.software_factory`; capability workflows run from the checkout or generated skill.
 
 ```text
 Workflows compose capability flows/stages → events and adapters → loop
@@ -91,5 +87,5 @@ Workflows compose capability flows/stages → events and adapters → loop
 
 ## What keeps it this way
 
-- `lint-imports` (run by `python -m pytest`) enforces the layers, the independence of Stages, Workflows and role agents, the private runtime engine and agent kit, that no process starts in Stages, definitions or the runtime (the discovery scheduler excepted), that Events are pure data, that no dependency-injection container is imported and that source never imports tests.
+- `lint-imports` (run by `python -m pytest`) enforces the layers, the independence of Stages, Workflows and role agents, the private runtime engine, the public factory helper boundary, that no process starts in Stages, definitions or the runtime (the discovery scheduler excepted), that Events are pure data, that no dependency-injection container is imported and that source never imports tests.
 - `workflows/tests/software_factory/architecture/` derives the rest from the code, with no hand-kept lists: every definition builds and validates, Stage ids are unique, every Stage is used by a Workflow, every fragment by two, no Stage factory takes a `bool`, policy modules hold values and pure functions only, nothing uses the retired phase-reporting names, every Event and agent message round-trips through the ledger codec and each Workflow runs from its own import closure.
