@@ -143,6 +143,14 @@ def test_count_initial_build_and_two_restarts_but_never_a_fourth(
     }
 
 
+def test_state_is_saved_where_directories_cannot_be_opened_for_fsync(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delattr(boundary.os, "O_DIRECTORY", raising=False)
+    failure = failed(client(tmp_path, JenkinsHost()))
+    assert failure.attempts == 1
+
+
 def test_external_builds_also_consume_capacity(tmp_path: Path) -> None:
     host = JenkinsHost()
     host.builds = [host.build(n) for n in (1, 2, 3)]

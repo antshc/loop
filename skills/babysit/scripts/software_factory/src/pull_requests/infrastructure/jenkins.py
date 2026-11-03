@@ -652,6 +652,8 @@ class Jenkins:
             stream.flush()
             os.fsync(stream.fileno())
         temporary.replace(path)
+        if not hasattr(os, "O_DIRECTORY"):
+            return
         descriptor = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
         try:
             os.fsync(descriptor)
