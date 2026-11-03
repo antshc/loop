@@ -131,10 +131,10 @@ The examples live in this repository and are not included in the installed
 | Example | Purpose |
 |---|---|
 | [Library usage](USAGE.md#library-examples) | One-shot runs, profiles, shared worktrees, sessions, and Loop hooks |
-| [PR scheduler and babysitter](workflows/software_factory/workflows/pr_babysit/README.md) | Discover user-authored PRs and address reviews/CI with ledger recovery and scoped telemetry |
+| [PR scheduler and babysitter](software_factory/workflows/pr_babysit/README.md) | Discover user-authored PRs and address reviews/CI with ledger recovery and scoped telemetry |
 | [Address one pull request once](USAGE.md#other-factory-workflows) | Address the trusted review feedback of one pull request with `address_once`, assembled from existing Stages |
-| [Write a factory Workflow](workflows/software_factory/README.md) | Compose a Workflow definition from the factory's Stages and run it with Loop's Workflow runtime |
-| [Plan and implement](workflows/loop/plan_implement.py) | Plan and implement with different models on one worktree |
+| [Write a factory Workflow](software_factory/README.md) | Compose a Workflow definition from the factory's Stages and run it with Loop's Workflow runtime |
+| [Plan and implement](loop/workflows/plan_implement.py) | Plan and implement with different models on one worktree |
 | [Implement Spec Workflow guide](USAGE.md#implement-spec-workflow) | Deliver GitHub Tickets, configure multiple repositories, and customize prompts |
 | [Multi-repository Workflow](USAGE.md#repositories-and-targets) | Route Specs to several repositories, each with its own agent steps |
 
@@ -152,10 +152,10 @@ implements and then reviews. Repositories must already be cloned under
 ```python
 from pathlib import Path
 
-from workflows.software_factory.events.specs import RepositoryTarget
-from workflows.software_factory.workflows.implement_spec.__main__ import build_services, main
-from workflows.software_factory.workflows.implement_spec.dry import Fakes
-from workflows.software_factory.workflows.implement_spec.settings import Targets
+from loop.software_factory.events.targets import RepositoryTarget
+from software_factory.workflows.implement_spec.__main__ import build_services, main
+from software_factory.workflows.implement_spec.dry import Fakes
+from software_factory.workflows.implement_spec.settings import Targets
 
 workspace = Path.cwd() / "workspace"
 targets = Targets((
@@ -174,16 +174,17 @@ has the delivery rules.
 
 | Path | Contents |
 |---|---|
-| `src/` | The installable `loop` library, including the Workflow runtime and the shared Git and process helpers. The only installed code. |
-| `tests/` | Library tests, grouped by capability. |
-| `workflows/loop/` | The standalone `plan_implement` example on the public `loop` API. |
-| [`workflows/software_factory/`](workflows/software_factory/README.md) | Software factory built on `loop`: reusable Stages, Flow fragments, role agents, and Workflow definitions such as `implement_spec` and `pr_babysit`. Imports only the public `loop` package and runs from the repository clone. |
-| `workflows/tests/` | Workflow tests for `loop/` and `software_factory/`. |
+| `loop/src/` | The installable `loop` library, including the Workflow runtime and the shared Git and process helpers. The only installed code. |
+| `loop/tests/` | Library tests, grouped by capability, including the `plan_implement` scenarios in `loop/tests/workflows/`. |
+| `loop/workflows/` | The standalone `plan_implement` example on the public `loop` API. |
+| [`software_factory/`](software_factory/README.md) | Software factory built on `loop`: reusable Stages, Flow fragments, role agents, and Workflow definitions such as `implement_spec` and `pr_babysit`. Imports only the public `loop` package and runs from the repository clone; its tests are in `software_factory/tests/`. |
+| [`skills/babysit/`](skills/babysit/SKILL.md) | A PR-URL skill that launches a detached babysit supervisor from a generated factory snapshot. |
+| `scripts/babysit/` | Canonical skill launcher and supervisor, copied into the skill at commit time. |
 
 ## Documentation
 
 - [Usage guide](USAGE.md): advanced examples, logging, and `implement_spec` Workflow configuration.
-- [Software factory](workflows/software_factory/README.md): write and run factory Workflows from reusable Stages.
+- [Software factory](software_factory/README.md): write and run factory Workflows from reusable Stages.
 - [Domain glossary](GLOSSARY.md): project terminology.
 - [Architecture](ARCHITECTURE.md): codebase structure, design decisions, and concepts.
 - [System context](docs/building-blocks/system-context.md): context and container diagrams.
@@ -198,7 +199,35 @@ python -m pip install -e ".[dev]" --config-settings editable_mode=strict
 python -m pytest
 ```
 
-The strict editable mode keeps `import loop` resolving to the repository-root `src/` folder.
+The strict editable mode keeps `import loop` resolving to the repository-root `loop/src/` folder.
+
+Install the repository's skill synchronization hook in each checkout:
+
+```sh
+git config core.hooksPath .githooks
+python scripts/sync_babysit_skill.py --check
+```
+
+Shared factory core installs with `loop` as `loop.software_factory`; skills do not copy it.
+
+The pre-commit hook copies factory `src/pull_requests/`, `src/github.py`, the `pr_babysit` workflow, and canonical launcher code into `skills/babysit/scripts/software_factory/`. Edit only canonical sources; CI rejects stale generated copies. To generate a copy before committing, run `python3 scripts/sync_babysit_skill.py`.
+
+To babysit one PR in the background, configure its checkout, build and test commands in `.loop/pr-babysit.json` (see the [example settings](software_factory/workflows/pr_babysit/settings.example.json)), then run:
+
+```sh
+python3 -m pip install -r skills/babysit/requirements.txt
+python3 skills/babysit/scripts/start.py https://github.com/owner/repo/pull/123
+```
+
+The launcher prints the PID and log path after startup. The process monitors one PR through blocks and clarification, then exits when GitHub reports it closed or merged. Use `--config /absolute/path/to/config.json` for another settings file. Install the compatible Loop package and authenticate `gh` and the agent CLI before starting.
+
+The root `skills/` folder is the source for `gh skill` installation, not an automatically loaded Copilot project-skill directory. After publishing this branch, install the babysit skill into your preferred agent host:
+
+```sh
+gh skill install antshc/loop skills/babysit --agent github-copilot --scope user
+```
+
+The installed skill can be invoked as `/babysit`; direct Python launcher use remains available. The install command discovers the canonical `skills/babysit/SKILL.md` and copies its generated scripts into the host-specific skill directory.
 The test suite includes library tests, example Workflow tests, and import-linter
 architecture checks. See the [test strategy](docs/concepts/ops-test-strategy.md)
 for testing boundaries.

@@ -4,12 +4,12 @@ The `loop` Python library: a single installable package, whose wheel holds the l
 
 ## Dependencies
 
-- **Called by:** User-owned Workflows (this repository's `workflows/software_factory/` and `workflows/loop/`, run from the clone) through the public `loop` API and its public `loop.shared` modules only.
+- **Called by:** User-owned Workflows (this repository's `workflows/software_factory/` and `loop/workflows/`, run from the clone) through the public `loop` API and its public `loop.shared` modules only.
 - **Calls (via subprocess):** `git`, the `copilot` and `codex` CLIs, and optionally `docker`. No Python dependency beyond `python-json-logger`; the optional `otel` extra adds the OpenTelemetry SDK and OTLP/HTTP exporter.
 
 ## Interfaces
 
-Public API re-exported from [`src/__init__.py`](../../src/__init__.py): `Agent()` returns an `AgentBuilder` ([Build agents with an agent builder](../adr/build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md)), configured with `with_git(GitOptions)`, `with_docker`, `with_session`, and `with_agent_cli_hooks`; `create()` yields an `AgentClient` and `open()` a `Worktree` whose `agent(profile)` yields clients. An `AgentProfile` picks the CLI (`copilot`, `codex`), model, and reasoning effort; a run takes an `AgentRequest` and returns an `AgentResult`. Replaceable seams are `CliRunner`, `GitService`, `DockerService`, `SessionStore`, and, when a Workflow opts in with `with_observer`, `RunObserver` and `SessionLogReader`. The Workflow runtime (`Stage`, `Flow`, `Workflow`, `Services`, `Ledger`, `run`, spans and routes) and the typed agent contract (`TypedAgent`, `Message`, typed agent errors) are exported from top-level `loop`, as are the Workflow-side Git helper (`GitClient`, `Commit`) and process runner (`CommandRunner`, `CommandError`). The GitHub package (issues with the Spec and Ticket model, pull requests, repository and account access) belongs to the factory in `workflows.software_factory.infrastructure.github`; these helpers are concrete, with no contract. implement_spec's definition and policy live in `workflows/software_factory/workflows/implement_spec/`.
+Public API re-exported from [`loop/src/__init__.py`](../../loop/src/__init__.py): `Agent()` returns an `AgentBuilder` ([Build agents with an agent builder](../adr/build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md)), configured with `with_git(GitOptions)`, `with_docker`, `with_session`, and `with_agent_cli_hooks`; `create()` yields an `AgentClient` and `open()` a `Worktree` whose `agent(profile)` yields clients. An `AgentProfile` picks the CLI (`copilot`, `codex`), model, and reasoning effort; a run takes an `AgentRequest` and returns an `AgentResult`. Replaceable seams are `CliRunner`, `GitService`, `DockerService`, `SessionStore`, and, when a Workflow opts in with `with_observer`, `RunObserver` and `SessionLogReader`. The Workflow runtime (`Stage`, `Flow`, `Workflow`, `Services`, `Ledger`, `run`, spans and routes) and the typed agent contract (`TypedAgent`, `Message`, typed agent errors) are exported from top-level `loop`, as are the Workflow-side Git helper (`GitClient`, `Commit`) and process runner (`CommandRunner`, `CommandError`). The GitHub package (issues with the Spec and Ticket model, pull requests, repository and account access) belongs to the factory in `workflows.software_factory.shared.infrastructure.github`; these helpers are concrete, with no contract. implement_spec's definition and policy live in `workflows/software_factory/workflows/implement_spec/`.
 
 ## Tweaks/Configuration
 
@@ -21,7 +21,7 @@ A `SessionStore` maps logical agent session keys to provider session identifiers
 
 ## Source-folder structure
 
-Paths relative to `src/`.
+Paths relative to `loop/src/`.
 
 ```text
 __init__.py     public API

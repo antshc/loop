@@ -4,7 +4,7 @@ GitHub access currently combines provider operations with factory conventions: S
 
 ## Decision
 
-Move the entire GitHub package to `workflows/software_factory/infrastructure/github/`, preserving its internal structure and behavior. Factory workflows import it directly and customize ordinary Python. Loop retains generic Git and process helpers; its wheel contains no GitHub package. No old import wrappers or policy configuration framework are added.
+Move the entire GitHub package to `workflows/software_factory/shared/infrastructure/github/`, preserving its internal structure and behavior. Factory workflows import it directly and customize ordinary Python. Loop retains generic Git and process helpers; its wheel contains no GitHub package. No old import wrappers or policy configuration framework are added.
 
 This supersedes [Share the Spec and Ticket model in Loop](share-the-spec-and-ticket-model-in-workflows-shared-while-dev-keeps-its-delivery-policy.md) and the GitHub placement in [Ship Loop as a workflow library](ship-loop-as-a-workflow-library-with-no-built-in-workflows.md).
 

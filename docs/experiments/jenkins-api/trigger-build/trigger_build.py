@@ -21,10 +21,10 @@ from urllib.parse import urlparse
 import requests
 import urllib3
 
-DEFAULT_CREDS = "/home/pet/_projects/afk/loop/docs/prototypes/jenkins-api/jenkins.json.user"
-DEFINITIONS_TREE = (
-    "property[parameterDefinitions[name,type,defaultParameterValue[value],choices,description]]"
+DEFAULT_CREDS = (
+    "/home/pet/_projects/afk/loop/docs/prototypes/jenkins-api/jenkins.json.user"
 )
+DEFINITIONS_TREE = "property[parameterDefinitions[name,type,defaultParameterValue[value],choices,description]]"
 QUEUE_POLL_SECONDS = 3
 BUILD_POLL_SECONDS = 10
 MAX_WAIT_SECONDS = 180
@@ -51,7 +51,10 @@ def make_session() -> requests.Session:
 
 def get_definitions(session: requests.Session, job_url: str) -> list[dict[str, Any]]:
     response = session.get(
-        f"{job_url}/api/json", params={"tree": DEFINITIONS_TREE}, timeout=30, verify=False
+        f"{job_url}/api/json",
+        params={"tree": DEFINITIONS_TREE},
+        timeout=30,
+        verify=False,
     )
     response.raise_for_status()
     definitions: list[dict[str, Any]] = []
@@ -60,16 +63,24 @@ def get_definitions(session: requests.Session, job_url: str) -> list[dict[str, A
     return definitions
 
 
-def build_payload(definitions: list[dict[str, Any]], overrides: dict[str, str]) -> dict[str, str]:
+def build_payload(
+    definitions: list[dict[str, Any]], overrides: dict[str, str]
+) -> dict[str, str]:
     names = {d["name"] for d in definitions}
     unknown = set(overrides) - names
     if unknown:
-        raise SystemExit(f"unknown parameters {sorted(unknown)}; job defines {sorted(names)}")
+        raise SystemExit(
+            f"unknown parameters {sorted(unknown)}; job defines {sorted(names)}"
+        )
     payload: dict[str, str] = {}
     for d in definitions:
-        value = overrides.get(d["name"], (d.get("defaultParameterValue") or {}).get("value"))
+        value = overrides.get(
+            d["name"], (d.get("defaultParameterValue") or {}).get("value")
+        )
         if value is not None:
-            payload[d["name"]] = str(value).lower() if isinstance(value, bool) else str(value)
+            payload[d["name"]] = (
+                str(value).lower() if isinstance(value, bool) else str(value)
+            )
     return payload
 
 
@@ -79,7 +90,9 @@ def get_json(session: requests.Session, url: str) -> dict[str, Any]:
     return response.json()
 
 
-def follow_queue(session: requests.Session, queue_url: str, deadline: float) -> str | None:
+def follow_queue(
+    session: requests.Session, queue_url: str, deadline: float
+) -> str | None:
     """Poll the queue item; return the build URL once it has an executable."""
     while time.monotonic() < deadline:
         item = get_json(session, f"{queue_url.rstrip('/')}/api/json")
@@ -100,7 +113,8 @@ def follow_build(session: requests.Session, build_url: str, deadline: float) -> 
     """Report building/result a few times; stop at the deadline or when finished."""
     while True:
         build = get_json(
-            session, f"{build_url.rstrip('/')}/api/json?tree=number,building,result,timestamp"
+            session,
+            f"{build_url.rstrip('/')}/api/json?tree=number,building,result,timestamp",
         )
         print(
             f"build #{build['number']}: building={build['building']} result={build['result']}"
