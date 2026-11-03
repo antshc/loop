@@ -10,22 +10,26 @@ from .composition import (
 )
 from .context import AgentCallContext, AgentRequest, AgentResult
 from .errors import (
+    AgentDeclined,
     AgentError,
     AgentReplyError,
     AgentRunError,
     PromptError,
     ReplyMismatch,
+    ReplyRejected,
 )
 from .host import AgentClient, AgentHost, AgentRun
 from .integrations import (
     CheckResult,
     CheckRunner,
+    Commit,
     GitHubClient,
     Issue,
     PlanStore,
     RetryPolicy,
     ReviewChecklist,
     TicketCache,
+    WorktreeGit,
 )
 from .middleware import Middleware, Next, Terminal
 from .pipeline import PipelineBuilder
@@ -35,6 +39,7 @@ __all__ = [
     "AgentCallContext",
     "AgentClient",
     "AgentClientTerminal",
+    "AgentDeclined",
     "AgentError",
     "AgentHost",
     "AgentReplyError",
@@ -44,6 +49,7 @@ __all__ = [
     "AgentRunError",
     "CheckResult",
     "CheckRunner",
+    "Commit",
     "GitHubClient",
     "Issue",
     "Middleware",
@@ -52,10 +58,12 @@ __all__ = [
     "PlanStore",
     "PromptError",
     "ReplyMismatch",
+    "ReplyRejected",
     "RetryPolicy",
     "ReviewChecklist",
     "Terminal",
     "TicketCache",
+    "WorktreeGit",
     "bind",
     "configure_pipeline",
     "configure_role_pipelines",

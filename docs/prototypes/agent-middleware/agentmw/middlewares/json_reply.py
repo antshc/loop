@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import json
 import types
-from dataclasses import fields, is_dataclass
+from collections.abc import Callable
+from dataclasses import MISSING, fields, is_dataclass
 from typing import Any, get_args, get_origin, get_type_hints
 
 from ..context import AgentCallContext
@@ -16,17 +17,22 @@ class JsonReplyMiddleware:
     """Post-agent: sets `ctx.reply` or raises `ReplyMismatch`."""
 
     async def invoke(self, ctx: AgentCallContext, next: Next) -> None:
-        """Decodes after the inner chain produced a result."""
+        """Decodes `ctx.payload`, else the last JSON object of the output."""
         await next(ctx)
         if ctx.result is None:
             raise ReplyMismatch("no agent result to parse")
-        ctx.reply = to_typed(
-            ctx.request.reply_type, last_json_object(ctx.result.output)
+        payload = (
+            ctx.payload
+            if ctx.payload is not None
+            else last_json_object(ctx.result.output)
         )
+        ctx.reply = to_typed(ctx.request.reply_type, payload)
 
 
-def last_json_object(text: str) -> dict[str, Any]:
-    """The last top-level JSON object in `text`."""
+def last_json_object(
+    text: str, accept: Callable[[dict[str, Any]], bool] = lambda _: True
+) -> dict[str, Any]:
+    """The last top-level JSON object in `text` that `accept` holds for."""
     decoder = json.JSONDecoder()
     found: dict[str, Any] | None = None
     index = text.find("{")
@@ -36,7 +42,7 @@ def last_json_object(text: str) -> dict[str, Any]:
         except json.JSONDecodeError:
             index = text.find("{", index + 1)
             continue
-        if isinstance(value, dict):
+        if isinstance(value, dict) and accept(value):
             found = value
         index = text.find("{", end)
     if found is None:
@@ -73,7 +79,13 @@ def _dataclass(cls: type, value: Any, path: str) -> Any:
     if not isinstance(value, dict):
         raise ReplyMismatch(f"{path} must be an object")
     hints = get_type_hints(cls)
-    missing = [field.name for field in fields(cls) if field.name not in value]
+    missing = [
+        field.name
+        for field in fields(cls)
+        if field.name not in value
+        and field.default is MISSING
+        and field.default_factory is MISSING
+    ]
     if missing:
         raise ReplyMismatch(f"{path} is missing {', '.join(missing)}")
     return cls(
@@ -82,6 +94,7 @@ def _dataclass(cls: type, value: Any, path: str) -> Any:
                 hints[field.name], value[field.name], f"{path}.{field.name}"
             )
             for field in fields(cls)
+            if field.name in value
         }
     )
 

@@ -41,6 +41,8 @@ class AgentCallContext:
     feedback: str | None = None
     prompt: str | None = None
     result: AgentResult | None = None
+    # The JSON object to decode, when a middleware unwrapped it from an envelope.
+    payload: dict[str, Any] | None = None
     reply: Any = None
     items: dict[str, Any] = field(default_factory=dict)
 

@@ -78,3 +78,27 @@ class ReviewChecklist:
     """Checklist items only the reviewer role receives."""
 
     items: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class Commit:
+    """One commit on a worktree's branch."""
+
+    sha: str
+    subject: str
+
+
+class WorktreeGit(Protocol):
+    """Git evidence and rollback for the worktree an agent runs in."""
+
+    async def head(self, path: str) -> str: ...
+
+    async def status(self, path: str) -> str: ...
+
+    async def commits_since(self, path: str, sha: str) -> list[Commit]: ...
+
+    async def branch_commits(self, path: str) -> list[Commit]: ...
+
+    async def commit(self, path: str, message: str) -> str: ...
+
+    async def restore(self, path: str, sha: str) -> None: ...

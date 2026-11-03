@@ -182,6 +182,7 @@ From this directory, on Python 3.14:
 ```sh
 python -m pip install -r requirements.txt   # dishka
 python -m agentmw                           # demo: planner (retries once) → implementer → reviewer
+python -m agentmw.implement_spec            # demo: the software factory's implement_spec on fakes
 python -m unittest discover -s tests -t .
 ```
 
@@ -190,18 +191,20 @@ python -m unittest discover -s tests -t .
 ```
 agentmw/
   context.py        AgentRequest[R], AgentResult, AgentCallContext
-  errors.py         PromptError, ReplyMismatch, AgentRunError, AgentReplyError
+  errors.py         PromptError, ReplyMismatch, AgentRunError, AgentReplyError, AgentDeclined, ReplyRejected
   template.py       {{KEY}} placeholders and render
   middleware.py     Next, Middleware, Terminal protocols
   pipeline.py       PipelineBuilder: use, use_when, map_when, for_role, map_role, apply, run, build
   host.py           AgentClient protocol, AgentHost, AgentRun (run scope)
   terminal.py       AgentClientTerminal, UnknownRoleTerminal
-  integrations.py   GitHubClient, TicketCache, Issue, RetryPolicy, ReviewChecklist
-  middlewares/      log, ticket, response_format, checklist, plan, checks, retry, json_reply, result_check
+  integrations.py   GitHubClient, TicketCache, Issue, RetryPolicy, ReviewChecklist, WorktreeGit, Commit
+  middlewares/      log, ticket, response_format, checklist, plan, checks, retry, json_reply, result_check,
+                    status (completed | failed envelope), contracts (ReadOnly, AgentCommits)
   composition.py    the composition root: providers, configure_pipeline, configure_role_pipelines, bind, create_host
   fakes.py          FakeGitHubClient, ScriptedAgentClient
   __main__.py       demo
-tests/              pipeline ordering and branching, each middleware, end-to-end host and run scope
+  implement_spec/   the software factory's implement_spec over the pipeline (see below)
+tests/              pipeline ordering and branching, each middleware, end-to-end host and run scope, implement_spec
 ```
 
 ## Example: planner → implementer
@@ -264,6 +267,57 @@ You are the implementer. Follow the plan.
 - **`args={"PLAN": ...}`**: the caller renders the typed `PlanReply` itself; `PlanMiddleware` leaves an explicit argument alone.
 
 `python -m agentmw` runs this flow against fakes. The planner needs one retry. The implementer gets the stored plan, fails its checks once, and is re-asked with the failure. The reviewer gets its checklist. It prints `GitHub fetches: 1, check runs: 2`.
+
+## Example: implement_spec
+
+[`agentmw/implement_spec/`](agentmw/implement_spec) rebuilds the agent side of the software factory's [`implement_spec`](../../../software_factory/workflows/implement_spec) Workflow on this pipeline. The four roles (`planner`, `developer`, `chore`, `reviewer`) each get a `map_role` chain. A small async Workflow, [`ImplementSpec`](agentmw/implement_spec/workflow.py), replaces the declarative definition. Each piece of today's code maps to one place:
+
+| In the software factory | Here |
+|---|---|
+| `TypedAgent.encode`: `template_agent(args={...})` per role | pre-agent middlewares: `RouteMiddleware`, `SpecJsonMiddleware`, `TicketJsonMiddleware`, `InitiativeCommitsMiddleware`, `PullRequestMiddleware`, `BranchCommitsMiddleware` |
+| The prompt's hand-written `## Response` JSON | `StatusFormatMiddleware`: the `completed \| failed` envelope rendered from the reply dataclass, echoing `identifier` when the request has one |
+| `read_status(output, identifier=...)` + per-role `_decode` | `StatusEnvelopeMiddleware` unwraps the envelope into `ctx.payload`, then the shared `JsonReplyMiddleware` decodes it. `failed` raises `AgentDeclined` (not retried) |
+| `Stage.gate` (`plan_violation`) | `PlanPolicyMiddleware`: `ReplyRejected` |
+| `.contract(ReadOnly())` | `ReadOnlyMiddleware`: a moved head or changed tree is restored and rejected |
+| `.contract(AgentCommits(subject=..., reported=...))` | `AgentCommitsMiddleware`: fills `{{COMMIT_SUBJECT_PREFIX}}`, then checks exactly one prefixed commit, a clean tree, and `reply.commit == HEAD`. Any failed attempt is restored to its base |
+| `.contract(HarnessCommits(message=chore_subject, verify=...))` + `_ChoreAgent` | `ChoreCommitMiddleware` (rejects an agent commit, verifies with `CheckRunner`, commits `chore(<initiative>): …`) + `DiffCaptureMiddleware` (per-file diff and manifest, removed in `finally`) |
+| `.on_fail(rework(max_attempts, then=escalate))` | the Workflow: a fresh `run.call` per attempt, then comment and label the Ticket and Spec `hitl` |
+| `.each(next_ready_ticket(), …, on_fail=next_())`, `require_delivered`, `finalize` | the Workflow, with `policy.py` (`review_blockers`, `REQUIRED_AXES`, `BLOCKING_FINDING_KINDS`) |
+| `dry.py`: `ScriptedAgent`, `DryGit`, `DryGh` | `fakes.py`: `ScriptedFactoryAgent`, `FakeGit`, `FakeTracker` |
+
+```
+┬─ planner:   Logging → Route → SpecJson → StatusFormat → PlanPolicy → Retry → ReadOnly → Json → StatusEnvelope → ResultCheck → Terminal
+├─ developer: Logging → Route → TicketJson → InitiativeCommits → StatusFormat → Retry → AgentCommits → Json → StatusEnvelope → ResultCheck → Terminal
+├─ chore:     Logging → Route → PullRequest → BranchCommits → DiffCapture → StatusFormat → Retry → ChoreCommit → Json → StatusEnvelope → ResultCheck → Terminal
+├─ reviewer:  Logging → Route → PullRequest → StatusFormat → Retry → ReadOnly → Json → StatusEnvelope → ResultCheck → Terminal
+└─ (other)    UnknownRoleTerminal → LookupError
+```
+
+### Three ways a call can fail
+
+The extension separates failures that `TypedAgent`, the Stage gate and the runtime contract handle in different places today:
+
+| Failure | Raised as | Handled by |
+|---|---|---|
+| Output does not match the envelope or reply shape, or echoes another identifier | `ReplyMismatch` | `ReplyRetryMiddleware`: the same call re-asks with feedback |
+| The agent answers `failed` | `AgentDeclined` | the Workflow: hand-off (planner), rework then escalate (developer), discard (chore), draft (reviewer) |
+| A well-formed reply breaks a rule (plan limits, repository contract, chore verification) | `ReplyRejected` | the Workflow, same as a decline |
+
+The contract middlewares sit **inside** the retry, so every attempt starts from the same base: a re-asked developer never meets its own earlier commit. `PlanPolicyMiddleware` sits **outside** it and judges only the final plan.
+
+### What the Workflow keeps
+
+Sequencing, rework and hand-offs stay out of the middlewares:
+
+1. Plan when the Spec has no Tickets. Any `AgentError` labels the Spec `hitl` and ends `handed_off`.
+2. Deliver each READY Ticket (open, not held, every blocker closed), one fresh `developer` call per attempt. After `max_failures` the Ticket is escalated, and Tickets it blocks never become ready.
+3. Publish the draft pull request. Fail when a Ticket was escalated or remains open.
+4. Run the chore, best effort: a decline or rejection is logged and the delivery stands.
+5. Review on the checkout, then finalize. The pull request is marked ready only when all four axes completed on the delivered head with no `bug` or `initiative` finding. Otherwise it stays a draft and the Spec is labelled `hitl`.
+
+Not ported: routing to a target repository, checkout and worktree preparation, the Execution ledger, resume and reconcile, the plan marker comment, and telemetry. `SpecRoute` stands in for the routed Spec.
+
+`python -m agentmw.implement_spec` runs one Spec on fakes. The planner is re-asked once for a missing `tickets` field, and Ticket #11 is declined once and reworked. The chore's edit is committed by the middleware. The run ends `ready` with `planner -> planner -> developer -> developer -> developer -> chore -> reviewer`.
 
 ## Open questions before adopting
 

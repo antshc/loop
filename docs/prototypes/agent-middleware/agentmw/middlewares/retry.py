@@ -28,3 +28,5 @@ class ReplyRetryMiddleware:
                 ctx.feedback = str(exception)
                 ctx.attempt += 1
                 ctx.result = None
+                ctx.payload = None
+                ctx.reply = None

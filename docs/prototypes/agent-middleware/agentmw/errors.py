@@ -26,3 +26,15 @@ class AgentRunError(AgentError):
 
 class AgentReplyError(AgentError):
     """The agent output never matched the reply shape."""
+
+
+class AgentDeclined(AgentError):
+    """The agent answered `failed` with a reason; well-formed, so not retried."""
+
+    def __init__(self, role: str, reason: str) -> None:
+        super().__init__(role, f"declined: {reason}")
+        self.reason = reason
+
+
+class ReplyRejected(AgentError):
+    """A well-formed reply, or what the agent left in the worktree, breaks a rule; not retried."""
