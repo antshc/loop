@@ -10,7 +10,6 @@
   "state_dir": "../../.loop/pr-babysit",
   "worktrees_dir": "../../.loop/.worktrees",
   "interval": 60,
-  "concurrency": 2,
   "retries": 3,
   "timeout": 1800,
   "copilot_review": false,

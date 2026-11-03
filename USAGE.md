@@ -251,14 +251,15 @@ settings from a `--config` file; see [`pr_babysit/settings.example.json`](softwa
 and [`address_once/settings.example.json`](software_factory/workflows/address_once/settings.example.json).
 
 ```sh
-python -m software_factory.workflows.pr_babysit --config cfg.json                  # discover your pull requests and babysit each one
 python -m software_factory.workflows.pr_babysit --config cfg.json --pr https://github.com/owner/repo/pull/123
 python -m software_factory.workflows.address_once --config cfg.json --pr https://github.com/owner/repo/pull/123
 ```
 
-`pr_babysit` polls a pull request until it closes, addressing feedback, maintaining CI, requesting a Copilot review and
-reporting readiness ([PR maintenance](software_factory/workflows/pr_babysit/README.md)); `--include-existing` also enrolls
-open pull requests, and `--retry URL` releases a blocked one. `address_once` addresses the trusted review feedback of one pull
+`pr_babysit` requires an explicit `--pr` URL and polls that pull request until it closes,
+addressing feedback, maintaining CI, requesting a Copilot review and
+reporting readiness ([PR maintenance](software_factory/workflows/pr_babysit/README.md)).
+The [babysit skill](skills/babysit/SKILL.md) launches one background supervisor per PR.
+`address_once` addresses the trusted review feedback of one pull
 request once, assembled only from existing Stages. To write a Workflow of your own, see the
 [factory quickstart](software_factory/README.md) and [Factory Workflow Runtime](docs/concepts/str-factory-workflow-runtime.md).
 
@@ -431,5 +432,5 @@ was removed. OTLP closes the run's span and marks retention independently of dis
 Loop has no isolated sandbox synchronization backend; patch-based sync recovery is
 not applicable to its host worktrees or Docker context adapter.
 
-See [PR maintenance](software_factory/workflows/pr_babysit/README.md) for continuous PR discovery,
+See [PR maintenance](software_factory/workflows/pr_babysit/README.md) for explicit PR babysitting,
 Address/Maintainer profiles, Execution-ledger recovery, and workflow-owned commit/push operations.

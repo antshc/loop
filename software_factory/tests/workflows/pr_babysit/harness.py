@@ -178,12 +178,6 @@ class Babysit(WatchRig):
             ["--config", str(self.config), "--pr", URL, *argv], services=self.services
         )
 
-    def discover(self, *argv: str, services: Services | None = None) -> int:
-        """Runs discovery through the command line over `services`."""
-        return main(
-            ["--config", str(self.config), *argv], services=services or self.services
-        )
-
     def status(self) -> RunStatus | None:
         """How the pull request's latest run stands."""
         return self.ledger.status(NAME, self.pr.id)
