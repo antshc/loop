@@ -355,3 +355,39 @@ def test_an_owned_observer_closes_after_success_or_worker_failure(
     else:
         assert main(argv) == (1 if failure else 0)
     observer.close.assert_called_once()
+
+
+def test_the_agent_starts_in_the_worktree_unless_a_harness_folder_is_configured(
+    tmp_path: Path,
+) -> None:
+    """Given a configuration with and without `harness_dir`, when its agent launcher builds an agent, then the CLI starts in that folder in harness mode, else in the worktree."""
+    (tmp_path / "root").mkdir()
+    repository = {"name": "a/b", "path": ".", "build": ["build"], "test": ["test"]}
+    config = tmp_path / "cfg.json"
+
+    def agent_context(extra: dict[str, str]):
+        config.write_text(
+            json.dumps({"repositories": [repository], **extra}), encoding="utf-8"
+        )
+        return entry.agent_launcher(Settings.load(config), None)()._defaults.agent
+
+    default = agent_context({})
+    harness = agent_context({"harness_dir": "root"})
+
+    assert default.start_mode == "worktree"
+    assert harness.start_mode == "harness"
+    assert harness.harness_dir == (tmp_path / "root").resolve()
+
+
+def test_a_harness_folder_that_does_not_exist_is_rejected_when_the_configuration_loads(
+    tmp_path: Path,
+) -> None:
+    """Given a `harness_dir` that is not a folder, when the configuration loads, then it is rejected before any work starts."""
+    config = tmp_path / "cfg.json"
+    repository = {"name": "a/b", "path": ".", "build": ["build"], "test": ["test"]}
+    config.write_text(
+        json.dumps({"repositories": [repository], "harness_dir": "missing"}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="harness_dir is not a folder"):
+        Settings.load(config)

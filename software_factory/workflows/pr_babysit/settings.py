@@ -36,6 +36,8 @@ class Settings:
     timeout: float = 1800
     worktrees_dir: Path | None = None
     jenkins: JenkinsSettings | None = None
+    # Where the agent CLI starts; it is told to change into the PR worktree. Unset starts it in the worktree.
+    harness_dir: Path | None = None
 
     @property
     def ledger_root(self) -> Path:
@@ -88,7 +90,12 @@ class Settings:
             if value.get("worktrees_dir")
             else None,
             JenkinsSettings.load(value.get("jenkins"), path.parent),
+            (path.parent / value["harness_dir"]).resolve()
+            if value.get("harness_dir")
+            else None,
         )
+        if settings.harness_dir is not None and not settings.harness_dir.is_dir():
+            raise ValueError(f"harness_dir is not a folder: {settings.harness_dir}")
         if not repositories or len({repo.name for repo in repositories}) != len(
             repositories
         ):

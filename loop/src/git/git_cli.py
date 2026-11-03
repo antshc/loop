@@ -98,11 +98,17 @@ class GitCli:
         records = self._output(
             repository, "worktree", "list", "--porcelain", "-z"
         ).split("\0\0")
+        # Git prints POSIX-style paths, so compare parsed paths rather than strings.
+        resolved = target.resolve()
         registered = next(
             (
-                record.split("\0")
-                for record in records
-                if f"worktree {target.resolve()}" in record.split("\0")
+                fields
+                for fields in (record.split("\0") for record in records)
+                if any(
+                    field.startswith("worktree ")
+                    and Path(field.removeprefix("worktree ")).resolve() == resolved
+                    for field in fields
+                )
             ),
             None,
         )

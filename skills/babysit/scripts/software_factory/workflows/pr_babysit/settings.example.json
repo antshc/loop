@@ -24,5 +24,6 @@
     "timeout": 30,
     "log_bytes": 262144
   },
+  "harness_dir": null,
   "otel_endpoint": null
 }

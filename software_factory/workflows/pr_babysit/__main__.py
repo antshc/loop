@@ -17,6 +17,8 @@ from typing import Any
 
 from loop import (
     Agent,
+    AgentOptions,
+    AgentStartMode,
     DefinitionError,
     Fail,
     LogSpans,
@@ -139,6 +141,18 @@ def verify_of(
     return verify
 
 
+def agent_launcher(
+    settings: Settings, observer: TracingObserver | None
+) -> AgentLauncher:
+    """Agents that start in `harness_dir` and are told to change into the PR worktree, else in the worktree."""
+    if settings.harness_dir is None:
+        return AgentLauncher(Agent, observer)
+    options = AgentOptions(
+        start_mode=AgentStartMode.HARNESS, harness_dir=settings.harness_dir
+    )
+    return AgentLauncher(lambda: Agent(options), observer)
+
+
 def build_services(observer: TracingObserver | None, stop: StopRequest) -> Services:
     """The services of the definition and the scheduler, all real."""
     run_process = CommandRunner(timeout_s=_GIT_TIMEOUT_S)
@@ -199,6 +213,8 @@ def _maintain(
     """Maintains one pull request until it closes, blocks or is interrupted; the exit code of its run."""
     with closing_observer(_observer(settings) if given is None else None) as observer:
         services = given or build_services(observer, stop)
+        if given is None and settings.harness_dir is not None:
+            services = services.bind(AgentLauncher, agent_launcher(settings, observer))
         if given is None and settings.jenkins is not None:
             services = services.bind(
                 Jenkins, Jenkins(settings.jenkins, settings.state_dir / "jenkins")
