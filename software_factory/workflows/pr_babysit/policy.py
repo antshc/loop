@@ -8,13 +8,13 @@ from typing import TYPE_CHECKING
 
 from loop import RunStatus
 
-from software_factory.pull_requests.events.feedback import TrustPolicy
-from software_factory.pull_requests.events.pull_requests import PullRequestPolled
+from software_factory.src.pull_requests.events.feedback import TrustPolicy
+from software_factory.src.pull_requests.events.pull_requests import PullRequestPolled
 
 if TYPE_CHECKING:
-    from software_factory.pull_requests.stages.address import IssueWork
-    from software_factory.pull_requests.stages.ci import FixInput
-    from software_factory.pull_requests.stages.conflicts import PublishInput
+    from software_factory.src.pull_requests.stages.address import IssueWork
+    from software_factory.src.pull_requests.stages.ci import FixInput
+    from software_factory.src.pull_requests.stages.conflicts import PublishInput
 
 __all__ = [
     "ADOPTED",

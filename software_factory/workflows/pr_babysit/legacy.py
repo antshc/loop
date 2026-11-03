@@ -11,13 +11,13 @@ from typing import Any
 from loop import Event, Ledger, Nothing, WorkItemLocked, WorkKey, encode
 from loop.software_factory.events.checks import ChecksPassed
 
-from software_factory.pull_requests.events.ci import (
+from software_factory.src.pull_requests.events.ci import (
     BranchBroken,
     CiFixed,
     CiRerun,
     Transient,
 )
-from software_factory.pull_requests.events.feedback import (
+from software_factory.src.pull_requests.events.feedback import (
     FeedbackBatch,
     FeedbackGrouped,
     FeedbackHandled,
@@ -26,12 +26,12 @@ from software_factory.pull_requests.events.feedback import (
     IssueUnclear,
     ReplyDraft,
 )
-from software_factory.pull_requests.events.pull_requests import (
+from software_factory.src.pull_requests.events.pull_requests import (
     CiFailing,
     CopilotRequested,
     PullRequestWork,
 )
-from software_factory.pull_requests.stages.pacing import Poll
+from software_factory.src.pull_requests.stages.pacing import Poll
 
 from .definition import NAME
 from .policy import ADOPTED, FINGERPRINT, REASON

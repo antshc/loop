@@ -54,28 +54,29 @@ python -m software_factory.workflows.address_once --config address_once.json --p
 
 Workflow commands now use `python -m software_factory.workflows.<workflow>`.
 Import each definition from `software_factory.workflows.<workflow>.definition`;
-shared infrastructure ships as `loop.software_factory`; capability policy stays in `pull_requests` or `spec_delivery`.
+shared infrastructure ships as `loop.software_factory`; capability policy stays in `src/pull_requests` or `src/spec_delivery`.
 
 
 ```text
 software_factory/
-├── github.py        # capability composition over installed GitHub transport
-├── pull_requests/   # PR feedback, CI, conflicts and merge readiness
-│   ├── agents/
-│   ├── events/
-│   ├── flows/
-│   ├── stages/
-│   └── infrastructure/
-├── spec_delivery/   # spec and ticket implementation
-│   ├── agents/
-│   ├── events/
-│   ├── stages/
-│   └── infrastructure/
-└── workflows/       # one package per runnable Workflow
-    ├── implement_spec/
-    ├── pr_babysit/
-    └── address_once/
-workflows/tests/software_factory/  # Stage, fragment, Workflow scenario and architecture tests
+├── src/             # package software_factory.src
+│   ├── github.py        # capability composition over installed GitHub transport
+│   ├── pull_requests/   # PR feedback, CI, conflicts and merge readiness
+│   │   ├── agents/
+│   │   ├── events/
+│   │   ├── flows/
+│   │   ├── stages/
+│   │   └── infrastructure/
+│   └── spec_delivery/   # spec and ticket implementation
+│       ├── agents/
+│       ├── events/
+│       ├── stages/
+│       └── infrastructure/
+├── workflows/       # one package per runnable Workflow
+│   ├── implement_spec/
+│   ├── pr_babysit/
+│   └── address_once/
+└── tests/           # Stage, fragment, Workflow scenario and architecture tests
 ```
 
 Loop provides the runtime (`loop.runtime`, exported from `loop`), the typed agent contract and Git/process helpers (`loop.shared`). Shared factory infrastructure ships in
@@ -88,4 +89,4 @@ Workflows compose capability flows/stages → events and adapters → loop
 ## What keeps it this way
 
 - `lint-imports` (run by `python -m pytest`) enforces the layers, the independence of Stages, Workflows and role agents, the private runtime engine, the public factory helper boundary, that no process starts in Stages, definitions or the runtime (the discovery scheduler excepted), that Events are pure data, that no dependency-injection container is imported and that source never imports tests.
-- `workflows/tests/software_factory/architecture/` derives the rest from the code, with no hand-kept lists: every definition builds and validates, Stage ids are unique, every Stage is used by a Workflow, every fragment by two, no Stage factory takes a `bool`, policy modules hold values and pure functions only, nothing uses the retired phase-reporting names, every Event and agent message round-trips through the ledger codec and each Workflow runs from its own import closure.
+- `software_factory/tests/architecture/` derives the rest from the code, with no hand-kept lists: every definition builds and validates, Stage ids are unique, every Stage is used by a Workflow, every fragment by two, no Stage factory takes a `bool`, policy modules hold values and pure functions only, nothing uses the retired phase-reporting names, every Event and agent message round-trips through the ledger codec and each Workflow runs from its own import closure.

@@ -45,10 +45,10 @@ from loop.software_factory.infrastructure.telemetry import (
 )
 from loop.software_factory.stages.checks import as_verify
 
-from software_factory.github import GitHub
-from software_factory.pull_requests.events.pull_requests import PullRequestWork
-from software_factory.pull_requests.infrastructure.jenkins import Jenkins
-from software_factory.pull_requests.stages import pull_requests
+from software_factory.src.github import GitHub
+from software_factory.src.pull_requests.events.pull_requests import PullRequestWork
+from software_factory.src.pull_requests.infrastructure.jenkins import Jenkins
+from software_factory.src.pull_requests.stages import pull_requests
 
 from .definition import HANDED_OFF_ERRORS, NAME, pr_babysit
 from .intake import (

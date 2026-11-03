@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from loop import Verify, Workflow
 
-from software_factory.pull_requests.events.pull_requests import PullRequestWork
-from software_factory.pull_requests.flows import address
-from software_factory.pull_requests.stages import feedback, pull_requests
+from software_factory.src.pull_requests.events.pull_requests import PullRequestWork
+from software_factory.src.pull_requests.flows import address
+from software_factory.src.pull_requests.stages import feedback, pull_requests
 
 from .policy import TRUST, address_subject
 

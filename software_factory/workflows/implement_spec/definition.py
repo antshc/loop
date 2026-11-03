@@ -7,14 +7,14 @@ from subprocess import CalledProcessError
 from loop import Flow, LoopHookError, Workflow, handoff, next_, rework, stop
 from loop.software_factory.stages import workspaces
 
-from software_factory.pull_requests.events.pull_requests import (
+from software_factory.src.pull_requests.events.pull_requests import (
     DraftPullRequestPublished,
 )
-from software_factory.spec_delivery.events.tickets import Delivery
-from software_factory.spec_delivery.infrastructure.github.issues.errors import (
+from software_factory.src.spec_delivery.events.tickets import Delivery
+from software_factory.src.spec_delivery.infrastructure.github.issues.errors import (
     IssueError,
 )
-from software_factory.spec_delivery.stages import (
+from software_factory.src.spec_delivery.stages import (
     chore,
     finalize,
     plan,
@@ -23,7 +23,7 @@ from software_factory.spec_delivery.stages import (
     specs,
     tickets,
 )
-from software_factory.spec_delivery.stages import workspaces as spec_workspaces
+from software_factory.src.spec_delivery.stages import workspaces as spec_workspaces
 
 from .policy import HITL, SOURCE, SpecWork, chore_subject, held_by_spec, held_by_ticket
 from .settings import ImplementSpecSettings, Targets

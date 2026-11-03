@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from software_factory.pull_requests.events.feedback import TrustPolicy
+from software_factory.src.pull_requests.events.feedback import TrustPolicy
 
 if TYPE_CHECKING:
-    from software_factory.pull_requests.stages.address import IssueWork
+    from software_factory.src.pull_requests.stages.address import IssueWork
 
 __all__ = ["TRUST", "address_subject"]
 

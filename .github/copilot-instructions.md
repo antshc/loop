@@ -5,7 +5,7 @@
 Single repo: docs and codebase live together at the reporoot. There is no `workspace/` split and no `.harness.env`.
 
 - **Docs & decisions:** `GLOSSARY.md` (domain glossary) and `ARCHITECTURE.md` (ADR index, Concept index, and Codebase Structure), with ADRs under `docs/adr/` and Crosscutting Concepts under `docs/concepts/`.
-- **Code:** `src/` (the `loop` library, including the Workflow runtime in `src/runtime/` and the shared Git and process helpers in `src/shared/`), library tests under `tests/`, the software factory under `software_factory/` (Stages, Events, Flow fragments, role agents, capability infrastructure and the `implement_spec`, `pr_babysit` and `address_once` Workflows), the standalone example under `workflows/loop/`, and Workflow tests under `workflows/tests/{loop,software_factory}/`. Shared factory helpers ship from `src/software_factory/` as `loop.software_factory`. Loop is a library with no command. The layout is documented under **Codebase Structure** in `ARCHITECTURE.md`.
+- **Code:** `loop/src/` (the `loop` library, including the Workflow runtime in `loop/src/runtime/` and the shared Git and process helpers in `loop/src/shared/`), library tests under `loop/tests/`, the standalone example under `loop/workflows/` (its tests in `loop/tests/workflows/`), and the software factory under `software_factory/` (capability code in `software_factory/src/`: Stages, Events, Flow fragments, role agents and capability infrastructure; the `implement_spec`, `pr_babysit` and `address_once` Workflows in `software_factory/workflows/`; their tests in `software_factory/tests/`). Shared factory helpers ship from `loop/src/software_factory/` as `loop.software_factory`. Loop is a library with no command. The layout is documented under **Codebase Structure** in `ARCHITECTURE.md`.
 - **Archive:** `archive/` holds retired prototypes as a parts source only. It is excluded from editor search and file watching (see `.vscode/settings.json`) — do not navigate into it, edit it, or import from it.
 
 Within this file, resolve conflicts in this order: **safety and repository targeting → authoritative sources → navigation → build and validation → documentation conventions.** This ordering scopes only the rules in this file; it does not override `AGENTS.md`, path-scoped instructions, or user instructions.
@@ -30,7 +30,7 @@ Consult these before searching the code:
 ## 4. Navigation policy
 
 1. Read the relevant authoritative source first and state which doc you checked (or that none applies) before searching.
-2. Use `ARCHITECTURE.md`'s Codebase Structure to scope searches to `src/`, `tests/`, `software_factory/`, `workflows/loop/`, or `workflows/tests/`.
+2. Use `ARCHITECTURE.md`'s Codebase Structure to scope searches to `loop/src/`, `loop/tests/`, `software_factory/`, or `loop/workflows/`.
 3. Exact symbol (definition, references, rename) → language-server tools; concept or behavior → semantic search; literal or config value → text search.
 4. Docs are leads, not proof — confirm behavior against current source or tests, then stop searching.
 
@@ -39,7 +39,7 @@ Consult these before searching the code:
 - Runtime: Python 3.14+ for the library and example Workflows; preserve the minimum declared in `pyproject.toml`.
 - Install: `python -m pip install -e ".[dev]" --config-settings editable_mode=strict` from the reporoot.
 - Style: run `python -m ruff check .` and `python -m ruff format --check .` from the reporoot before completing Python changes; both also run in the pull request gate.
-- Test: `python -m pytest` from the reporoot (configured in `pyproject.toml`, `testpaths = ["tests", "workflows/tests"]`); it includes the import-linter architecture checks (`tests/test_architecture.py`).
+- Test: `python -m pytest` from the reporoot (configured in `pyproject.toml`, `testpaths = ["loop/tests", "software_factory/tests"]`); it includes the import-linter architecture checks (`loop/tests/test_architecture.py`).
 - For compatibility changes, follow [Test Strategy: Python compatibility](../docs/concepts/ops-test-strategy.md#python-compatibility); a newer local interpreter alone does not verify the minimum.
 
 ## 6. Documentation conventions
@@ -49,5 +49,5 @@ Consult these before searching the code:
 
 ## 7. Generated skill scripts
 
-- MUST treat `skills/**/scripts/**/*.py` as generated, read-only code. Edit the canonical source under `scripts/babysit/` or `software_factory/` (shared helpers: `src/software_factory/`), then run `python scripts/sync_babysit_skill.py`; never hand-edit the skill copy, even if faster or simpler.
+- MUST treat `skills/**/scripts/**/*.py` as generated, read-only code. Edit the canonical source under `scripts/babysit/` or `software_factory/` (shared helpers: `loop/src/software_factory/`), then run `python scripts/sync_babysit_skill.py`; never hand-edit the skill copy, even if faster or simpler.
 - MUST NOT bypass the skill synchronization pre-commit hook or its CI drift check.

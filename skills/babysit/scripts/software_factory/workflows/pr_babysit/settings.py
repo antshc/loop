@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from software_factory.pull_requests.infrastructure.jenkins import JenkinsSettings
+from software_factory.src.pull_requests.infrastructure.jenkins import JenkinsSettings
 
 
 @dataclass(frozen=True)

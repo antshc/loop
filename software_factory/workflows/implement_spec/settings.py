@@ -7,7 +7,7 @@ from pathlib import Path
 
 from loop import LoopHook
 
-from software_factory.spec_delivery.events.specs import RepositoryTarget
+from software_factory.src.spec_delivery.events.specs import RepositoryTarget
 
 
 @dataclass(frozen=True)

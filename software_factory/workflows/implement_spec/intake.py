@@ -7,8 +7,10 @@ from dataclasses import dataclass
 
 from loop import Ledger
 
-from software_factory.spec_delivery.infrastructure.github.issues.client import Issues
-from software_factory.spec_delivery.infrastructure.github.issues.graph import (
+from software_factory.src.spec_delivery.infrastructure.github.issues.client import (
+    Issues,
+)
+from software_factory.src.spec_delivery.infrastructure.github.issues.graph import (
     SpecGraphSnapshot,
 )
 

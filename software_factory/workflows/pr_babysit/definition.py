@@ -8,16 +8,16 @@ from subprocess import CalledProcessError, TimeoutExpired
 from loop import Flow, Verify, Workflow, WorktreeError, handoff, reroute, stop
 from loop.software_factory.stages import workspaces
 
-from software_factory.pull_requests.events.ci import CiFixed
-from software_factory.pull_requests.events.feedback import FeedbackBatch
-from software_factory.pull_requests.events.jenkins import (
+from software_factory.src.pull_requests.events.ci import CiFixed
+from software_factory.src.pull_requests.events.feedback import FeedbackBatch
+from software_factory.src.pull_requests.events.jenkins import (
     JenkinsFailed,
     JenkinsObservation,
     JenkinsReadiness,
     JenkinsWaiting,
     OtherCi,
 )
-from software_factory.pull_requests.events.pull_requests import (
+from software_factory.src.pull_requests.events.pull_requests import (
     CiFailing,
     CopilotDue,
     MergeConflict,
@@ -27,8 +27,8 @@ from software_factory.pull_requests.events.pull_requests import (
     ReadinessCheck,
     Unsupported,
 )
-from software_factory.pull_requests.flows import address
-from software_factory.pull_requests.stages import (
+from software_factory.src.pull_requests.flows import address
+from software_factory.src.pull_requests.stages import (
     ci,
     conflicts,
     copilot,
@@ -37,7 +37,7 @@ from software_factory.pull_requests.stages import (
     pull_requests,
     readiness,
 )
-from software_factory.pull_requests.stages import workspaces as pr_workspaces
+from software_factory.src.pull_requests.stages import workspaces as pr_workspaces
 
 from .policy import (
     TRUST,

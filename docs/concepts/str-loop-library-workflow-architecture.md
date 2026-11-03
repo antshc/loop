@@ -7,7 +7,7 @@ Let each autonomous procedure (`implement_spec`, a review loop, a custom flow) b
 
 ## Concept
 
-Loop is a library of an agent builder, agent CLI adapters, git and hooks, the declarative Workflow runtime ([Factory Workflow Runtime](str-factory-workflow-runtime.md)), the typed agent contract, and shared Workflow infrastructure; a **workflow** is a user-owned Python entry point that builds a definition, passes its `Services` and runs it. The `implement_spec`, `pr_babysit` and `address_once` Workflows are definitions over the factory's Stage library in `workflows/software_factory/`; the `plan_implement` example in `workflows/loop/` uses its own Stages.
+Loop is a library of an agent builder, agent CLI adapters, git and hooks, the declarative Workflow runtime ([Factory Workflow Runtime](str-factory-workflow-runtime.md)), the typed agent contract, and shared Workflow infrastructure; a **workflow** is a user-owned Python entry point that builds a definition, passes its `Services` and runs it. The `implement_spec`, `pr_babysit` and `address_once` Workflows are definitions over the factory's Stage library in `workflows/software_factory/`; the `plan_implement` example in `loop/workflows/` uses its own Stages.
 
 - The core of Loop is the **agent builder** and git. `Agent()` returns an `AgentBuilder`; `open()` creates a worktree under the harness's `workspace` folder on a branch strategy and yields clients that run the agent CLI directly on the host in that worktree, and removes the worktree on exit ([Build agents with an agent builder](../adr/build-agents-with-an-agent-builder-over-profiles-strategies-and-session-stores.md)).
 - The **runtime** (`loop.runtime`, exported from top-level `loop`) runs every Workflow: Stages with typed inputs and trusted gates, routes, the Execution ledger and spans ([Compose Workflows as declarative definitions](../adr/compose-factory-workflows-as-declarative-definitions-over-a-stages-library-run-by-a-factory-runtime.md)). A typed agent (`TypedAgent`) is one reusable role: a profile, a request encoder and a reply decoder.
@@ -32,7 +32,7 @@ Loop is a library of an agent builder, agent CLI adapters, git and hooks, the de
 - MUST let callers replace every external dependency by passing `Services` (or injectable defaults) to the entry point; no workflow module imports a dependency-injection container.
 - MUST declare a workflow's settings and Loop hooks as code in the workflow module; a workflow MUST run with no command-line arguments beyond its required inputs and MUST NOT require a configuration file.
 - MUST treat command-line arguments as optional overrides of the workflow's coded settings, owned by that workflow.
-- MUST keep library tests in `tests/`, grouped by capability, and each Workflow's tests under `workflows/tests/<workflow tree>/`, mirroring its source folders; the shared `gh` fake lives in `workflows/tests/software_factory/infrastructure/github/fakes/` and workflow harnesses reuse or extend it.
+- MUST keep library tests in `loop/tests/`, grouped by capability, and each Workflow's tests under `workflows/tests/<workflow tree>/`, mirroring its source folders; the shared `gh` fake lives in `software_factory/tests/infrastructure/github/fakes/` and workflow harnesses reuse or extend it.
 - MUST NOT couple independent workflows through imports. A Workflow definition MUST NOT import another, `loop.runtime._engine` or the factory's `agents._kit`, and its policy module MUST import no process, Git or GitHub client.
 - MUST keep the library layered by import direction (`runtime | factory` > `builder` > `agents` > `clis | docker | git` > `run` > `hooks` > `sessions` > `observe` > `shared`), and each workflow independent of sibling Workflows.
 - MUST keep process execution (`git`, `gh`, agent CLIs) inside shipped implementations.
@@ -45,7 +45,7 @@ Loop is a library of an agent builder, agent CLI adapters, git and hooks, the de
 Sketch — not the implementation (derived from the example Workflows):
 
 ```text
-src/  (package loop)                     # public API: builder, profiles, strategies, hooks, runtime
+loop/src/  (package loop)                     # public API: builder, profiles, strategies, hooks, runtime
 ├── Agent(), AgentBuilder, Worktree      # worktree + host agent runs
 ├── AgentClient, AgentProfile, TypedAgent, copilot, codex, CliRunner
 ├── GitOptions, BranchStrategy, MergeToHeadStrategy, HeadStrategy, GitService
@@ -53,20 +53,20 @@ src/  (package loop)                     # public API: builder, profiles, strate
 ├── LoopHook (three points), AgentCliHook
 ├── SessionStore, MemorySessionStore
 └── shared/                              # git.py, process.py
-<harness root>/workflows/                # run from the clone; never installed
-├── loop/plan_implement.py               # python -m workflows.loop.plan_implement
-└── software_factory/
-    ├── agents/, events/, stages/, flows/, infrastructure/   # role agents, Events, Stage library, fragments, factory-only infrastructure
-    └── workflows/
-        ├── implement_spec/                  # python -m workflows.software_factory.workflows.implement_spec
-        │   ├── definition.py                # the definition over the Stage library
-        │   ├── policy.py                    # hitl label, hand-off texts, subjects, work item, release rule
-        │   ├── intake.py, settings.py, dry.py
-        │   └── __main__.py                  # entry point, services, console and OpenTelemetry spans
-        ├── pr_babysit/                      # python -m workflows.software_factory.workflows.pr_babysit
-        └── address_once/                    # python -m workflows.software_factory.workflows.address_once
-<harness root>/tests/                    # library tests by capability
-<harness root>/workflows/tests/          # loop/ and software_factory/ Workflow tests
+<harness root>/loop/workflows/           # run from the clone; never installed
+└── plan_implement.py                    # python loop/workflows/plan_implement.py
+<harness root>/loop/tests/               # library tests by capability; workflows/ holds the plan_implement scenarios
+<harness root>/software_factory/         # run from the clone; never installed
+├── src/                                 # capability code: pull_requests/, spec_delivery/, github.py
+├── workflows/
+│   ├── implement_spec/                  # python -m software_factory.workflows.implement_spec
+│   │   ├── definition.py                # the definition over the Stage library
+│   │   ├── policy.py                    # hitl label, hand-off texts, subjects, work item, release rule
+│   │   ├── intake.py, settings.py, dry.py
+│   │   └── __main__.py                  # entry point, services, console and OpenTelemetry spans
+│   ├── pr_babysit/                      # python -m software_factory.workflows.pr_babysit
+│   └── address_once/                    # python -m software_factory.workflows.address_once
+└── tests/                               # factory Stage, Flow, Workflow and architecture tests
 ```
 
 ```python
@@ -108,7 +108,7 @@ The user's aliases (`alias loop-implement-spec='python -m workflows.software_fac
 
 - Workflow tests run against fakes at every process boundary.
 - Architecture checks (import-linter) verify the library layering, that the factory and examples import only the public `loop` API, the factory layers (Workflow definitions over Flow fragments over Stages over Events over the runtime over role agents and shared infrastructure), that Stages, Workflows and role agents are mutually independent, that the runtime engine and agent kit are private, that no process starts in Stages, definitions or the runtime (the discovery scheduler excepted), that no dependency-injection container is imported, that the pure modules of the factory GitHub `issues` and `pull_requests` packages import no `gh` process code and that source never imports tests.
-- Structural tests derive the rest from the code (`workflows/tests/software_factory/architecture/`): every definition builds and validates, Stage ids are unique, every Stage is used by a Workflow and every shared fragment by two, no Stage factory takes a `bool`, policy modules hold values and pure functions only, nothing uses the retired phase-reporting names, every Event and agent message round-trips through the ledger codec and each Workflow runs from its own import closure.
+- Structural tests derive the rest from the code (`software_factory/tests/architecture/`): every definition builds and validates, Stage ids are unique, every Stage is used by a Workflow and every shared fragment by two, no Stage factory takes a `bool`, policy modules hold values and pure functions only, nothing uses the retired phase-reporting names, every Event and agent message round-trips through the ledger codec and each Workflow runs from its own import closure.
 - The example workflows import only the public `loop` API; import-linter also keeps Loop free of any `workflows` or test import.
 
 ## Options Considered

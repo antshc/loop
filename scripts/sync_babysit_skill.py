@@ -9,15 +9,15 @@ from pathlib import Path
 
 SOURCES = (
     ("scripts/babysit", ""),
-    ("software_factory/pull_requests", "software_factory/pull_requests"),
+    ("software_factory/src/pull_requests", "software_factory/src/pull_requests"),
     (
         "software_factory/workflows/pr_babysit",
         "software_factory/workflows/pr_babysit",
     ),
 )
 PACKAGE_MARKERS = (
-    "software_factory/__init__.py",
-    "software_factory/github.py",
+    "software_factory/src/__init__.py",
+    "software_factory/src/github.py",
     "software_factory/workflows/__init__.py",
 )
 DESTINATION = Path("skills/babysit/scripts")

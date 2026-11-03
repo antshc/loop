@@ -43,16 +43,18 @@ from loop.software_factory.infrastructure.telemetry import (
     TracingObserver,
 )
 
-from software_factory.github import GitHub
-from software_factory.spec_delivery.events.specs import RepositoryTarget
-from software_factory.spec_delivery.infrastructure.github.issues.client import Issues
-from software_factory.spec_delivery.infrastructure.github.issues.errors import (
+from software_factory.src.github import GitHub
+from software_factory.src.spec_delivery.events.specs import RepositoryTarget
+from software_factory.src.spec_delivery.infrastructure.github.issues.client import (
+    Issues,
+)
+from software_factory.src.spec_delivery.infrastructure.github.issues.errors import (
     IssueError,
 )
-from software_factory.spec_delivery.infrastructure.github.issues.graph import (
+from software_factory.src.spec_delivery.infrastructure.github.issues.graph import (
     SpecGraphSnapshot,
 )
-from software_factory.spec_delivery.stages.specs import post_failure_comment
+from software_factory.src.spec_delivery.stages.specs import post_failure_comment
 
 from .definition import FAILURE_ERRORS, NAME, implement_spec
 from .dry import SEAMS, Fakes

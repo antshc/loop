@@ -29,9 +29,9 @@ from loop.software_factory.infrastructure.github.repo import GhCli
 from loop.software_factory.infrastructure.ledger import Ledger
 from loop.software_factory.stages.checks import as_verify
 
-from software_factory.github import GitHub
-from software_factory.pull_requests.events.pull_requests import PullRequestWork
-from software_factory.spec_delivery.events.specs import RepositoryTarget
+from software_factory.src.github import GitHub
+from software_factory.src.pull_requests.events.pull_requests import PullRequestWork
+from software_factory.src.spec_delivery.events.specs import RepositoryTarget
 
 from .definition import NAME, address_once
 from .settings import Settings

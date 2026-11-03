@@ -20,13 +20,13 @@ from loop.software_factory.infrastructure.state import (
     process_lock,
 )
 
-from software_factory.github import GitHub
-from software_factory.pull_requests.events.pull_requests import PullRequestWork
-from software_factory.pull_requests.infrastructure.github.pull_requests.model import (
+from software_factory.src.github import GitHub
+from software_factory.src.pull_requests.events.pull_requests import PullRequestWork
+from software_factory.src.pull_requests.infrastructure.github.pull_requests.model import (
     PullRequest,
 )
-from software_factory.pull_requests.stages import pull_requests
-from software_factory.pull_requests.stages.ci import DiagnoseInput, signal
+from software_factory.src.pull_requests.stages import pull_requests
+from software_factory.src.pull_requests.stages.ci import DiagnoseInput, signal
 
 from .definition import NAME
 from .legacy import adopt_v1, read_status, state_path

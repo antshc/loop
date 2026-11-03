@@ -44,12 +44,15 @@ packages = [
 ]
 
 [tool.setuptools.package-dir]
-loop = "src"
+loop = "loop/src"
 
 [tool.pytest.ini_options]
-pythonpath = ["."]
-testpaths = ["tests", "workflows/tests"]
+pythonpath = [".", "loop"]
+testpaths = ["loop/tests", "software_factory/tests"]
 norecursedirs = ["archive", ".*"]
+# loop/tests and software_factory/tests are both packages named `tests`; importlib mode keeps them from colliding on sys.path.
+addopts = ["--import-mode=importlib"]
+consider_namespace_packages = true
 
 [tool.importlinter]
 root_packages = ["loop", "software_factory", "workflows", "tests"]
@@ -81,7 +84,7 @@ forbidden_modules = ["software_factory", "workflows", "tests"]
 [[tool.importlinter.contracts]]
 name = "The factory and examples use public Loop APIs, shared modules and factory helpers"
 type = "forbidden"
-source_modules = ["workflows.loop", "software_factory"]
+source_modules = ["workflows", "software_factory"]
 forbidden_modules = [
     "loop.agents",
     "loop.builder",
@@ -97,7 +100,13 @@ forbidden_modules = [
     "loop.sessions",
 ]
 # `from loop import run` names the runtime's run function, which grimp reads as the `loop.run` subpackage.
-ignore_imports = ["software_factory.**.__main__ -> loop.run", "workflows.**.__main__ -> loop.run", "workflows.loop.plan_implement -> loop.run"]
+# Factory tests may reach the runtime, run and observe modules they exercise.
+ignore_imports = [
+    "software_factory.**.__main__ -> loop.run",
+    "workflows.**.__main__ -> loop.run",
+    "workflows.plan_implement -> loop.run",
+    "software_factory.tests.** -> loop.**",
+]
 unmatched_ignore_imports_alerting = "none"
 allow_indirect_imports = true
 
@@ -110,13 +119,13 @@ layers = [
     "events",
     "agents | infrastructure",
 ]
-containers = ["software_factory.pull_requests"]
+containers = ["software_factory.src.pull_requests"]
 
 [[tool.importlinter.contracts]]
 name = "Spec delivery layers: Stages over Events over agents and infrastructure"
 type = "layers"
 layers = ["stages", "events", "agents | infrastructure"]
-containers = ["software_factory.spec_delivery"]
+containers = ["software_factory.src.spec_delivery"]
 
 [[tool.importlinter.contracts]]
 name = "Core layers: Stages over Events over agents and infrastructure"
@@ -127,36 +136,36 @@ containers = ["loop.software_factory"]
 [[tool.importlinter.contracts]]
 name = "Pure modules of the factory GitHub issues package never import the gh process layer; only its reader, commands, ticketing service, and client do"
 type = "forbidden"
-source_modules = ["software_factory.spec_delivery.infrastructure.github.issues"]
+source_modules = ["software_factory.src.spec_delivery.infrastructure.github.issues"]
 forbidden_modules = [
     "loop.shared.process",
     "loop.software_factory.infrastructure.github.repo",
     "loop.software_factory.infrastructure.github.account",
-    "software_factory.pull_requests.infrastructure.github.pull_requests",
+    "software_factory.src.pull_requests.infrastructure.github.pull_requests",
 ]
 ignore_imports = [
-    "software_factory.spec_delivery.infrastructure.github.issues.reader -> loop.shared.process",
-    "software_factory.spec_delivery.infrastructure.github.issues.reader -> loop.software_factory.infrastructure.github.repo",
-    "software_factory.spec_delivery.infrastructure.github.issues.commands -> loop.software_factory.infrastructure.github.repo",
-    "software_factory.spec_delivery.infrastructure.github.issues.ticketing -> loop.shared.process",
-    "software_factory.spec_delivery.infrastructure.github.issues.client -> loop.software_factory.infrastructure.github.repo",
+    "software_factory.src.spec_delivery.infrastructure.github.issues.reader -> loop.shared.process",
+    "software_factory.src.spec_delivery.infrastructure.github.issues.reader -> loop.software_factory.infrastructure.github.repo",
+    "software_factory.src.spec_delivery.infrastructure.github.issues.commands -> loop.software_factory.infrastructure.github.repo",
+    "software_factory.src.spec_delivery.infrastructure.github.issues.ticketing -> loop.shared.process",
+    "software_factory.src.spec_delivery.infrastructure.github.issues.client -> loop.software_factory.infrastructure.github.repo",
 ]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "Pure modules of the factory GitHub pull_requests package never import the gh process layer; only its reader, policy reader, and client do"
 type = "forbidden"
-source_modules = ["software_factory.pull_requests.infrastructure.github.pull_requests"]
+source_modules = ["software_factory.src.pull_requests.infrastructure.github.pull_requests"]
 forbidden_modules = [
     "loop.shared.process",
     "loop.software_factory.infrastructure.github.repo",
     "loop.software_factory.infrastructure.github.account",
 ]
 ignore_imports = [
-    "software_factory.pull_requests.infrastructure.github.pull_requests.reader -> loop.software_factory.infrastructure.github.repo",
-    "software_factory.pull_requests.infrastructure.github.pull_requests.client -> loop.software_factory.infrastructure.github.repo",
-    "software_factory.pull_requests.infrastructure.github.pull_requests.policy_reader -> loop.shared.process",
-    "software_factory.pull_requests.infrastructure.github.pull_requests.policy_reader -> loop.software_factory.infrastructure.github.repo",
+    "software_factory.src.pull_requests.infrastructure.github.pull_requests.reader -> loop.software_factory.infrastructure.github.repo",
+    "software_factory.src.pull_requests.infrastructure.github.pull_requests.client -> loop.software_factory.infrastructure.github.repo",
+    "software_factory.src.pull_requests.infrastructure.github.pull_requests.policy_reader -> loop.shared.process",
+    "software_factory.src.pull_requests.infrastructure.github.pull_requests.policy_reader -> loop.software_factory.infrastructure.github.repo",
 ]
 allow_indirect_imports = true
 
@@ -165,14 +174,14 @@ name = "Factory and example source packages never import a test tree"
 type = "forbidden"
 source_modules = [
     "loop.software_factory",
-    "software_factory.pull_requests",
-    "software_factory.spec_delivery",
+    "software_factory.src.pull_requests",
+    "software_factory.src.spec_delivery",
     "software_factory.workflows.address_once",
     "software_factory.workflows.implement_spec",
     "software_factory.workflows.pr_babysit",
-    "workflows.loop",
+    "workflows",
 ]
-forbidden_modules = ["tests", "workflows.tests"]
+forbidden_modules = ["tests", "software_factory.tests"]
 
 [[tool.importlinter.contracts]]
 name = "No dependency-injection container in the factory"
@@ -184,7 +193,7 @@ forbidden_modules = ["dishka"]
 name = "The factory never imports the examples"
 type = "forbidden"
 source_modules = ["software_factory"]
-forbidden_modules = ["workflows.loop"]
+forbidden_modules = ["workflows"]
 
 [[tool.importlinter.contracts]]
 name = "No Workflow imports another: factory Workflow definitions and the examples are independent"
@@ -193,13 +202,13 @@ modules = [
     "software_factory.workflows.address_once",
     "software_factory.workflows.implement_spec",
     "software_factory.workflows.pr_babysit",
-    "workflows.loop.plan_implement",
+    "workflows.plan_implement",
 ]
 
 [[tool.importlinter.contracts]]
 name = "Agent roles are independent of each other"
 type = "independence"
-modules = ["software_factory.pull_requests.agents.roles.*", "software_factory.spec_delivery.agents.roles.*"]
+modules = ["software_factory.src.pull_requests.agents.roles.*", "software_factory.src.spec_delivery.agents.roles.*"]
 
 [[tool.importlinter.contracts]]
 name = "The runtime engine is private: only the runtime package reaches it"
@@ -217,11 +226,12 @@ source_modules = [
     "loop.run",
     "loop.sessions",
     "loop.shared",
-    "workflows.loop",
+    "workflows",
     "software_factory",
     "loop.software_factory",
 ]
 forbidden_modules = ["loop.runtime._engine"]
+ignore_imports = ["software_factory.tests.** -> loop.runtime._engine.**"]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
@@ -234,20 +244,20 @@ allow_indirect_imports = true
 [[tool.importlinter.contracts]]
 name = "Stages are independent: they share Events, never each other; composition across Stage modules belongs to Flow fragments and Workflow definitions"
 type = "independence"
-modules = ["loop.software_factory.stages.*", "software_factory.pull_requests.stages.*", "software_factory.spec_delivery.stages.*"]
+modules = ["loop.software_factory.stages.*", "software_factory.src.pull_requests.stages.*", "software_factory.src.spec_delivery.stages.*"]
 
 [[tool.importlinter.contracts]]
 name = "Events are pure data: no Git, no GitHub clients"
 type = "forbidden"
-source_modules = ["loop.software_factory.events", "software_factory.pull_requests.events", "software_factory.spec_delivery.events"]
+source_modules = ["loop.software_factory.events", "software_factory.src.pull_requests.events", "software_factory.src.spec_delivery.events"]
 forbidden_modules = [
     "loop.shared.git",
     "loop.software_factory.infrastructure.github.repo",
     "loop.software_factory.infrastructure.github.account",
     "loop.software_factory.stages",
-    "software_factory.pull_requests.stages",
-    "software_factory.spec_delivery.stages",
-    "software_factory.pull_requests.flows",
+    "software_factory.src.pull_requests.stages",
+    "software_factory.src.spec_delivery.stages",
+    "software_factory.src.pull_requests.flows",
 ]
 allow_indirect_imports = true
 
@@ -256,9 +266,9 @@ name = "Stages, Flow fragments and Workflow definitions never start processes th
 type = "forbidden"
 source_modules = [
     "loop.software_factory.stages",
-    "software_factory.pull_requests.stages",
-    "software_factory.spec_delivery.stages",
-    "software_factory.pull_requests.flows",
+    "software_factory.src.pull_requests.stages",
+    "software_factory.src.spec_delivery.stages",
+    "software_factory.src.pull_requests.flows",
     "software_factory.workflows.address_once",
     "software_factory.workflows.implement_spec",
     "software_factory.workflows.pr_babysit",
@@ -294,9 +304,9 @@ forbidden_modules = [
     "loop.shared.git",
     "loop.software_factory.infrastructure.github.repo",
     "loop.software_factory.infrastructure.github.account",
-    "software_factory.github",
-    "software_factory.spec_delivery.infrastructure.github.issues.client",
-    "software_factory.pull_requests.infrastructure.github.pull_requests.client",
+    "software_factory.src.github",
+    "software_factory.src.spec_delivery.infrastructure.github.issues.client",
+    "software_factory.src.pull_requests.infrastructure.github.pull_requests.client",
     "subprocess",
 ]
 allow_indirect_imports = true
@@ -310,3 +320,8 @@ extend-exclude = ["archive"]
 [tool.ruff.lint]
 # Core PEP 8 checks, Pyflakes, import sorting, and modern Python syntax.
 select = ["E4", "E7", "E9", "F", "I", "UP"]
+
+[tool.ruff.lint.isort]
+# The repository holds a `loop/` project directory beside the installed `loop` library, and the other roots have no `__init__.py`, so ruff is told which side each is on.
+known-first-party = ["software_factory", "workflows", "tests"]
+known-third-party = ["loop"]
