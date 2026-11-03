@@ -69,8 +69,10 @@ def chore_subject(initiative: str, proposed: str) -> str:
     return f"{prefix}{line}"[:SUBJECT_LIMIT].rstrip()
 
 
-def review_blockers(review: Reviewed | str, head: str) -> list[str]:
-    """Why the review keeps the pull request a draft; `review` is the failure reason when it did not run."""
+def review_blockers(review: Reviewed | str | None, head: str) -> list[str]:
+    """Why the review keeps the pull request a draft; a string is the reason it failed, None that it did not run."""
+    if review is None:
+        return ["the review did not run"]
     if isinstance(review, str):
         return [f"the review failed: {review}"]
     blockers: list[str] = []

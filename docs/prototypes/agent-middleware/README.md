@@ -203,7 +203,9 @@ agentmw/
   composition.py    the composition root: providers, configure_pipeline, configure_role_pipelines, bind, create_host
   fakes.py          FakeGitHubClient, ScriptedAgentClient
   __main__.py       demo
-  implement_spec/   the software factory's implement_spec over the pipeline (see below)
+  implement_spec/   the software factory's implement_spec over the pipeline: definition (workflow.py),
+                    Stages and hand-offs (stages.py), role middlewares, state, policy, fakes (see below)
+  flow.py           Workflow, Flow, Stage and the responses (next_, stop, handoff, rework): the declarative builder
 tests/              pipeline ordering and branching, each middleware, end-to-end host and run scope, implement_spec
 ```
 
@@ -270,7 +272,7 @@ You are the implementer. Follow the plan.
 
 ## Example: implement_spec
 
-[`agentmw/implement_spec/`](agentmw/implement_spec) rebuilds the agent side of the software factory's [`implement_spec`](../../../software_factory/workflows/implement_spec) Workflow on this pipeline. The four roles (`planner`, `developer`, `chore`, `reviewer`) each get a `map_role` chain. A small async Workflow, [`ImplementSpec`](agentmw/implement_spec/workflow.py), replaces the declarative definition. Each piece of today's code maps to one place:
+[`agentmw/implement_spec/`](agentmw/implement_spec) rebuilds the agent side of the software factory's [`implement_spec`](../../../software_factory/workflows/implement_spec) Workflow on this pipeline. The four roles (`planner`, `developer`, `chore`, `reviewer`) each get a `map_role` chain. The flow itself is a declarative definition, [`implement_spec(settings)`](agentmw/implement_spec/workflow.py), written with the same `Workflow`/`Flow`/`Stage` builder style as the factory's `definition.py`. The small async builder is [`agentmw/flow.py`](agentmw/flow.py). Each piece of today's code maps to one place:
 
 | In the software factory | Here |
 |---|---|
@@ -281,8 +283,8 @@ You are the implementer. Follow the plan.
 | `.contract(ReadOnly())` | `ReadOnlyMiddleware`: a moved head or changed tree is restored and rejected |
 | `.contract(AgentCommits(subject=..., reported=...))` | `AgentCommitsMiddleware`: fills `{{COMMIT_SUBJECT_PREFIX}}`, then checks exactly one prefixed commit, a clean tree, and `reply.commit == HEAD`. Any failed attempt is restored to its base |
 | `.contract(HarnessCommits(message=chore_subject, verify=...))` + `_ChoreAgent` | `ChoreCommitMiddleware` (rejects an agent commit, verifies with `CheckRunner`, commits `chore(<initiative>): …`) + `DiffCaptureMiddleware` (per-file diff and manifest, removed in `finally`) |
-| `.on_fail(rework(max_attempts, then=escalate))` | the Workflow: a fresh `run.call` per attempt, then comment and label the Ticket and Spec `hitl` |
-| `.each(next_ready_ticket(), …, on_fail=next_())`, `require_delivered`, `finalize` | the Workflow, with `policy.py` (`review_blockers`, `REQUIRED_AXES`, `BLOCKING_FINDING_KINDS`) |
+| `.on_fail(rework(max_attempts, then=escalate))` | the same builder call; `flow.py` asks again (a fresh `run.call`), then `escalate_ticket` comments and labels the Ticket and Spec `hitl` |
+| `.each(next_ready_ticket(), …, on_fail=next_())`, `require_delivered`, `finalize` | the same builder calls over the Stages in [`stages.py`](agentmw/implement_spec/stages.py), with `policy.py` (`review_blockers`, `REQUIRED_AXES`, `BLOCKING_FINDING_KINDS`) |
 | `dry.py`: `ScriptedAgent`, `DryGit`, `DryGh` | `fakes.py`: `ScriptedFactoryAgent`, `FakeGit`, `FakeTracker` |
 
 ```
@@ -305,17 +307,68 @@ The extension separates failures that `TypedAgent`, the Stage gate and the runti
 
 The contract middlewares sit **inside** the retry, so every attempt starts from the same base: a re-asked developer never meets its own earlier commit. `PlanPolicyMiddleware` sits **outside** it and judges only the final plan.
 
-### What the Workflow keeps
+### The flow
 
-Sequencing, rework and hand-offs stay out of the middlewares:
+The definition lists the Stages top to bottom. Sequencing, rework and hand-offs live here, not in the middlewares:
 
-1. Plan when the Spec has no Tickets. Any `AgentError` labels the Spec `hitl` and ends `handed_off`.
+```python
+def implement_spec(settings: ImplementSpecSettings) -> Workflow[SpecRun]:
+    to_human = handoff(hand_to_human)
+    escalate = handoff(escalate_ticket, status="escalated")
+    ticket = (
+        Flow("ticket")
+        .stage(implement_ticket().on_fail(rework(max_attempts=settings.max_failures, then=escalate)))
+        .stage(close_ticket())
+        .stage(publish_draft_pr().named("publish-ticket"))
+    )
+    return (
+        Workflow(NAME)
+        .on_error(FAILURE_ERRORS, handoff(comment_failure, status="failed"))
+        .within(
+            checkout(),
+            Flow("plan")
+            .stage(plan_spec().on_hold(to_human).on_fail(to_human))
+            .stage(create_tickets().on_fail(to_human)),
+        )
+        .stage(publish_draft_pr().named("publish-earlier"))
+        .stage(require_work().on_hold(stop.idle()))
+        .within(
+            feature_worktree(),
+            Flow("deliver")
+            .each(next_ready_ticket(), ticket, on_fail=next_())
+            .stage(publish_draft_pr().named("publish-delivery"))
+            .stage(require_delivered().on_hold(stop.idle()))
+            .stage(announce_delivered().on_hold(stop.idle()))
+            .stage(refine_chore().on_fail(next_()))
+            .stage(publish_draft_pr().named("publish-chore"))
+            .stage(require_delivered().named("require-refined").on_hold(stop.idle())),
+        )
+        .within(checkout(), Flow("review").stage(review_pull_request().on_fail(next_())))
+        .stage(finalize())
+    )
+```
+
+A Stage is an async function that returns `Pass(value)`, `Hold(reason)` or `Fail(reason)`; the answer to a hold or failure is part of the definition:
+
+| Response | Effect |
+|---|---|
+| `next_()` | skip the Stage (or the item of an `each`) and carry on |
+| `stop.idle()` | end the run with nothing to do |
+| `handoff(action, status=...)` | run `action(ctx, reason)` (comment, label), then end the run |
+| `rework(max_attempts, then=...)` | ask the Stage again, then fall back to `then` |
+| none | a hold ends the run `held`, a failure ends it `failed` |
+
+A `Stop` leaves its flow, so `each(..., on_fail=next_())` absorbs an escalated Ticket and moves on to the next one. `.on_error(...)` answers errors that escape a Stage. `.within(workspace, flow)` switches the directory the agent calls run in (`checkout()` is read-only, `feature_worktree()` is where agents commit). `.when(condition)` skips a Stage, and `.named(...)` keeps the three `publish_draft_pr` runs apart in `ctx.results`.
+
+What the run does:
+
+1. Plan when the Spec has no Tickets. A decline, an invalid plan or any agent failure labels the Spec `hitl` and ends `handed_off`.
 2. Deliver each READY Ticket (open, not held, every blocker closed), one fresh `developer` call per attempt. After `max_failures` the Ticket is escalated, and Tickets it blocks never become ready.
-3. Publish the draft pull request. Fail when a Ticket was escalated or remains open.
+3. Publish the draft pull request. The run fails when a Ticket was escalated, and ends `idle` while Tickets remain open or nothing was committed.
 4. Run the chore, best effort: a decline or rejection is logged and the delivery stands.
 5. Review on the checkout, then finalize. The pull request is marked ready only when all four axes completed on the delivered head with no `bug` or `initiative` finding. Otherwise it stays a draft and the Spec is labelled `hitl`.
 
-Not ported: routing to a target repository, checkout and worktree preparation, the Execution ledger, resume and reconcile, the plan marker comment, and telemetry. `SpecRoute` stands in for the routed Spec.
+Not ported: routing to a target repository, checkout and worktree preparation, the Execution ledger, resume and reconcile, the plan marker comment, and telemetry. `SpecRoute` stands in for the routed Spec. `.reads(Event, from_=...)` is replaced by `ctx.results["<stage name>"]`.
 
 `python -m agentmw.implement_spec` runs one Spec on fakes. The planner is re-asked once for a missing `tickets` field, and Ticket #11 is declined once and reworked. The chore's edit is committed by the middleware. The run ends `ready` with `planner -> planner -> developer -> developer -> developer -> chore -> reviewer`.
 

@@ -13,13 +13,15 @@ from .messages import (
     ReviewedFinding,
 )
 from .policy import HITL, PlanPolicy
+from .state import Outcome, SpecRoute, SpecRun
 from .tracker import PullRequest, Spec, Ticket, Tracker
-from .workflow import ImplementSpec, Outcome, SpecRoute
+from .workflow import ImplementSpec, ImplementSpecSettings, implement_spec
 
 __all__ = [
     "HITL",
     "Delivered",
     "ImplementSpec",
+    "ImplementSpecSettings",
     "Outcome",
     "PlanPolicy",
     "Proposed",
@@ -31,8 +33,10 @@ __all__ = [
     "ReviewedFinding",
     "Spec",
     "SpecRoute",
+    "SpecRun",
     "Ticket",
     "Tracker",
     "configure_implement_spec",
     "create_implement_spec_host",
+    "implement_spec",
 ]
