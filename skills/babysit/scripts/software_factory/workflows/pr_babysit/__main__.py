@@ -242,7 +242,11 @@ def _runtime_of(
 def _observer(settings: Settings) -> TracingObserver | None:
     if not settings.otel_endpoint:
         return None
-    return OtlpObserverFactory("loop-babysit", resource_per_agent=True)(
+    return OtlpObserverFactory(
+        "loop-babysit",
+        resource_per_agent=True,
+        capture_content=settings.otel_capture_content,
+    )(
         settings.otel_endpoint
     )
 

@@ -37,6 +37,8 @@ class Settings:
     jenkins: JenkinsSettings | None = None
     # Where the agent CLI starts; it is told to change into the PR worktree. Unset starts it in the worktree.
     harness_dir: Path | None = None
+    # Puts agent prompts (incl. instructions) and outputs, and tool arguments/results, on the exported spans.
+    otel_capture_content: bool = True
 
     @property
     def ledger_root(self) -> Path:
@@ -91,6 +93,7 @@ class Settings:
             (path.parent / value["harness_dir"]).resolve()
             if value.get("harness_dir")
             else None,
+            bool(value.get("otel_capture_content", True)),
         )
         if settings.harness_dir is not None and not settings.harness_dir.is_dir():
             raise ValueError(f"harness_dir is not a folder: {settings.harness_dir}")
