@@ -8,9 +8,11 @@ from pathlib import Path
 
 from loop import Ledger, WorkItemLog
 
+from software_factory.src.github import GitHub
 from software_factory.src.pull_requests.infrastructure.github.pull_requests.babysit import (
     digest,
 )
+from software_factory.tests.infrastructure.github.fakes import FakeGhCli
 from software_factory.tests.stages.pr_support import (
     NUMBER,
     SLUG,
@@ -19,13 +21,18 @@ from software_factory.tests.stages.pr_support import (
     selected_batch,
     thread,
 )
+from software_factory.workflows.pr_babysit.intake import (
+    adopt_state,
+    release_if_changed,
+    work_of,
+)
 from software_factory.workflows.pr_babysit.legacy import adopt_v1, state_path
 from software_factory.workflows.pr_babysit.policy import ADOPTED, FINGERPRINT
+from software_factory.workflows.pr_babysit.settings import Repository, Settings
 from tests.runtime.harness import command
 
 from .golden import GOLDEN, OPEN, build_host
 from .harness import Babysit
-from .test_intake import Discovery
 
 KEYS = ("thread:t1:t1c", "thread:t2:t2c")
 SUBJECT = "babysit: address i1 (PR #7)"
@@ -402,67 +409,26 @@ def test_a_pull_request_with_no_earlier_state_adopts_nothing(tmp_path: Path) -> 
 def test_the_golden_blocked_state_carries_its_status_and_fingerprint_into_the_ledger(
     tmp_path: Path,
 ) -> None:
-    """Given the state the earlier version saved for the golden pull request, when discovery meets it, then the ledger shows it handed off at that fingerprint and no worker starts for the unchanged pull request."""
+    """An explicit run adopts the golden blocked state but does not release it unchanged."""
     host = build_host()
     host.pulls.pop(3)
-    discovery = Discovery(tmp_path, host)
+    github = GitHub(FakeGhCli(pulls=host))
+    settings = Settings((Repository("a/b", tmp_path, ("build",), ("test",)),), tmp_path)
+    ledger = Ledger(settings.ledger_root)
+    work = work_of(settings, "a/b", OPEN)
     golden = json.loads(GOLDEN.read_text())["open"]
     path = state_path(tmp_path, "a/b", OPEN)
     path.parent.mkdir(parents=True)
     path.write_text(golden["state_file"])
-    discovery.serve(1, "--include-existing")
 
-    discovery.serve(3)
+    assert adopt_state(settings, ledger, github, work)
+    assert not release_if_changed(ledger, github, work)
 
-    status = discovery.ledger.status("pr_babysit", f"a/b#{OPEN}")
+    status = ledger.status("pr_babysit", f"a/b#{OPEN}")
     assert (
         status is not None
         and status.status == "handed_off"
         and status.attributes[FINGERPRINT] == golden["fingerprint"]
     )
-    assert status.attributes[ADOPTED] is True and discovery.workers.started == []
+    assert status.attributes[ADOPTED] is True
     assert path.read_text() == golden["state_file"]
-
-
-def test_a_pull_request_the_earlier_baseline_ignored_stays_ignored(
-    tmp_path: Path,
-) -> None:
-    """Given a registry of the earlier version whose pull request state is ignored, when discovery runs with an open pull request, then it gets no worker."""
-    discovery = Discovery(tmp_path)
-    (tmp_path / "scheduler.json").write_text(
-        json.dumps(
-            {
-                "version": 1,
-                "initialized": True,
-                "author": "me",
-                "repositories": ["a/b"],
-                "prs": {
-                    "a/b#1": {
-                        "repo": "a/b",
-                        "number": 1,
-                        "url": "https://github.com/a/b/pull/1",
-                    }
-                },
-            }
-        )
-    )
-    path = state_path(tmp_path, "a/b", 1)
-    path.parent.mkdir(parents=True)
-    path.write_text(
-        json.dumps(
-            {
-                "version": 1,
-                "repo": "a/b",
-                "number": 1,
-                "status": "ignored",
-                "items": {},
-                "retries": {},
-                "copilot": {},
-                "batch": None,
-            }
-        )
-    )
-
-    discovery.serve(3)
-
-    assert discovery.workers.started == []

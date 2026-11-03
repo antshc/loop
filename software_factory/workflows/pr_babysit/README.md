@@ -1,6 +1,6 @@
 # PR babysitting
 
-This user-owned Workflow discovers new PRs and maintains them through review and CI.
+This user-owned Workflow maintains one explicit PR through review and CI.
 It uses only Loop's public API and is not included in the installed `loop` package.
 Run from this checkout.
 
@@ -21,7 +21,7 @@ pr_babysit/
     definition.py                # the definition: validate origin, then poll until the pull request closes
     policy.py                    # trust rules, fingerprint, commit subjects, what a blocked run records
     settings.py, settings.example.json
-    intake.py                    # discovery scheduler, one thread per PR, reads the Execution ledger
+    intake.py                    # explicit PR identity and recovery from the Execution ledger
     legacy.py                    # one-time adoption of the earlier per-PR JSON state into the ledger
     __main__.py                  # CLI, services built by hand, console and OpenTelemetry spans
 ```
@@ -45,27 +45,31 @@ block instead of pushing through an unrelated remote.
 Copy `settings.example.json` to a local configuration file. Paths resolve relative
 to that file. Each repository requires build and test argument arrays, executed
 without a shell. Include dependency preparation in those commands when needed in
-a fresh worktree. Set `author` to override the authenticated GitHub user.
+a fresh worktree. Set `author` to override the review-trust author.
 
 ```sh
-python3 -m software_factory.workflows.pr_babysit --config babysit.local.json
-python3 -m software_factory.workflows.pr_babysit --config babysit.local.json --include-existing
 python3 -m software_factory.workflows.pr_babysit --config babysit.local.json --pr https://github.com/owner/repo/pull/123
-python3 -m software_factory.workflows.pr_babysit --config babysit.local.json --retry https://github.com/owner/repo/pull/123
 ```
 
-The default first scan baselines existing PRs. `--include-existing` enrolls them
-on that first scan. Future open PRs by the selected author, including drafts, start
-independent PR threads in the scheduler process. The default scan/poll interval
-is 60 seconds; `concurrency` limits active workers. Enrolled PRs restart when reopened. Merged/closed PRs finish;
-green CI is a milestone, so open PRs continue watching for late feedback.
+The [babysit skill](../../../skills/babysit/SKILL.md) launches this exact `--pr`
+command in a dedicated background supervisor. Each invocation targets one PR;
+to watch multiple PRs, launch the skill separately for each.
+
+```sh
+python3 skills/babysit/scripts/start.py https://github.com/owner/repo/pull/123 --config babysit.local.json
+```
+
+There is no repository scan or PR discovery. The default poll interval is
+60 seconds. Merged/closed PRs finish; green CI is a milestone, so open PRs
+continue watching for late feedback.
 
 `--pr` runs one PR directly. A run that ends blocked is *handed off* with the pull
 request's fingerprint recorded on the run, and while it stays blocked no agent runs and
-nothing is pushed for it. Discovery starts a worker for a blocked PR again only when its
-fingerprint changed (head, base revision, review, or CI inputs), which first releases the blocked work so
-the next run starts a fresh scope; `--retry <pr-url>` writes the release itself, whatever the
-fingerprint. A worker that died without closing its run requires an explicit `--retry`.
+nothing is pushed for it. The skill supervisor checks the same PR again;
+on a changed fingerprint (head, base revision, review, or CI inputs), the next
+invocation releases the blocked run. For an unchanged blocker or an interrupted
+run that needs manual recovery, inspect the retained work and release the
+specific ledger entry explicitly before restarting.
 Pressing Ctrl+C (or SIGTERM) stops a run after its current poll and exits 130.
 
 For telemetry, install `loop[otel]` and configure `otel_endpoint`, for example
@@ -159,7 +163,7 @@ with a per-PR lock. A slot is reserved and fsynced before one POST; `201` means
 queued, not recovered. Queue identity is reconciled against build history.
 An interrupted/lost response retains its reservation and requires investigation
 when it cannot be reconciled; there is no blind resend. A queued/running job
-waits. `--retry`, process restart and disable/re-enable do not erase this state.
+waits. Restarting the process or disabling/re-enabling Jenkins does not erase this state.
 Keep this directory alongside the Execution ledger; workers must share it for
 cooperative locking. Independent human/SCM triggers cannot be globally capped
 by the Workflow.
@@ -179,11 +183,11 @@ is performed.
 Failed checks and interrupted edits retain the worktree for inspection. Interrupted
 commit/publication attempts reconcile against the recorded tree and ordered parents;
 an already published merge is not duplicated. A rejected push keeps the local commit:
-after inspection and `--retry`, it is verified again and published without another
+after inspection and explicit ledger release, it is verified again and published without another
 resolver call. Dirty or ambiguous recovery work is never discarded automatically.
 
 New blocked fingerprints include the base ref/SHA. Older blocked records retain their
-previous comparison until another head/review/CI input changes or `--retry` is used;
+previous comparison until another head/review/CI input changes or the ledger is released;
 a base-only change cannot release a record that never observed its earlier base.
 
 ## Worktree lifecycle and recovery
@@ -215,7 +219,7 @@ call. A dirty failure keeps the preserved directory, and Loop raises `WorktreeEr
 ends with retained edits; the command records the run as handed off. Unverified
 edits and unexpected commits are never silently reset, committed, or discarded.
 
-Inspect retained work before `--retry`. Repair or remove only the failed issue's
+Inspect retained work before releasing its ledger entry. Repair or remove only the failed issue's
 uncommitted changes, preserving prior verified commits. An interrupted commit is
 reconciled using the actual parent and subject; an incomplete verification/commit
 without a recognized commit is held for inspection.
@@ -227,13 +231,11 @@ a crash are reconciled against GitHub, and stale drafted replies do not answer n
 reviewer follow-ups. Repository collaborators, the operator, and known review bots
 are accepted; unrelated authors are ignored.
 
-State is the Execution ledger (one append-only JSONL log and lock per pull request) next to the
-discovery baseline and optional Jenkins admission journal:
+State is the Execution ledger (one append-only JSONL log and lock per pull request)
+and optional Jenkins admission journal:
 
 ```text
 .loop/pr-babysit/
-    scheduler.json
-    scheduler.lock
     ledger/pr_babysit/<owner>-<repo>-<number>-<hash>/log.jsonl
     ledger/pr_babysit/<owner>-<repo>-<number>-<hash>/lock
     jenkins/<hash>.json                   # head-bound builds and unresolved submission
@@ -242,15 +244,11 @@ discovery baseline and optional Jenkins admission journal:
 ```
 
 Keep state outside tracked files. Writes use file fsync; a torn last line is ignored.
-OS locks release on process exit. Changing discovery author/repositories requires a new
-state directory or migration. One PR's blocker does not stop others. Shutdown
-requests a shared stop, wakes poll waits, and joins owned PR threads before
-releasing the scheduler lock. Unfinished work and local recovery branches remain available.
-Unexpected scheduler errors request the same cooperative shutdown. There is no per-worker
-terminate/kill fallback: in-flight actions must return before their threads can exit.
-Agent and check timeouts still apply, but some Git operations have no timeout, so shutdown
-has no guaranteed upper bound. Ordinary worker exceptions are isolated per PR; a fatal
-process crash affects every PR thread.
+OS locks release on process exit. Independent skill instances use per-PR locks;
+one PR's blocker does not stop others. Shutdown requests a stop and wakes poll
+waits. Unfinished work and recovery branches remain available. Agent and check
+timeouts still apply, but some Git operations have no timeout, so shutdown has
+no guaranteed upper bound.
 
 ### Adopting the earlier per-PR state
 
@@ -263,11 +261,9 @@ status keeps its fingerprint. The old file is left in place and never read again
 
 ## Telemetry and validation
 
-Discovery, dispatch, state access, and scheduler waits produce local logs only; the
-scheduler creates no observer. Each PR thread builds its own services and observer,
-and each submitted run starts with an empty context without changing process-wide trace
-headers. Owned telemetry providers are flushed and closed when the run exits. Each
-run exports an independent `pr_babysit` root with its scope and Stage attempt spans,
+The explicit invocation builds its own services and observer. Owned telemetry
+providers are flushed and closed when the run exits. Each run exports an
+independent `pr_babysit` root with its scope and Stage attempt spans,
 shared with agent observations; a poll that does nothing exports no span and writes
 nothing to the ledger. Retained worktrees end their active telemetry span without claiming
 disk removal.

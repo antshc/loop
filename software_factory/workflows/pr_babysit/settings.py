@@ -23,13 +23,12 @@ class Repository:
 
 @dataclass(frozen=True)
 class Settings:
-    """Configure discovery and bounded maintenance without library-global defaults."""
+    """Configure one PR's bounded maintenance without library-global defaults."""
 
     repositories: tuple[Repository, ...]
     state_dir: Path
     author: str = ""
     interval: float = 60
-    concurrency: int = 2
     retries: int = 3
     copilot_review: bool = False
     otel_endpoint: str | None = None
@@ -81,7 +80,6 @@ class Settings:
             (path.parent / value.get("state_dir", ".loop/pr-babysit")).resolve(),
             value.get("author", ""),
             float(value.get("interval", 60)),
-            int(value.get("concurrency", 2)),
             int(value.get("retries", 3)),
             bool(value.get("copilot_review", False)),
             value.get("otel_endpoint"),
@@ -104,11 +102,10 @@ class Settings:
             not math.isfinite(settings.interval)
             or not math.isfinite(settings.timeout)
             or settings.interval <= 0
-            or settings.concurrency < 1
             or settings.retries < 0
             or settings.timeout <= 0
         ):
-            raise ValueError("invalid interval, concurrency, retries, or timeout")
+            raise ValueError("invalid interval, retries, or timeout")
         return settings
 
     def repository(self, name: str) -> Repository:

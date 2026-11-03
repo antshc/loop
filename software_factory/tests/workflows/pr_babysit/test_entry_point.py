@@ -5,33 +5,17 @@ from __future__ import annotations
 import json
 import signal
 from pathlib import Path
-from queue import Queue
 from subprocess import CalledProcessError, TimeoutExpired
-from threading import Barrier, current_thread, main_thread
 from unittest.mock import Mock
 
 import pytest
 from loop import (
     DefinitionError,
-    FakeCliRunner,
-    FakeReply,
-    GitCli,
-    GitRuntime,
     RunResult,
     WorktreeError,
-    fake_agent,
 )
-from loop.shared.git import GitClient
-from loop.shared.process import CommandRunner
-from loop.software_factory.infrastructure.agents.launcher import (
-    AgentLauncher,
-)
-from loop.software_factory.infrastructure.pacing import Pacer
 from loop.software_factory.infrastructure.telemetry import Tee
 
-from software_factory.src.github import GitHub
-from software_factory.tests.infrastructure.github.fakes import FakeGhCli
-from software_factory.tests.stages.pr_support import thread
 from software_factory.workflows.pr_babysit import __main__ as entry
 from software_factory.workflows.pr_babysit.__main__ import StopRequest, main
 from software_factory.workflows.pr_babysit.policy import (
@@ -41,12 +25,11 @@ from software_factory.workflows.pr_babysit.policy import (
 )
 from software_factory.workflows.pr_babysit.settings import Settings
 
-from .harness import Babysit, LocalOrigin
-from .test_intake import Discovery
+from .harness import Babysit
 from .test_scenarios import addressing
 
 
-def test_the_help_exits_0_and_lists_the_config_pr_include_existing_and_retry_options(
+def test_the_help_lists_only_config_and_explicit_pr(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Given the --help option, when the command starts, then it exits 0 and lists every option."""
@@ -55,15 +38,14 @@ def test_the_help_exits_0_and_lists_the_config_pr_include_existing_and_retry_opt
 
     help_text = capsys.readouterr().out
     assert exit_info.value.code == 0
-    assert all(
-        option in help_text
-        for option in ("--config", "--pr", "--include-existing", "--retry")
-    )
+    assert "--config" in help_text and "--pr" in help_text
+    assert "--include-existing" not in help_text and "--retry" not in help_text
 
 
 @pytest.mark.parametrize(
     "arguments",
     [
+        [],
         ["--pr", "not-a-url"],
         [
             "--pr",
@@ -74,15 +56,16 @@ def test_the_help_exits_0_and_lists_the_config_pr_include_existing_and_retry_opt
         ["--pr", "https://github.com/a/b/pull/1", "--include-existing"],
     ],
     ids=[
+        "no explicit pull request",
         "a pull request that is no URL",
-        "retry with an explicit pull request",
-        "include-existing with an explicit pull request",
+        "removed retry option",
+        "removed include-existing option",
     ],
 )
 def test_arguments_that_do_not_fit_are_refused_with_a_usage_error(
     arguments: list[str], tmp_path: Path
 ) -> None:
-    """Given a --pr that is no GitHub URL, or a discovery-only option beside it, when the command starts, then it exits with a usage error."""
+    """Missing, malformed and obsolete PR arguments fail with a usage error."""
     with pytest.raises(SystemExit) as exit_info:
         main(["--config", str(tmp_path / "babysit.json"), *arguments])
 
@@ -103,7 +86,17 @@ def test_a_pull_request_of_an_unconfigured_repository_exits_1(tmp_path: Path) ->
 
 def test_a_missing_configuration_file_exits_1(tmp_path: Path) -> None:
     """Given a configuration file that does not exist, when the command runs, then it exits 1."""
-    assert main(["--config", str(tmp_path / "missing.json")]) == 1
+    assert (
+        main(
+            [
+                "--config",
+                str(tmp_path / "missing.json"),
+                "--pr",
+                "https://github.com/a/b/pull/1",
+            ]
+        )
+        == 1
+    )
 
 
 @pytest.mark.parametrize(
@@ -243,22 +236,8 @@ def test_telemetry_spans_are_exported_next_to_the_console_log_only_when_an_obser
     assert isinstance(with_observer.spans, Tee) and not isinstance(without.spans, Tee)
 
 
-def test_a_discovery_that_is_asked_to_stop_exits_0_and_stops_its_workers(
-    tmp_path: Path,
-) -> None:
-    """Given a stop signal that turns on after the first scan, when discovery ends, then it exits 0 and every worker it started was told to stop."""
-    discovery = Discovery(tmp_path)
-
-    code = discovery.serve(1, "--include-existing")
-
-    assert code == 0 and len(discovery.workers.started) == 1
-    assert [child.returncode for child in discovery.workers.runs] == [0]
-
-
-def test_the_real_services_are_exactly_what_the_definition_and_the_scheduler_need() -> (
-    None
-):
-    """Given the real services, when they are built, then they are Git, the runtime's Git, GitHub, the agent launcher and the pacer."""
+def test_the_real_services_are_exactly_what_the_definition_needs() -> None:
+    """The explicit PR definition gets Git, GitHub, the launcher and pacer."""
     names = sorted(
         type_.__name__ for type_ in entry.build_services(None, StopRequest()).types()
     )
@@ -266,67 +245,14 @@ def test_the_real_services_are_exactly_what_the_definition_and_the_scheduler_nee
     assert names == ["AgentLauncher", "GitClient", "GitHub", "Pacer", "WorktreeGit"]
 
 
-def test_discovered_prs_in_one_repository_have_separate_services_worktrees_and_ledgers(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Two real workflow runs overlap in distinct worktrees of the same checkout."""
-    rig = Babysit(tmp_path, threads=[thread("first", "Inspect cart")])
-    second = rig.host.add(8, head_ref="feature", head_sha=rig.head)
-    second.head_repo = "owner/repo"
-    second.threads = [thread("second", "Inspect cart")]
-    grouped = Barrier(2, timeout=10)
-    completed: Queue[None] = Queue()
-    paths, services_seen, ledgers = [], [], []
-    original_build, original_run = entry.build_services, entry.run
+def test_explicit_pr_does_not_enroll_other_open_prs(tmp_path: Path) -> None:
+    """The explicit invocation maintains only its named PR."""
+    rig = Babysit(tmp_path)
+    rig.host.add(8, head_ref="other", head_sha=rig.head)
 
-    def answer(request, context):
-        paths.append(context.agent.cwd)
-        grouped.wait()
-        # An invalid grouping hands off without edits or remote writes.
-        return FakeReply("invalid grouping")
-
-    def build(observer, stop):
-        services = original_build(observer, stop)
-        github = GitHub(FakeGhCli(pulls=rig.host))
-        if current_thread() is main_thread():
-
-            def wait(seconds):
-                completed.get(timeout=15)
-                completed.get(timeout=15)
-                stop.stop()
-
-            return services.replace(github, Pacer(wait))
-        launcher = AgentLauncher(
-            lambda: fake_agent(FakeCliRunner(answer, speed=0), GitRuntime(GitCli()))
-        )
-        services = services.replace(github, launcher).bind(
-            GitClient, LocalOrigin(CommandRunner())
-        )
-        services_seen.append(services)
-        return services
-
-    def run(*args, **kwargs):
-        ledgers.append(kwargs["ledger"])
-        try:
-            return original_run(*args, **kwargs)
-        finally:
-            completed.put(None)
-
-    monkeypatch.setattr(entry, "build_services", build)
-    monkeypatch.setattr(entry, "run", run)
-
-    assert main(["--config", str(rig.config), "--include-existing"]) == 0
-    assert {path.name for path in paths} == {"7", "8"}
-    assert all(
-        path.parent == tmp_path / "worktrees/babysit/owner/repo" for path in paths
-    )
-    assert len(services_seen) == 2 and services_seen[0] is not services_seen[1]
-    assert len(ledgers) == 2 and ledgers[0] is not ledgers[1]
-    for type_ in services_seen[0].types():
-        assert services_seen[0].get(type_) is not services_seen[1].get(type_)
-    assert rig.ledger.status("pr_babysit", "owner/repo#7").status == "handed_off"
-    assert rig.ledger.status("pr_babysit", "owner/repo#8").status == "handed_off"
-    assert all(not path.exists() for path in paths)
+    assert rig.babysit() == 0
+    assert rig.ledger.status("pr_babysit", "owner/repo#7") is not None
+    assert rig.ledger.status("pr_babysit", "owner/repo#8") is None
 
 
 @pytest.mark.parametrize(

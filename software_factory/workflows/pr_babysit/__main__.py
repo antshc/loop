@@ -1,4 +1,4 @@
-"""The pr_babysit command: discover the user's pull requests continuously, or maintain one explicit pull request, through the factory runtime."""
+"""Maintain one explicitly selected pull request through the factory runtime."""
 
 from __future__ import annotations
 
@@ -53,14 +53,7 @@ from software_factory.src.pull_requests.infrastructure.jenkins import Jenkins
 from software_factory.src.pull_requests.stages import pull_requests
 
 from .definition import HANDED_OFF_ERRORS, NAME, pr_babysit
-from .intake import (
-    DiscoveryRequest,
-    Maintain,
-    Scheduler,
-    adopt_state,
-    release_if_changed,
-    work_of,
-)
+from .intake import adopt_state, release_if_changed, work_of
 from .policy import FINGERPRINT, REASON, Blocked, fingerprint
 from .settings import Repository, Settings
 
@@ -110,14 +103,11 @@ class StopRequest:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="pr_babysit", description="Discover PRs continuously or babysit one PR"
+        prog="pr_babysit", description="Babysit one explicitly selected PR"
     )
     parser.add_argument("--config", type=Path, required=True)
-    parser.add_argument("--pr", help="https://github.com/owner/repo/pull/123")
-    parser.add_argument("--include-existing", action="store_true")
     parser.add_argument(
-        "--retry",
-        help="Release an enrolled blocked PR during discovery, so its work starts afresh",
+        "--pr", required=True, help="https://github.com/owner/repo/pull/123"
     )
     return parser
 
@@ -174,27 +164,18 @@ def _runtime(
 
 
 def main(argv: Sequence[str] | None = None, *, services: Services | None = None) -> int:
-    """Starts discovery, or maintains one explicit pull request; `services` replaces every external dependency."""
+    """Maintain one PR; `services` replaces every external dependency."""
     parser = _parser()
     args = parser.parse_args(argv)
-    match = _PULL_REQUEST.fullmatch(args.pr or "")
-    if args.pr and not match:
+    match = _PULL_REQUEST.fullmatch(args.pr)
+    if not match:
         parser.error("--pr must be a GitHub PR URL")
-    if args.pr and (args.include_existing or args.retry):
-        parser.error("--include-existing and --retry apply to discovery only")
     logging.basicConfig(level=logging.INFO)
     try:
         settings = Settings.load(args.config)
         stop = StopRequest()
         with _handling(stop, services is None):
-            if match:
-                return _maintain(settings, services, match[1], int(match[2]), stop)
-            return _discover(
-                settings,
-                services,
-                DiscoveryRequest(args.include_existing, args.retry),
-                stop,
-            )
+            return _maintain(settings, services, match[1], int(match[2]), stop)
     except (Blocked, ValueError, OSError) as exception:
         logger.error("PR maintenance stopped: %s", exception)
         return 1
@@ -243,33 +224,6 @@ def _maintain(
             return _hand_off_unclosed(runtime.ledger, github, work, str(exception))
         _report(work, result)
         return result.exit_code
-
-
-def _discover(
-    settings: Settings,
-    given: Services | None,
-    request: DiscoveryRequest,
-    stop: StopRequest,
-) -> int:
-    """Scans for pull requests and supervises one thread per eligible PR."""
-    services = given or build_services(None, stop)
-    runtime = _runtime_of(settings, services, None, stop)
-    maintain = (
-        services.get(Maintain)
-        if Maintain in services.types()
-        else lambda slug, number: _maintain(settings, None, slug, number, stop)
-    )
-    scheduler = Scheduler(
-        settings,
-        request,
-        services.get(GitHub),
-        runtime.ledger,
-        maintain,
-        services.get(Pacer),
-        runtime.stop,
-        stop.stop,
-    )
-    return scheduler.serve()
 
 
 def _runtime_of(
