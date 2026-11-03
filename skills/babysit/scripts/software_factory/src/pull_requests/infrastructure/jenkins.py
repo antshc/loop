@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import base64
-import fcntl
 import hashlib
 import json
 import logging
@@ -24,6 +23,8 @@ from urllib.request import (
     Request,
     build_opener,
 )
+
+from loop.shared.filelock import lock_file
 
 logger = logging.getLogger(__name__)
 TOTAL_BUILDS = 3
@@ -631,7 +632,7 @@ class Jenkins:
         self.state_dir.mkdir(parents=True, exist_ok=True)
         path = self._path(slug, number)
         with path.with_suffix(".lock").open("a") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)
+            lock_file(lock)
             try:
                 state = json.loads(path.read_text()) if path.exists() else {}
             except ValueError as exception:

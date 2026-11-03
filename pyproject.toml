@@ -239,6 +239,8 @@ name = "The Workflow definition runtime is generic: no GitHub, shared infrastruc
 type = "forbidden"
 source_modules = ["loop.runtime"]
 forbidden_modules = ["loop.shared", "workflows", "subprocess"]
+# The ledger needs the cross-platform file lock, which is stdlib-only.
+ignore_imports = ["loop.runtime.ledger -> loop.shared.filelock"]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]

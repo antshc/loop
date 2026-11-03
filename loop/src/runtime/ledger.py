@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
 import os
@@ -14,6 +13,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from ..agents.contract import Json
+from ..shared.filelock import lock_file, unlock_file
 from ._engine.codec import decode, encode, is_tagged
 from .event import Event
 
@@ -182,13 +182,13 @@ class WorkItemLog:
         self._directory.mkdir(parents=True, exist_ok=True)
         with (self._directory / "lock").open("a") as handle:
             try:
-                fcntl.flock(handle, fcntl.LOCK_EX | (0 if wait else fcntl.LOCK_NB))
+                lock_file(handle, wait=wait)
             except BlockingIOError:
                 raise WorkItemLocked(str(self._directory)) from None
             try:
                 yield
             finally:
-                fcntl.flock(handle, fcntl.LOCK_UN)
+                unlock_file(handle)
 
     def records(self) -> tuple[dict[str, Any], ...]:
         """Every record written so far, in order."""

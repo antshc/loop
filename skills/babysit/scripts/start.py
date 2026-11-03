@@ -8,6 +8,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 from supervise import load_factory, parse_pr, pr_state, python_environment
@@ -24,6 +25,16 @@ def config_path(explicit: Path | None) -> Path:
     if not path.is_file():
         raise ValueError(f"Missing babysit config: {path}; pass --config PATH")
     return path
+
+
+def _detached() -> dict[str, Any]:
+    """Detach the supervisor from the caller's session or console."""
+    if sys.platform == "win32":
+        return {
+            "creationflags": subprocess.CREATE_NEW_PROCESS_GROUP
+            | subprocess.CREATE_NO_WINDOW
+        }
+    return {"start_new_session": True}
 
 
 def launch(url: str, config: Path) -> tuple[int, Path]:
@@ -62,7 +73,7 @@ def launch(url: str, config: Path) -> tuple[int, Path]:
             stdin=subprocess.DEVNULL,
             stdout=output,
             stderr=subprocess.STDOUT,
-            start_new_session=True,
+            **_detached(),
         )
     (root / "pid").write_text(f"{process.pid}\n", encoding="utf-8")
     deadline = time.monotonic() + 15
