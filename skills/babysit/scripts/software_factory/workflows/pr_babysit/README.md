@@ -46,6 +46,11 @@ Copy `settings.example.json` to a local configuration file. Paths resolve relati
 to that file. Each repository requires build and test argument arrays, executed
 without a shell. Include dependency preparation in those commands when needed in
 a fresh worktree. Set `author` to override the review-trust author.
+Optional `ignored_checks` is an array of case-sensitive `fnmatch` globs: matching
+check runs (by name) and commit statuses (by context) are dropped from the CI
+state, and a failed workflow run is dropped when its name matches or all its
+failed jobs match. Ignored failures trigger no CI repair, and readiness accepts
+GitHub's `unstable` state when only ignored checks failed.
 
 ```sh
 python3 -m software_factory.workflows.pr_babysit --config babysit.local.json --pr https://github.com/owner/repo/pull/123

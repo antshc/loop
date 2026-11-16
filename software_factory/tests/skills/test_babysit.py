@@ -116,7 +116,7 @@ def test_supervisor_watches_a_blocked_pr_until_it_closes(
         worktrees_root=tmp_path / "worktrees",
         ledger_root=tmp_path / "state" / "ledger",
         interval=5,
-        repository=lambda _: SimpleNamespace(path=tmp_path),
+        repository=lambda _: SimpleNamespace(path=tmp_path, ignored_checks=()),
     )
     monkeypatch.setattr(Settings, "load", lambda _: settings)
     monkeypatch.setattr(supervise, "load_factory", lambda: None)
@@ -172,7 +172,7 @@ def test_launcher_detaches_and_reports_only_after_ready(
     start = importlib.import_module("start")
     settings = SimpleNamespace(
         state_dir=tmp_path / "state",
-        repository=lambda _: SimpleNamespace(path=tmp_path),
+        repository=lambda _: SimpleNamespace(path=tmp_path, ignored_checks=()),
         otel_endpoint=None,
         aspire_dashboard_port=19000,
     )

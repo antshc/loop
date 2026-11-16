@@ -42,6 +42,7 @@ from software_factory.src.pull_requests.infrastructure.github.pull_requests.baby
     bot_logins,
     ci_failed,
     ci_state,
+    ignore_checks,
     is_copilot,
     unhandled_items,
 )
@@ -293,7 +294,9 @@ def _poll(i: SnapshotInput) -> PullRequestPolled:
     target, number = i.work.target, i.work.number
     read = i.github.pull_requests(target.slug).snapshot(number)
     # Plain JSON, so the Event equals what the ledger replays.
-    projected = json.loads(json.dumps(babysit_snapshot(read)))
+    projected = json.loads(
+        json.dumps(ignore_checks(babysit_snapshot(read), i.work.ignored_checks))
+    )
     return PullRequestPolled(
         target, number, projected, i.github.login(), bot_logins(read)
     )
@@ -350,7 +353,7 @@ def _feedback(i: DecideInput, trust: TrustPolicy) -> FeedbackBatch | None:
 
 
 def _ready(snapshot: dict[str, Any]) -> bool:
-    """CI is green, no Copilot review is pending, and GitHub reports the non-draft pull request clean and not waiting on a review."""
+    """CI is green, no Copilot review is pending, and GitHub reports the non-draft pull request clean (or unstable only through ignored checks) and not waiting on a review."""
     pr = snapshot["pr"]
     copilot_pending = any(
         is_copilot(user["login"]) for user in pr.get("requested_reviewers", [])
@@ -361,7 +364,13 @@ def _ready(snapshot: dict[str, Any]) -> bool:
         and not copilot_pending
         and not pr["draft"]
         and pr.get("mergeable") is True
-        and pr.get("mergeable_state") == "clean"
+        and (
+            pr.get("mergeable_state") == "clean"
+            or (
+                pr.get("mergeable_state") == "unstable"
+                and bool(snapshot.get("ignored"))
+            )
+        )
         and decision not in _UNREADY_DECISIONS
     )
 

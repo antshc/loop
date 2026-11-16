@@ -4,7 +4,8 @@
       "name": "antshc/eShop",
       "path": "../../workspace/eShop",
       "build": ["dotnet", "build"],
-      "test": ["dotnet", "test", "--no-build"]
+      "test": ["dotnet", "test", "--no-build"],
+      "ignored_checks": ["*/ secret-scanner"]
     }
   ],
   "state_dir": "../../.loop/pr-babysit",

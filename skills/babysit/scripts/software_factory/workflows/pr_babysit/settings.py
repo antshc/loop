@@ -19,6 +19,7 @@ class Repository:
     path: Path
     build: tuple[str, ...]
     test: tuple[str, ...]
+    ignored_checks: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -71,12 +72,18 @@ class Settings:
                 raise ValueError(
                     "each repository requires build and test argument arrays"
                 )
+            ignored = item.get("ignored_checks", [])
+            if not isinstance(ignored, list) or any(
+                not isinstance(pattern, str) or not pattern for pattern in ignored
+            ):
+                raise ValueError("ignored_checks must be an array of non-empty strings")
             repositories.append(
                 Repository(
                     item["name"],
                     (path.parent / item["path"]).resolve(),
                     tuple(commands[0]),
                     tuple(commands[1]),
+                    tuple(ignored),
                 )
             )
         settings = cls(

@@ -29,6 +29,7 @@ def work_of(settings: Settings, slug: str, number: int) -> PullRequestWork:
         RepositoryTarget(slug, repository.path, settings.worktrees_root),
         number,
         REVISION,
+        repository.ignored_checks,
     )
 
 
