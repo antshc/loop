@@ -132,6 +132,26 @@ class GitCli:
             worktree, "status", "--porcelain", "--untracked-files=all"
         )
 
+    def fast_forward_to_origin(self, worktree: Path, branch: str) -> bool:
+        """Fast-forward a clean worktree to `origin/<branch>`; a dirty, ahead or diverged one is left as it is."""
+        remote = f"refs/remotes/origin/{branch}"
+        if not self._succeeds(worktree, "show-ref", "--verify", "--quiet", remote):
+            return False
+        if self._output(worktree, "rev-parse", "HEAD") == self._output(
+            worktree, "rev-parse", remote
+        ):
+            return False
+        if not self.is_clean(worktree) or not self._succeeds(
+            worktree, "merge-base", "--is-ancestor", "HEAD", remote
+        ):
+            logger.warning(
+                "worktree %s not fast-forwarded to origin/%s", worktree, branch
+            )
+            return False
+        logger.info("fast-forwarding worktree %s to origin/%s", worktree, branch)
+        self._git(worktree, "merge", "--ff-only", remote)
+        return True
+
     def _output(self, repository: Path, *args: str) -> str:
         return self._invoke(repository, args, check=True).stdout.strip()
 

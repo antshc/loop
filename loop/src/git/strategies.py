@@ -57,17 +57,20 @@ class MergeToHeadStrategy:
 
 @dataclass(frozen=True)
 class BranchStrategy:
-    """Reuse a local branch; a new branch starts at explicit base, else origin branch or HEAD."""
+    """Reuse a local branch; a new branch starts at explicit base, else origin branch or HEAD; `keep` leaves the worktree in place for the next run."""
 
     branch: str
     base_branch: str | None = None
+    # The caller removes a kept worktree when its work ends; each open fast-forwards a clean one to origin.
+    keep: bool = False
 
     @contextmanager
     def open(
         self, git: GitCli, cwd: Path, repository: Path, options: GitOptions
     ) -> Iterator[Path]:
         git.fetch(repository)
-        with _worktree(
+        opener = _kept_worktree if self.keep else _worktree
+        with opener(
             git, cwd, repository, options, self.branch, self.base_branch
         ) as target:
             yield target
@@ -82,12 +85,7 @@ def _worktree(
     branch: str,
     base: str | None,
 ) -> Iterator[Path]:
-    root = (cwd / options.root_path).resolve()
-    if not options.root_path.is_absolute() and not root.is_relative_to(cwd.resolve()):
-        raise ValueError(f"worktrees root {root} must be inside {cwd}")
-    target = root / branch
-    if not target.resolve().is_relative_to(root):
-        raise WorktreeError(f"Worktree path escapes its root: {target}")
+    target = _target(cwd, options, branch)
     # Validate before filesystem mutation; Git also rejects unsafe branch names.
     git.add_worktree(repository, target, branch, base)
     try:
@@ -109,6 +107,34 @@ def _worktree(
             raise WorktreeError(
                 f"Worktree has uncommitted changes; preserved at {target}"
             )
+
+
+@contextmanager
+def _kept_worktree(
+    git: GitCli,
+    cwd: Path,
+    repository: Path,
+    options: GitOptions,
+    branch: str,
+    base: str | None,
+) -> Iterator[Path]:
+    """A worktree that outlives the run: created or reused, brought up to origin, never removed here."""
+    target = _target(cwd, options, branch)
+    git.add_worktree(repository, target, branch, base)
+    git.fast_forward_to_origin(target, branch)
+    for hook in options.hooks_at(LoopHookPoint.WORKTREE_READY):
+        git.run_hook(hook, target, repository, target)
+    yield target
+
+
+def _target(cwd: Path, options: GitOptions, branch: str) -> Path:
+    root = (cwd / options.root_path).resolve()
+    if not options.root_path.is_absolute() and not root.is_relative_to(cwd.resolve()):
+        raise ValueError(f"worktrees root {root} must be inside {cwd}")
+    target = root / branch
+    if not target.resolve().is_relative_to(root):
+        raise WorktreeError(f"Worktree path escapes its root: {target}")
+    return target
 
 
 def _cleanup(git: GitCli, repository: Path, target: Path) -> bool:
