@@ -26,6 +26,8 @@ from urllib.request import (
 
 from loop.shared.filelock import lock_file
 
+from software_factory.src.pull_requests.infrastructure.logs import save_log
+
 logger = logging.getLogger(__name__)
 TOTAL_BUILDS = 3
 _SHA = re.compile(r"[0-9a-f]{40,64}")
@@ -56,7 +58,7 @@ class JenkinsSettings:
     ca_bundle: Path | None = None
     insecure_tls: bool = False
     timeout: float = 30
-    log_bytes: int = 262144
+    log_bytes: int = 67108864
 
     @classmethod
     def load(cls, value: Any, base: Path) -> JenkinsSettings | None:
@@ -102,14 +104,14 @@ class JenkinsSettings:
             raise ValueError("jenkins.ca_bundle must be a path")
         insecure = value.get("insecure_tls", False)
         timeout = value.get("timeout", 30)
-        size = value.get("log_bytes", 262144)
+        size = value.get("log_bytes", 67108864)
         if (
             type(insecure) is not bool
             or type(timeout) not in (int, float)
             or not 0 < timeout <= 3600
             or not math.isfinite(timeout)
             or type(size) is not int
-            or not 1024 <= size <= 1048576
+            or not 1024 <= size <= 268435456
             or (insecure and ca is not None)
         ):
             raise ValueError("invalid Jenkins TLS, timeout, or log_bytes configuration")
@@ -133,7 +135,7 @@ class JenkinsFailure:
     head: str
     result: str
     attempts: int
-    logs: str
+    log_file: str
 
 
 @dataclass(frozen=True)
@@ -280,7 +282,7 @@ class Jenkins:
                         head,
                         latest["result"],
                         attempts,
-                        self._logs(f"{job}{latest['number']}/"),
+                        self._logs(f"{job}{latest['number']}/", slug, number),
                     )
                 )
             return tuple(failures)
@@ -484,7 +486,8 @@ class Jenkins:
             else ""
         )
 
-    def _logs(self, build: str) -> str:
+    def _logs(self, build: str, slug: str, number: int) -> str:
+        """Saves the console tail, up to `log_bytes`, to a file the agent searches; returns its path."""
         endpoint = f"{build}logText/progressiveText"
         size_response = self._request("HEAD", f"{endpoint}?start=0", None, 0)
         try:
@@ -497,10 +500,14 @@ class Jenkins:
         response = self._request(
             "GET", f"{endpoint}?start={start}", None, self.settings.log_bytes
         )
-        text = response.body.decode("utf-8", errors="replace")
-        if not text.strip():
+        if not response.body.strip():
             raise JenkinsError("Jenkins failed-build console is empty")
-        return f"Untrusted Jenkins console {build} (byte offset {start}):\n{text}"
+        header = (
+            f"Untrusted Jenkins console {build} "
+            f"(bytes {start}-{size} of {size}; earlier output omitted when start > 0)\n"
+        )
+        key = "jenkins-" + hashlib.sha256(build.encode()).hexdigest()[:12]
+        return save_log(slug, number, key, header.encode() + response.body)
 
     def _payload(self, job: str, build: dict[str, Any]) -> dict[str, str]:
         info = self._json(

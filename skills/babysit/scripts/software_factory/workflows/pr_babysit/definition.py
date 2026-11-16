@@ -9,7 +9,7 @@ from loop import Flow, Verify, Workflow, WorktreeError, handoff, reroute, stop
 from loop.software_factory.stages import workspaces
 
 from software_factory.src.pull_requests.events.ci import CiFixed
-from software_factory.src.pull_requests.events.feedback import FeedbackBatch
+from software_factory.src.pull_requests.events.feedback import DiscussionPending
 from software_factory.src.pull_requests.events.jenkins import (
     JenkinsFailed,
     JenkinsObservation,
@@ -20,6 +20,7 @@ from software_factory.src.pull_requests.events.jenkins import (
 from software_factory.src.pull_requests.events.pull_requests import (
     CiFailing,
     CopilotDue,
+    DraftWaiting,
     MergeConflict,
     NextAction,
     PullRequestClosed,
@@ -40,9 +41,7 @@ from software_factory.src.pull_requests.stages import (
 from software_factory.src.pull_requests.stages import workspaces as pr_workspaces
 
 from .policy import (
-    TRUST,
     Blocked,
-    address_subject,
     ci_subject,
     fingerprint,
     merge_subject,
@@ -65,7 +64,7 @@ HANDED_OFF_ERRORS: tuple[type[Exception], ...] = (
 
 
 def pr_babysit(settings: Settings, verify: Verify) -> Workflow[PullRequestWork]:
-    """Poll until closed, repairing conflicts before feedback or CI; `settings.timeout` bounds agents and checks."""
+    """Poll until closed, repairing conflicts before review discussion or CI; `settings.timeout` bounds agents and checks."""
     block = handoff(pull_requests.block_pr(fingerprint=fingerprint))
     fix_conflicts = (
         Flow("fix-conflicts")
@@ -211,7 +210,6 @@ def pr_babysit(settings: Settings, verify: Verify) -> Workflow[PullRequestWork]:
             .stage(pull_requests.snapshot())
             .stage(
                 pull_requests.decide_next(
-                    trust=TRUST,
                     author=settings.author or None,
                     copilot=lambda _: settings.copilot_review,
                 )
@@ -219,12 +217,22 @@ def pr_babysit(settings: Settings, verify: Verify) -> Workflow[PullRequestWork]:
             .dispatch(
                 NextAction,
                 {
-                    # A hold ends the poll loop, which is how a closed pull request completes the run.
-                    PullRequestClosed: stop.held("the pull request is closed"),
+                    # A hold ends the poll loop, which is how a closed pull request completes the run; only then is the kept worktree removed.
+                    PullRequestClosed: Flow("closed").stage(
+                        pr_workspaces.remove_worktree().on_pass(
+                            stop.held("the pull request is closed")
+                        )
+                    ),
+                    DraftWaiting: Flow("draft").stage(
+                        pacing.pace(settings.interval).named("pace-draft")
+                    ),
                     Unsupported: block,
                     MergeConflict: fix_conflicts,
-                    FeedbackBatch: address.address_feedback(
-                        message=address_subject,
+                    DiscussionPending: address.address_feedback(
+                        commands=lambda polled: (
+                            settings.repository(polled.target.slug).build,
+                            settings.repository(polled.target.slug).test,
+                        ),
                         verify=verify,
                         on_baseline_red=reroute(CiFailing),
                         on_stuck=block,

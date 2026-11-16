@@ -1,4 +1,4 @@
-"""pr_babysit's policy as values and pure functions: whose feedback is trusted, the change fingerprint, the commit subjects and what a blocked pull request records."""
+"""pr_babysit's policy as values and pure functions: the change fingerprint, the commit subjects and what a blocked pull request records; the address gate decides which review discussion needs work."""
 
 from __future__ import annotations
 
@@ -8,11 +8,9 @@ from typing import TYPE_CHECKING
 
 from loop import RunStatus
 
-from software_factory.src.pull_requests.events.feedback import TrustPolicy
 from software_factory.src.pull_requests.events.pull_requests import PullRequestPolled
 
 if TYPE_CHECKING:
-    from software_factory.src.pull_requests.stages.address import IssueWork
     from software_factory.src.pull_requests.stages.ci import FixInput
     from software_factory.src.pull_requests.stages.conflicts import PublishInput
 
@@ -21,9 +19,7 @@ __all__ = [
     "CRASHED",
     "FINGERPRINT",
     "REASON",
-    "TRUST",
     "Blocked",
-    "address_subject",
     "ci_subject",
     "merge_subject",
     "fingerprint",
@@ -41,21 +37,6 @@ ADOPTED = "factory.pr.adopted"
 
 # The fingerprint the earlier version recorded for a worker that died, which no pull request ever has again.
 CRASHED = "worker-crash"
-
-# The authors whose review feedback is acted on; the acting account always is.
-TRUST = TrustPolicy(
-    associations=frozenset({"OWNER", "MEMBER", "COLLABORATOR"}),
-    bots=frozenset(
-        {
-            "copilot",
-            "copilot-pull-request-reviewer",
-            "chatgpt-codex-connector",
-            "coderabbitai",
-            "claude",
-            "bugbot",
-        }
-    ),
-)
 
 
 class Blocked(RuntimeError):
@@ -88,11 +69,6 @@ def fingerprint(polled: PullRequestPolled) -> str:
     )
     base = snapshot["pr"].get("base", {})
     return f"{observed}:{digest({key: base.get(key) for key in ('ref', 'sha')})}"
-
-
-def address_subject(work: IssueWork) -> str:
-    """The commit subject of the fix for one grouped review issue."""
-    return f"babysit: address {work.issue.id} (PR #{work.polled.number})"
 
 
 def ci_subject(work: FixInput) -> str:

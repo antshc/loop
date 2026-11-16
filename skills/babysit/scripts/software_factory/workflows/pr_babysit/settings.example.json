@@ -22,7 +22,7 @@
     "ca_bundle": null,
     "insecure_tls": false,
     "timeout": 30,
-    "log_bytes": 262144
+    "log_bytes": 67108864
   },
   "harness_dir": null,
   "otel_endpoint": null,

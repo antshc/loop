@@ -6,7 +6,8 @@ Run from this checkout.
 
 Native polling uses [novotnyllc/babysit-pr](https://github.com/novotnyllc/babysit-pr)
 as a behavioral reference, without installing, pinning, vendoring, or wrapping it.
-Review handling follows the [Brain address skill](https://github.com/antshc/brain/tree/main/plugins/ralph/skills/address).
+Review handling runs the `address` skill: its discussion gate decides when to trigger, and the
+address agent follows its procedure (see *Review discussion* below).
 
 ## Structure
 
@@ -19,7 +20,7 @@ shared fragment in [`software_factory/src/pull_requests/flows`](../../src/pull_r
 ```text
 pr_babysit/
     definition.py                # the definition: validate origin, then poll until the pull request closes
-    policy.py                    # trust rules, fingerprint, commit subjects, what a blocked run records
+    policy.py                    # fingerprint, commit subjects, what a blocked run records
     settings.py, settings.example.json
     intake.py                    # explicit PR identity and recovery from the Execution ledger
     legacy.py                    # one-time adoption of the earlier per-PR JSON state into the ledger
@@ -27,8 +28,8 @@ pr_babysit/
 ```
 
 On every poll the definition does exactly one of: repair a confirmed merge conflict,
-address trusted unhandled feedback
-(clean tree, baseline check, group, resolve each issue, push once, reply once), maintain
+address the review discussion the address gate reports
+(clean tree, baseline check, address agent, clean tree), maintain
 a failing CI (diagnose; rerun a transient failure up to the retry budget per head, or fix
 a broken branch and publish; then pace), request a Copilot review once per head, or
 report readiness when it changed (then pace). A red baseline while CI is red maintains CI
@@ -45,12 +46,7 @@ block instead of pushing through an unrelated remote.
 Copy `settings.example.json` to a local configuration file. Paths resolve relative
 to that file. Each repository requires build and test argument arrays, executed
 without a shell. Include dependency preparation in those commands when needed in
-a fresh worktree. Set `author` to override the review-trust author.
-Optional `ignored_checks` is an array of case-sensitive `fnmatch` globs: matching
-check runs (by name) and commit statuses (by context) are dropped from the CI
-state, and a failed workflow run is dropped when its name matches or all its
-failed jobs match. Ignored failures trigger no CI repair, and readiness accepts
-GitHub's `unstable` state when only ignored checks failed.
+a fresh worktree. Set `author` to override the expected PR author.
 
 ```sh
 python3 -m software_factory.workflows.pr_babysit --config babysit.local.json --pr https://github.com/owner/repo/pull/123
@@ -68,6 +64,10 @@ There is no repository scan or PR discovery. The default poll interval is
 60 seconds. Merged/closed PRs finish; green CI is a milestone, so open PRs
 continue watching for late feedback.
 
+Draft PRs are only watched. Once marked ready, it repairs conflicts, CI and
+review threads, including threads left while it was a draft.
+Jenkins recovery runs only when `jenkins.enabled` is `true`.
+
 `--pr` runs one PR directly. A run that ends blocked is *handed off* with the pull
 request's fingerprint recorded on the run, and while it stays blocked no agent runs and
 nothing is pushed for it. The skill supervisor checks the same PR again;
@@ -78,11 +78,8 @@ specific ledger entry explicitly before restarting.
 Pressing Ctrl+C (or SIGTERM) stops a run after its current poll and exits 130.
 
 For telemetry, install `loop[otel]` and configure `otel_endpoint`, for example
-`http://localhost:4318`. Without it no exporter is created. For a local endpoint with no
-listener, `start.py` starts a shared, detached Aspire dashboard (`aspire dashboard run`;
-UI on `aspire_dashboard_port`, default `http://localhost:19000`; log
-`<state_dir>/aspire/dashboard.log`) and waits until it accepts OTLP. An endpoint still
-unreachable when the workflow starts logs one warning and disables the exporter. `copilot_review` defaults
+`http://localhost:4318`. Without it no exporter is created. With it, INFO+ log records
+are also exported over OTLP (`/v1/logs`) as `loop-babysit`. `copilot_review` defaults
 to false; enabling it requests a best-effort Copilot review once per SHA. Pending
 review prevents the readiness milestone, while unavailable Copilot does not block work.
 
@@ -90,20 +87,18 @@ review prevents the readiness milestone, while unavailable Copilot does not bloc
 
 | Actor | Responsibility |
 |---|---|
-| Loop library | Create/reuse named worktrees; remove clean directories; preserve dirty work; retain branch commits; prune stale metadata |
-| Address | Group review feedback, investigate with evidence, edit justified fixes, draft replies |
+| Loop library | Create/reuse named worktrees; keep them across polls and fast-forward them to origin; preserve dirty work; retain branch commits; prune stale metadata |
+| Address | Run the `address` skill procedure in babysit's worktree: group threads, investigate with evidence, fix, commit, push, reply, resolve settled agent threads |
 | Maintainer | Diagnose CI read-only, fix branch defects, identify transient failures, resolve merge conflicts |
-| Factory runtime | Verify, commit each fix with the Workflow's subject, push, post replies, retry CI, record every attempt in the Execution ledger, serialize one pull request with a lock |
+| Factory runtime | Own the PR worktree, run the address gate, check what the address agent left, verify and publish CI fixes, retry CI, record every attempt in the Execution ledger, serialize one pull request with a lock |
 
 The role agents' profiles and complete Markdown instructions live under [`software_factory/src/pull_requests/agents`](../../src/pull_requests/agents).
-Agents must not commit, push, change branches, or use GitHub clients. Native deny
-rules reinforce the prompts, and Python checks actual HEAD changes. Host agent
-execution is not a sandbox.
-
-Python commits each verified review issue and pushes once per batch, confirms the
-remote SHA, then replies. Rejected pushes produce no replies. Threads remain open
-for reviewers; no code merges PRs. Maintainer uses the same explicit publication
-sequence. Three GitHub Actions transient retry cycles per SHA are allowed by default; repeated
+Maintainer must not commit, push, change branches, or use GitHub clients. Native deny
+rules reinforce the prompts, and Python checks actual HEAD changes. The address agent
+is the exception: it runs with default Copilot permissions and commits, pushes
+(`git push origin HEAD:refs/heads/<headRef>`, never forced), replies and resolves itself,
+but must not create, switch or remove branches or worktrees. Host agent execution is
+not a sandbox. No code merges PRs. Python commits and publishes Maintainer's CI fixes. Three GitHub Actions transient retry cycles per SHA are allowed by default; repeated
 stale CI snapshots do not spend another cycle. Baseline verification must pass
 before review edits; Maintainer can repair a failing CI baseline first.
 
@@ -125,8 +120,10 @@ under a trusted job root to this PR's `PR-<number>` job.
 Certificate verification is on by default. Supply `ca_bundle` for an internal CA.
 An explicit `insecure_tls: true` disables verification for this integration and
 logs a warning; do not combine it with `ca_bundle`. There is no global TLS bypass.
-`timeout` bounds each request; `log_bytes` bounds the console tail (1 KiB to 1 MiB,
-default 256 KiB). Credentials never follow redirects.
+`timeout` bounds each request; `log_bytes` bounds the console tail (1 KiB to 256 MiB,
+default 64 MiB). Failed CI and Jenkins logs are saved to `$TMPDIR/babysit-logs/`; the
+maintainer gets the file path, not the log, in its prompt and searches it. Credentials
+never follow redirects.
 
 Jenkins history must identify the watched repository and provide an unambiguous
 PR SCM revision `pullHash`. Multiple checkout SHAs are not substitutes for that
@@ -179,8 +176,9 @@ by the Workflow.
 
 ### Merge conflict recovery
 
-Python pins the PR head, recovery head and actual base branch revision in the ledger,
-then starts `git merge --no-commit --no-ff <base-sha>` in the clean recovery worktree.
+Python pins the PR head, recovery head and the base branch tip freshly fetched from
+origin (the PR payload's `base.sha` can lag it) in the ledger, then starts
+`git merge --no-commit --no-ff <base-sha>` in the clean recovery worktree.
 Maintainer resolves conflicting files only; ambiguous intent blocks with the decision
 needed. A clean merge needs no agent. Python stages resolutions, rejects remaining
 conflict markers, runs the configured build/tests, and records the verified tree.
@@ -201,18 +199,18 @@ a base-only change cannot release a record that never observed its earlier base.
 
 ## Worktree lifecycle and recovery
 
-Every PR uses a persistent local branch `babysit/<owner>/<repo>/<number>` through
-Loop's built-in `BranchStrategy`. There is no workflow-specific worktree strategy.
+Every PR uses a persistent local branch named after the PR head branch through
+Loop's built-in `BranchStrategy(keep=True)`: the worktree is created once, reused by every
+poll and run, fast-forwarded to `origin/<branch>` on each open, and removed by the
+`remove-worktree` Stage only when the PR is closed or merged.
 Worktree roots are explicitly configured absolute paths: `worktrees_dir` in the settings file
 (resolved relative to it), by default `worktrees` under the state directory.
 
 | Case | Result |
 |---|---|
-| Run fails with a clean worktree | Loop removes the directory; local branch and commits remain |
-| Run fails with uncommitted edits | Loop preserves the directory and the original failure |
-| Run returns successfully with edits | Loop raises `WorktreeError`; no automatic commit |
-| Temporary-branch merge succeeds | Loop merges into host and deletes the temporary branch |
-| Temporary-branch merge fails/diverges | Loop retains the branch; Workflow resolves recovery |
+| Poll or run ends, PR still open | Loop keeps the directory; next open reuses it |
+| Kept worktree clean and behind `origin/<branch>` | Loop fast-forwards it on open |
+| PR closed or merged | `remove-worktree` removes a clean directory; a dirty one is kept with a warning; the branch remains |
 | Recovery branch behind the PR head | Workflow fast-forwards it to the head |
 | Recovery branch is a stale pre-rebase copy of the head | Workflow resets it to the head when the worktree is clean and every local commit already has a patch-equivalent on the head |
 | Recovery branch has other local commits that diverge from the head | Workflow raises `WorktreeError` and hands the PR off; nothing is discarded |
@@ -221,7 +219,7 @@ Worktree roots are explicitly configured absolute paths: `worktrees_dir` in the 
 | Two users of one named worktree | Workflow holds a repository/branch lock |
 | Sandbox sync conflict | Not applicable: Loop currently has no isolated synchronization backend |
 
-The Execution ledger records the batch's scope, each issue's attempt and the replies it drafted.
+The Execution ledger records each scope, Stage attempt and the Events they produced.
 A clean publication failure can remove the directory safely: after a release the next run
 recreates it from the retained branch and publishes the existing commit without another agent
 call. A dirty failure keeps the preserved directory, and Loop raises `WorktreeError` when a scope
@@ -233,12 +231,36 @@ uncommitted changes, preserving prior verified commits. An interrupted commit is
 reconciled using the actual parent and subject; an incomplete verification/commit
 without a recognized commit is held for inspection.
 
-Observed feedback is separate from handled feedback. Resolved/answered threads are
-skipped; reviewer follow-ups and unanswered self-notes or `fix!:` comments become
-pending. A new SHA alone does not reopen handled comments. Replies posted just before
-a crash are reconciled against GitHub, and stale drafted replies do not answer newer
-reviewer follow-ups. Repository collaborators, the operator, and known review bots
-are accepted; unrelated authors are ignored.
+### Review discussion
+
+Every poll of an open PR runs the address gate,
+[`discussion_state.py`](../../src/pull_requests/infrastructure/github/pull_requests/discussion_state.py),
+a copy of the `address` skill's `scripts/pr_discussion_state.py`. It reads unresolved review
+threads (conversation comments and review bodies are not handled) and classifies them by
+hidden markers: an opening `<!-- agent:comment` block makes a thread agent-owned; published
+`<!-- agent:reply` blocks separate answered work from new `pending` work and agent threads to
+`reconcile`. Login is never used for origin.
+
+| Gate `action` | Babysit |
+|---|---|
+| `skip` | No address run; continue to CI, Copilot or readiness |
+| `stop` (truncated thread, fetch error) | Block the PR with the gate's reason |
+| `proceed` | Trigger the address agent, unless an earlier address run left the discussion in exactly this state |
+
+The discussion state is identified by a token over thread ids, states and published comment
+ids/`updatedAt` (not the head SHA). After a run the gate is read again and both tokens are
+recorded, so threads that only wait on a human do not retrigger every poll; a reviewer's new
+comment changes the token and triggers again.
+
+The address agent's prompt is [`instructions.md`](../../src/pull_requests/agents/roles/address/instructions.md),
+the skill's `SKILL.md` body adapted to babysit (worktree supplied, no cleanup), rendered per run:
+the PR, head, build/test commands and the unresolved discussion (the gate JSON, compacted) fill its
+`{{...}}` placeholders, then `github-api.md`, `investigation.md` and the `review-conversation` skill are
+appended from [`agents/roles/address/references`](../../src/pull_requests/agents/roles/address/references).
+The prompt is one command-line argument, so diff hunks (outdated threads keep theirs), then comment
+bodies are shed when it nears 120 KB; the agent can always rerun the gate for the full form.
+The run fails, blocking the PR, when the agent reports `blocked`, leaves commits unpushed, leaves
+a pending thread unanswered on the same latest comment, or leaves the worktree dirty.
 
 State is the Execution ledger (one append-only JSONL log and lock per pull request)
 and optional Jenkins admission journal:
@@ -249,7 +271,7 @@ and optional Jenkins admission journal:
     ledger/pr_babysit/<owner>-<repo>-<number>-<hash>/lock
     jenkins/<hash>.json                   # head-bound builds and unresolved submission
     jenkins/<hash>.lock
-    worktrees/babysit/owner/repo/123/        # default; `worktrees_dir` moves it elsewhere
+    worktrees/<head branch>/        # default; `worktrees_dir` moves it elsewhere
 ```
 
 Keep state outside tracked files. Writes use file fsync; a torn last line is ignored.
@@ -263,9 +285,8 @@ no guaranteed upper bound.
 
 The earlier version kept `prs/<owner>--<repo>--<number>.json` (version 1). On the first run
 for a pull request that state is adopted once into its ledger, under the work item's lock:
-an open batch becomes an open address scope (finished issues are passed attempts with their
-replies kept, an interrupted commit a committing attempt that is adopted or held for
-inspection), rerun budgets, Copilot requests and handled feedback carry over, and a blocked
+an open CI batch becomes an open fix scope, an open address batch is dropped so the address
+gate decides afresh, rerun budgets and Copilot requests carry over, and a blocked
 status keeps its fingerprint. The old file is left in place and never read again.
 
 ## Telemetry and validation
@@ -284,3 +305,8 @@ python3 -m pytest
 
 Tests use fake GitHub/Jenkins/agent responses, isolated local Git remotes, temporary
 state, and in-memory spans. They never invoke live agents or contact GitHub/Jenkins.
+
+`scripts/tests/fixtures/jenkins/pr-536-build-5/` holds a recorded real Jenkins failure
+(`history.json` job API response, `console.txt` plain console, `meta.json` job/head/size).
+`scripts/tests/test_jenkins_logs.py` replays it through the `transport` seam; run from
+`scripts/` with `python3 -m pytest tests`.

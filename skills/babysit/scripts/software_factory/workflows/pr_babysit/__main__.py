@@ -30,6 +30,7 @@ from loop import (
     WorktreeGit,
     run,
 )
+from loop.observe.otel import otlp_observer
 from loop.shared.git import GitClient
 from loop.shared.process import CommandRunner, git_command
 from loop.software_factory.infrastructure.agents.launcher import (
@@ -40,7 +41,6 @@ from loop.software_factory.infrastructure.ledger import Ledger
 from loop.software_factory.infrastructure.pacing import Pacer
 from loop.software_factory.infrastructure.telemetry import (
     OtelSpans,
-    OtlpObserverFactory,
     Tee,
     TracingObserver,
     closing_observer,
@@ -52,9 +52,9 @@ from software_factory.src.pull_requests.events.pull_requests import PullRequestW
 from software_factory.src.pull_requests.infrastructure.jenkins import Jenkins
 from software_factory.src.pull_requests.stages import pull_requests
 
-from .aspire import reachable_endpoint
 from .definition import HANDED_OFF_ERRORS, NAME, pr_babysit
 from .intake import adopt_state, release_if_changed, work_of
+from .log_export import exported_logs, reachable_endpoint
 from .policy import FINGERPRINT, REASON, Blocked, fingerprint
 from .settings import Repository, Settings
 
@@ -179,7 +179,10 @@ def main(argv: Sequence[str] | None = None, *, services: Services | None = None)
                 settings, otel_endpoint=reachable_endpoint(settings.otel_endpoint)
             )
         stop = StopRequest()
-        with _handling(stop, services is None):
+        with (
+            exported_logs(settings.otel_endpoint if services is None else None),
+            _handling(stop, services is None),
+        ):
             return _maintain(settings, services, match[1], int(match[2]), stop)
     except (Blocked, ValueError, OSError) as exception:
         logger.error("PR maintenance stopped: %s", exception)
@@ -247,12 +250,11 @@ def _runtime_of(
 def _observer(settings: Settings) -> TracingObserver | None:
     if not settings.otel_endpoint:
         return None
-    return OtlpObserverFactory(
-        "loop-babysit",
+    return otlp_observer(
+        endpoint=settings.otel_endpoint,
+        service_name="loop-babysit",
         resource_per_agent=True,
         capture_content=settings.otel_capture_content,
-    )(
-        settings.otel_endpoint
     )
 
 

@@ -9,10 +9,10 @@ from loop import Json, Message
 
 @dataclass(frozen=True)
 class DiagnoseRequest(Message):
-    """A pull request snapshot and its failed CI logs to diagnose; the agent only reads."""
+    """A pull request snapshot and the file holding its failed CI logs to diagnose; the agent only reads."""
 
     snapshot: Json
-    logs: str
+    logsFile: str
 
 
 @dataclass(frozen=True)
@@ -25,10 +25,10 @@ class Diagnosis(Message):
 
 @dataclass(frozen=True)
 class JenkinsDiagnoseRequest(Message):
-    """A failed Jenkins job's untrusted evidence, requiring an explicit failure category."""
+    """A failed Jenkins job and the file holding its untrusted console, requiring an explicit failure category."""
 
     snapshot: Json
-    logs: str
+    logsFile: str
     job: str
     build: int
     result: str

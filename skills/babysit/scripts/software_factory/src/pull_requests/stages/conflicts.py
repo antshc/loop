@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 from loop import AgentWorkspace, Evidence, Fail, Nothing, Pass, Stage, Verify
 from loop.shared.git import GitClient
@@ -22,6 +23,10 @@ from software_factory.src.pull_requests.events.pull_requests import (
     MergePublished,
     MergeVerified,
     PullRequestPolled,
+)
+from software_factory.src.pull_requests.infrastructure.github.pull_requests.babysit import (
+    agent_view,
+    head_confirmed,
 )
 from software_factory.src.pull_requests.infrastructure.github.pull_requests.model import (
     PullRequest,
@@ -82,12 +87,13 @@ def resolve() -> Stage[ResolveInput, Fixed, Nothing]:
         .agent(
             RESOLVE_CONFLICTS,
             request=lambda i, _: ConflictRequest(
-                i.polled.snapshot,
+                agent_view(i.polled.snapshot),
                 i.plan.start,
                 i.plan.base_ref,
                 i.plan.base,
                 i.prepared.paths,
             ),
+            session=lambda i: i.polled.title,
         )
         .gate(_resolved)
         .when(lambda i: bool(i.prepared.paths))
@@ -124,10 +130,12 @@ def _plan(i: PlanInput) -> MergePlanned:
     if not i.git.is_clean(path) or _merge_head(i.git, i.worktree):
         raise ValueError("Recovery worktree has unfinished work; inspect before retry")
     planned = MergePlanned(
-        conflict.head, i.git.head(path).sha, conflict.base_ref, conflict.base
+        conflict.head,
+        i.git.head(path).sha,
+        conflict.base_ref,
+        _base_tip(i.git, path, conflict.base_ref),
     )
     _current(i.polled, planned, i.github, {planned.head})
-    i.git.fetch_revision(path, planned.base)
     if not i.git.is_ancestor(path, planned.head, planned.start):
         raise ValueError("Recovery branch no longer contains the PR head")
     return planned
@@ -196,8 +204,8 @@ def _publish(i: PublishInput, message: str) -> MergePublished:
     pull = _current(i.polled, planned, i.github, {planned.head, local})
     if pull.head_sha != local:
         git.publish(path, i.polled.branch)
-    pull = i.github.pull_requests(i.polled.target.slug).pull_request(i.polled.number)
-    if pull.head_sha != local:
+    pulls = i.github.pull_requests(i.polled.target.slug)
+    if not head_confirmed(lambda: pulls.pull_request(i.polled.number).head_sha, local):
         raise ValueError("Published merge SHA could not be confirmed")
     return MergePublished(local)
 
@@ -228,10 +236,16 @@ def _current(
         or pull.head_repository != polled.target.slug
         or pull.head_sha not in heads
         or pull.base_ref != planned.base_ref
-        or pull.payload["base"]["sha"] != planned.base
     ):
         raise ValueError("PR head, base or state changed; merge publication stopped")
     return pull
+
+
+def _base_tip(git: GitClient, path: Path, base_ref: str) -> str:
+    """The base branch tip on origin; the PR payload's `base.sha` can lag it, and merging that stale revision is a no-op that leaves the conflict."""
+    remote = f"refs/remotes/origin/{base_ref}"
+    git.text(path, "fetch", "origin", f"+refs/heads/{base_ref}:{remote}")
+    return git.ref_sha(path, remote)
 
 
 def _unchanged(i: MergeInput) -> None:
@@ -273,5 +287,13 @@ def _staged_tree(i: MergeInput) -> str:
     git.text(path, "add", "-A")
     if _unmerged(i):
         raise ValueError("Merge still has unmerged entries")
-    git.text(path, "diff", "--cached", "--check")
+    # Whitespace rules off: `--check` then rejects only leftover conflict markers, not whitespace the base already carries.
+    git.text(
+        path,
+        "-c",
+        "core.whitespace=-blank-at-eol,-blank-at-eof,-space-before-tab,-indent-with-non-tab,-tab-in-indent,-cr-at-eol",
+        "diff",
+        "--cached",
+        "--check",
+    )
     return git.text(path, "write-tree")

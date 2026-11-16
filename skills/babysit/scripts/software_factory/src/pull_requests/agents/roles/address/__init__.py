@@ -1,93 +1,102 @@
-"""The address role: groups review feedback into issues and resolves one issue at a time."""
+"""The address role: runs the `address` skill's procedure on a pull request's review threads inside babysit's worktree, owning commits, the push, replies and thread resolution."""
 
 from __future__ import annotations
 
+import json
+import shlex
+import sys
+from pathlib import Path
 from typing import Any
 
-from loop import ReplyMismatch, TypedAgent
+from loop import AgentProfile, ReplyMismatch, TypedAgent, copilot
 from loop.software_factory import agents as agent_tools
 
-from .messages import (
-    FeedbackIssue,
-    FeedbackReply,
-    Grouped,
-    GroupRequest,
-    Resolved,
-    ResolveRequest,
+from software_factory.src.pull_requests.infrastructure.github.pull_requests import (
+    discussion_state,
 )
 
-_VERDICTS = ("fix-needed", "no-change-needed", "unclear")
+from .messages import AddressReport, AddressRequest
 
-_PROFILE = agent_tools.profile_with_instructions(__name__, "address", timeout_sec=1800)
+_OUTCOMES = ("addressed", "waiting", "blocked")
+_HERE = Path(__file__).resolve().parent
+_REFERENCES = (
+    ("GitHub API", "github-api.md"),
+    ("Investigation", "investigation.md"),
+    ("Review conversation", "review-conversation.md"),
+)
+_GATE_COMMAND = shlex.join(
+    (sys.executable, str(Path(discussion_state.__file__).resolve()))
+)
 
 
-def _strings(value: Any, what: str) -> tuple[str, ...]:
-    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
-        raise ReplyMismatch(f"{what} must be a list of strings: {value!r}")
-    return tuple(value)
+def _read(name: str) -> str:
+    return (_HERE / name).read_text(encoding="utf-8")
 
 
-def _issue(item: Any) -> FeedbackIssue:
-    if (
-        not isinstance(item, dict)
-        or not isinstance(item.get("id"), str)
-        or not isinstance(item.get("statement"), str)
-    ):
-        raise ReplyMismatch(f"invalid issue: {item!r}")
-    return FeedbackIssue(
-        item["id"], item["statement"], _strings(item.get("keys"), "issue keys")
+_TEMPLATE = _read("instructions.md")
+_APPENDIX = "\n\n".join(
+    f"# {title}\n\n{_read('references/' + name)}" for title, name in _REFERENCES
+).replace("{{gateCommand}}", _GATE_COMMAND)
+
+_ARGS = frozenset(
+    {
+        "prUrl",
+        "owner",
+        "repo",
+        "number",
+        "headRef",
+        "baseRef",
+        "headOid",
+        "buildCommand",
+        "testCommand",
+        "gateCommand",
+        "discussionFile",
+    }
+)
+if agent_tools.placeholders(_TEMPLATE) != _ARGS:
+    raise agent_tools.PromptError(
+        "address instructions placeholders and arguments differ: "
+        + ", ".join(sorted(agent_tools.placeholders(_TEMPLATE) ^ _ARGS))
     )
 
 
-def _decode_group(request: GroupRequest, output: str) -> Grouped:
-    issues = agent_tools.read_object(output).get("issues")
-    if not isinstance(issues, list):
-        raise ReplyMismatch(f"issues must be a list: {issues!r}")
-    return Grouped(tuple(_issue(item) for item in issues))
+def render(request: AddressRequest) -> str:
+    """The address instructions with the request's values and discussion file path in their placeholders, followed by the references."""
+    args = {
+        "prUrl": request.prUrl,
+        "owner": request.owner,
+        "repo": request.repo,
+        "number": str(request.number),
+        "headRef": request.headRef,
+        "baseRef": request.baseRef,
+        "headOid": request.headOid,
+        "buildCommand": json.dumps(list(request.buildCommand)),
+        "testCommand": json.dumps(list(request.testCommand)),
+        "gateCommand": _GATE_COMMAND,
+        "discussionFile": request.discussionFile,
+    }
+    return agent_tools.render(_TEMPLATE, args) + "\n\n" + _APPENDIX
 
 
-def _reply(key: Any, body: Any) -> FeedbackReply:
-    if not isinstance(key, str) or not isinstance(body, str):
-        raise ReplyMismatch(f"reply must map a feedback key to text: {key!r}")
-    return FeedbackReply(key, body)
-
-
-def _decode_resolve(request: ResolveRequest, output: str) -> Resolved:
-    result = agent_tools.read_object(output)
-    verdict, replies, reason = (
-        result.get("verdict"),
-        result.get("replies"),
+def _decode(request: AddressRequest, output: str) -> AddressReport:
+    result: dict[str, Any] = agent_tools.read_object(output)
+    outcome, head, reason = (
+        result.get("outcome"),
+        result.get("head", ""),
         result.get("reason", ""),
     )
-    if verdict not in _VERDICTS:
-        raise ReplyMismatch(f"invalid verdict: {verdict!r}")
-    if not isinstance(replies, dict) or not isinstance(reason, str):
-        raise ReplyMismatch(
-            f"resolution needs a replies object and a text reason: {result!r}"
-        )
-    evidence = _strings(result.get("evidence", []), "evidence")
-    return Resolved(
-        verdict,
-        evidence,
-        tuple(_reply(key, body) for key, body in replies.items()),
-        reason,
-    )
+    if outcome not in _OUTCOMES:
+        raise ReplyMismatch(f"invalid outcome: {outcome!r}")
+    if not isinstance(head, str) or not isinstance(reason, str):
+        raise ReplyMismatch(f"head and reason must be text: {result!r}")
+    return AddressReport(outcome, head, reason, result)
 
 
-GROUP_FEEDBACK: TypedAgent[GroupRequest, Grouped] = agent_tools.mode_agent(
-    "address", "group", profile=_PROFILE, decode=_decode_group
-)
-RESOLVE_ISSUE: TypedAgent[ResolveRequest, Resolved] = agent_tools.mode_agent(
-    "address", "resolve", profile=_PROFILE, decode=_decode_resolve
+# Default Copilot permissions (`--allow-all`): the agent commits, pushes and posts through `gh` itself.
+_PROFILE = AgentProfile(copilot, name="address", timeout_sec=1800)
+
+ADDRESS: TypedAgent[AddressRequest, AddressReport] = TypedAgent(
+    "address", _PROFILE, render, _decode
 )
 
-__all__ = [
-    "GROUP_FEEDBACK",
-    "RESOLVE_ISSUE",
-    "FeedbackIssue",
-    "FeedbackReply",
-    "GroupRequest",
-    "Grouped",
-    "Resolved",
-    "ResolveRequest",
-]
+__all__ = ["ADDRESS", "AddressReport", "AddressRequest", "render"]

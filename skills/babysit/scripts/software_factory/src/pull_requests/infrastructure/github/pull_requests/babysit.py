@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable
+import time
 from fnmatch import fnmatchcase
+from collections.abc import Callable
 from typing import Any, Protocol
 
 from loop.software_factory.infrastructure.github.issue import Comment
@@ -239,6 +240,77 @@ def unhandled_items(
         for item in pending_items(snapshot, login, trust, bots)
         if item["key"] not in handled
     ]
+
+
+# The agent CLI takes the whole prompt as one argv entry, which Linux caps at 128 KiB.
+_TEXT_LIMIT = 2_000
+
+
+def head_confirmed(
+    read: Callable[[], str], sha: str, *, attempts: int = 6, delay: float = 5.0
+) -> bool:
+    """Whether `read` reports `sha`, retried because GitHub's PR head lags a push."""
+    for attempt in range(attempts):
+        if read() == sha:
+            return True
+        if attempt + 1 < attempts:
+            time.sleep(delay)
+    return False
+
+
+def agent_view(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """The snapshot an agent prompt carries: the pull request, review and failed CI signals without the raw API payloads, which alone exceed the argv cap."""
+    pr = snapshot["pr"]
+    state = ci_state(snapshot)
+    checks = latest(
+        snapshot["checks"], lambda c: (c["name"], (c.get("app") or {}).get("id"))
+    )
+    statuses = latest(snapshot["statuses"], lambda s: s["context"])
+    return {
+        "pr": {
+            "number": pr["number"],
+            "title": pr["title"],
+            "url": pr["html_url"],
+            "state": pr["state"],
+            "draft": pr.get("draft"),
+            "author": (pr.get("user") or {}).get("login"),
+            "body": (pr.get("body") or "")[:_TEXT_LIMIT],
+            "head": {"ref": pr["head"]["ref"], "sha": pr["head"]["sha"]},
+            "base": {"ref": pr["base"]["ref"], "sha": pr["base"]["sha"]},
+            "mergeable_state": pr.get("mergeable_state"),
+        },
+        "review": snapshot["review"],
+        "ci": {"pending": state["pending"], "failed": state["failed"]},
+        "failed_runs": [
+            {
+                key: run.get(key)
+                for key in ("id", "name", "html_url", "conclusion", "run_attempt")
+            }
+            for run in state["runs"]
+        ],
+        "failed_checks": [
+            {
+                "name": check["name"],
+                "conclusion": check.get("conclusion"),
+                "url": check.get("html_url"),
+                "summary": ((check.get("output") or {}).get("summary") or "")[
+                    :_TEXT_LIMIT
+                ],
+            }
+            for check in checks
+            if check.get("conclusion") in FAILED
+        ],
+        "failed_statuses": [
+            {
+                "context": status["context"],
+                "state": status["state"],
+                "description": status.get("description"),
+                "url": status.get("target_url"),
+            }
+            for status in statuses
+            if status["state"] in {"failure", "error"}
+        ],
+    }
 
 
 def latest(
