@@ -51,6 +51,13 @@ def launch(url: str, config: Path) -> tuple[int, Path]:
         )
     if pr_state(url) != "OPEN":
         raise ValueError(f"PR is already closed or merged: {url}")
+    from software_factory.workflows.pr_babysit.aspire import ensure_dashboard
+
+    dashboard = ensure_dashboard(
+        settings.otel_endpoint, settings.state_dir, settings.aspire_dashboard_port
+    )
+    if dashboard:
+        print(f"Aspire dashboard started: {dashboard}")
     root = settings.state_dir / "skill-runs" / slug / str(number) / uuid4().hex
     root.mkdir(parents=True, exist_ok=False)
     log = root / "babysit.log"

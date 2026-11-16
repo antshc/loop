@@ -16,6 +16,7 @@ description: Launch a background PR babysitter for a GitHub pull request URL, co
 ## Gotchas
 
 - Install the `loop[otel]` Python package from `requirements.txt`; the skill does not vendor the Loop library.
+- With a local `otel_endpoint`, `start.py` starts the Aspire dashboard (`aspire` CLI required) if nothing listens there; report its URL (`http://localhost:<aspire_dashboard_port>`, default `19000`) with the PID and log. Babysitters share it; it outlives them.
 - The repository checkout, authenticated `gh`, agent CLI, build/test commands and optional Jenkins credentials are configured by the existing workflow settings.
 - All Python files under `scripts/` are generated. Change canonical files in the Loop repository and regenerate; never edit bundled scripts directly.
 - A second invocation targets a separate process; per-PR locking prevents simultaneous modifications to the same PR.

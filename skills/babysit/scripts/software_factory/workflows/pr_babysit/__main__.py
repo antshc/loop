@@ -9,7 +9,7 @@ import signal
 import threading
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from subprocess import CalledProcessError, TimeoutExpired
 from types import FrameType
@@ -52,6 +52,7 @@ from software_factory.src.pull_requests.events.pull_requests import PullRequestW
 from software_factory.src.pull_requests.infrastructure.jenkins import Jenkins
 from software_factory.src.pull_requests.stages import pull_requests
 
+from .aspire import reachable_endpoint
 from .definition import HANDED_OFF_ERRORS, NAME, pr_babysit
 from .intake import adopt_state, release_if_changed, work_of
 from .policy import FINGERPRINT, REASON, Blocked, fingerprint
@@ -173,6 +174,10 @@ def main(argv: Sequence[str] | None = None, *, services: Services | None = None)
     logging.basicConfig(level=logging.INFO)
     try:
         settings = Settings.load(args.config)
+        if services is None:
+            settings = replace(
+                settings, otel_endpoint=reachable_endpoint(settings.otel_endpoint)
+            )
         stop = StopRequest()
         with _handling(stop, services is None):
             return _maintain(settings, services, match[1], int(match[2]), stop)

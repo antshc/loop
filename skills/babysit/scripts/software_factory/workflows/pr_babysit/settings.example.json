@@ -25,5 +25,6 @@
   },
   "harness_dir": null,
   "otel_endpoint": null,
-  "otel_capture_content": true
+  "otel_capture_content": true,
+  "aspire_dashboard_port": 19000
 }

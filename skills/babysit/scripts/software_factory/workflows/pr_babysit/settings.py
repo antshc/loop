@@ -39,6 +39,8 @@ class Settings:
     harness_dir: Path | None = None
     # Puts agent prompts (incl. instructions) and outputs, and tool arguments/results, on the exported spans.
     otel_capture_content: bool = True
+    # Port of the Aspire dashboard UI start.py starts for a local, unreachable otel_endpoint.
+    aspire_dashboard_port: int = 19000
 
     @property
     def ledger_root(self) -> Path:
@@ -94,6 +96,7 @@ class Settings:
             if value.get("harness_dir")
             else None,
             bool(value.get("otel_capture_content", True)),
+            int(value.get("aspire_dashboard_port", 19000)),
         )
         if settings.harness_dir is not None and not settings.harness_dir.is_dir():
             raise ValueError(f"harness_dir is not a folder: {settings.harness_dir}")
@@ -109,6 +112,8 @@ class Settings:
             or settings.timeout <= 0
         ):
             raise ValueError("invalid interval, retries, or timeout")
+        if not 0 < settings.aspire_dashboard_port < 65536:
+            raise ValueError("aspire_dashboard_port must be 1-65535")
         return settings
 
     def repository(self, name: str) -> Repository:

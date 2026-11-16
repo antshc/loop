@@ -37,6 +37,8 @@ class Settings:
     jenkins: JenkinsSettings | None = None
     # Where the agent CLI starts; it is told to change into the PR worktree. Unset starts it in the worktree.
     harness_dir: Path | None = None
+    # Port of the Aspire dashboard UI start.py starts for a local, unreachable otel_endpoint.
+    aspire_dashboard_port: int = 19000
 
     @property
     def ledger_root(self) -> Path:
@@ -91,6 +93,7 @@ class Settings:
             (path.parent / value["harness_dir"]).resolve()
             if value.get("harness_dir")
             else None,
+            int(value.get("aspire_dashboard_port", 19000)),
         )
         if settings.harness_dir is not None and not settings.harness_dir.is_dir():
             raise ValueError(f"harness_dir is not a folder: {settings.harness_dir}")
@@ -106,6 +109,8 @@ class Settings:
             or settings.timeout <= 0
         ):
             raise ValueError("invalid interval, retries, or timeout")
+        if not 0 < settings.aspire_dashboard_port < 65536:
+            raise ValueError("aspire_dashboard_port must be 1-65535")
         return settings
 
     def repository(self, name: str) -> Repository:
