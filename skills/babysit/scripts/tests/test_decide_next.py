@@ -61,7 +61,9 @@ def _input(
 
 
 def test_closed_pr_stops() -> None:
-    assert isinstance(_decide(_input(open_=False), None, lambda _: False), PullRequestClosed)
+    assert isinstance(
+        _decide(_input(open_=False), None, lambda _: False), PullRequestClosed
+    )
 
 
 def test_ready_pr_repairs_conflicts() -> None:
@@ -91,7 +93,9 @@ def test_draft_pr_is_only_watched(conflict: bool, action: str) -> None:
     assert decided == DraftWaiting(HEAD)
 
 
-@pytest.mark.parametrize(("jenkins", "loaded"), [(None, False), ({"enabled": False}, False)])
+@pytest.mark.parametrize(
+    ("jenkins", "loaded"), [(None, False), ({"enabled": False}, False)]
+)
 def test_jenkins_skipped_unless_enabled(
     tmp_path: Path, jenkins: dict[str, Any] | None, loaded: bool
 ) -> None:

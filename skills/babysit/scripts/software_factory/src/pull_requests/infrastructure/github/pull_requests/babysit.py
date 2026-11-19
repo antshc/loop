@@ -5,8 +5,8 @@ from __future__ import annotations
 import hashlib
 import json
 import time
-from fnmatch import fnmatchcase
 from collections.abc import Callable
+from fnmatch import fnmatchcase
 from typing import Any, Protocol
 
 from loop.software_factory.infrastructure.github.issue import Comment

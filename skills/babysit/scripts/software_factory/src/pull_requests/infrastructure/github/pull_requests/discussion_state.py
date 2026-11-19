@@ -9,6 +9,7 @@ Copied from the `address` skill's `scripts/pr_discussion_state.py`; babysit impo
 decide when to trigger the address agent, and the agent runs it as a script for its gate.
 Stdlib only, so it stays runnable standalone.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -19,7 +20,9 @@ import subprocess
 import sys
 from typing import Any
 
-PR_URL_RE = re.compile(r"^https?://[^/]+/(?P<owner>[^/]+)/(?P<repo>[^/]+)/pull/(?P<number>\d+)")
+PR_URL_RE = re.compile(
+    r"^https?://[^/]+/(?P<owner>[^/]+)/(?P<repo>[^/]+)/pull/(?P<number>\d+)"
+)
 PR_SHORT_RE = re.compile(r"^(?P<owner>[^/\s]+)/(?P<repo>[^/#\s]+)#(?P<number>\d+)$")
 MARKER_OPENERS = {"<!-- agent:comment": "comment", "<!-- agent:reply": "reply"}
 FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
@@ -60,7 +63,9 @@ class GhError(RuntimeError):
 def run_gh(args: list[str]) -> str:
     proc = subprocess.run(["gh", *args], capture_output=True, text=True)
     if proc.returncode != 0:
-        raise GhError(f"gh {' '.join(args)} failed ({proc.returncode}): {proc.stderr.strip()}")
+        raise GhError(
+            f"gh {' '.join(args)} failed ({proc.returncode}): {proc.stderr.strip()}"
+        )
     return proc.stdout
 
 
@@ -74,11 +79,17 @@ def parse_pr_ref(raw: str) -> tuple[str, str, int]:
 
 
 def pr_metadata(owner: str, repo: str, number: int) -> dict[str, Any]:
-    out = run_gh([
-        "pr", "view", str(number),
-        "--repo", f"{owner}/{repo}",
-        "--json", "headRefName,baseRefName,headRefOid,state,isDraft,url",
-    ])
+    out = run_gh(
+        [
+            "pr",
+            "view",
+            str(number),
+            "--repo",
+            f"{owner}/{repo}",
+            "--json",
+            "headRefName,baseRefName,headRefOid,state,isDraft,url",
+        ]
+    )
     return json.loads(out)
 
 
@@ -88,11 +99,16 @@ def fetch_threads(owner: str, repo: str, number: int) -> list[dict[str, Any]]:
     seen_cursors: set[str] = set()
     while True:
         args = [
-            "api", "graphql",
-            "-f", f"query={THREADS_QUERY}",
-            "-f", f"owner={owner}",
-            "-f", f"repo={repo}",
-            "-F", f"number={number}",
+            "api",
+            "graphql",
+            "-f",
+            f"query={THREADS_QUERY}",
+            "-f",
+            f"owner={owner}",
+            "-f",
+            f"repo={repo}",
+            "-F",
+            f"number={number}",
         ]
         if cursor:
             args += ["-f", f"cursor={cursor}"]
@@ -127,7 +143,13 @@ def resolve_anchor(thread: dict[str, Any]) -> dict[str, Any]:
             "side": thread.get("diffSide"),
             "basis": "original",
         }
-    return {"path": thread["path"], "startLine": None, "line": None, "side": thread.get("diffSide"), "basis": "unknown"}
+    return {
+        "path": thread["path"],
+        "startLine": None,
+        "line": None,
+        "side": thread.get("diffSide"),
+        "basis": "unknown",
+    }
 
 
 def is_pending_review_comment(comment: dict[str, Any]) -> bool:
@@ -163,7 +185,7 @@ def terminal_block(body: str) -> tuple[str, int] | None:
         return None
     opening = candidates[-1]
     # An early closing delimiter or nested block is not one complete terminal block.
-    prose = "".join(lines[opening + 1:last])
+    prose = "".join(lines[opening + 1 : last])
     if "-->" in prose or "<!--" in prose:
         return None
     fence: str | None = None
@@ -173,7 +195,9 @@ def terminal_block(body: str) -> tuple[str, int] | None:
     for line in lines[:opening]:
         text = line.rstrip("\r\n")
         if fence is not None:
-            if re.fullmatch(r" {0,3}" + re.escape(fence) + "{" + str(fence_length) + r",}\s*", text):
+            if re.fullmatch(
+                r" {0,3}" + re.escape(fence) + "{" + str(fence_length) + r",}\s*", text
+            ):
                 fence = None
             continue
         match = FENCE_RE.match(text)
@@ -209,7 +233,7 @@ def terminal_marker(body: str) -> str | None:
 
 def visible_body(body: str) -> str:
     block = terminal_block(body)
-    return body[:block[1]].rstrip() if block else body
+    return body[: block[1]].rstrip() if block else body
 
 
 def classify(thread: dict[str, Any]) -> dict[str, Any] | None:
@@ -217,12 +241,21 @@ def classify(thread: dict[str, Any]) -> dict[str, Any] | None:
     if not comments:
         return None
     connection = thread["comments"]
-    truncated = connection["pageInfo"]["hasNextPage"] or connection["totalCount"] > len(connection["nodes"])
-    origin = "agent" if terminal_marker(comments[0]["body"]) == "comment" else "human/unknown"
-    replies = [i for i, comment in enumerate(comments[1:], 1)
-               if terminal_marker(comment["body"]) == "reply"]
+    truncated = connection["pageInfo"]["hasNextPage"] or connection["totalCount"] > len(
+        connection["nodes"]
+    )
+    origin = (
+        "agent"
+        if terminal_marker(comments[0]["body"]) == "comment"
+        else "human/unknown"
+    )
+    replies = [
+        i
+        for i, comment in enumerate(comments[1:], 1)
+        if terminal_marker(comment["body"]) == "reply"
+    ]
     last_reply = replies[-1] if replies else None
-    new_comments = comments[last_reply + 1:] if last_reply is not None else comments
+    new_comments = comments[last_reply + 1 :] if last_reply is not None else comments
     record: dict[str, Any] = {
         "id": thread["id"],
         "anchor": resolve_anchor(thread),
@@ -232,10 +265,18 @@ def classify(thread: dict[str, Any]) -> dict[str, Any] | None:
         "lastAuthor": comments[-1]["author"],
         "lastCommentAt": comments[-1]["createdAt"],
         "origin": origin,
-        "state": "pending" if new_comments or truncated else ("reconcile" if origin == "agent" else "answered"),
+        "state": "pending"
+        if new_comments or truncated
+        else ("reconcile" if origin == "agent" else "answered"),
         "mode": "follow-up" if replies else "first-pass",
-        "diffHunk": next((c.get("diffHunk") for c in thread["comments"]["nodes"]
-                          if not is_pending_review_comment(c) and c.get("diffHunk")), None),
+        "diffHunk": next(
+            (
+                c.get("diffHunk")
+                for c in thread["comments"]["nodes"]
+                if not is_pending_review_comment(c) and c.get("diffHunk")
+            ),
+            None,
+        ),
         "comments": comments,
         "newComments": new_comments,
     }
@@ -266,20 +307,33 @@ def build_state(pr_ref: str) -> tuple[dict[str, Any], int]:
 
     raw_threads = fetch_threads(owner, repo, number)
     resolved = [t for t in raw_threads if t["isResolved"]]
-    incomplete = [t for t in raw_threads if not t["isResolved"] and (
-        t["comments"]["pageInfo"]["hasNextPage"]
-        or t["comments"]["totalCount"] > len(t["comments"]["nodes"])
-    )]
+    incomplete = [
+        t
+        for t in raw_threads
+        if not t["isResolved"]
+        and (
+            t["comments"]["pageInfo"]["hasNextPage"]
+            or t["comments"]["totalCount"] > len(t["comments"]["nodes"])
+        )
+    ]
     if incomplete:
-        state.update(action="stop", reason="Truncated review comments; full context required",
-                     counts={"total": len(raw_threads), "resolved": len(resolved)}, threads=[])
+        state.update(
+            action="stop",
+            reason="Truncated review comments; full context required",
+            counts={"total": len(raw_threads), "resolved": len(resolved)},
+            threads=[],
+        )
         return state, 1
     classified = (classify(t) for t in raw_threads if not t["isResolved"])
     live = [record for record in classified if record is not None]
 
     answered = [t for t in live if t["state"] == "answered"]
-    first_pass = [t for t in live if t["state"] == "pending" and t["mode"] == "first-pass"]
-    follow_up = [t for t in live if t["state"] == "pending" and t["mode"] == "follow-up"]
+    first_pass = [
+        t for t in live if t["state"] == "pending" and t["mode"] == "first-pass"
+    ]
+    follow_up = [
+        t for t in live if t["state"] == "pending" and t["mode"] == "follow-up"
+    ]
     reconcile = [t for t in live if t["state"] == "reconcile"]
 
     state["counts"] = {
@@ -290,10 +344,13 @@ def build_state(pr_ref: str) -> tuple[dict[str, Any], int]:
         "pendingFollowUp": len(follow_up),
         "reconcile": len(reconcile),
     }
-    state["action"] = "skip" if not (first_pass or follow_up or reconcile) else "proceed"
+    state["action"] = (
+        "skip" if not (first_pass or follow_up or reconcile) else "proceed"
+    )
     state["threads"] = first_pass + follow_up + reconcile
     state["answeredThreads"] = [
-        {"id": t["id"], "path": t["anchor"]["path"], "lastAuthor": t["lastAuthor"]} for t in answered
+        {"id": t["id"], "path": t["anchor"]["path"], "lastAuthor": t["lastAuthor"]}
+        for t in answered
     ]
     return state, 0
 
@@ -317,7 +374,11 @@ def discussion_token(state: dict[str, Any]) -> str:
         for thread in state.get("threads", [])
     )
     payload = json.dumps(
-        {"action": state.get("action"), "reason": state.get("reason"), "threads": threads}
+        {
+            "action": state.get("action"),
+            "reason": state.get("reason"),
+            "threads": threads,
+        }
     )
     return hashlib.sha256(payload.encode()).hexdigest()[:16]
 
@@ -332,7 +393,11 @@ def compact(state: dict[str, Any]) -> dict[str, Any]:
             if key not in ("comments", "newComments", "lastReply", "diffHunk")
         }
         slim["comments"] = [
-            {key: value for key, value in c.items() if key != "visibleBody" or value != c["body"]}
+            {
+                key: value
+                for key, value in c.items()
+                if key != "visibleBody" or value != c["body"]
+            }
             for c in thread["comments"]
         ]
         slim["newCommentIds"] = [c["id"] for c in thread.get("newComments", [])]
@@ -345,8 +410,12 @@ def compact(state: dict[str, Any]) -> dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("pr", help="PR URL (https://github.com/owner/repo/pull/N) or owner/repo#N")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "pr", help="PR URL (https://github.com/owner/repo/pull/N) or owner/repo#N"
+    )
     parser.add_argument("--json-out", help="also write the JSON state to this path")
     parser.add_argument("--pretty", action="store_true", help="indent the JSON")
     args = parser.parse_args()

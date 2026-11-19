@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from software_factory.workflows.pr_babysit import aspire
+from scripts.babysit import aspire
 
 
 def _free_port() -> int:

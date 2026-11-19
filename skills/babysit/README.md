@@ -36,6 +36,10 @@ Unknown keys (e.g. `concurrency`) are ignored.
 
 Draft PRs: watch only. Ready PRs: repairs conflicts, CI and review threads (incl. threads left while draft). Pushes commits to the PR branch.
 
+Temporary GitHub state-read connection failures, timeouts and HTTP 500/502/503/504 responses log a warning and retry after `interval`, retaining the monitor lock. SIGTERM interrupts the wait. Access refusals and other permanent errors still stop the supervisor. A handoff caused by a temporary read-only `gh api user` failure resumes after a successful snapshot, even without a PR change; other unchanged blocked work stays blocked.
+
+In the Loop checkout, bundle-specific files are maintained under `scripts/babysit/bundle_overrides/`; `.deleted` lists source paths intentionally absent from the bundle. The synchronizer applies these overrides before checking or generating the skill.
+
 ## `jenkins`
 
 Stages run only when `enabled` is `true`; otherwise Jenkins is skipped.

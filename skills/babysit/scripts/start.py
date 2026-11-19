@@ -39,7 +39,7 @@ def _detached() -> dict[str, Any]:
 
 
 def run_id() -> str:
-    """Local start time to the second plus a short random suffix, so the latest run sorts last."""
+    """Local start time and a random suffix keep run directories distinct."""
     return f"{datetime.now():%Y%m%d-%H%M%S}-{uuid4().hex[:6]}"
 
 
@@ -57,7 +57,7 @@ def launch(url: str, config: Path) -> tuple[int, Path]:
         )
     if pr_state(url) != "OPEN":
         raise ValueError(f"PR is already closed or merged: {url}")
-    from software_factory.workflows.pr_babysit.aspire import ensure_dashboard
+    from aspire import ensure_dashboard
 
     dashboard = ensure_dashboard(
         settings.otel_endpoint, settings.state_dir, settings.aspire_dashboard_port

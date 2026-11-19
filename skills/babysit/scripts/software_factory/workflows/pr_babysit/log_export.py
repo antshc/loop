@@ -28,7 +28,9 @@ def reachable_endpoint(
         if quiet:
             return None
         logger.warning(
-            "OpenTelemetry export disabled: no collector at %s (%s)", endpoint, exception
+            "OpenTelemetry export disabled: no collector at %s (%s)",
+            endpoint,
+            exception,
         )
         return None
 
@@ -64,7 +66,9 @@ def exported_logs(endpoint: str | None) -> Iterator[None]:
         handler = LoggingHandler(level=logging.INFO, logger_provider=provider)
         handler.addFilter(_not_from_otel)
     except Exception as exception:
-        logger.warning("log export disabled: %s: %s", type(exception).__name__, exception)
+        logger.warning(
+            "log export disabled: %s: %s", type(exception).__name__, exception
+        )
         yield
         return
     root = logging.getLogger()

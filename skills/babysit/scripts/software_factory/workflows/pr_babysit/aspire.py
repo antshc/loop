@@ -22,19 +22,30 @@ def ensure_dashboard(
         return None
     parts = urlsplit(endpoint)
     if parts.hostname not in _LOCAL_HOSTS:
-        raise ValueError(f"No OTLP collector at {endpoint}; start it or set otel_endpoint to null")
+        raise ValueError(
+            f"No OTLP collector at {endpoint}; start it or set otel_endpoint to null"
+        )
     aspire = shutil.which("aspire")
     if aspire is None:
-        raise ValueError(f"No OTLP collector at {endpoint} and no `aspire` CLI to start the dashboard")
+        raise ValueError(
+            f"No OTLP collector at {endpoint} and no `aspire` CLI to start the dashboard"
+        )
     dashboard = f"http://localhost:{port}"
     log = state_dir / "aspire" / "dashboard.log"
     log.parent.mkdir(parents=True, exist_ok=True)
     command = [
-        aspire, "dashboard", "run", "--non-interactive", "--nologo",
-        "--frontend-url", dashboard,
-        "--otlp-http-url", f"http://{parts.hostname}:{parts.port or 80}",
+        aspire,
+        "dashboard",
+        "run",
+        "--non-interactive",
+        "--nologo",
+        "--frontend-url",
+        dashboard,
+        "--otlp-http-url",
+        f"http://{parts.hostname}:{parts.port or 80}",
         "--allow-anonymous",
-        "--application-name", SERVICE_NAME,
+        "--application-name",
+        SERVICE_NAME,
     ]
     with log.open("ab") as output:
         process = subprocess.Popen(
@@ -51,11 +62,16 @@ def ensure_dashboard(
         if reachable_endpoint(endpoint, quiet=True):
             return dashboard
         time.sleep(0.5)
-    raise ValueError(f"Aspire dashboard not ready after {wait:.0f}s; process {process.pid}, log {log}")
+    raise ValueError(
+        f"Aspire dashboard not ready after {wait:.0f}s; process {process.pid}, log {log}"
+    )
 
 
 def _detached() -> dict[str, object]:
     """Lets the dashboard outlive the launcher, so later babysitters share it."""
     if sys.platform == "win32":
-        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW}
+        return {
+            "creationflags": subprocess.CREATE_NEW_PROCESS_GROUP
+            | subprocess.CREATE_NO_WINDOW
+        }
     return {"start_new_session": True}
