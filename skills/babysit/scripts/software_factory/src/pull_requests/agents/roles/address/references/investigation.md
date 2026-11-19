@@ -36,10 +36,10 @@ Establish whether the reviewer is right by reading the code, its callers, and it
 1. VERDICT — fix-needed | no-change-needed | unclear
 2. EVIDENCE — at least one `path:line` citation per claim, each with the quoted line. A verdict with no citation is not a verdict.
 3. ROOT CAUSE — what the code actually does today and why the reviewer's reading holds or fails.
-4. PROPOSED CHANGE — the minimal edit in prose, naming the exact symbols and files. No diff.
+4. PROPOSED CHANGE — compare credible remedies and recommend the smallest evidence-backed correction, naming the exact symbols and files. Distinguish required facts from optional optimization. No diff.
 5. BLAST RADIUS — every other call site, test, or contract the proposed change touches.
 
-Choose `unclear` when the reviewer's intent has two defensible readings, and state both readings plus the one question that separates them.
+Choose `unclear` only when missing evidence or conflicting requirements prevent a safe verdict or remedy. State the blocked decision and one question that would unblock it. Multiple possible remedies or an unknown optimum alone do not make a verified concern unclear.
 ```
 
 ## Verdict contract
@@ -48,6 +48,6 @@ Choose `unclear` when the reviewer's intent has two defensible readings, and sta
 |---|---|
 | `fix-needed` | The reviewer is right and the code needs an edit. |
 | `no-change-needed` | Cited evidence shows the code already satisfies the reviewer, or the concern rests on a misreading. |
-| `unclear` | Two defensible readings of the reviewer's intent survive the evidence. |
+| `unclear` | A specific evidence or requirement gap blocks a safe verdict or remedy. |
 
 A subagent that returns no `path:line` citation has returned `unclear`, whatever verdict it typed.
