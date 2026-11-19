@@ -1,4 +1,4 @@
-"""The address role: runs the `address` skill's procedure on a pull request's review threads inside babysit's worktree, owning commits, the push, replies and thread resolution."""
+"""The address role: runs the `review` skill's `address` procedure on a pull request's review threads inside babysit's worktree, owning commits, the push, replies and thread resolution."""
 
 from __future__ import annotations
 
@@ -19,24 +19,11 @@ from .messages import AddressReport, AddressRequest
 
 _OUTCOMES = ("addressed", "waiting", "blocked")
 _HERE = Path(__file__).resolve().parent
-_REFERENCES = (
-    ("GitHub API", "github-api.md"),
-    ("Investigation", "investigation.md"),
-    ("Review conversation", "review-conversation.md"),
-)
 _GATE_COMMAND = shlex.join(
     (sys.executable, str(Path(discussion_state.__file__).resolve()))
 )
 
-
-def _read(name: str) -> str:
-    return (_HERE / name).read_text(encoding="utf-8")
-
-
-_TEMPLATE = _read("instructions.md")
-_APPENDIX = "\n\n".join(
-    f"# {title}\n\n{_read('references/' + name)}" for title, name in _REFERENCES
-).replace("{{gateCommand}}", _GATE_COMMAND)
+_TEMPLATE = (_HERE / "instructions.md").read_text(encoding="utf-8")
 
 _ARGS = frozenset(
     {
@@ -61,7 +48,7 @@ if agent_tools.placeholders(_TEMPLATE) != _ARGS:
 
 
 def render(request: AddressRequest) -> str:
-    """The address instructions with the request's values and discussion file path in their placeholders, followed by the references."""
+    """The address instructions with the request's values and discussion file path in their placeholders."""
     args = {
         "prUrl": request.prUrl,
         "owner": request.owner,
@@ -75,7 +62,7 @@ def render(request: AddressRequest) -> str:
         "gateCommand": _GATE_COMMAND,
         "discussionFile": request.discussionFile,
     }
-    return agent_tools.render(_TEMPLATE, args) + "\n\n" + _APPENDIX
+    return agent_tools.render(_TEMPLATE, args)
 
 
 def _decode(request: AddressRequest, output: str) -> AddressReport:

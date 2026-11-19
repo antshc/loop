@@ -255,8 +255,8 @@ comment changes the token and triggers again.
 The address agent's prompt is [`instructions.md`](../../src/pull_requests/agents/roles/address/instructions.md),
 the skill's `SKILL.md` body adapted to babysit (worktree supplied, no cleanup), rendered per run:
 the PR, head, build/test commands and the unresolved discussion (the gate JSON, compacted) fill its
-`{{...}}` placeholders, then `github-api.md`, `investigation.md` and the `review-conversation` skill are
-appended from [`agents/roles/address/references`](../../src/pull_requests/agents/roles/address/references).
+`{{...}}` placeholders. The agent loads the installed `review` skill (`references/investigation.md`), `github`
+skill (Reviews: draft, reply, resolve) and `write` skill (`github` route) itself; nothing is appended.
 The prompt is one command-line argument, so diff hunks (outdated threads keep theirs), then comment
 bodies are shed when it nears 120 KB; the agent can always rerun the gate for the full form.
 The run fails, blocking the PR, when the agent reports `blocked`, leaves commits unpushed, leaves

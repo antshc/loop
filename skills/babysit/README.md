@@ -115,9 +115,9 @@ Paths are under `scripts/software_factory/src/pull_requests/agents/roles/`; each
 - `maintainer/__init__.py` `DIAGNOSE_JENKINS` (`stages/jenkins.py` `diagnose`): Read-only; classifies a failed Jenkins console log and a category that must match the classification (`timeout`, `flaky_test`, `container_error`, `likely_transient` = transient; `test_failure`, `branch_defect` = branch; `unknown` = blocked).
 - `maintainer/__init__.py` `FIX_CI` (`stages/ci.py` `fix`): Applies the smallest change for the diagnosis and replies `fixed` or `blocked`; Python runs build+test, commits and pushes.
 - `maintainer/__init__.py` `RESOLVE_CONFLICTS` (`stages/conflicts.py` `resolve`): Edits only the conflicted paths of the merge Python started, keeping both branches' intent; Python stages, verifies, commits and pushes.
-- `address/__init__.py` `ADDRESS` (`stages/address.py` `address_discussion`): Runs the `address` skill procedure on pending review threads; fixes, commits, pushes, replies and resolves settled agent threads itself, then replies `addressed`, `waiting` or `blocked`.
+- `address/__init__.py` `ADDRESS` (`stages/address.py` `address_discussion`): Runs the `review` skill's `address` procedure on pending review threads; fixes, commits, pushes, replies and resolves settled agent threads itself, then replies `addressed`, `waiting` or `blocked`.
 
-Maintainer agents (`maintainer/instructions.md`) MUST NOT commit, push, post comments, resolve threads or use GitHub clients, and only edit the supplied worktree. The address agent (`address/instructions.md` plus `references/`) runs with full Copilot permissions and owns commits, push, replies and thread resolution; its instructions are copied from the `address` skill. Both roles time out after 1800s unless `timeout` overrides it.
+Maintainer agents (`maintainer/instructions.md`) MUST NOT commit, push, post comments, resolve threads or use GitHub clients, and only edit the supplied worktree. The address agent (`address/instructions.md`) runs with full Copilot permissions and owns commits, push, replies and thread resolution; its instructions adapt the `review` skill's `address` route and load the installed `review`, `github` and `write` skills for investigation, reply wording, posting and resolution. Both roles time out after 1800s unless `timeout` overrides it.
 
 ## Flow
 
