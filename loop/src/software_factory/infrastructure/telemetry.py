@@ -44,18 +44,24 @@ class Telemetry:
 class OtlpObserverFactory:
     """Builds the OTLP observer of one service for an endpoint."""
 
-    def __init__(self, service_name: str, *, resource_per_agent: bool = False) -> None:
+    def __init__(
+        self,
+        service_name: str,
+        *,
+        resource_per_agent: bool = False,
+        capture_content: bool = False,
+    ) -> None:
         self._service_name = service_name
         self._resource_per_agent = resource_per_agent
+        self._capture_content = capture_content
 
     def __call__(self, endpoint: str) -> TracingObserver:
-        if self._resource_per_agent:
-            return otlp_observer(
-                endpoint=endpoint,
-                service_name=self._service_name,
-                resource_per_agent=True,
-            )
-        return otlp_observer(endpoint=endpoint, service_name=self._service_name)
+        return otlp_observer(
+            endpoint=endpoint,
+            service_name=self._service_name,
+            resource_per_agent=self._resource_per_agent,
+            capture_content=self._capture_content,
+        )
 
 
 @contextmanager

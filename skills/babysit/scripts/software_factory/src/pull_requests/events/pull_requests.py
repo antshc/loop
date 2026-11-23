@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from loop import Event, Json
 from loop.software_factory.events.targets import RepositoryTarget
 
-from software_factory.src.pull_requests.events.feedback import FeedbackBatch
+from software_factory.src.pull_requests.events.feedback import DiscussionPending
 
 
 @dataclass(frozen=True)
@@ -17,6 +17,8 @@ class PullRequestWork:
     target: RepositoryTarget
     number: int
     revision: str
+    # Globs of check runs, statuses and workflow runs whose failures babysit ignores.
+    ignored_checks: tuple[str, ...] = ()
 
     @property
     def id(self) -> str:
@@ -33,13 +35,14 @@ class PollStarted(Event):
 
 @dataclass(frozen=True)
 class PullRequestPolled(Event):
-    """One read of pull request `number` of `target`'s repository, as the snapshot dictionaries babysit's fingerprints and agent envelopes are built on; `login` is the acting account and `bots` the review-thread authors that are bot accounts."""
+    """One read of pull request `number` of `target`'s repository, as the snapshot dictionaries babysit's fingerprints and agent envelopes are built on; `login` is the acting account, `bots` the review-thread authors that are bot accounts and `discussion` the address gate's JSON for an open pull request."""
 
     target: RepositoryTarget
     number: int
     snapshot: dict[str, Json]
     login: str = ""
     bots: tuple[str, ...] = ()
+    discussion: dict[str, Json] = field(default_factory=dict)
 
     @property
     def is_open(self) -> bool:
@@ -50,6 +53,11 @@ class PullRequestPolled(Event):
     def head(self) -> str:
         """The pull request's head commit."""
         return str(self.snapshot["pr"]["head"]["sha"])  # type: ignore[index]
+
+    @property
+    def title(self) -> str:
+        """The pull request's title; names the agent sessions run for it."""
+        return str(self.snapshot["pr"]["title"])  # type: ignore[index]
 
     @property
     def branch(self) -> str:
@@ -159,11 +167,19 @@ class ReadinessCheck(Event):
     ready: bool
 
 
+@dataclass(frozen=True)
+class DraftWaiting(Event):
+    """The pull request at `head` is a draft; it is only watched until marked ready."""
+
+    head: str
+
+
 type NextAction = (
     PullRequestClosed
+    | DraftWaiting
     | Unsupported
     | MergeConflict
-    | FeedbackBatch
+    | DiscussionPending
     | CiFailing
     | CopilotDue
     | ReadinessCheck

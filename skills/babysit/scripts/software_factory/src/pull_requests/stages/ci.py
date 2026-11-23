@@ -39,9 +39,11 @@ from software_factory.src.pull_requests.events.ci import (
 )
 from software_factory.src.pull_requests.events.pull_requests import PullRequestPolled
 from software_factory.src.pull_requests.infrastructure.github.pull_requests.babysit import (
+    agent_view,
     ci_state,
     digest,
 )
+from software_factory.src.pull_requests.infrastructure.logs import log_path, save_log
 
 __all__ = [
     "BranchBroken",
@@ -92,7 +94,10 @@ def diagnose() -> Stage[DiagnoseInput, Classification, Diagnosis]:
         Stage("diagnose-ci", DiagnoseInput, produces=Diagnosis)
         .agent(
             DIAGNOSE_CI,
-            request=lambda i, _: DiagnoseRequest(i.polled.snapshot, _logs(i)),
+            request=lambda i, _: DiagnoseRequest(
+                agent_view(i.polled.snapshot), _logs(i)
+            ),
+            session=lambda i: i.polled.title,
         )
         .gate(_diagnosed)
         .contract(ReadOnly())
@@ -120,8 +125,10 @@ def fix(
         .agent(
             FIX_CI,
             request=lambda i, _: FixRequest(
-                Classification("branch", i.broken.reason), i.polled.snapshot
+                Classification("branch", i.broken.reason),
+                agent_view(i.polled.snapshot),
             ),
+            session=lambda i: i.polled.title,
         )
         .gate(_fixed)
         .contract(
@@ -134,21 +141,25 @@ def fix(
 
 def _logs(i: DiagnoseInput) -> str:
     runs = ci_state(i.polled.snapshot)["runs"]
-    if not runs:
-        return _NO_LOGS
-    return i.github.pull_requests(i.polled.target.slug).failed_logs(
-        run["id"] for run in runs
+    text = (
+        i.github.pull_requests(i.polled.target.slug).failed_logs(
+            run["id"] for run in runs
+        )
+        if runs
+        else _NO_LOGS
     )
+    return save_log(i.polled.target.slug, i.polled.number, f"ci-{signal(i)}", text)
 
 
 def _diagnosed(
-    _: DiagnoseInput, reply: Classification, __: Evidence
+    i: DiagnoseInput, reply: Classification, __: Evidence
 ) -> Verdict[Diagnosis]:
     match reply.classification:
         case "transient":
             return Pass(Transient(reply.reason))
         case "branch":
-            return Pass(BranchBroken(reply.reason))
+            logs = log_path(i.polled.target.slug, i.polled.number, f"ci-{signal(i)}")
+            return Pass(BranchBroken(f"{reply.reason}\n\nFailed CI logs: {logs}"))
     return Hold(reply.reason or "CI diagnosis is unclear")
 
 

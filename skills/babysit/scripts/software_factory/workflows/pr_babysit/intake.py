@@ -12,9 +12,10 @@ from software_factory.src.pull_requests.events.pull_requests import PullRequestW
 from software_factory.src.pull_requests.stages import pull_requests
 from software_factory.src.pull_requests.stages.ci import DiagnoseInput, signal
 
+from .connectivity import transient_account_read
 from .definition import NAME
 from .legacy import adopt_v1, state_path
-from .policy import fingerprint, is_blocked, released_for_change
+from .policy import REASON, fingerprint, is_blocked, released_for_change
 from .settings import Settings
 
 logger = logging.getLogger("workflow.pr_babysit")
@@ -29,6 +30,7 @@ def work_of(settings: Settings, slug: str, number: int) -> PullRequestWork:
         RepositoryTarget(slug, repository.path, settings.worktrees_root),
         number,
         REVISION,
+        repository.ignored_checks,
     )
 
 
@@ -52,11 +54,18 @@ def adopt_state(
 
 
 def release_if_changed(ledger: Ledger, github: GitHub, work: PullRequestWork) -> bool:
-    """Release blocked work if GitHub inputs changed since its hand-off."""
+    """Release changed PRs or recovered account reads after a successful snapshot."""
     status = ledger.status(NAME, work.id)
-    if not is_blocked(status) or not released_for_change(
-        status, fingerprint(pull_requests.read(work, github))
-    ):
+    if status is None or not is_blocked(status):
         return False
-    ledger.release(NAME, work.id, "the pull request changed since it was blocked")
+    current = fingerprint(pull_requests.read(work, github))
+    blocked_reason = status.attributes.get(REASON)
+    if released_for_change(status, current):
+        reason = "the pull request changed since it was blocked"
+    elif isinstance(blocked_reason, str) and transient_account_read(blocked_reason):
+        reason = "GitHub recovered after a temporary account read failure"
+    else:
+        return False
+    ledger.release(NAME, work.id, reason)
+    logger.info("%s: %s", work.id, reason)
     return True

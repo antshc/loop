@@ -17,6 +17,8 @@ class PullRequestWork:
     target: RepositoryTarget
     number: int
     revision: str
+    # Globs of check runs, statuses and workflow runs whose failures babysit ignores.
+    ignored_checks: tuple[str, ...] = ()
 
     @property
     def id(self) -> str:

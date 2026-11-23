@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Any
 
 from loop import Event, Ledger, Nothing, WorkItemLocked, WorkKey, encode
-from loop.software_factory.events.checks import ChecksPassed
 
 from software_factory.src.pull_requests.events.ci import (
     BranchBroken,
@@ -17,15 +16,7 @@ from software_factory.src.pull_requests.events.ci import (
     CiRerun,
     Transient,
 )
-from software_factory.src.pull_requests.events.feedback import (
-    FeedbackBatch,
-    FeedbackGrouped,
-    FeedbackHandled,
-    GroupedIssue,
-    IssueResolved,
-    IssueUnclear,
-    ReplyDraft,
-)
+from software_factory.src.pull_requests.events.feedback import FeedbackHandled
 from software_factory.src.pull_requests.events.pull_requests import (
     CiFailing,
     CopilotRequested,
@@ -41,10 +32,9 @@ __all__ = ["adopt_v1", "read_status", "state_path"]
 _EPOCH = 1
 _ADOPTED_STAGES = ("adopted",)
 
-# The scope paths below name the Flows and openers of the definition: the poll loop, the address and maintain-ci cases, the worktree and the issue loop.
+# The scope paths below name the Flows and openers of the definition: the poll loop, the maintain-ci case and the worktree.
 _POLL = ("poll", "poll-1")
 _POLL_REVISION = "poll-1"
-_ADDRESS = (*_POLL, "address", "FeedbackBatch")
 _MAINTAIN = (*_POLL, "maintain-ci", "CiFailing")
 
 
@@ -126,82 +116,18 @@ class _Adoption:
         """Every record, in the order a run would have written them."""
         self.out.append({"kind": "run-opened", "epoch": _EPOCH})
         batch = self.state.get("batch")
-        if batch:
-            (self._ci_batch if batch.get("kind") == "ci" else self._address_batch)(
-                batch
-            )
+        # An open address batch is not resumed: the address gate decides afresh what the discussion still needs.
+        ci_batch = bool(batch) and batch.get("kind") == "ci"
+        if ci_batch:
+            self._ci_batch(batch)
         self._handled()
         self._copilot()
         self._reruns()
-        self._close(bool(batch))
+        self._close(ci_batch)
         self.out.append({"kind": "adopted", "source": str(self.source), "version": 1})
         return self.out
 
     # ---- the open batch ----------------------------------------------------------------------------------
-
-    def _address_batch(self, batch: dict[str, Any]) -> None:
-        """The batch as an open address scope: the checks and the grouping as recorded, each finished issue as a passed attempt, the interrupted commit as a committing one."""
-        base, head, index = batch["base"], batch["head"], batch["index"]
-        issues = [
-            GroupedIssue(issue["id"], issue.get("statement"), tuple(issue["keys"]))
-            for issue in batch["issues"]
-        ]
-        feedback = FeedbackBatch(
-            base,
-            False,
-            tuple(
-                {**self.state["items"][key], "status": "pending"}
-                for issue in issues
-                for key in issue.keys
-            ),
-        )
-        worktree = (*_ADDRESS, "pr-worktree")
-        self._scope(_POLL, Poll(1), _POLL_REVISION, None)
-        self._scope(_ADDRESS, feedback, _POLL_REVISION, None)
-        self._scope(worktree, None, _POLL_REVISION, head)
-        self._pure(worktree, "require-clean", Nothing())
-        self._pure(worktree, "baseline", ChecksPassed())
-        self._attempt(
-            worktree,
-            "group-feedback",
-            _POLL_REVISION,
-            "passed",
-            event=FeedbackGrouped(feedback.token, base, tuple(issues)),
-        )
-        for position, issue in enumerate(issues[:index]):
-            unclear = bool(batch.get("unclear")) and position == index - 1
-            self._attempt(
-                (*worktree, "issue", issue.id),
-                "resolve-issue",
-                base,
-                "held" if unclear else "passed",
-                event=self._resolution(feedback, issue, batch, head != base, unclear),
-            )
-        inflight = batch.get("inflight")
-        if inflight and index < len(issues):
-            self._interrupted_issue(worktree, feedback, issues[index], batch, inflight)
-
-    def _interrupted_issue(
-        self,
-        worktree: tuple[str, ...],
-        feedback: FeedbackBatch,
-        issue: GroupedIssue,
-        batch: dict[str, Any],
-        inflight: dict[str, Any],
-    ) -> None:
-        path = (*worktree, "issue", issue.id)
-        parent = inflight["parent"]
-        self._scope(path, issue, batch["base"], parent)
-        self._attempt(path, "resolve-issue", batch["base"], "running", parent=parent)
-        self._attempt(
-            path,
-            "resolve-issue",
-            batch["base"],
-            "committing",
-            parent=parent,
-            message=inflight["message"],
-            event=self._resolution(feedback, issue, batch, True, False),
-        )
 
     def _ci_batch(self, batch: dict[str, Any]) -> None:
         """The CI batch as an open fix scope: a committed fix is a passed attempt awaiting publication, an interrupted commit a committing one."""
@@ -240,31 +166,6 @@ class _Adoption:
                 commit=head,
                 event=fixed,
             )
-
-    def _resolution(
-        self,
-        feedback: FeedbackBatch,
-        issue: GroupedIssue,
-        batch: dict[str, Any],
-        fixed: bool,
-        unclear: bool,
-    ) -> Event:
-        """The Event an issue ended with, carrying the replies the batch kept for its feedback."""
-        replies = tuple(
-            ReplyDraft(key, batch["replies"][key])
-            for key in issue.keys
-            if key in batch["replies"]
-        )
-        if unclear:
-            return IssueUnclear(
-                feedback.token, issue.id, "adopted from the per-PR state", replies
-            )
-        return IssueResolved(
-            feedback.token,
-            issue.id,
-            "fix-needed" if fixed else "no-change-needed",
-            replies,
-        )
 
     # ---- what the state remembered -----------------------------------------------------------------------
 

@@ -1,0 +1,133 @@
+"""pr_babysit's configuration: the repositories it may maintain and how it paces, bounds and checks its work, loaded from a JSON file."""
+
+from __future__ import annotations
+
+import json
+import math
+import re
+from dataclasses import dataclass
+from pathlib import Path
+
+from software_factory.src.pull_requests.infrastructure.jenkins import JenkinsSettings
+
+
+@dataclass(frozen=True)
+class Repository:
+    """Pair an explicit GitHub repository with its checkout and verification commands."""
+
+    name: str
+    path: Path
+    build: tuple[str, ...]
+    test: tuple[str, ...]
+    ignored_checks: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class Settings:
+    """Configure one PR's bounded maintenance without library-global defaults."""
+
+    repositories: tuple[Repository, ...]
+    state_dir: Path
+    author: str = ""
+    interval: float = 60
+    retries: int = 3
+    copilot_review: bool = False
+    otel_endpoint: str | None = None
+    timeout: float = 1800
+    worktrees_dir: Path | None = None
+    jenkins: JenkinsSettings | None = None
+    # Where the agent CLI starts; it is told to change into the PR worktree. Unset starts it in the worktree.
+    harness_dir: Path | None = None
+    # Puts agent prompts (incl. instructions) and outputs, and tool arguments/results, on the exported spans.
+    otel_capture_content: bool = True
+    # Port of the Aspire dashboard UI start.py starts for a local, unreachable otel_endpoint.
+    aspire_dashboard_port: int = 19000
+
+    @property
+    def ledger_root(self) -> Path:
+        """Where every pull request's Execution ledger lives."""
+        return self.state_dir / "ledger"
+
+    @property
+    def worktrees_root(self) -> Path:
+        """Where the pull request worktrees live: `worktrees_dir`, else `worktrees` under the state folder."""
+        return self.worktrees_dir or self.state_dir / "worktrees"
+
+    @classmethod
+    def load(cls, path: Path) -> Settings:
+        """Resolve JSON configuration paths relative to the configuration file."""
+        path = path.resolve()
+        value = json.loads(path.read_text(encoding="utf-8"))
+        repositories = []
+        for item in value["repositories"]:
+            if not re.fullmatch(r"[\w.-]+/[\w.-]+", item["name"]):
+                raise ValueError("repository name must be owner/repo")
+            commands = [item.get("build"), item.get("test")]
+            if any(
+                not isinstance(command, list)
+                or not command
+                or any(not isinstance(part, str) or not part for part in command)
+                for command in commands
+            ):
+                raise ValueError(
+                    "each repository requires build and test argument arrays"
+                )
+            ignored = item.get("ignored_checks", [])
+            if not isinstance(ignored, list) or any(
+                not isinstance(pattern, str) or not pattern for pattern in ignored
+            ):
+                raise ValueError("ignored_checks must be an array of non-empty strings")
+            repositories.append(
+                Repository(
+                    item["name"],
+                    (path.parent / item["path"]).resolve(),
+                    tuple(commands[0]),
+                    tuple(commands[1]),
+                    tuple(ignored),
+                )
+            )
+        settings = cls(
+            tuple(repositories),
+            (path.parent / value.get("state_dir", ".loop/pr-babysit")).resolve(),
+            value.get("author", ""),
+            float(value.get("interval", 60)),
+            int(value.get("retries", 3)),
+            bool(value.get("copilot_review", False)),
+            value.get("otel_endpoint"),
+            float(value.get("timeout", 1800)),
+            (path.parent / value["worktrees_dir"]).resolve()
+            if value.get("worktrees_dir")
+            else None,
+            JenkinsSettings.load(value.get("jenkins"), path.parent),
+            (path.parent / value["harness_dir"]).resolve()
+            if value.get("harness_dir")
+            else None,
+            bool(value.get("otel_capture_content", True)),
+            int(value.get("aspire_dashboard_port", 19000)),
+        )
+        if settings.harness_dir is not None and not settings.harness_dir.is_dir():
+            raise ValueError(f"harness_dir is not a folder: {settings.harness_dir}")
+        if not repositories or len({repo.name for repo in repositories}) != len(
+            repositories
+        ):
+            raise ValueError("configure at least one repository, without duplicates")
+        if (
+            not math.isfinite(settings.interval)
+            or not math.isfinite(settings.timeout)
+            or settings.interval <= 0
+            or settings.retries < 0
+            or settings.timeout <= 0
+        ):
+            raise ValueError("invalid interval, retries, or timeout")
+        if not 0 < settings.aspire_dashboard_port < 65536:
+            raise ValueError("aspire_dashboard_port must be 1-65535")
+        return settings
+
+    def repository(self, name: str) -> Repository:
+        """Reject unconfigured repositories before any Git operation."""
+        return next(
+            (repo for repo in self.repositories if repo.name == name), None
+        ) or self._missing(name)
+
+    def _missing(self, name: str) -> Repository:
+        raise ValueError(f"Repository not configured: {name}")

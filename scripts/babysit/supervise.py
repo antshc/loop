@@ -32,7 +32,8 @@ def load_factory() -> None:
         import loop.software_factory  # noqa: F401
     except ImportError as exception:
         raise ValueError(
-            "Install a compatible Loop Python package first"
+            f"Install a compatible Loop Python package first ({sys.executable}): "
+            f"{type(exception).__name__}: {exception}"
         ) from exception
 
 
@@ -57,6 +58,26 @@ def pr_state(url: str) -> str:
     if state not in ("OPEN", "CLOSED", "MERGED"):
         raise ValueError(f"Unknown GitHub PR state: {state!r}")
     return state
+
+
+def wait_for_pr_state(url: str, stop: threading.Event, interval: float) -> str | None:
+    """Wait through temporary GitHub outages without treating unknown state as closure."""
+    from software_factory.workflows.pr_babysit.connectivity import github_unavailable
+
+    while not stop.is_set():
+        try:
+            return pr_state(url)
+        except subprocess.CalledProcessError as exception:
+            detail = exception.stderr or exception.stdout or str(exception)
+            if not github_unavailable(detail):
+                raise
+        except subprocess.TimeoutExpired as exception:
+            detail = str(exception)
+        LOGGER.warning(
+            "GitHub state read failed; retrying in %ss: %s", interval, detail.strip()
+        )
+        stop.wait(interval)
+    return None
 
 
 def python_environment() -> dict[str, str]:
@@ -87,16 +108,17 @@ def supervise(url: str, config: Path, ready: Path, stop: threading.Event) -> int
     ledger = Ledger(settings.ledger_root)
     lock = settings.state_dir / "skill-runs" / slug / f"{number}.lock"
     with process_lock(lock):
-        if pr_state(url) != "OPEN":
-            LOGGER.info("PR already closed: %s", url)
-            return 0
-        ready.parent.mkdir(parents=True, exist_ok=True)
-        ready.write_text("ready\n", encoding="utf-8")
-        LOGGER.info("Watching %s until closed or merged", url)
         while not stop.is_set():
-            if pr_state(url) != "OPEN":
+            state = wait_for_pr_state(url, stop, settings.interval)
+            if state is None:
+                return 130
+            if state != "OPEN":
                 LOGGER.info("PR closed: %s", url)
                 return 0
+            if not ready.exists():
+                ready.parent.mkdir(parents=True, exist_ok=True)
+                ready.write_text("ready\n", encoding="utf-8")
+                LOGGER.info("Watching %s until closed or merged", url)
             command = [
                 sys.executable,
                 "-m",
@@ -117,7 +139,10 @@ def supervise(url: str, config: Path, ready: Path, stop: threading.Event) -> int
                     return 130
             if stop.is_set():
                 return 130
-            if pr_state(url) != "OPEN":
+            state = wait_for_pr_state(url, stop, settings.interval)
+            if state is None:
+                return 130
+            if state != "OPEN":
                 LOGGER.info("PR closed: %s", url)
                 return 0
             status = ledger.status(NAME, work.id)

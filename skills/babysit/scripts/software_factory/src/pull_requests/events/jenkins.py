@@ -9,14 +9,14 @@ from loop import Event
 
 @dataclass(frozen=True)
 class JenkinsFailed(Event):
-    """A failed Jenkins build and bounded evidence tied to the current PR head."""
+    """A failed Jenkins build tied to the current PR head; `log_file` holds its saved console."""
 
     job: str
     number: int
     head: str
     result: str
     attempts: int
-    logs: str
+    log_file: str
     jobs: tuple[str, ...]
 
     @property

@@ -87,3 +87,23 @@ class FeedbackHandled(Event):
 
     keys: tuple[str, ...]
     head: str
+
+
+@dataclass(frozen=True)
+class DiscussionPending(Event):
+    """The address gate found review-thread work on `head` that no earlier address run left behind; `token` identifies that discussion, `discussion` is the gate's JSON and `ci_failing` the CI state of that head."""
+
+    head: str
+    ci_failing: bool
+    token: str
+    discussion: dict[str, Json]
+
+
+@dataclass(frozen=True)
+class DiscussionAddressed(Event):
+    """The address agent handled the discussion `tokens` name (before and after its run) and left the pull request at `head`; later polls do not trigger it again for them."""
+
+    tokens: tuple[str, ...]
+    head: str
+    outcome: str
+    summary: str

@@ -4,7 +4,8 @@
       "name": "antshc/eShop",
       "path": "../../workspace/eShop",
       "build": ["dotnet", "build"],
-      "test": ["dotnet", "test", "--no-build"]
+      "test": ["dotnet", "test", "--no-build"],
+      "ignored_checks": ["*/ secret-scanner"]
     }
   ],
   "state_dir": "../../.loop/pr-babysit",
@@ -24,5 +25,6 @@
     "log_bytes": 262144
   },
   "harness_dir": null,
-  "otel_endpoint": null
+  "otel_endpoint": null,
+  "aspire_dashboard_port": 19000
 }

@@ -200,7 +200,8 @@ class AgentBuilder:
         finally:
             if worktree is not None:
                 worktree._closed = True
-                logger.info("worktree closed: %s", worktree.path)
+                state = "kept" if worktree.path.exists() else "removed"
+                logger.info("worktree %s: %s", state, worktree.path)
 
     def create(
         self, profile: AgentProfile | None = None, session: SessionName | None = None

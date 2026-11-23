@@ -8,13 +8,13 @@ from typing import Any
 from loop import AgentWorkspace, Evidence, Fail, Hold, Pass, Stage, Verdict, Verify
 from loop.software_factory.events.checks import ChecksPassed
 
-from software_factory.src.pull_requests.events.feedback import FeedbackBatch
+from software_factory.src.pull_requests.events.feedback import DiscussionPending
 
 
 @dataclass(frozen=True)
 class ChecksInput:
     worktree: AgentWorkspace
-    batch: FeedbackBatch
+    batch: DiscussionPending
 
 
 def run_checks(*, verify: Verify) -> Stage[ChecksInput, Fail[Any] | None, ChecksPassed]:

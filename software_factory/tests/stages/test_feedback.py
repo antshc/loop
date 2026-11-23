@@ -20,7 +20,9 @@ from software_factory.src.pull_requests.events.feedback import (
 from software_factory.src.pull_requests.flows.address import address_feedback
 from software_factory.src.pull_requests.infrastructure.github.pull_requests.babysit import (
     ci_failed,
+    ci_state,
     digest,
+    ignore_checks,
     pending_items,
 )
 from software_factory.src.pull_requests.stages.address import (
@@ -30,6 +32,7 @@ from software_factory.src.pull_requests.stages.address import (
     resolve_issue,
 )
 from software_factory.src.pull_requests.stages.feedback import SelectInput, select
+from software_factory.src.pull_requests.stages.pull_requests import _ready
 from software_factory.src.spec_delivery.events.specs import RepositoryTarget
 from software_factory.tests.infrastructure.github.fakes import (
     FakeGhCli,
@@ -247,6 +250,58 @@ def test_ci_is_failed_when_a_latest_check_status_or_run_failed_and_a_newer_succe
         True,
         True,
     ]
+
+
+def _compliance(scanner: str, trivy: str) -> dict:
+    """A compliance workflow run (check suite 7) with a secret scanner and a trivy job, on an approved pull request GitHub calls unstable."""
+    return {
+        "pr": {
+            "draft": False,
+            "mergeable": True,
+            "mergeable_state": "unstable",
+            "requested_reviewers": [],
+        },
+        "review": {"reviewDecision": "APPROVED"},
+        "checks": [
+            {**check_run(id_, name, conclusion=conclusion), "check_suite": {"id": 7}}
+            for id_, name, conclusion in (
+                (1, "compliance / secret-scanner", scanner),
+                (2, "compliance / trivy", trivy),
+            )
+        ],
+        "statuses": [],
+        "runs": [
+            {
+                **workflow_run(9, "sha", conclusion="failure"),
+                "name": "compliance",
+                "check_suite_id": 7,
+            }
+        ],
+    }
+
+
+def test_a_run_failing_only_through_an_ignored_job_leaves_ci_green_and_the_pull_request_ready() -> (
+    None
+):
+    """Given a run whose only failed job matches an ignored glob, when filtered, then CI is green, the dropped names are listed and unstable counts as ready."""
+    snapshot = _compliance("failure", "success")
+
+    filtered = ignore_checks(snapshot, ("*/ secret-scanner",))
+
+    assert ci_state(filtered)["green"]
+    assert filtered["ignored"] == ["compliance", "compliance / secret-scanner"]
+    assert _ready(filtered)
+    assert not _ready(snapshot)
+
+
+def test_a_run_with_another_failed_job_still_fails_ci() -> None:
+    """Given a run with an ignored and a non-ignored failed job, when filtered, then the run still fails CI."""
+    state = ci_state(
+        ignore_checks(_compliance("failure", "failure"), ("*/ secret-scanner",))
+    )
+
+    assert state["failed"]
+    assert [run["id"] for run in state["runs"]] == [9]
 
 
 def test_select_makes_a_batch_of_the_pending_items_with_their_head_ci_state_and_pending_status(

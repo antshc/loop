@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -37,6 +38,11 @@ def _detached() -> dict[str, Any]:
     return {"start_new_session": True}
 
 
+def run_id() -> str:
+    """Local start time and a random suffix keep run directories distinct."""
+    return f"{datetime.now():%Y%m%d-%H%M%S}-{uuid4().hex[:6]}"
+
+
 def launch(url: str, config: Path) -> tuple[int, Path]:
     """Start a new process and confirm that it holds the PR's monitor lock."""
     load_factory()
@@ -51,7 +57,14 @@ def launch(url: str, config: Path) -> tuple[int, Path]:
         )
     if pr_state(url) != "OPEN":
         raise ValueError(f"PR is already closed or merged: {url}")
-    root = settings.state_dir / "skill-runs" / slug / str(number) / uuid4().hex
+    from aspire import ensure_dashboard
+
+    dashboard = ensure_dashboard(
+        settings.otel_endpoint, settings.state_dir, settings.aspire_dashboard_port
+    )
+    if dashboard:
+        print(f"Aspire dashboard started: {dashboard}")
+    root = settings.state_dir / "skill-runs" / slug / str(number) / run_id()
     root.mkdir(parents=True, exist_ok=False)
     log = root / "babysit.log"
     ready = root / "ready"

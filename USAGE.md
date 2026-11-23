@@ -420,6 +420,9 @@ worktree exit. `GitOptions.commit_message` has been removed.
   then reuses preserved work. Existing local commits are never silently reset.
 - An explicit `BranchStrategy(..., base_branch=...)` starts a new local branch from
   that exact ref. Without it, an existing origin branch is preferred over HEAD.
+- `BranchStrategy(..., keep=True)` never removes the worktree; each open reuses it and
+  fast-forwards a clean one to `origin/<branch>` (dirty, ahead or diverged trees stay as
+  they are). The caller removes it when its work ends.
 - Successful `MergeToHeadStrategy` runs fast-forward the host and delete the temporary
   branch. Failed/divergent merges retain that branch for Workflow-owned recovery.
 - Stale metadata is pruned. Empty orphan directories or lone broken Git links can be

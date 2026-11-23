@@ -46,6 +46,11 @@ Copy `settings.example.json` to a local configuration file. Paths resolve relati
 to that file. Each repository requires build and test argument arrays, executed
 without a shell. Include dependency preparation in those commands when needed in
 a fresh worktree. Set `author` to override the review-trust author.
+Optional `ignored_checks` is an array of case-sensitive `fnmatch` globs: matching
+check runs (by name) and commit statuses (by context) are dropped from the CI
+state, and a failed workflow run is dropped when its name matches or all its
+failed jobs match. Ignored failures trigger no CI repair, and readiness accepts
+GitHub's `unstable` state when only ignored checks failed.
 
 ```sh
 python3 -m software_factory.workflows.pr_babysit --config babysit.local.json --pr https://github.com/owner/repo/pull/123
@@ -73,7 +78,11 @@ specific ledger entry explicitly before restarting.
 Pressing Ctrl+C (or SIGTERM) stops a run after its current poll and exits 130.
 
 For telemetry, install `loop[otel]` and configure `otel_endpoint`, for example
-`http://localhost:4318`. Without it no exporter is created. `copilot_review` defaults
+`http://localhost:4318`. Without it no exporter is created. For a local endpoint with no
+listener, `start.py` starts a shared, detached Aspire dashboard (`aspire dashboard run`;
+UI on `aspire_dashboard_port`, default `http://localhost:19000`; log
+`<state_dir>/aspire/dashboard.log`) and waits until it accepts OTLP. An endpoint still
+unreachable when the workflow starts logs one warning and disables the exporter. `copilot_review` defaults
 to false; enabling it requests a best-effort Copilot review once per SHA. Pending
 review prevents the readiness milestone, while unavailable Copilot does not block work.
 

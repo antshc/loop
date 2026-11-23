@@ -28,6 +28,7 @@ from software_factory.src.pull_requests.events.jenkins import (
 )
 from software_factory.src.pull_requests.events.pull_requests import PullRequestPolled
 from software_factory.src.pull_requests.infrastructure.github.pull_requests.babysit import (
+    agent_view,
     ci_state,
 )
 from software_factory.src.pull_requests.infrastructure.jenkins import (
@@ -74,12 +75,13 @@ def diagnose() -> Stage[DiagnoseInput, JenkinsDiagnosis, Diagnosis]:
         .agent(
             DIAGNOSE_JENKINS,
             request=lambda i, _: JenkinsDiagnoseRequest(
-                i.polled.snapshot,
-                i.failed.logs,
+                agent_view(i.polled.snapshot),
+                i.failed.log_file,
                 i.failed.job,
                 i.failed.number,
                 i.failed.result,
             ),
+            session=lambda i: i.polled.title,
         )
         .gate(_diagnosed)
         .contract(ReadOnly())
@@ -152,7 +154,7 @@ def _observe(i: ObserveInput) -> JenkinsObservation:
         failure.head,
         failure.result,
         failure.attempts,
-        failure.logs,
+        failure.log_file,
         jobs,
     )
 
@@ -166,7 +168,9 @@ def _diagnosed(
     if reply.classification == "transient":
         return Pass(Transient(reason))
     if reply.classification == "branch":
-        return Pass(BranchBroken(f"{reason}\n\n{i.failed.logs}"))
+        return Pass(
+            BranchBroken(f"{reason}\n\nJenkins console log: {i.failed.log_file}")
+        )
     return Hold(reason)
 
 
@@ -189,7 +193,7 @@ def _restart(i: RecoverInput) -> JenkinsRestarted:
                 failed.head,
                 failed.result,
                 failed.attempts,
-                failed.logs,
+                failed.log_file,
             ),
             lambda: _current_head(i),
             failed.jobs,
