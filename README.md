@@ -201,16 +201,22 @@ python -m pytest
 
 The strict editable mode keeps `import loop` resolving to the repository-root `loop/src/` folder.
 
-Install the repository's skill synchronization hook in each checkout:
+Install [Gitleaks](https://github.com/gitleaks/gitleaks#installing) and enable the
+repository's Git hooks in each checkout:
 
 ```sh
-git config core.hooksPath .githooks
+git config --local core.hooksPath .githooks
 python scripts/sync_babysit_skill.py --check
 ```
 
 Shared factory core installs with `loop` as `loop.software_factory`; skills do not copy it.
 
 The pre-commit hook copies factory `src/pull_requests/`, `src/github.py`, the `pr_babysit` workflow, and canonical launcher code into `skills/babysit/scripts/software_factory/`. Edit only canonical sources; CI rejects stale generated copies. To generate a copy before committing, run `python3 scripts/sync_babysit_skill.py`.
+
+The pre-push hook scans outgoing commit diffs with Gitleaks and blocks a push if it
+finds secrets or Gitleaks is unavailable. For new refs, it excludes history already
+advertised by the remote; if remote refs cannot be listed, it scans the full history.
+Uncommitted changes are not scanned.
 
 To babysit one PR in the background, configure its checkout, build and test commands in `.loop/pr-babysit.json` (see the [example settings](software_factory/workflows/pr_babysit/settings.example.json)), then run:
 

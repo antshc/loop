@@ -1,0 +1,54 @@
+#!/bin/sh
+set -eu
+
+remote_url=$2
+remote_refs_loaded=false
+remote_exclusions=
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+    case "$local_sha" in
+        *[!0]*) ;;
+        *) continue ;;
+    esac
+
+    if ! command -v gitleaks >/dev/null 2>&1; then
+        printf 'Gitleaks is required to push; install it and add it to PATH.\n' >&2
+        exit 1
+    fi
+    if ! git cat-file -e "$local_sha^{commit}" </dev/null 2>/dev/null; then
+        printf 'Gitleaks cannot scan non-commit ref %s; push aborted.\n' "$local_ref" >&2
+        exit 1
+    fi
+
+    old_commit=
+    case "$remote_sha" in
+        *[!0]*)
+            if git cat-file -e "$remote_sha^{commit}" </dev/null 2>/dev/null; then
+                old_commit=$remote_sha
+            fi
+            ;;
+    esac
+
+    if [ -n "$old_commit" ]; then
+        log_opts="--diff-merges=first-parent $old_commit..$local_sha"
+    else
+        if [ "$remote_refs_loaded" = false ]; then
+            remote_refs_loaded=true
+            if remote_refs=$(git ls-remote --refs -- "$remote_url" </dev/null 2>/dev/null); then
+                while read -r oid ref; do
+                    if [ -n "$oid" ] && git cat-file -e "$oid^{commit}" </dev/null 2>/dev/null; then
+                        remote_exclusions="$remote_exclusions ^$oid"
+                    fi
+                done <<EOF
+$remote_refs
+EOF
+            else
+                printf 'Could not list remote refs; Gitleaks will scan full history.\n' >&2
+            fi
+        fi
+        log_opts="--diff-merges=first-parent $local_sha$remote_exclusions"
+    fi
+
+    printf 'Gitleaks: scanning commits for %s\n' "$remote_ref" >&2
+    gitleaks git --log-opts="$log_opts" --redact=100 --no-banner --no-color --exit-code=1 . </dev/null
+done
